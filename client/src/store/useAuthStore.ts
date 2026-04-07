@@ -11,18 +11,17 @@ interface AuthState {
   userEmail: string | null;
   userName: string | null;
   isLoading: boolean;
-  setAuth: (payload: Omit<AuthState, 'isLoading' | 'setAuth' | 'clearAuth'>) => void;
+  setAuth: (payload: Partial<Omit<AuthState, 'isLoading' | 'setAuth' | 'clearAuth'>>) => void;
   clearAuth: () => void;
 }
 
 export const useAuthStore = create<AuthState>((set) => ({
-  // Mock data for development of the layout
-  accessToken: 'mock-token',
-  companyId: 'mock-company',
-  userRole: 'super_admin',
-  userId: 'mock-user-123',
-  userEmail: 'admin@company.com',
-  userName: 'Admin User',
+  accessToken: null,
+  companyId: null,
+  userRole: null,
+  userId: null,
+  userEmail: null,
+  userName: null,
   isLoading: false,
   setAuth: (payload) => set((state) => ({ ...state, ...payload })),
   clearAuth: () => set({

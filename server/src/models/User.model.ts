@@ -1,0 +1,62 @@
+// server/src/models/User.model.ts
+import { Schema, model, Document, Types } from 'mongoose';
+
+export type LifecycleState = 'invited' | 'onboarding' | 'active' | 'probation' | 'on_leave' | 'terminated' | 'archived';
+export type EmploymentType = 'full_time' | 'part_time' | 'contractor' | 'intern';
+
+export interface IUser extends Document {
+  company_id: Types.ObjectId;
+  employee_id: string;
+  full_name: string;
+  email: string;
+  password_hash: string;
+  phone?: string;
+  avatar_url?: string;
+  department_id?: Types.ObjectId;
+  team_id?: Types.ObjectId;
+  manager_id?: Types.ObjectId;
+  lifecycle_state: LifecycleState;
+  lifecycle_changed_at: Date;
+  hire_date?: Date;
+  termination_date?: Date;
+  employment_type: EmploymentType;
+  location_id?: Types.ObjectId;
+  custom_fields: Record<string, unknown>;
+  last_login?: Date;
+  mfa_enabled: boolean;
+  refresh_token_hash?: string;
+  is_active: boolean;
+}
+
+const UserSchema = new Schema<IUser>({
+  company_id: { type: Schema.Types.ObjectId, ref: 'Company', required: true, index: true },
+  employee_id: { type: String, required: true },
+  full_name: { type: String, required: true },
+  email: { type: String, required: true, lowercase: true },
+  password_hash: { type: String, required: true },
+  phone: String,
+  avatar_url: String,
+  department_id: { type: Schema.Types.ObjectId, ref: 'Department' },
+  team_id: { type: Schema.Types.ObjectId, ref: 'Department' },
+  manager_id: { type: Schema.Types.ObjectId, ref: 'User' },
+  lifecycle_state: {
+    type: String,
+    enum: ['invited', 'onboarding', 'active', 'probation', 'on_leave', 'terminated', 'archived'],
+    default: 'invited',
+  },
+  lifecycle_changed_at: { type: Date, default: Date.now },
+  hire_date: Date,
+  termination_date: Date,
+  employment_type: { type: String, enum: ['full_time', 'part_time', 'contractor', 'intern'], default: 'full_time' },
+  location_id: { type: Schema.Types.ObjectId, ref: 'Location' },
+  custom_fields: { type: Schema.Types.Mixed, default: {} },
+  last_login: Date,
+  mfa_enabled: { type: Boolean, default: false },
+  refresh_token_hash: String,
+  is_active: { type: Boolean, default: false },
+}, { timestamps: { createdAt: 'created_at', updatedAt: 'updated_at' } });
+
+UserSchema.index({ company_id: 1, email: 1 }, { unique: true });
+UserSchema.index({ company_id: 1, employee_id: 1 }, { unique: true });
+
+export const User = model<IUser>('User', UserSchema);

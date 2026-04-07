@@ -4,9 +4,11 @@ import { QueryClientProvider } from '@tanstack/react-query';
 import { Toaster } from 'sonner';
 import { queryClient } from './lib/queryClient';
 import { AdminShell } from './components/layout/AdminShell';
+import { AuthGuard, GuestGuard } from './components/layout/AuthGuard';
 import { ROUTES } from './constants/routes';
 
 // Pages
+import LoginPage from './pages/auth/LoginPage';
 import OverviewPage from './pages/overview/OverviewPage';
 
 function App() {
@@ -14,9 +16,15 @@ function App() {
     <QueryClientProvider client={queryClient}>
       <BrowserRouter>
         <Routes>
-          <Route path="/" element={<AdminShell />}>
-            <Route index element={<Navigate to={ROUTES.OVERVIEW} replace />} />
-            <Route path={ROUTES.OVERVIEW} element={<OverviewPage />} />
+          <Route element={<GuestGuard />}>
+            <Route path={ROUTES.LOGIN} element={<LoginPage />} />
+          </Route>
+          
+          <Route element={<AuthGuard />}>
+            <Route path="/" element={<AdminShell />}>
+              <Route index element={<Navigate to={ROUTES.OVERVIEW} replace />} />
+              <Route path={ROUTES.OVERVIEW} element={<OverviewPage />} />
+            </Route>
           </Route>
         </Routes>
       </BrowserRouter>
