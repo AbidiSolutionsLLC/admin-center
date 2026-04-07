@@ -1,5 +1,6 @@
 // server/src/models/User.model.ts
 import { Schema, model, Document, Types } from 'mongoose';
+import { Company } from './Company.model';
 
 export type LifecycleState = 'invited' | 'onboarding' | 'active' | 'probation' | 'on_leave' | 'terminated' | 'archived';
 export type EmploymentType = 'full_time' | 'part_time' | 'contractor' | 'intern';
@@ -26,11 +27,13 @@ export interface IUser extends Document {
   mfa_enabled: boolean;
   refresh_token_hash?: string;
   is_active: boolean;
+  created_at: Date;
+  updated_at: Date;
 }
 
 const UserSchema = new Schema<IUser>({
   company_id: { type: Schema.Types.ObjectId, ref: 'Company', required: true, index: true },
-  employee_id: { type: String, required: true },
+  employee_id: { type: String },
   full_name: { type: String, required: true },
   email: { type: String, required: true, lowercase: true },
   password_hash: { type: String, required: true },
@@ -56,7 +59,61 @@ const UserSchema = new Schema<IUser>({
   is_active: { type: Boolean, default: false },
 }, { timestamps: { createdAt: 'created_at', updatedAt: 'updated_at' } });
 
+// ── Indexes ──────────────────────────────────────────────────────────────────
 UserSchema.index({ company_id: 1, email: 1 }, { unique: true });
 UserSchema.index({ company_id: 1, employee_id: 1 }, { unique: true });
+UserSchema.index({ company_id: 1, lifecycle_state: 1 });
+UserSchema.index({ company_id: 1, department_id: 1 });
+UserSchema.index({ last_login: 1 });
+
+// ── Pre-save Hook: Auto-generate employee_id ────────────────────────────────
+/**
+ * Generates employee_id atomically using Company.employee_id_format + counter.
+ * Format example: 'EMP-{counter:5}' → 'EMP-00001', 'EMP-00002', etc.
+ * Uses findOneAndUpdate with $inc for atomic counter increment.
+ */
+UserSchema.pre('save', async function(next) {
+  // Only generate employee_id if it's a new document and employee_id is not set
+  if (this.isNew && !this.employee_id) {
+    try {
+      // Atomically increment the company's employee_id_counter
+      const company = await Company.findOneAndUpdate(
+        { _id: this.company_id },
+        { $inc: { employee_id_counter: 1 } },
+        { new: true } // Return the updated document
+      );
+
+      if (!company) {
+        throw new Error(`Company not found: ${this.company_id}`);
+      }
+
+      // Parse the format string and generate the employee_id
+      const format = company.employee_id_format;
+      const counter = company.employee_id_counter;
+
+      // Replace {counter:N} with zero-padded counter value
+      // Example: 'EMP-{counter:5}' with counter=42 → 'EMP-00042'
+      this.employee_id = format.replace(/\{counter:(\d+)\}/, (match, digits) => {
+        const paddingLength = parseInt(digits, 10);
+        return counter.toString().padStart(paddingLength, '0');
+      });
+    } catch (error) {
+      return next(error as Error);
+    }
+  }
+  next();
+});
+
+// ── Pre-save Hook: Auto-update lifecycle_changed_at ─────────────────────────
+/**
+ * Updates lifecycle_changed_at timestamp when lifecycle_state changes.
+ * Tracks when users transition between states (invited → active, etc.)
+ */
+UserSchema.pre('save', function(next) {
+  if (this.isModified('lifecycle_state')) {
+    this.lifecycle_changed_at = new Date();
+  }
+  next();
+});
 
 export const User = model<IUser>('User', UserSchema);

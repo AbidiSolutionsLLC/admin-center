@@ -10,6 +10,7 @@ import { ROUTES } from './constants/routes';
 // Pages
 import LoginPage from './pages/auth/LoginPage';
 import OverviewPage from './pages/overview/OverviewPage';
+import OrganizationPage from './pages/organization/OrganizationPage';
 
 function App() {
   return (
@@ -24,6 +25,7 @@ function App() {
             <Route path="/" element={<AdminShell />}>
               <Route index element={<Navigate to={ROUTES.OVERVIEW} replace />} />
               <Route path={ROUTES.OVERVIEW} element={<OverviewPage />} />
+              <Route path={ROUTES.ORGANIZATION} element={<OrganizationPage />} />
             </Route>
           </Route>
         </Routes>
