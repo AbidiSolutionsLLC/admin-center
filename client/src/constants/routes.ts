@@ -1,0 +1,21 @@
+// src/constants/routes.ts
+export const ROUTES = {
+  OVERVIEW: '/overview',
+  ORGANIZATION: '/organization',
+  DEPARTMENT_DETAIL: (id: string) => `/organization/${id}`,
+  PEOPLE: '/people',
+  USER_DETAIL: (id: string) => `/people/${id}`,
+  ROLES: '/roles',
+  ROLE_DETAIL: (id: string) => `/roles/${id}`,
+  APPS: '/apps',
+  POLICIES: '/policies',
+  POLICY_DETAIL: (id: string) => `/policies/${id}`,
+  WORKFLOWS: '/workflows',
+  LOCATIONS: '/locations',
+  SECURITY: '/security',
+  DATA_FIELDS: '/data-fields',
+  NOTIFICATIONS: '/notifications',
+  INTEGRATIONS: '/integrations',
+  AUDIT_LOGS: '/audit-logs',
+  LOGIN: '/login',
+} as const;
