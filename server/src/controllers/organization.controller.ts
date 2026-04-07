@@ -20,7 +20,7 @@ export const getDepartments = asyncHandler(async (req: Request, res: Response) =
   const departments = await Department.find({
     company_id: req.user.company_id,
     is_active: true,
-  })
+  } as any)
     .populate('primary_manager_id', 'full_name avatar_url')
     .sort({ created_at: 1 });
 
@@ -32,7 +32,7 @@ export const getDepartmentById = asyncHandler(async (req: Request, res: Response
     _id: req.params.id,
     company_id: req.user.company_id,
     is_active: true,
-  }).populate('primary_manager_id', 'full_name avatar_url');
+  } as any).populate('primary_manager_id', 'full_name avatar_url');
 
   if (!dept) {
     throw new AppError('Department not found', 404, 'NOT_FOUND');
@@ -49,7 +49,7 @@ export const createDepartment = asyncHandler(async (req: Request, res: Response)
   const dept = await Department.create({
     ...parsedBody,
     company_id: req.user.company_id,
-  });
+  } as any);
 
   // 3. Audit log
   await auditLogger.log({
@@ -73,7 +73,7 @@ export const updateDepartment = asyncHandler(async (req: Request, res: Response)
     _id: req.params.id,
     company_id: req.user.company_id,
     is_active: true,
-  });
+  } as any);
 
   if (!dept) {
     throw new AppError('Department not found', 404, 'NOT_FOUND');
@@ -104,7 +104,7 @@ export const deleteDepartment = asyncHandler(async (req: Request, res: Response)
     _id: req.params.id,
     company_id: req.user.company_id,
     is_active: true,
-  });
+  } as any);
 
   if (!dept) {
     throw new AppError('Department not found', 404, 'NOT_FOUND');
@@ -134,7 +134,7 @@ export const getOrgTree = asyncHandler(async (req: Request, res: Response) => {
   const departments = await Department.find({
     company_id: req.user.company_id,
     is_active: true,
-  }).lean(); // .lean() for faster processing since we don't need mongoose docs
+  } as any).lean(); // .lean() for faster processing since we don't need mongoose docs
 
   // Build tree
   const map = new Map<string, any>();

@@ -3,13 +3,13 @@ import { Schema, model, Document, Types } from 'mongoose';
 import { slugify } from '../utils/slugify';
 
 export interface IDepartment extends Document {
-  company_id: Types.ObjectId;
+  company_id: Types.ObjectId | string;
   name: string;
   slug: string;
   type: 'business_unit' | 'division' | 'department' | 'team' | 'cost_center';
-  parent_id?: Types.ObjectId;
-  primary_manager_id?: Types.ObjectId;
-  secondary_manager_id?: Types.ObjectId;
+  parent_id?: Types.ObjectId | string | null;
+  primary_manager_id?: Types.ObjectId | string | null;
+  secondary_manager_id?: Types.ObjectId | string | null;
   is_active: boolean;
   created_at: Date;
   updated_at: Date;
