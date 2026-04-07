@@ -72,36 +72,31 @@ UserSchema.index({ last_login: 1 });
  * Format example: 'EMP-{counter:5}' → 'EMP-00001', 'EMP-00002', etc.
  * Uses findOneAndUpdate with $inc for atomic counter increment.
  */
-UserSchema.pre('save', async function(next) {
+UserSchema.pre('save', async function() {
   // Only generate employee_id if it's a new document and employee_id is not set
   if (this.isNew && !this.employee_id) {
-    try {
-      // Atomically increment the company's employee_id_counter
-      const company = await Company.findOneAndUpdate(
-        { _id: this.company_id },
-        { $inc: { employee_id_counter: 1 } },
-        { new: true } // Return the updated document
-      );
+    // Atomically increment the company's employee_id_counter
+    const company = await Company.findOneAndUpdate(
+      { _id: this.company_id },
+      { $inc: { employee_id_counter: 1 } },
+      { new: true } // Return the updated document
+    );
 
-      if (!company) {
-        throw new Error(`Company not found: ${this.company_id}`);
-      }
-
-      // Parse the format string and generate the employee_id
-      const format = company.employee_id_format;
-      const counter = company.employee_id_counter;
-
-      // Replace {counter:N} with zero-padded counter value
-      // Example: 'EMP-{counter:5}' with counter=42 → 'EMP-00042'
-      this.employee_id = format.replace(/\{counter:(\d+)\}/, (match, digits) => {
-        const paddingLength = parseInt(digits, 10);
-        return counter.toString().padStart(paddingLength, '0');
-      });
-    } catch (error) {
-      return next(error as Error);
+    if (!company) {
+      throw new Error(`Company not found: ${this.company_id}`);
     }
+
+    // Parse the format string and generate the employee_id
+    const format = company.employee_id_format;
+    const counter = company.employee_id_counter;
+
+    // Replace {counter:N} with zero-padded counter value
+    // Example: 'EMP-{counter:5}' with counter=42 → 'EMP-00042'
+    this.employee_id = format.replace(/\{counter:(\d+)\}/, (match, digits) => {
+      const paddingLength = parseInt(digits, 10);
+      return counter.toString().padStart(paddingLength, '0');
+    });
   }
-  next();
 });
 
 // ── Pre-save Hook: Auto-update lifecycle_changed_at ─────────────────────────
@@ -109,11 +104,10 @@ UserSchema.pre('save', async function(next) {
  * Updates lifecycle_changed_at timestamp when lifecycle_state changes.
  * Tracks when users transition between states (invited → active, etc.)
  */
-UserSchema.pre('save', function(next) {
+UserSchema.pre('save', function() {
   if (this.isModified('lifecycle_state')) {
     this.lifecycle_changed_at = new Date();
   }
-  next();
 });
 
 export const User = model<IUser>('User', UserSchema);
