@@ -428,7 +428,9 @@ const AuditEventSchema = new Schema({
   user_agent: String,
 }, { timestamps: { createdAt: 'created_at' }, versionKey: false });
 
-// Immutability: no update/delete routes exist for this model
+export const AuditEvent = model('AuditEvent', AuditEventSchema);
+
+// Immutability: AuditEvent collection has no update/delete routes.
 ```
 
 ### Insight
@@ -450,29 +452,29 @@ const InsightSchema = new Schema({
   detected_at: { type: Date, default: Date.now },
   resolved_at: Date,
 }, { timestamps: false });
+
+export const Insight = model('Insight', InsightSchema);
 ```
 
 ---
 
 ## 6. CONTROLLER PATTERN
 
-Every controller uses `asyncHandler` to remove try/catch boilerplate.
-
-```typescript
-// server/src/utils/asyncHandler.ts
-import { Request, Response, NextFunction } from 'express';
-export const asyncHandler = (fn: Function) =>
-  (req: Request, res: Response, next: NextFunction) =>
-    Promise.resolve(fn(req, res, next)).catch(next);
-```
+Every controller uses `asyncHandler` and `zod` for validation.
 
 ```typescript
 // server/src/controllers/organization.controller.ts
 import { Request, Response } from 'express';
+import { z } from 'zod';
 import { asyncHandler } from '../utils/asyncHandler';
 import { Department } from '../models/Department.model';
 import { auditLogger } from '../lib/auditLogger';
 import { AppError } from '../utils/AppError';
+
+const CreateSchema = z.object({
+  name: z.string().min(1),
+  type: z.enum(['business_unit', 'division', 'department', 'team', 'cost_center']),
+});
 
 export const getDepartments = asyncHandler(async (req: Request, res: Response) => {
   const departments = await Department.find({
@@ -486,12 +488,14 @@ export const getDepartments = asyncHandler(async (req: Request, res: Response) =
 });
 
 export const createDepartment = asyncHandler(async (req: Request, res: Response) => {
+  const input = CreateSchema.parse(req.body);
+
   const dept = await Department.create({
-    ...req.body,
-    company_id: req.user.company_id, // injected from JWT, never from body
+    ...input,
+    company_id: req.user.company_id, // injected from JWT
   });
 
-  // MANDATORY: audit log every write
+  // MANDATORY: audit log
   await auditLogger.log({
     req,
     action: 'department.created',

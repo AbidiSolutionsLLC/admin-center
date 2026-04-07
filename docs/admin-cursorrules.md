@@ -386,10 +386,13 @@ const canExport = useHasPermission('people', 'export');
 import { asyncHandler } from '../utils/asyncHandler';
 
 export const createDepartment = asyncHandler(async (req, res) => {
-  // 1. Validate input (zod on body, or express-validator)
+  // 1. Validate input (zod)
+  const CreateSchema = z.object({ name: z.string() });
+  const input = CreateSchema.parse(req.body);
+
   // 2. Use req.user.company_id — NEVER req.body.company_id
   const dept = await Department.create({
-    ...req.body,
+    ...input,
     company_id: req.user.company_id,
   });
 
