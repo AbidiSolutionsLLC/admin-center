@@ -5,6 +5,7 @@ import bcrypt from 'bcryptjs';
 import { asyncHandler } from '../utils/asyncHandler';
 import { User } from '../models/User.model';
 import { Company } from '../models/Company.model';
+import { RefreshToken } from '../models/RefreshToken.model';
 import { auditLogger } from '../lib/auditLogger';
 import { sendWelcomeEmail, sendBulkWelcomeEmails } from '../lib/emailService';
 import { isValidTransition, getTransitionErrorMessage, LifecycleState } from '../lib/lifecycle';
@@ -315,6 +316,8 @@ export const updateUser = asyncHandler(async (req: Request, res: Response) => {
  * Transitions a user to a new lifecycle state.
  * Validates transition against VALID_TRANSITIONS.
  * Automatically updates lifecycle_changed_at via model hook.
+ * Fires automation handlers for specific transitions.
+ * Produces audit events for all state changes and automations.
  */
 export const updateUserLifecycle = asyncHandler(async (req: Request, res: Response) => {
   const input = UpdateLifecycleSchema.parse(req.body);
@@ -331,7 +334,7 @@ export const updateUserLifecycle = asyncHandler(async (req: Request, res: Respon
   const currentState = user.lifecycle_state as LifecycleState;
   const targetState = input.lifecycle_state as LifecycleState;
 
-  // Validate transition
+  // Validate transition against VALID_TRANSITIONS
   if (!isValidTransition(currentState, targetState)) {
     throw new AppError(
       getTransitionErrorMessage(currentState, targetState),
@@ -356,20 +359,17 @@ export const updateUserLifecycle = asyncHandler(async (req: Request, res: Respon
 
   if (targetState === 'archived') {
     user.is_active = false;
-    // Optionally anonymize PII for archived users (uncomment if desired)
-    // user.full_name = 'Archived User';
-    // user.phone = null;
-    // user.avatar_url = null;
   }
 
   await user.save();
 
   // ── Lifecycle Automations ─────────────────────────────────────────────
-  // Fire automations based on state transitions
+  // Each automation fires an audit event and performs its specific action
+
   const transitionKey = `${currentState}→${targetState}`;
 
   try {
-    // invited → onboarding: Send welcome email
+    // AUTOMATION 1: invited → onboarding: Send welcome email
     if (transitionKey === 'invited→onboarding') {
       const company = await Company.findById(req.user.company_id);
       if (company) {
@@ -380,87 +380,119 @@ export const updateUserLifecycle = asyncHandler(async (req: Request, res: Respon
           company_name: company.name,
           invite_link: `${process.env.CLIENT_URL}/onboarding?email=${user.email}`,
         });
-        console.log(`[Automation] Welcome email sent for ${user.email} (invited→onboarding)`);
 
-        // Audit event for email sent
+        // Audit event for welcome email
         await auditLogger.log({
           req,
-          action: 'user.welcome_email_sent',
+          action: 'user.lifecycle_automation',
           module: 'people',
           object_type: 'User',
           object_id: user._id.toString(),
           object_label: user.full_name,
-          before_state: null,
-          after_state: { email: user.email, transition: 'invited→onboarding' },
+          before_state: { transition: 'invited→onboarding' },
+          after_state: { automation: 'welcome_email_sent', email: user.email },
         });
       }
     }
 
-    // onboarding → active: Assign default role
+    // AUTOMATION 2: onboarding → active: Assign default Employee role
     if (transitionKey === 'onboarding→active') {
-      console.log(`[Automation] Default role assignment triggered for ${user.email} (onboarding→active)`);
-
-      // Audit event for role assignment triggered
+      // TODO: Assign default Employee role from department's role mapping
+      // For now, log the automation event
       await auditLogger.log({
         req,
-        action: 'user.role_assigned',
+        action: 'user.lifecycle_automation',
         module: 'people',
         object_type: 'User',
         object_id: user._id.toString(),
         object_label: user.full_name,
-        before_state: null,
-        after_state: { transition: 'onboarding→active', note: 'Default role assignment pending implementation' },
+        before_state: { transition: 'onboarding→active' },
+        after_state: { automation: 'default_role_assigned', note: 'Employee role assignment pending RBAC integration' },
       });
-      // TODO: Assign default role from department's role mapping
     }
 
-    // active → terminated: Invalidate refresh tokens
+    // AUTOMATION 3: active → terminated: Invalidate all refresh tokens
     if (transitionKey === 'active→terminated') {
-      (user as any).refresh_token_hash = undefined;
+      // Clear refresh token hash from user document
+      user.refresh_token_hash = undefined;
       await user.save();
-      console.log(`[Automation] Refresh tokens invalidated for ${user.email} (active→terminated)`);
 
-      // Audit event for token revocation
+      // Revoke all active refresh tokens in the RefreshToken collection
+      await RefreshToken.updateMany(
+        { user_id: user._id, is_revoked: false },
+        { $set: { is_revoked: true } }
+      );
+
+      // Audit event for session revocation
       await auditLogger.log({
         req,
-        action: 'user.sessions_revoked',
+        action: 'user.lifecycle_automation',
         module: 'people',
         object_type: 'User',
         object_id: user._id.toString(),
         object_label: user.full_name,
-        before_state: null,
-        after_state: { transition: 'active→terminated', action: 'refresh_tokens_invalidated' },
+        before_state: { transition: 'active→terminated' },
+        after_state: { automation: 'sessions_revoked', refresh_tokens_invalidated: true },
       });
-      // TODO: Add to pending_session_revocations log
     }
 
-    // terminated → archived: Anonymize PII
+    // AUTOMATION 4: terminated → archived: Anonymize all PII
     if (transitionKey === 'terminated→archived') {
       const beforeAnonymize = user.toObject();
+
+      // Clear all PII fields
       user.full_name = 'Archived User';
-      (user as any).phone = undefined;
-      (user as any).avatar_url = undefined;
+      user.email = `archived-${user._id}@archived.local`;
+      user.phone = undefined;
+      user.avatar_url = undefined;
+      user.employee_id = `ARCHIVED-${user._id.toString().slice(-8)}`;
+      
+      // Clear optional PII
+      (user as any).department_id = undefined;
+      (user as any).team_id = undefined;
+      (user as any).manager_id = undefined;
+      (user as any).location_id = undefined;
+      (user as any).hire_date = undefined;
+      (user as any).termination_date = undefined;
+      (user as any).custom_fields = {};
+
       await user.save();
-      console.log(`[Automation] PII anonymized for ${user.email} (terminated→archived)`);
 
       // Audit event for PII anonymization
       await auditLogger.log({
         req,
-        action: 'user.pii_anonymized',
+        action: 'user.lifecycle_automation',
         module: 'people',
         object_type: 'User',
         object_id: user._id.toString(),
         object_label: 'Archived User',
         before_state: beforeAnonymize,
-        after_state: user.toObject(),
+        after_state: {
+          automation: 'pii_anonymized',
+          full_name: user.full_name,
+          email: user.email,
+          fields_cleared: ['full_name', 'email', 'phone', 'avatar_url', 'employee_id', 'department_id', 'team_id', 'manager_id', 'location_id', 'hire_date', 'termination_date', 'custom_fields'],
+        },
       });
     }
   } catch (automationError) {
-    console.error(`[Automation] Error in ${transitionKey} automation:`, automationError);
-    // Don't fail the lifecycle change if automation fails
+    // Log automation errors but don't fail the lifecycle transition
+    console.error(`[Lifecycle Automation Error] ${transitionKey}:`, automationError);
+    
+    // Still log the error as an audit event
+    await auditLogger.log({
+      req,
+      action: 'user.lifecycle_automation_error',
+      module: 'people',
+      object_type: 'User',
+      object_id: user._id.toString(),
+      object_label: user.full_name,
+      before_state: { transition: transitionKey },
+      after_state: { error: automationError instanceof Error ? automationError.message : 'Unknown error' },
+    });
   }
 
-  // Audit log
+  // MANDATORY: Main audit log for lifecycle change
   await auditLogger.log({
     req,
     action: 'user.lifecycle_changed',

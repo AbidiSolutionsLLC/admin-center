@@ -9,7 +9,9 @@
       "Bash(powershell *)",
       "Bash(curl *)",
       "Bash(taskkill *)",
-      "Bash(dir *)"
+      "Bash(dir *)",
+      "Bash(del *)",
+      "Bash(select-string *)"
     ]
   },
   "$version": 3
