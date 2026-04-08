@@ -9,4 +9,17 @@ export const QUERY_KEYS = {
   USERS_FILTERED: (filters: Record<string, unknown>) => ['users', filters] as const,
   USER_DETAIL: (id: string) => ['user', id] as const,
   USER_STATS: ['users', 'stats'] as const,
+  // Roles
+  ROLES: ['roles'] as const,
+  ROLE_DETAIL: (id: string) => ['role', id] as const,
+  ROLE_PERMISSIONS: (id: string) => ['role', 'permissions', id] as const,
+  ROLE_USERS: (id: string) => ['role', 'users', id] as const,
+  ALL_PERMISSIONS: ['permissions', 'all'] as const,
+  // Apps
+  APPS: ['apps'] as const,
+  APP_DETAIL: (id: string) => ['app', id] as const,
+  APP_ASSIGNMENTS: (id: string) => ['app', 'assignments', id] as const,
+  APP_TIMELINE: (id: string) => ['app', 'timeline', id] as const,
+  APP_DEPENDENCIES: (id: string, targetType: string, targetId: string) => ['app', 'dependencies', id, targetType, targetId] as const,
+  APP_USERS: (id: string) => ['app', 'users', id] as const,
 } as const;

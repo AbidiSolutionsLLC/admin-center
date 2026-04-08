@@ -14,5 +14,7 @@ export * from './Permission.model';
 export * from './Role.model';
 export * from './RolePermission.model';
 export * from './UserRole.model';
+export * from './App.model';
+export * from './AppAssignment.model';
 export * from './RefreshToken.model';
 export * from './Insight.model';

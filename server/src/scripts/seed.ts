@@ -5,6 +5,7 @@ import * as dotenv from 'dotenv';
 import path from 'path';
 import { User } from '../models/User.model';
 import { Company } from '../models/Company.model';
+import { seedPermissions, seedSystemRoles } from '../lib/seed';
 
 dotenv.config({ path: path.join(__dirname, '../../.env') });
 
@@ -36,14 +37,20 @@ const seed = async () => {
       console.log('Company already exists.');
     }
 
-    // 2. Create Admin User
+    // 2. Seed global permissions (195 documents)
+    await seedPermissions();
+
+    // 3. Seed system roles and assign permissions for the company
+    await seedSystemRoles(company._id);
+
+    // 4. Create Admin User
     const adminEmail = 'admin@example.com';
     const existingUser = await User.findOne({ email: adminEmail });
 
     if (!existingUser) {
       console.log('Creating admin user...');
       const passwordHash = await bcrypt.hash('password123', 10);
-      
+
       const adminUser = await User.create({
         company_id: company._id,
         full_name: 'Admin User',

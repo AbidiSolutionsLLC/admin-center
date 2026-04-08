@@ -7,7 +7,10 @@
     "dev": "ts-node-dev --respawn --transpile-only src/index.ts",
     "build": "tsc",
     "start": "node dist/index.js",
-    "seed": "ts-node -T src/scripts/seed.ts"
+    "seed": "ts-node -T src/scripts/seed.ts",
+    "verify-seed": "ts-node -T src/scripts/verify-seed.ts",
+    "test-roles": "ts-node -T src/scripts/test-roles.ts",
+    "test-apps": "ts-node -T src/scripts/test-apps.ts"
   },
   "dependencies": {
     "bcryptjs": "^3.0.3",

@@ -29,6 +29,7 @@ export const seedPermissions = async (): Promise<void> => {
     'notifications',
     'integrations',
     'audit_logs',
+    'insights',
   ];
 
   const actions: Array<'create' | 'read' | 'update' | 'delete' | 'export'> = [
@@ -130,7 +131,7 @@ export const seedSystemRoles = async (companyId: string | Types.ObjectId): Promi
           is_active: true,
         },
       },
-      { upsert: true, new: true }
+      { upsert: true, returnDocument: 'after' }
     );
 
     if (role) {
@@ -182,9 +183,9 @@ async function assignRolePermissions(roles: { [key: string]: Types.ObjectId }): 
     }
   }
 
-  // ── HR ADMIN: People, roles, org, audit logs ──
+  // ── HR ADMIN: People, roles, org, audit logs, insights ──
   if (roles['HR Admin']) {
-    const modules = ['people', 'roles', 'organization', 'audit_logs'];
+    const modules = ['people', 'roles', 'organization', 'audit_logs', 'insights'];
     const actions = ['create', 'read', 'update', 'delete', 'export'];
 
     for (const module of modules) {
@@ -205,10 +206,12 @@ async function assignRolePermissions(roles: { [key: string]: Types.ObjectId }): 
       }
     }
 
-    // IT Admin can also read people, org, audit logs
+    // IT Admin can also read people, org, audit logs, insights
     await assign(roles['IT Admin'], getPerm('people', 'read', 'all'), true);
     await assign(roles['IT Admin'], getPerm('organization', 'read', 'all'), true);
     await assign(roles['IT Admin'], getPerm('audit_logs', 'read', 'all'), true);
+    await assign(roles['IT Admin'], getPerm('insights', 'read', 'all'), true);
+    await assign(roles['IT Admin'], getPerm('insights', 'update', 'all'), true);
   }
 
   // ── OPS ADMIN: Workflows, policies, locations, notifications ──
@@ -222,10 +225,11 @@ async function assignRolePermissions(roles: { [key: string]: Types.ObjectId }): 
       }
     }
 
-    // Ops Admin can also read people, org, audit logs
+    // Ops Admin can also read people, org, audit logs, insights
     await assign(roles['Ops Admin'], getPerm('people', 'read', 'all'), true);
     await assign(roles['Ops Admin'], getPerm('organization', 'read', 'all'), true);
     await assign(roles['Ops Admin'], getPerm('audit_logs', 'read', 'all'), true);
+    await assign(roles['Ops Admin'], getPerm('insights', 'read', 'all'), true);
   }
 
   // ── MANAGER: Department-level access to people and org ──
@@ -235,10 +239,13 @@ async function assignRolePermissions(roles: { [key: string]: Types.ObjectId }): 
     await assign(roles['Manager'], getPerm('people', 'update', 'department'), true);
     await assign(roles['Manager'], getPerm('organization', 'read', 'department'), true);
     await assign(roles['Manager'], getPerm('apps', 'read', 'all'), true);
-    
+
     // Can read company-wide org structure and policies
     await assign(roles['Manager'], getPerm('organization', 'read', 'all'), true);
     await assign(roles['Manager'], getPerm('policies', 'read', 'all'), true);
+
+    // Can read insights
+    await assign(roles['Manager'], getPerm('insights', 'read', 'department'), true);
   }
 
   // ── EMPLOYEE: Own data only ──
@@ -255,6 +262,9 @@ async function assignRolePermissions(roles: { [key: string]: Types.ObjectId }): 
     
     // Can read policies
     await assign(roles['Employee'], getPerm('policies', 'read', 'all'), true);
+
+    // Can read insights assigned to them
+    await assign(roles['Employee'], getPerm('insights', 'read', 'own'), true);
   }
 }
 

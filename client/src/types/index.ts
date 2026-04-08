@@ -166,3 +166,122 @@ export interface UserFilters {
   department_id: string;
   employment_type: EmploymentType | '';
 }
+
+/** Role types for RBAC */
+export interface Role {
+  _id: string;
+  company_id: string;
+  name: string;
+  description?: string;
+  type: 'system' | 'custom';
+  parent_role_id?: string | null;
+  is_active: boolean;
+  created_at: string;
+  updated_at: string;
+  granted_permissions_count?: number;
+}
+
+export interface Permission {
+  _id: string;
+  module: string;
+  action: 'create' | 'read' | 'update' | 'delete' | 'export';
+  data_scope: 'own' | 'department' | 'all';
+}
+
+export interface RolePermission {
+  _id?: string;
+  role_id: string;
+  permission_id: string;
+  granted: boolean;
+}
+
+export interface ResolvedPermission {
+  module: string;
+  action: string;
+  data_scope: string;
+  granted: boolean;
+}
+
+export interface CreateRoleInput {
+  name: string;
+  description?: string;
+  type?: 'system' | 'custom';
+  parent_role_id?: string;
+}
+
+export interface UpdateRoleInput {
+  name?: string;
+  description?: string;
+  parent_role_id?: string;
+  is_active?: boolean;
+}
+
+export interface PermissionUpdate {
+  permission_id: string;
+  granted: boolean;
+}
+
+export interface PermissionMatrixData {
+  modules: string[];
+  actions: string[];
+  data_scopes: string[];
+  permissions: Map<string, Permission>;
+}
+
+/** App types for App Assignment */
+export interface App {
+  _id: string;
+  company_id: string;
+  name: string;
+  slug: string;
+  description?: string;
+  icon_url?: string;
+  category: string;
+  provider?: string;
+  status: 'active' | 'inactive' | 'maintenance';
+  is_system_app: boolean;
+  is_active: boolean;
+  dependencies?: string[];
+  created_at: string;
+  updated_at: string;
+  assignment_count?: number;
+}
+
+export interface AppAssignment {
+  _id: string;
+  company_id: string;
+  app_id: string;
+  target_type: 'role' | 'department' | 'group' | 'user';
+  target_id: string;
+  granted_by: string;
+  granted_at: string;
+  revoked_by?: string;
+  revoked_at?: string;
+  is_active: boolean;
+  reason?: string;
+  created_at: string;
+  updated_at: string;
+  granted_by_info?: { full_name: string; email: string };
+  revoked_by_info?: { full_name: string; email: string };
+}
+
+export interface AssignAppInput {
+  target_type: 'role' | 'department' | 'group' | 'user';
+  target_id: string;
+  reason?: string;
+}
+
+export interface DependencyCheckResult {
+  has_dependencies: boolean;
+  dependencies_met: boolean;
+  required?: string[];
+  assigned?: string[];
+  missing?: string[];
+}
+
+export interface AssignmentTimelineEntry {
+  assignment: AppAssignment;
+  action: 'granted' | 'revoked';
+  timestamp: string;
+  actor?: { full_name: string; email: string };
+}
