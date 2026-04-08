@@ -5,11 +5,41 @@ import crypto from 'crypto';
 import { asyncHandler } from '../utils/asyncHandler';
 import { User, LifecycleState } from '../models/User.model';
 import { RefreshToken } from '../models/RefreshToken.model';
+import { SecurityEvent } from '../models/SecurityEvent.model';
+import { SecurityPolicy } from '../models/SecurityPolicy.model';
 import { signAccessToken, signRefreshToken, AdminClaim } from '../lib/tokenService';
 import { AppError } from '../utils/AppError';
 
 // 7 days in milliseconds
 const REFRESH_TOKEN_MAX_AGE = 7 * 24 * 60 * 60 * 1000;
+
+/**
+ * Helper: Log security event for login attempts
+ */
+async function logSecurityEvent(params: {
+  company_id: any;
+  user_id?: any;
+  email?: string;
+  event_type: string;
+  ip_address?: string;
+  user_agent?: string;
+  is_suspicious?: boolean;
+  metadata?: Record<string, unknown>;
+}) {
+  const eventDoc: any = {
+    company_id: params.company_id,
+    event_type: params.event_type,
+    is_suspicious: params.is_suspicious || false,
+  };
+
+  if (params.user_id) eventDoc.user_id = params.user_id;
+  if (params.email) eventDoc.email = params.email;
+  if (params.ip_address) eventDoc.ip_address = params.ip_address;
+  if (params.user_agent) eventDoc.user_agent = params.user_agent;
+  if (params.metadata) eventDoc.metadata = params.metadata;
+
+  await SecurityEvent.create(eventDoc);
+}
 
 export const login = asyncHandler(async (req: Request, res: Response) => {
   const { email, password } = req.body;
@@ -19,12 +49,74 @@ export const login = asyncHandler(async (req: Request, res: Response) => {
   }
 
   const user = await User.findOne({ email }).select('+password_hash');
+  
+  // Log login attempt (before validation)
+  await logSecurityEvent({
+    company_id: user?.company_id || null,
+    user_id: user?._id || null,
+    email: email.toLowerCase(),
+    event_type: 'login_attempt',
+    ip_address: req.ip,
+    user_agent: req.headers['user-agent'],
+    metadata: { reason: 'login_attempt_logged' },
+  });
+
   if (!user) {
+    // User not found - log failure
+    // Check if this is suspicious (multiple failures for non-existent email)
+    const recentFailures = await SecurityEvent.countDocuments({
+      email: email.toLowerCase(),
+      event_type: 'login_failure',
+      created_at: { $gte: new Date(Date.now() - 30 * 60 * 1000) }, // Last 30 minutes
+    });
+
+    const maxAttempts = 5; // Default threshold for unknown users
+    const isSuspicious = recentFailures >= maxAttempts;
+
+    await logSecurityEvent({
+      company_id: null,
+      email: email.toLowerCase(),
+      event_type: 'login_failure',
+      ip_address: req.ip,
+      user_agent: req.headers['user-agent'],
+      is_suspicious: isSuspicious,
+      metadata: { reason: 'user_not_found' },
+    });
+
     throw new AppError('Invalid credentials', 401, 'UNAUTHORIZED');
   }
 
   const isMatch = await bcrypt.compare(password, user.password_hash);
   if (!isMatch) {
+    // Check recent failures for this email/user
+    const recentFailures = await SecurityEvent.countDocuments({
+      email: email.toLowerCase(),
+      event_type: 'login_failure',
+      created_at: { $gte: new Date(Date.now() - 30 * 60 * 1000) }, // Last 30 minutes
+    });
+
+    const securityPolicy = await SecurityPolicy.findOne({ company_id: user.company_id });
+    const maxAttempts = securityPolicy?.settings.max_failed_login_attempts || 5;
+    
+    // is_suspicious = true if we've reached or exceeded the threshold
+    const isSuspicious = (recentFailures + 1) >= maxAttempts;
+
+    // Log login failure
+    await logSecurityEvent({
+      company_id: user.company_id,
+      user_id: user._id,
+      email: email.toLowerCase(),
+      event_type: 'login_failure',
+      ip_address: req.ip,
+      user_agent: req.headers['user-agent'],
+      is_suspicious: isSuspicious,
+      metadata: { 
+        reason: 'invalid_password',
+        failure_count: recentFailures + 1,
+        max_attempts: maxAttempts,
+      },
+    });
+
     throw new AppError('Invalid credentials', 401, 'UNAUTHORIZED');
   }
 
@@ -59,6 +151,17 @@ export const login = asyncHandler(async (req: Request, res: Response) => {
     expires_at: new Date(Date.now() + REFRESH_TOKEN_MAX_AGE),
     ip_address: req.ip,
     user_agent: req.headers['user-agent']
+  });
+
+  // Log successful login
+  await logSecurityEvent({
+    company_id: user.company_id,
+    user_id: user._id,
+    email: user.email,
+    event_type: 'login_success',
+    ip_address: req.ip,
+    user_agent: req.headers['user-agent'],
+    metadata: { lifecycle_state: user.lifecycle_state },
   });
 
   // Set the refresh cookie

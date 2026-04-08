@@ -2,6 +2,7 @@
 import { Permission } from '../models/Permission.model';
 import { Role } from '../models/Role.model';
 import { RolePermission } from '../models/RolePermission.model';
+import { SecurityPolicy } from '../models/SecurityPolicy.model';
 import { Types } from 'mongoose';
 
 /**
@@ -269,15 +270,59 @@ async function assignRolePermissions(roles: { [key: string]: Types.ObjectId }): 
 }
 
 /**
- * Complete database seeding: permissions + system roles for a company.
- * 
+ * Seeds default SecurityPolicy for a company.
+ * Creates a default security policy with standard settings if one doesn't exist.
+ *
+ * @param companyId - The company to seed security policy for
+ */
+export const seedSecurityPolicy = async (companyId: string | Types.ObjectId): Promise<void> => {
+  console.log(`🌱 Seeding security policy for company ${companyId}...`);
+
+  const companyObjectId = typeof companyId === 'string' ? new Types.ObjectId(companyId) : companyId;
+
+  // Check if policy already exists
+  const existingPolicy = await SecurityPolicy.findOne({ company_id: companyObjectId });
+  if (existingPolicy) {
+    console.log('Security policy already exists.');
+    return;
+  }
+
+  // Create default security policy
+  await SecurityPolicy.create({
+    company_id: companyObjectId,
+    policy_name: 'Default Security Policy',
+    description: 'Default security policy with standard protection settings',
+    is_enabled: true,
+    settings: {
+      max_failed_login_attempts: 5,
+      lockout_duration_minutes: 30,
+      session_timeout_minutes: 480, // 8 hours
+      require_mfa: false,
+      password_min_length: 8,
+      password_require_uppercase: true,
+      password_require_lowercase: true,
+      password_require_numbers: true,
+      password_require_special_chars: true,
+      password_expiry_days: 90,
+      ip_whitelist_enabled: false,
+      ip_whitelist: [],
+    },
+  });
+
+  console.log('✅ Security policy seeded');
+};
+
+/**
+ * Complete database seeding: permissions + system roles + security policy for a company.
+ *
  * @param companyId - The company to seed roles for
  */
 export const seedDatabase = async (companyId: string | Types.ObjectId): Promise<void> => {
   console.log('🌱 Starting database seed...');
-  
+
   await seedPermissions();
   await seedSystemRoles(companyId);
-  
+  await seedSecurityPolicy(companyId);
+
   console.log('✅ Database seeding complete');
 };

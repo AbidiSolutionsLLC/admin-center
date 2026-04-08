@@ -18,3 +18,5 @@ export * from './App.model';
 export * from './AppAssignment.model';
 export * from './RefreshToken.model';
 export * from './Insight.model';
+export * from './SecurityEvent.model';
+export * from './SecurityPolicy.model';

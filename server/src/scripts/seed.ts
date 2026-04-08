@@ -5,7 +5,7 @@ import * as dotenv from 'dotenv';
 import path from 'path';
 import { User } from '../models/User.model';
 import { Company } from '../models/Company.model';
-import { seedPermissions, seedSystemRoles } from '../lib/seed';
+import { seedPermissions, seedSystemRoles, seedSecurityPolicy } from '../lib/seed';
 
 dotenv.config({ path: path.join(__dirname, '../../.env') });
 
@@ -43,7 +43,10 @@ const seed = async () => {
     // 3. Seed system roles and assign permissions for the company
     await seedSystemRoles(company._id);
 
-    // 4. Create Admin User
+    // 4. Seed security policy for the company
+    await seedSecurityPolicy(company._id);
+
+    // 5. Create Admin User
     const adminEmail = 'admin@example.com';
     const existingUser = await User.findOne({ email: adminEmail });
 
