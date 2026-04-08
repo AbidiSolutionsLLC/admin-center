@@ -27,4 +27,11 @@ export const QUERY_KEYS = {
   SETUP_PROGRESS: ['overview', 'setup-progress'] as const,
   RECENT_ACTIVITY: ['overview', 'recent-activity'] as const,
   OVERVIEW_INSIGHTS: ['overview', 'insights'] as const,
+  // Security
+  SECURITY_POLICY: ['security', 'policy'] as const,
+  SECURITY_EVENTS: (filters?: Record<string, unknown>) =>
+    filters ? ['security', 'events', filters] as const : ['security', 'events'] as const,
+  // Audit Logs
+  AUDIT_EVENTS: (filters?: Record<string, unknown>) =>
+    filters ? ['audit', 'events', filters] as const : ['audit', 'events'] as const,
 } as const;

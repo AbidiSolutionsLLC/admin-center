@@ -326,6 +326,7 @@ export interface AuditEvent {
   company_id: string;
   actor_id: string;
   actor_email: string;
+  actor_name?: string;
   action: string;
   module: string;
   object_type: string;
@@ -337,4 +338,82 @@ export interface AuditEvent {
   user_agent?: string;
   created_at: string;
   time_ago?: string;
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Security
+// ─────────────────────────────────────────────────────────────────────────────
+
+export type SecurityEventType =
+  | 'login_attempt'
+  | 'login_success'
+  | 'login_failure'
+  | 'logout'
+  | 'password_reset_request'
+  | 'password_reset_complete'
+  | 'mfa_challenge'
+  | 'mfa_verified'
+  | 'mfa_failed'
+  | 'session_expired'
+  | 'token_refresh'
+  | 'token_revoked'
+  | 'suspicious_activity_detected'
+  | 'account_locked'
+  | 'account_unlocked';
+
+export interface SecurityEvent {
+  _id: string;
+  company_id: string;
+  user_id?: string;
+  user?: { _id: string; full_name: string; email: string };
+  email?: string;
+  event_type: SecurityEventType;
+  ip_address?: string;
+  user_agent?: string;
+  is_suspicious: boolean;
+  metadata?: Record<string, unknown>;
+  created_at: string;
+}
+
+export interface SecurityPolicySettings {
+  max_failed_login_attempts: number;
+  lockout_duration_minutes: number;
+  session_timeout_minutes: number;
+  require_mfa: boolean;
+  password_min_length: number;
+  password_require_uppercase: boolean;
+  password_require_lowercase: boolean;
+  password_require_numbers: boolean;
+  password_require_special_chars: boolean;
+  password_expiry_days: number;
+  ip_whitelist_enabled: boolean;
+  ip_whitelist: string[];
+}
+
+export interface SecurityPolicy {
+  _id: string;
+  company_id: string;
+  policy_name: string;
+  description?: string;
+  is_enabled: boolean;
+  settings: SecurityPolicySettings;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface UpdateSecurityPolicyInput {
+  policy_name?: string;
+  description?: string;
+  is_enabled?: boolean;
+  settings?: Partial<SecurityPolicySettings>;
+}
+
+export interface SecurityEventsResponse {
+  events: SecurityEvent[];
+  pagination: {
+    page: number;
+    limit: number;
+    total: number;
+    totalPages: number;
+  };
 }
