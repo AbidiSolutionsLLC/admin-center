@@ -1,6 +1,6 @@
 // src/pages/organization/OrganizationPage.tsx
 import { useState, useMemo } from 'react';
-import { Building2, Plus, LayoutGrid, List, Search, ChevronDown, X } from 'lucide-react';
+import { Building2, Plus, LayoutGrid, List, Search, ChevronDown, X, FolderTree } from 'lucide-react';
 import * as Tabs from '@radix-ui/react-tabs';
 import { useDepartments } from '@/features/organization/hooks/useDepartments';
 import { useOrgTree } from '@/features/organization/hooks/useOrgTree';
@@ -11,6 +11,7 @@ import { DepartmentTable } from '@/features/organization/components/DepartmentTa
 import { OrgChartView } from '@/features/organization/components/OrgChartView';
 import { DepartmentForm } from '@/features/organization/components/DepartmentForm';
 import type { DepartmentFormData } from '@/features/organization/components/DepartmentForm';
+import { BusinessUnitsTab } from '@/features/organization/components/BusinessUnitsTab';
 import { TableSkeleton } from '@/components/ui/TableSkeleton';
 import { ErrorState } from '@/components/ui/ErrorState';
 import { EmptyState } from '@/components/ui/EmptyState';
@@ -179,163 +180,190 @@ export default function OrganizationPage() {
       {/* ── Intelligence Banner ── */}
       <IntelligenceBanner module="organization" />
 
-      {/* ── Empty State ── */}
-      {!hasData ? (
-        <EmptyState
-          icon={Building2}
-          title="No departments yet"
-          description="Build your organization by creating the first business unit or department."
-          action={{ label: 'Create First Department', onClick: handleOpenCreate }}
-        />
-      ) : (
-        <Tabs.Root defaultValue="list" className="space-y-4">
-          {/* ── Filter Bar + View Toggle ── */}
-          <div className="flex items-center justify-between gap-3 flex-wrap">
-            {/* Filter bar */}
-            <div className="flex items-center gap-2 flex-wrap flex-1">
-              {/* Search */}
-              <div className="relative w-60">
-                <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-ink-muted pointer-events-none" />
-                <input
-                  type="text"
-                  value={filters.search}
-                  onChange={(e) => setFilters((f) => ({ ...f, search: e.target.value }))}
-                  placeholder="Search departments..."
-                  className="w-full h-9 pl-9 pr-8 text-sm rounded-md border border-line bg-white text-ink placeholder:text-ink-muted focus:outline-none focus:ring-2 focus:ring-primary/30 focus:border-primary transition-all duration-150"
-                />
-                {filters.search && (
-                  <button
-                    onClick={() => setFilters((f) => ({ ...f, search: '' }))}
-                    className="absolute right-2 top-1/2 -translate-y-1/2 text-ink-muted hover:text-ink"
-                    aria-label="Clear search"
-                  >
-                    <X className="w-3.5 h-3.5" />
-                  </button>
-                )}
-              </div>
-
-              {/* Type filter */}
-              <div className="relative">
-                <select
-                  value={filters.type}
-                  onChange={(e) =>
-                    setFilters((f) => ({
-                      ...f,
-                      type: e.target.value as DepartmentFilters['type'],
-                    }))
-                  }
-                  className="h-9 pl-3 pr-8 text-sm rounded-md border border-line bg-white text-ink focus:outline-none focus:ring-2 focus:ring-primary/30 focus:border-primary transition-all duration-150 appearance-none cursor-pointer"
-                >
-                  {DEPT_TYPE_OPTIONS.map((opt) => (
-                    <option key={opt.value} value={opt.value}>
-                      {opt.label}
-                    </option>
-                  ))}
-                </select>
-                <ChevronDown className="absolute right-2 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-ink-muted pointer-events-none" />
-              </div>
-
-              {/* Status filter */}
-              <div className="relative">
-                <select
-                  value={filters.status}
-                  onChange={(e) =>
-                    setFilters((f) => ({
-                      ...f,
-                      status: e.target.value as DepartmentFilters['status'],
-                    }))
-                  }
-                  className="h-9 pl-3 pr-8 text-sm rounded-md border border-line bg-white text-ink focus:outline-none focus:ring-2 focus:ring-primary/30 focus:border-primary transition-all duration-150 appearance-none cursor-pointer"
-                >
-                  <option value="">All Status</option>
-                  <option value="active">Active</option>
-                  <option value="inactive">Archived</option>
-                </select>
-                <ChevronDown className="absolute right-2 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-ink-muted pointer-events-none" />
-              </div>
-
-              {/* Clear filters */}
-              {activeFilterCount > 0 && (
-                <button
-                  onClick={() =>
-                    setFilters({ search: '', type: '', status: 'active' })
-                  }
-                  className="text-xs font-medium text-accent hover:text-accent-hover transition-colors"
-                >
-                  Clear {activeFilterCount} filter{activeFilterCount > 1 ? 's' : ''}
-                </button>
-              )}
-
-              {/* Result count */}
-              {filters.search || filters.type ? (
-                <span className="text-xs text-ink-muted">
-                  {filteredDepartments.length} of {departments.length} results
-                </span>
-              ) : null}
-            </div>
-
-            {/* View toggle (right-aligned) */}
-            <Tabs.List className="flex bg-surface-alt p-1 rounded-lg gap-1 flex-shrink-0">
-              <Tabs.Trigger
-                value="list"
-                className="flex items-center gap-1.5 px-3 py-1.5 text-sm font-medium rounded-md text-ink-secondary data-[state=active]:bg-white data-[state=active]:text-ink data-[state=active]:shadow-sm transition-all"
-              >
-                <List className="w-3.5 h-3.5" />
-                Table
-              </Tabs.Trigger>
-              <Tabs.Trigger
-                value="chart"
-                className="flex items-center gap-1.5 px-3 py-1.5 text-sm font-medium rounded-md text-ink-secondary data-[state=active]:bg-white data-[state=active]:text-ink data-[state=active]:shadow-sm transition-all"
-              >
-                <LayoutGrid className="w-3.5 h-3.5" />
-                Org Chart
-              </Tabs.Trigger>
-            </Tabs.List>
-          </div>
-
-          {/* ── Table View ── */}
-          <Tabs.Content value="list" className="focus:outline-none">
-            {filteredDepartments.length === 0 ? (
-              <div className="bg-white rounded-lg border border-line shadow-card p-16 text-center">
-                <div className="w-10 h-10 rounded-xl bg-primary-light flex items-center justify-center mx-auto mb-3">
-                  <Search className="w-5 h-5 text-primary" />
-                </div>
-                <h3 className="text-sm font-semibold text-ink mb-1">No results found</h3>
-                <p className="text-sm text-ink-secondary">
-                  Try adjusting your search or filter criteria.
-                </p>
-              </div>
-            ) : (
-              <DepartmentTable
-                departments={filteredDepartments}
-                onEdit={handleOpenEdit}
-                onDelete={handleRequestDelete}
-              />
-            )}
-          </Tabs.Content>
-
-          {/* ── Org Chart View ── */}
-          <Tabs.Content
-            value="chart"
-            className="focus:outline-none bg-white rounded-lg border border-line shadow-card min-h-[600px] overflow-hidden"
+      {/* ── Main Tabs: Departments | Business Units ── */}
+      <Tabs.Root defaultValue="departments" className="space-y-4">
+        <Tabs.List className="flex bg-surface-alt p-1 rounded-lg gap-1 w-fit">
+          <Tabs.Trigger
+            value="departments"
+            className="flex items-center gap-1.5 px-4 py-2 text-sm font-medium rounded-md text-ink-secondary data-[state=active]:bg-white data-[state=active]:text-ink data-[state=active]:shadow-sm transition-all"
           >
-            {isTreeLoading ? (
-              <div className="flex items-center justify-center h-[600px]">
-                <div className="flex flex-col items-center gap-3">
-                  <div className="w-8 h-8 border-2 border-primary border-t-transparent rounded-full animate-spin" />
-                  <p className="text-sm text-ink-muted">Generating org tree…</p>
+            <List className="w-4 h-4" />
+            Departments
+          </Tabs.Trigger>
+          <Tabs.Trigger
+            value="business-units"
+            className="flex items-center gap-1.5 px-4 py-2 text-sm font-medium rounded-md text-ink-secondary data-[state=active]:bg-white data-[state=active]:text-ink data-[state=active]:shadow-sm transition-all"
+          >
+            <FolderTree className="w-4 h-4" />
+            Business Units
+          </Tabs.Trigger>
+        </Tabs.List>
+
+        {/* Departments Tab */}
+        <Tabs.Content value="departments" className="focus:outline-none">
+          {!hasData ? (
+            <EmptyState
+              icon={Building2}
+              title="No departments yet"
+              description="Build your organization by creating the first business unit or department."
+              action={{ label: 'Create First Department', onClick: handleOpenCreate }}
+            />
+          ) : (
+            <>
+              {/* ── Filter Bar + View Toggle ── */}
+              <div className="flex items-center justify-between gap-3 flex-wrap">
+                {/* Filter bar */}
+                <div className="flex items-center gap-2 flex-wrap flex-1">
+                  {/* Search */}
+                  <div className="relative w-60">
+                    <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-ink-muted pointer-events-none" />
+                    <input
+                      type="text"
+                      value={filters.search}
+                      onChange={(e) => setFilters((f) => ({ ...f, search: e.target.value }))}
+                      placeholder="Search departments..."
+                      className="w-full h-9 pl-9 pr-8 text-sm rounded-md border border-line bg-white text-ink placeholder:text-ink-muted focus:outline-none focus:ring-2 focus:ring-primary/30 focus:border-primary transition-all duration-150"
+                    />
+                    {filters.search && (
+                      <button
+                        onClick={() => setFilters((f) => ({ ...f, search: '' }))}
+                        className="absolute right-2 top-1/2 -translate-y-1/2 text-ink-muted hover:text-ink"
+                        aria-label="Clear search"
+                      >
+                        <X className="w-3.5 h-3.5" />
+                      </button>
+                    )}
+                  </div>
+
+                  {/* Type filter */}
+                  <div className="relative">
+                    <select
+                      value={filters.type}
+                      onChange={(e) =>
+                        setFilters((f) => ({
+                          ...f,
+                          type: e.target.value as DepartmentFilters['type'],
+                        }))
+                      }
+                      className="h-9 pl-3 pr-8 text-sm rounded-md border border-line bg-white text-ink focus:outline-none focus:ring-2 focus:ring-primary/30 focus:border-primary transition-all duration-150 appearance-none cursor-pointer"
+                    >
+                      {DEPT_TYPE_OPTIONS.map((opt) => (
+                        <option key={opt.value} value={opt.value}>
+                          {opt.label}
+                        </option>
+                      ))}
+                    </select>
+                    <ChevronDown className="absolute right-2 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-ink-muted pointer-events-none" />
+                  </div>
+
+                  {/* Status filter */}
+                  <div className="relative">
+                    <select
+                      value={filters.status}
+                      onChange={(e) =>
+                        setFilters((f) => ({
+                          ...f,
+                          status: e.target.value as DepartmentFilters['status'],
+                        }))
+                      }
+                      className="h-9 pl-3 pr-8 text-sm rounded-md border border-line bg-white text-ink focus:outline-none focus:ring-2 focus:ring-primary/30 focus:border-primary transition-all duration-150 appearance-none cursor-pointer"
+                    >
+                      <option value="">All Status</option>
+                      <option value="active">Active</option>
+                      <option value="inactive">Archived</option>
+                    </select>
+                    <ChevronDown className="absolute right-2 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-ink-muted pointer-events-none" />
+                  </div>
+
+                  {/* Clear filters */}
+                  {activeFilterCount > 0 && (
+                    <button
+                      onClick={() =>
+                        setFilters({ search: '', type: '', status: 'active' })
+                      }
+                      className="text-xs font-medium text-accent hover:text-accent-hover transition-colors"
+                    >
+                      Clear {activeFilterCount} filter{activeFilterCount > 1 ? 's' : ''}
+                    </button>
+                  )}
+
+                  {/* Result count */}
+                  {filters.search || filters.type ? (
+                    <span className="text-xs text-ink-muted">
+                      {filteredDepartments.length} of {departments.length} results
+                    </span>
+                  ) : null}
                 </div>
+
+                {/* View toggle (right-aligned) */}
+                <Tabs.List className="flex bg-surface-alt p-1 rounded-lg gap-1 flex-shrink-0">
+                  <Tabs.Trigger
+                    value="list"
+                    className="flex items-center gap-1.5 px-3 py-1.5 text-sm font-medium rounded-md text-ink-secondary data-[state=active]:bg-white data-[state=active]:text-ink data-[state=active]:shadow-sm transition-all"
+                  >
+                    <List className="w-3.5 h-3.5" />
+                    Table
+                  </Tabs.Trigger>
+                  <Tabs.Trigger
+                    value="chart"
+                    className="flex items-center gap-1.5 px-3 py-1.5 text-sm font-medium rounded-md text-ink-secondary data-[state=active]:bg-white data-[state=active]:text-ink data-[state=active]:shadow-sm transition-all"
+                  >
+                    <LayoutGrid className="w-3.5 h-3.5" />
+                    Org Chart
+                  </Tabs.Trigger>
+                </Tabs.List>
               </div>
-            ) : treeData && treeData.length > 0 ? (
-              <OrgChartView treeData={treeData} onNodeClick={handleOpenEdit} />
-            ) : (
-              <div className="flex items-center justify-center h-[600px]">
-                <p className="text-sm text-ink-muted">No hierarchy data available.</p>
-              </div>
-            )}
-          </Tabs.Content>
-        </Tabs.Root>
-      )}
+
+              {/* ── Table View ── */}
+              <Tabs.Content value="list" className="focus:outline-none">
+                {filteredDepartments.length === 0 ? (
+                  <div className="bg-white rounded-lg border border-line shadow-card p-16 text-center">
+                    <div className="w-10 h-10 rounded-xl bg-primary-light flex items-center justify-center mx-auto mb-3">
+                      <Search className="w-5 h-5 text-primary" />
+                    </div>
+                    <h3 className="text-sm font-semibold text-ink mb-1">No results found</h3>
+                    <p className="text-sm text-ink-secondary">
+                      Try adjusting your search or filter criteria.
+                    </p>
+                  </div>
+                ) : (
+                  <DepartmentTable
+                    departments={filteredDepartments}
+                    onEdit={handleOpenEdit}
+                    onDelete={handleRequestDelete}
+                  />
+                )}
+              </Tabs.Content>
+
+              {/* ── Org Chart View ── */}
+              <Tabs.Content
+                value="chart"
+                className="focus:outline-none bg-white rounded-lg border border-line shadow-card min-h-[600px] overflow-hidden"
+              >
+                {isTreeLoading ? (
+                  <div className="flex items-center justify-center h-[600px]">
+                    <div className="flex flex-col items-center gap-3">
+                      <div className="w-8 h-8 border-2 border-primary border-t-transparent rounded-full animate-spin" />
+                      <p className="text-sm text-ink-muted">Generating org tree…</p>
+                    </div>
+                  </div>
+                ) : treeData && treeData.length > 0 ? (
+                  <OrgChartView treeData={treeData} onNodeClick={handleOpenEdit} />
+                ) : (
+                  <div className="flex items-center justify-center h-[600px]">
+                    <p className="text-sm text-ink-muted">No hierarchy data available.</p>
+                  </div>
+                )}
+              </Tabs.Content>
+            </>
+          )}
+        </Tabs.Content>
+
+        {/* Business Units Tab */}
+        <Tabs.Content value="business-units" className="focus:outline-none">
+          <BusinessUnitsTab allDepartments={departments ?? []} />
+        </Tabs.Content>
+      </Tabs.Root>
 
       {/* ── Create / Edit Modal ── */}
       <Modal

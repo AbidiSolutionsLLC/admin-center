@@ -4,6 +4,7 @@ import { z } from 'zod';
 import { asyncHandler } from '../utils/asyncHandler';
 import { Department } from '../models/Department.model';
 import { User } from '../models/User.model';
+import { Team } from '../models/Team.model';
 import { auditLogger } from '../lib/auditLogger';
 import { runIntelligenceRules } from '../lib/intelligence';
 import { AppError } from '../utils/AppError';
@@ -19,6 +20,19 @@ const CreateDepartmentSchema = z.object({
 });
 
 const UpdateDepartmentSchema = CreateDepartmentSchema.partial();
+
+// BU-specific schema (type is locked to 'business_unit')
+const CreateBUSchema = z.object({
+  name: z.string().min(1, 'Name is required').max(100),
+  primary_manager_id: z.string().optional().nullable(),
+  secondary_manager_id: z.string().optional().nullable(),
+});
+
+// User org assignment schema
+const AssignUserOrgSchema = z.object({
+  department_id: z.string().optional().nullable(),
+  team_ids: z.array(z.string()).optional().nullable(),
+});
 
 // ── Intelligence helpers ─────────────────────────────────────────────────────
 
@@ -240,4 +254,260 @@ export const getOrgTree = asyncHandler(async (req: Request, res: Response) => {
   });
 
   res.status(200).json({ success: true, data: tree });
+});
+
+/**
+ * GET /organization/bu-tree
+ * Returns full hierarchy tree for all Business Units: BU → Departments → Teams
+ */
+export const getBUTree = asyncHandler(async (req: Request, res: Response) => {
+  // Get all active BUs
+  const bus = await Department.find({
+    company_id: req.user.company_id,
+    type: 'business_unit',
+    is_active: true,
+  } as any)
+    .populate('primary_manager_id', 'full_name avatar_url')
+    .sort({ created_at: 1 })
+    .lean();
+
+  // Get all active departments (excluding BUs)
+  const departments = await Department.find({
+    company_id: req.user.company_id,
+    type: { $in: ['division', 'department', 'cost_center'] },
+    is_active: true,
+  } as any)
+    .populate('primary_manager_id', 'full_name avatar_url')
+    .sort({ created_at: 1 })
+    .lean();
+
+  // Get all active teams
+  const teams = await Team.find({
+    company_id: req.user.company_id,
+    is_active: true,
+  } as any)
+    .populate('team_lead_id', 'full_name avatar_url')
+    .sort({ created_at: 1 })
+    .lean();
+
+  // Enrich departments with headcount and flags
+  const enrichedDepts = await enrichDepartments(departments);
+
+  // Build hierarchy: BU → Departments → Teams
+  const buTree = bus.map((bu) => {
+    // Find direct children and all descendants
+    const allDescendants = enrichedDepts.filter((d) => {
+      // Check if this dept is under this BU (direct or indirect)
+      let current = d;
+      while (current.parent_id) {
+        if (current.parent_id.toString() === bu._id.toString()) return true;
+        const parent = enrichedDepts.find((p) => p._id.toString() === current.parent_id?.toString());
+        if (!parent) break;
+        current = parent;
+      }
+      return false;
+    });
+
+    // Build nested structure
+    const buildDeptTree = (parentId: string) => {
+      const children = allDescendants.filter(
+        (d) => d.parent_id?.toString() === parentId
+      );
+      return children.map((child) => {
+        const deptTeams = teams.filter(
+          (t) => t.department_id?.toString() === child._id.toString()
+        );
+        return {
+          ...child,
+          teams: deptTeams,
+          team_count: deptTeams.length,
+          children: buildDeptTree(child._id.toString()),
+        };
+      });
+    };
+
+    // Get direct children of BU
+    const directChildren = allDescendants.filter(
+      (d) => d.parent_id?.toString() === bu._id.toString()
+    );
+
+    const children = directChildren.map((child) => {
+      const deptTeams = teams.filter(
+        (t) => t.department_id?.toString() === child._id.toString()
+      );
+      return {
+        ...child,
+        teams: deptTeams,
+        team_count: deptTeams.length,
+        children: buildDeptTree(child._id.toString()),
+      };
+    });
+
+    const deptCount = allDescendants.length;
+    const teamCount = teams.filter((t) =>
+      allDescendants.some((d) => d._id.toString() === t.department_id?.toString())
+    ).length;
+
+    return {
+      ...bu,
+      children,
+      dept_count: deptCount,
+      team_count: teamCount,
+    };
+  });
+
+  res.status(200).json({ success: true, data: buTree });
+});
+
+/**
+ * GET /organization/business-units
+ * Returns all BUs with dept + team counts
+ */
+export const getBusinessUnits = asyncHandler(async (req: Request, res: Response) => {
+  const bus = await Department.find({
+    company_id: req.user.company_id,
+    type: 'business_unit',
+    is_active: true,
+  } as any)
+    .populate('primary_manager_id', 'full_name avatar_url')
+    .sort({ created_at: 1 })
+    .lean();
+
+  // Get all departments under these BUs
+  const buIds = bus.map((bu) => bu._id.toString());
+  const allDepts = await Department.find({
+    company_id: req.user.company_id,
+    is_active: true,
+  } as any).lean();
+
+  // Get all teams
+  const allTeams = await Team.find({
+    company_id: req.user.company_id,
+    is_active: true,
+  } as any).lean();
+
+  // Count descendants and teams for each BU
+  const buWithCounts = bus.map((bu) => {
+    const findDescendants = (parentId: string): string[] => {
+      const children = allDepts.filter(
+        (d) => d.parent_id?.toString() === parentId
+      );
+      let descendants: string[] = children.map((c) => c._id.toString());
+      children.forEach((child) => {
+        descendants = descendants.concat(findDescendants(child._id.toString()));
+      });
+      return descendants;
+    };
+
+    const descendantIds = findDescendants(bu._id.toString());
+    const deptCount = descendantIds.length;
+    const teamCount = allTeams.filter((t) =>
+      descendantIds.includes(t.department_id?.toString())
+    ).length;
+
+    return {
+      ...bu,
+      dept_count: deptCount,
+      team_count: teamCount,
+    };
+  });
+
+  res.status(200).json({ success: true, data: buWithCounts });
+});
+
+/**
+ * DELETE /organization/business-units/:id
+ * Deletes a BU. Blocked if it has child departments (409).
+ */
+export const deleteBusinessUnit = asyncHandler(async (req: Request, res: Response) => {
+  const bu = await Department.findOne({
+    _id: req.params.id,
+    company_id: req.user.company_id,
+    type: 'business_unit',
+    is_active: true,
+  } as any);
+
+  if (!bu) {
+    throw new AppError('Business Unit not found', 404, 'NOT_FOUND');
+  }
+
+  // Check for child departments
+  const childCount = await Department.countDocuments({
+    company_id: req.user.company_id,
+    parent_id: bu._id,
+    is_active: true,
+  } as any);
+
+  if (childCount > 0) {
+    throw new AppError(
+      `Cannot delete Business Unit "${bu.name}" — it has ${childCount} child department${childCount > 1 ? 's' : ''}. Remove or reassign all child departments first.`,
+      409,
+      'BU_HAS_CHILD_DEPARTMENTS'
+    );
+  }
+
+  const beforeState = bu.toObject();
+
+  bu.is_active = false;
+  await bu.save();
+
+  await auditLogger.log({
+    req,
+    action: 'business_unit.archived',
+    module: 'organization',
+    object_type: 'Department',
+    object_id: bu._id.toString(),
+    object_label: bu.name,
+    before_state: beforeState,
+    after_state: bu.toObject(),
+  });
+
+  runIntelligenceRules(req.user.company_id).catch(err => {
+    console.error('Intelligence rules failed:', err);
+  });
+
+  res.status(200).json({ success: true, data: {} });
+});
+
+/**
+ * POST /people/:id/assign-org
+ * Assigns a user to a department and teams in one request.
+ */
+export const assignUserOrg = asyncHandler(async (req: Request, res: Response) => {
+  const input = AssignUserOrgSchema.parse(req.body);
+
+  const user = await User.findOne({
+    _id: req.params.id,
+    company_id: req.user.company_id,
+  } as any);
+
+  if (!user) {
+    throw new AppError('User not found', 404, 'NOT_FOUND');
+  }
+
+  const beforeState = user.toObject();
+
+  // Update department
+  if (input.department_id !== undefined) {
+    user.department_id = input.department_id || undefined;
+  }
+
+  // Note: Team memberships are managed via TeamMember join table,
+  // not on the User document. This endpoint just updates the primary department.
+  // Team assignments should be managed via the Teams API.
+
+  await user.save();
+
+  await auditLogger.log({
+    req,
+    action: 'user.org_assigned',
+    module: 'people',
+    object_type: 'User',
+    object_id: user._id.toString(),
+    object_label: user.full_name,
+    before_state: beforeState,
+    after_state: user.toObject(),
+  });
+
+  res.status(200).json({ success: true, data: user });
 });

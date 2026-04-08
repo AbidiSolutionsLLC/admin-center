@@ -3,19 +3,19 @@ import { useState } from 'react';
 import { NavLink, useLocation } from 'react-router-dom';
 import { cn } from '@/utils/cn';
 import { ROUTES } from '@/constants/routes';
-import { 
-  LayoutDashboard, 
-  Building2, 
-  MapPin, 
-  Users, 
-  Shield, 
-  LayoutGrid, 
-  FileText, 
-  GitBranch, 
-  Lock, 
-  Activity, 
-  Database, 
-  Bell, 
+import {
+  LayoutDashboard,
+  Building2,
+  Users,
+  MapPin,
+  Shield,
+  LayoutGrid,
+  FileText,
+  GitBranch,
+  Lock,
+  Activity,
+  Database,
+  Bell,
   Plug,
   LogOut,
   MoreVertical
@@ -37,6 +37,7 @@ const navGroups = [
     label: 'Structure',
     items: [
       { label: 'Organization', href: ROUTES.ORGANIZATION, icon: Building2 },
+      { label: 'Teams', href: ROUTES.TEAMS, icon: Users },
       { label: 'Locations', href: ROUTES.LOCATIONS, icon: MapPin },
     ],
   },

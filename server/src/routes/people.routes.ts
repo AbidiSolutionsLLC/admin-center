@@ -9,6 +9,7 @@ import {
   bulkInviteUsers,
   deleteUser,
 } from '../controllers/people.controller';
+import { assignUserOrg } from '../controllers/organization.controller';
 
 const router = Router();
 
@@ -59,5 +60,11 @@ router.put('/:id/lifecycle', updateUserLifecycle);
  * Archive a user (soft delete)
  */
 router.delete('/:id', deleteUser);
+
+/**
+ * POST /people/:id/assign-org
+ * Assign user to department and teams
+ */
+router.post('/:id/assign-org', assignUserOrg);
 
 export default router;

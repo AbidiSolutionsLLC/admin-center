@@ -2,8 +2,14 @@ export const QUERY_KEYS = {
   DEPARTMENTS: ['departments'] as const,
   DEPARTMENT_DETAIL: (id: string) => ['department', id] as const,
   ORG_TREE: ['org', 'tree'] as const,
+  BUSINESS_UNITS: ['business-units'] as const,
+  BU_TREE: ['bu-tree'] as const,
   INSIGHTS: (filters?: Record<string, unknown>) =>
     filters ? ['insights', filters] as const : ['insights'] as const,
+  // Teams
+  TEAMS: ['teams'] as const,
+  TEAM_DETAIL: (id: string) => ['team', id] as const,
+  TEAM_MEMBERS: (id: string) => ['team', id, 'members'] as const,
   // People
   USERS: ['users'] as const,
   USERS_FILTERED: (filters: Record<string, unknown>) => ['users', filters] as const,

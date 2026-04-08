@@ -11,6 +11,7 @@ import { ROUTES } from './constants/routes';
 import LoginPage from './pages/auth/LoginPage';
 import OverviewPage from './pages/overview/OverviewPage';
 import OrganizationPage from './pages/organization/OrganizationPage';
+import TeamsPage from './pages/teams/TeamsPage';
 import PeoplePage from './pages/people/PeoplePage';
 import RolesPage from './pages/roles/RolesPage';
 import AppsPage from './pages/apps/AppsPage';
@@ -31,6 +32,7 @@ function App() {
               <Route index element={<Navigate to={ROUTES.OVERVIEW} replace />} />
               <Route path={ROUTES.OVERVIEW} element={<OverviewPage />} />
               <Route path={ROUTES.ORGANIZATION} element={<OrganizationPage />} />
+              <Route path={ROUTES.TEAMS} element={<TeamsPage />} />
               <Route path={ROUTES.PEOPLE} element={<PeoplePage />} />
               <Route path={ROUTES.ROLES} element={<RolesPage />} />
               <Route path={ROUTES.APPS} element={<AppsPage />} />
