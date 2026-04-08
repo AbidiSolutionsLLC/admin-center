@@ -235,7 +235,7 @@ export default function OrganizationPage() {
               action={{ label: 'Create First Department', onClick: handleOpenCreate }}
             />
           ) : (
-            <>
+            <Tabs.Root defaultValue="list">
               {/* ── Filter Bar + View Toggle ── */}
               <div className="flex items-center justify-between gap-3 flex-wrap">
                 {/* Filter bar */}
@@ -381,7 +381,7 @@ export default function OrganizationPage() {
                   </div>
                 )}
               </Tabs.Content>
-            </>
+            </Tabs.Root>
           )}
         </Tabs.Content>
 

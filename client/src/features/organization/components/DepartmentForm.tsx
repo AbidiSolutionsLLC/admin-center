@@ -3,6 +3,7 @@ import React from 'react';
 import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { z } from 'zod';
+import { useUsers } from '@/features/people/hooks/useUsers';
 import type { Department } from '@/types';
 import { cn } from '@/utils/cn';
 
@@ -76,6 +77,8 @@ export const DepartmentForm: React.FC<DepartmentFormProps> = ({
     },
   });
 
+  const { data: users, isLoading: isLoadingUsers } = useUsers();
+
   const availableParents = departments.filter((d) => d._id !== initialData?._id);
 
   return (
@@ -146,17 +149,23 @@ export const DepartmentForm: React.FC<DepartmentFormProps> = ({
       {/* Primary Manager */}
       <div className="space-y-1.5">
         <label htmlFor="dept-manager" className="text-sm font-medium text-ink">
-          Primary Manager ID
+          Primary Manager
         </label>
-        <input
+        <select
           id="dept-manager"
           {...register('primary_manager_id')}
-          placeholder="24-char MongoDB ObjectId"
-          disabled={isSubmitting}
+          disabled={isSubmitting || isLoadingUsers}
           className={inputClass(!!errors.primary_manager_id)}
-        />
+        >
+          <option value="">{isLoadingUsers ? 'Loading...' : 'None'}</option>
+          {users?.map((user) => (
+            <option key={user._id} value={user._id}>
+              {user.full_name}
+            </option>
+          ))}
+        </select>
         <p className="text-[11px] text-ink-muted">
-          Enter the 24-character hex ID of the manager user.
+          Select the manager for this department.
         </p>
         {errors.primary_manager_id && (
           <p className="text-xs text-red-500">{errors.primary_manager_id.message}</p>

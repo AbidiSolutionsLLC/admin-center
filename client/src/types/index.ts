@@ -137,8 +137,8 @@ export interface User {
   team?: { _id: string; name: string; slug: string };
   manager_id?: string;
   manager?: { _id: string; full_name: string; email: string; avatar_url?: string };
-  secondary_manager_id?: string | null;
-  secondary_manager?: { _id: string; full_name: string; email: string; avatar_url?: string };
+  secondary_manager_ids?: string[];
+  secondary_managers?: Array<{ _id: string; full_name: string; email: string; avatar_url?: string }>;
   lifecycle_state: LifecycleState;
   lifecycle_changed_at: string;
   hire_date?: string;
@@ -471,4 +471,44 @@ export interface SecurityEventsResponse {
     total: number;
     totalPages: number;
   };
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Reporting Lines
+// ─────────────────────────────────────────────────────────────────────────────
+
+export interface ReportingLineData {
+  user: {
+    _id: string;
+    full_name: string;
+    email: string;
+    avatar_url?: string;
+  };
+  primary_manager: {
+    _id: string;
+    full_name: string;
+    email: string;
+    avatar_url?: string;
+  } | null;
+  secondary_managers: Array<{
+    _id: string;
+    full_name: string;
+    email: string;
+    avatar_url?: string;
+  }>;
+  direct_reports: Array<{
+    _id: string;
+    full_name: string;
+    email: string;
+    avatar_url?: string;
+    reports_as: 'primary' | 'secondary';
+  }>;
+}
+
+export interface AddSecondaryManagerInput {
+  manager_id: string;
+}
+
+export interface ChangePrimaryManagerInput {
+  manager_id: string | null;
 }

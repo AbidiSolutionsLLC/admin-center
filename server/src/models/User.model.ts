@@ -16,7 +16,7 @@ export interface IUser extends Document {
   department_id?: Types.ObjectId;
   team_id?: Types.ObjectId;
   manager_id?: Types.ObjectId;
-  secondary_manager_id?: Types.ObjectId;
+  secondary_manager_ids?: Types.ObjectId[];
   lifecycle_state: LifecycleState;
   lifecycle_changed_at: Date;
   hire_date?: Date;
@@ -43,7 +43,7 @@ const UserSchema = new Schema<IUser>({
   department_id: { type: Schema.Types.ObjectId, ref: 'Department' },
   team_id: { type: Schema.Types.ObjectId, ref: 'Department' },
   manager_id: { type: Schema.Types.ObjectId, ref: 'User' },
-  secondary_manager_id: { type: Schema.Types.ObjectId, ref: 'User' },
+  secondary_manager_ids: [{ type: Schema.Types.ObjectId, ref: 'User' }],
   lifecycle_state: {
     type: String,
     enum: ['invited', 'onboarding', 'active', 'probation', 'on_leave', 'terminated', 'archived'],
@@ -67,6 +67,8 @@ UserSchema.index({ company_id: 1, employee_id: 1 }, { unique: true });
 UserSchema.index({ company_id: 1, lifecycle_state: 1 });
 UserSchema.index({ company_id: 1, department_id: 1 });
 UserSchema.index({ last_login: 1 });
+UserSchema.index({ company_id: 1, manager_id: 1 });
+UserSchema.index({ company_id: 1, secondary_manager_ids: 1 });
 
 // ── Pre-save Hook: Auto-generate employee_id ────────────────────────────────
 /**

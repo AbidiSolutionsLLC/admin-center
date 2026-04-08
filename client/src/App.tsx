@@ -13,6 +13,7 @@ import OverviewPage from './pages/overview/OverviewPage';
 import OrganizationPage from './pages/organization/OrganizationPage';
 import TeamsPage from './pages/teams/TeamsPage';
 import PeoplePage from './pages/people/PeoplePage';
+import UserDetailPage from './pages/people/UserDetailPage';
 import RolesPage from './pages/roles/RolesPage';
 import AppsPage from './pages/apps/AppsPage';
 import SecurityPage from './pages/security/SecurityPage';
@@ -34,6 +35,7 @@ function App() {
               <Route path={ROUTES.ORGANIZATION} element={<OrganizationPage />} />
               <Route path={ROUTES.TEAMS} element={<TeamsPage />} />
               <Route path={ROUTES.PEOPLE} element={<PeoplePage />} />
+              <Route path="/people/:id" element={<UserDetailPage />} />
               <Route path={ROUTES.ROLES} element={<RolesPage />} />
               <Route path={ROUTES.APPS} element={<AppsPage />} />
               <Route path={ROUTES.SECURITY} element={<SecurityPage />} />
