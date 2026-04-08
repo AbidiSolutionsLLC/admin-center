@@ -1,9 +1,9 @@
 // src/features/organization/components/DepartmentForm.tsx
 import React from 'react';
-import { useForm } from 'react-hook-form';
+import { useForm, Controller } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { z } from 'zod';
-import { useUsers } from '@/features/people/hooks/useUsers';
+import { UserSelect } from '@/components/ui/UserSelect';
 import type { Department } from '@/types';
 import { cn } from '@/utils/cn';
 
@@ -64,6 +64,7 @@ export const DepartmentForm: React.FC<DepartmentFormProps> = ({
   const {
     register,
     handleSubmit,
+    control,
     formState: { errors },
   } = useForm<DepartmentFormData>({
     resolver: zodResolver(schema),
@@ -74,8 +75,6 @@ export const DepartmentForm: React.FC<DepartmentFormProps> = ({
       primary_manager_id: initialData?.primary_manager_id ?? '',
     },
   });
-
-  const { data: users, isLoading: isLoadingUsers } = useUsers();
 
   const availableParents = departments.filter((d) => d._id !== initialData?._id);
 
@@ -149,19 +148,19 @@ export const DepartmentForm: React.FC<DepartmentFormProps> = ({
         <label htmlFor="dept-manager" className="text-sm font-medium text-ink">
           Primary Manager
         </label>
-        <select
-          id="dept-manager"
-          {...register('primary_manager_id')}
-          disabled={isSubmitting || isLoadingUsers}
-          className={inputClass(!!errors.primary_manager_id)}
-        >
-          <option value="">{isLoadingUsers ? 'Loading...' : 'None'}</option>
-          {users?.map((user) => (
-            <option key={user._id} value={user._id}>
-              {user.full_name}
-            </option>
-          ))}
-        </select>
+        <Controller
+          name="primary_manager_id"
+          control={control}
+          render={({ field }) => (
+            <UserSelect
+              value={field.value}
+              onChange={field.onChange}
+              disabled={isSubmitting}
+              hasError={!!errors.primary_manager_id}
+              placeholder="None"
+            />
+          )}
+        />
         <p className="text-[11px] text-ink-muted">
           Select the manager for this department.
         </p>

@@ -1,8 +1,9 @@
 // src/features/teams/components/TeamForm.tsx
 import React from 'react';
-import { useForm } from 'react-hook-form';
+import { useForm, Controller } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { z } from 'zod';
+import { UserSelect } from '@/components/ui/UserSelect';
 import type { Team, Department } from '@/types';
 import { cn } from '@/utils/cn';
 
@@ -56,6 +57,7 @@ export const TeamForm: React.FC<TeamFormProps> = ({
   const {
     register,
     handleSubmit,
+    control,
     formState: { errors },
   } = useForm<TeamFormData>({
     resolver: zodResolver(schema),
@@ -138,12 +140,18 @@ export const TeamForm: React.FC<TeamFormProps> = ({
         <label htmlFor="team-lead" className="text-sm font-medium text-ink">
           Team Lead
         </label>
-        <input
-          id="team-lead"
-          {...register('team_lead_id')}
-          placeholder="24-char MongoDB ObjectId of the user"
-          disabled={isSubmitting}
-          className={inputClass(!!errors.team_lead_id)}
+        <Controller
+          name="team_lead_id"
+          control={control}
+          render={({ field }) => (
+            <UserSelect
+              value={field.value}
+              onChange={field.onChange}
+              disabled={isSubmitting}
+              hasError={!!errors.team_lead_id}
+              placeholder="Select team lead..."
+            />
+          )}
         />
         <p className="text-[11px] text-ink-muted">
           Enter the 24-character hex ID of the user who will lead this team.

@@ -98,6 +98,7 @@ export const createTeam = asyncHandler(async (req: Request, res: Response) => {
  * Updates an existing team, scoped to the company tenant.
  */
 export const updateTeam = asyncHandler(async (req: Request, res: Response) => {
+  console.log("Update Team Request Body:", req.body);
   const input = UpdateTeamSchema.parse(req.body);
 
   const team = await Team.findOne({

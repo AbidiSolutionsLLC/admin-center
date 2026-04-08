@@ -512,3 +512,62 @@ export interface AddSecondaryManagerInput {
 export interface ChangePrimaryManagerInput {
   manager_id: string | null;
 }
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Policies
+// ─────────────────────────────────────────────────────────────────────────────
+
+export type PolicyCategory = 'hr' | 'it' | 'security' | 'compliance' | 'operations' | 'other';
+export type PolicyStatus = 'draft' | 'published' | 'archived';
+
+export interface PolicyVersion {
+  _id: string;
+  company_id: string;
+  policy_key: string;
+  title: string;
+  content: string;
+  version_number: number;
+  status: PolicyStatus;
+  category: PolicyCategory;
+  effective_date: string;
+  published_by?: {
+    _id: string;
+    full_name: string;
+    email: string;
+    avatar_url?: string;
+  };
+  published_at?: string;
+  summary?: string;
+  is_active: boolean;
+  created_at: string;
+  updated_at: string;
+  version_count?: number; // Added when listing policies
+}
+
+export interface PolicyAcknowledgment {
+  _id: string;
+  user: {
+    _id: string;
+    full_name: string;
+    email: string;
+    avatar_url?: string;
+  };
+  acknowledged_at: string;
+}
+
+export interface AcknowledgmentStatus {
+  acknowledged: boolean;
+  acknowledged_at: string | null;
+}
+
+export interface PublishPolicyInput {
+  title: string;
+  content: string;
+  category: PolicyCategory;
+  effective_date: string;
+  summary?: string;
+}
+
+export interface AcknowledgePolicyInput {
+  policy_version_id: string;
+}

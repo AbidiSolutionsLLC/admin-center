@@ -1,6 +1,7 @@
 import { useMutation, useQueryClient } from '@tanstack/react-query';
 import { apiClient } from '@/lib/apiClient';
 import { QUERY_KEYS } from '@/constants/queryKeys';
+import { toast } from 'sonner';
 import type { InviteUserInput, User } from '@/types';
 
 /**
@@ -12,11 +13,17 @@ export const useInviteUser = () => {
 
   return useMutation<User, Error, InviteUserInput>({
     mutationFn: async (input: InviteUserInput) => {
+      console.log("Payload:", input);
       const { data } = await apiClient.post('/people/invite', input);
       return data.data;
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: QUERY_KEYS.USERS });
+      toast.success('User invited successfully');
+    },
+    onError: (error) => {
+      console.error('User invite failed', error);
+      toast.error('Failed to invite user. Please try again.');
     },
   });
 };

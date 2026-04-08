@@ -257,6 +257,7 @@ export const inviteUser = asyncHandler(async (req: Request, res: Response) => {
  * Does NOT change lifecycle_state (use PUT /people/:id/lifecycle for that).
  */
 export const updateUser = asyncHandler(async (req: Request, res: Response) => {
+  console.log("Update User Request Body:", req.body);
   const input = UpdateUserSchema.parse(req.body);
 
   const user = await User.findOne({

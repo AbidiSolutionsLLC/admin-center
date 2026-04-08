@@ -19,6 +19,7 @@ export const useUpdateTeam = () => {
 
   return useMutation<Team, Error, UpdateTeamVariables>({
     mutationFn: async ({ id, data }) => {
+      console.log("Payload:", data);
       const { data: responseData } = await apiClient.put(`/teams/${id}`, data);
       return responseData.data;
     },

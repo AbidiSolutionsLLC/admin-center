@@ -43,4 +43,10 @@ export const QUERY_KEYS = {
   // Audit Logs
   AUDIT_EVENTS: (filters?: Record<string, unknown>) =>
     filters ? ['audit', 'events', filters] as const : ['audit', 'events'] as const,
+  // Policies
+  POLICIES: ['policies'] as const,
+  POLICY_VERSIONS: (policyKey: string) => ['policy', 'versions', policyKey] as const,
+  POLICY_DETAIL: (id: string) => ['policy', id] as const,
+  POLICY_ACKNOWLEDGMENTS: (id: string) => ['policy', id, 'acknowledgments'] as const,
+  POLICY_ACKNOWLEDGMENT_STATUS: (id: string) => ['policy', id, 'acknowledgment-status'] as const,
 } as const;

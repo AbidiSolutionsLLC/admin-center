@@ -22,3 +22,5 @@ export * from './RefreshToken.model';
 export * from './Insight.model';
 export * from './SecurityEvent.model';
 export * from './SecurityPolicy.model';
+export * from './PolicyVersion.model';
+export * from './PolicyAcknowledgment.model';

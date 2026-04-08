@@ -147,6 +147,7 @@ export const createDepartment = asyncHandler(async (req: Request, res: Response)
  * Updates an existing department, scoped to the company tenant.
  */
 export const updateDepartment = asyncHandler(async (req: Request, res: Response) => {
+  console.log("Update Department Request Body:", req.body);
   const input = UpdateDepartmentSchema.parse(req.body);
 
   const dept = await Department.findOne({
