@@ -32,7 +32,7 @@ const createTransporter = () => {
       host: 'smtp.sendgrid.net',
       port: 587,
       auth: {
-        user: 'apikey',
+        user: 'sowaye',
         pass: process.env.SENDGRID_API_KEY,
       },
     });
@@ -84,7 +84,7 @@ export const sendWelcomeEmail = async (params: WelcomeEmailParams): Promise<void
   const { email, full_name, employee_id, company_name, invite_link } = params;
 
   const mailOptions = {
-    from: process.env.SMTP_FROM_EMAIL ?? 'noreply@admin-center.com',
+    from: process.env.EMAIL_FROM ?? process.env.SMTP_FROM_EMAIL ?? 'noreply@admin-center.com',
     to: email,
     subject: `Welcome to ${company_name} — Complete Your Profile`,
     html: `
@@ -200,7 +200,7 @@ export const sendPasswordResetEmail = async (
   reset_link: string
 ): Promise<void> => {
   const mailOptions = {
-    from: process.env.SMTP_FROM_EMAIL ?? 'noreply@admin-center.com',
+    from: process.env.EMAIL_FROM ?? process.env.SMTP_FROM_EMAIL ?? 'noreply@admin-center.com',
     to: email,
     subject: 'Password Reset Request',
     html: `

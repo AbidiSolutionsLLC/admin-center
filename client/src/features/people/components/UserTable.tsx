@@ -6,7 +6,6 @@ import type { User, LifecycleState } from '@/types';
 import { DataTable } from '@/components/ui/DataTable';
 import { StatusBadge } from '@/components/ui/StatusBadge';
 import { formatDistanceToNow } from 'date-fns';
-import { cn } from '@/utils/cn';
 
 interface UserTableProps {
   users: User[];
@@ -82,7 +81,8 @@ export const UserTable: React.FC<UserTableProps> = ({ users, onEdit, onChangeSta
         accessorKey: 'department_id',
         header: 'Department',
         cell: ({ row }) => {
-          const dept = row.original.department;
+          const user = row.original;
+          const dept = user.department || (typeof user.department_id === 'object' ? (user.department_id as any) : null);
           if (!dept) {
             return (
               <span className="inline-flex items-center gap-1 text-xs text-amber-600">

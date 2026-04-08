@@ -77,9 +77,27 @@ const generateTemporaryPassword = (): string => {
 /**
  * Enriches user list with populated department and manager info
  */
-async function enrichUsers(users: ReturnType<(typeof User.prototype.toObject)>[]): Promise<typeof users> {
-  // Already populated via .populate() in the query, just return as-is
-  return users;
+/**
+ * Enriches user list with populated department and manager info
+ */
+async function enrichUsers(users: any[]): Promise<any[]> {
+  return users.map((user) => {
+    const data = { ...user };
+    // Map populated objects to the names expected by the frontend
+    if (data.department_id && typeof data.department_id === 'object') {
+      data.department = data.department_id;
+    }
+    if (data.team_id && typeof data.team_id === 'object') {
+      data.team = data.team_id;
+    }
+    if (data.location_id && typeof data.location_id === 'object') {
+      data.location = data.location_id;
+    }
+    if (data.manager_id && typeof data.manager_id === 'object') {
+      data.manager = data.manager_id;
+    }
+    return data;
+  });
 }
 
 // ── Controllers ──────────────────────────────────────────────────────────────
