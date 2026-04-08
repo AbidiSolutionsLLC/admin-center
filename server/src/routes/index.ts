@@ -7,6 +7,7 @@ import intelligenceRoutes from './intelligence.routes';
 import peopleRoutes from './people.routes';
 import rolesRoutes from './roles.routes';
 import appsRoutes from './apps.routes';
+import overviewRoutes from './overview.routes';
 
 const router = Router();
 
@@ -17,6 +18,7 @@ router.use('/intelligence', requireAuth, intelligenceRoutes);
 router.use('/people', requireAuth, peopleRoutes);
 router.use('/roles', rolesRoutes);
 router.use('/apps', appsRoutes);
+router.use('/overview', overviewRoutes);
 
 // Protected test route for verifying JWT rejection logic
 router.get('/protected-test', requireAuth, (req, res) => {

@@ -3,6 +3,8 @@ import { Types } from 'mongoose';
 import { User } from '../models/User.model';
 import { Department } from '../models/Department.model';
 import { UserRole } from '../models/UserRole.model';
+import { Role } from '../models/Role.model';
+import { RolePermission } from '../models/RolePermission.model';
 import { Insight } from '../models/Insight.model';
 
 /**
@@ -16,6 +18,7 @@ import { Insight } from '../models/Insight.model';
  * - RULE-03: Active user with no department
  * - RULE-04: User last_login > 90 days and still active
  * - RULE-05: Team (type='team') with no parent department (orphan)
+ * - RULE-06: Role with excessive permissions (over-permissioned)
  */
 export const runIntelligenceRules = async (companyId: string | Types.ObjectId): Promise<void> => {
   const companyObjectId = typeof companyId === 'string' ? new Types.ObjectId(companyId) : companyId;
@@ -123,6 +126,51 @@ export const runIntelligenceRules = async (companyId: string | Types.ObjectId): 
       is_resolved: false,
       detected_at: new Date(),
     });
+  }
+
+  // ────────────────────────────────────────────────────────────────────────────
+  // RULE-06: Over-permissioned role (role with delete + export on all modules/scopes)
+  // ────────────────────────────────────────────────────────────────────────────
+
+  const allRoles = await Role.find({
+    company_id: companyObjectId,
+    is_active: true,
+  }).lean();
+
+  for (const role of allRoles) {
+    const grantedPerms = await RolePermission.find({
+      role_id: role._id,
+      granted: true,
+    }).lean();
+
+    // Get full permission details
+    const permIds = grantedPerms.map((rp) => rp.permission_id);
+    const { Permission } = await import('../models/Permission.model');
+    const perms = await Permission.find({ _id: { $in: permIds } }).lean();
+
+    // Count high-risk permissions (delete or export with 'all' scope)
+    const highRiskCount = perms.filter(
+      (p) => (p.action === 'delete' || p.action === 'export') && p.data_scope === 'all'
+    ).length;
+
+    // Flag if role has more than 10 high-risk permissions
+    if (highRiskCount > 10) {
+      insightsToUpsert.push({
+        company_id: companyObjectId,
+        category: 'misconfiguration',
+        severity: 'warning',
+        title: `${role.name} is over-permissioned`,
+        description: `This role has ${highRiskCount} high-risk permissions (delete/export with 'all' scope). Review and reduce to follow least-privilege principle.`,
+        reasoning: `Role "${role.name}" has ${grantedPerms.length} total permissions, including ${highRiskCount} high-risk ones. Consider reducing scope to 'department' or 'own' where possible.`,
+        affected_object_type: 'Role',
+        affected_object_id: role._id.toString(),
+        affected_object_label: role.name,
+        remediation_url: `/roles/${role._id}`,
+        remediation_action: 'Review and reduce role permissions',
+        is_resolved: false,
+        detected_at: new Date(),
+      });
+    }
   }
 
   // ────────────────────────────────────────────────────────────────────────────
@@ -347,6 +395,42 @@ export const runIntelligenceRules = async (companyId: string | Types.ObjectId): 
         }
       }
     );
+  }
+
+  // ────────────────────────────────────────────────────────────────────────────
+  // Auto-resolve RULE-06 insights where role permissions reduced
+  // ────────────────────────────────────────────────────────────────────────────
+
+  for (const role of allRoles) {
+    const grantedPerms = await RolePermission.find({
+      role_id: role._id,
+      granted: true,
+    }).lean();
+
+    const permIds = grantedPerms.map((rp) => rp.permission_id);
+    const { Permission } = await import('../models/Permission.model');
+    const perms = await Permission.find({ _id: { $in: permIds } }).lean();
+
+    const highRiskCount = perms.filter(
+      (p) => (p.action === 'delete' || p.action === 'export') && p.data_scope === 'all'
+    ).length;
+
+    if (highRiskCount <= 10) {
+      await Insight.updateMany(
+        {
+          company_id: companyObjectId,
+          affected_object_id: role._id.toString(),
+          title: `${role.name} is over-permissioned`,
+          is_resolved: false,
+        },
+        {
+          $set: {
+            is_resolved: true,
+            resolved_at: new Date(),
+          }
+        }
+      );
+    }
   }
 };
 

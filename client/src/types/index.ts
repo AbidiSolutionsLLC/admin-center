@@ -285,3 +285,56 @@ export interface AssignmentTimelineEntry {
   timestamp: string;
   actor?: { full_name: string; email: string };
 }
+
+/** Overview Dashboard types */
+export interface DashboardStats {
+  users: {
+    total: number;
+    active: number;
+    invited: number;
+  };
+  departments: {
+    total: number;
+  };
+  apps: {
+    total: number;
+    active: number;
+  };
+  roles: {
+    total: number;
+    custom: number;
+  };
+}
+
+export interface SetupProgressModule {
+  key: string;
+  label: string;
+  completed: number;
+  total: number;
+  percentage: number;
+}
+
+export interface SetupProgress {
+  overall_percentage: number;
+  modules: SetupProgressModule[];
+  total_checks: number;
+  completed_checks: number;
+}
+
+export interface AuditEvent {
+  _id: string;
+  company_id: string;
+  actor_id: string;
+  actor_email: string;
+  action: string;
+  module: string;
+  object_type: string;
+  object_id: string;
+  object_label: string;
+  before_state?: unknown;
+  after_state?: unknown;
+  ip_address?: string;
+  user_agent?: string;
+  created_at: string;
+  time_ago?: string;
+}

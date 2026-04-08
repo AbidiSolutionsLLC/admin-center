@@ -22,4 +22,9 @@ export const QUERY_KEYS = {
   APP_TIMELINE: (id: string) => ['app', 'timeline', id] as const,
   APP_DEPENDENCIES: (id: string, targetType: string, targetId: string) => ['app', 'dependencies', id, targetType, targetId] as const,
   APP_USERS: (id: string) => ['app', 'users', id] as const,
+  // Overview
+  DASHBOARD_STATS: ['overview', 'stats'] as const,
+  SETUP_PROGRESS: ['overview', 'setup-progress'] as const,
+  RECENT_ACTIVITY: ['overview', 'recent-activity'] as const,
+  OVERVIEW_INSIGHTS: ['overview', 'insights'] as const,
 } as const;
