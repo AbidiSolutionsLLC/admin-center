@@ -9,9 +9,7 @@ import { cn } from '@/utils/cn';
 
 const schema = z.object({
   name: z.string().min(1, 'Department name is required').max(100, 'Name too long'),
-  type: z.enum(['business_unit', 'division', 'department', 'team', 'cost_center'], {
-    required_error: 'Type is required',
-  }),
+  type: z.enum(['business_unit', 'division', 'department', 'team', 'cost_center']),
   parent_id: z.string().optional().nullable(),
   primary_manager_id: z
     .string()

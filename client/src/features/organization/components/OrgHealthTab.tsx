@@ -1,6 +1,6 @@
 // src/features/organization/components/OrgHealthTab.tsx
 import React from 'react';
-import { AlertTriangle, AlertCircle, Info, X, ExternalLink } from 'lucide-react';
+import { AlertTriangle, AlertCircle, Info, X } from 'lucide-react';
 import { useOrgHealth, useDismissInsight } from '../hooks/useOrgHealth';
 import { TableSkeleton } from '@/components/ui/TableSkeleton';
 import { ErrorState } from '@/components/ui/ErrorState';

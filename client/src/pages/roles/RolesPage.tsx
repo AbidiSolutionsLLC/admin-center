@@ -1,6 +1,6 @@
 // client/src/pages/roles/RolesPage.tsx
 import { useState } from 'react';
-import { Shield, Plus, Edit2, Trash2, Users, Key } from 'lucide-react';
+import { Shield, Plus, Edit2, Trash2, Key } from 'lucide-react';
 import { useRoles, useCreateRole, useUpdateRole, useDeleteRole } from '@/features/roles/useRoles';
 import { useRolePermissions, useAllPermissions, useUpdateRolePermissions } from '@/features/roles/useRolePermissions';
 import { PermissionMatrix } from '@/features/roles/PermissionMatrix';
@@ -126,8 +126,8 @@ export default function RolesPage() {
     return (
       <ErrorState
         title="Failed to load roles"
-        message="Please try again."
-        onRetry={() => refetch()}
+        description="Please try again."
+        onRetry={refetch}
       />
     );
   }
@@ -139,8 +139,7 @@ export default function RolesPage() {
         icon={Shield}
         title="No roles yet"
         description="Create your first role to start managing access control."
-        actionLabel="Create Role"
-        onAction={handleOpenCreateModal}
+        action={{ label: 'Create Role', onClick: handleOpenCreateModal }}
       />
     );
   }

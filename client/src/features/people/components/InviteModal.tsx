@@ -1,7 +1,7 @@
 // src/features/people/components/InviteModal.tsx
-import React, { useState, useCallback, useMemo } from 'react';
+import React, { useState, useCallback } from 'react';
 import * as Tabs from '@radix-ui/react-tabs';
-import { Upload, Download, CheckCircle, XCircle, AlertCircle } from 'lucide-react';
+import { Upload, Download, CheckCircle, XCircle } from 'lucide-react';
 import { Modal } from '@/components/ui/Modal';
 import { useInviteUser } from '../hooks/useInviteUser';
 import { useBulkInvite } from '../hooks/useBulkInvite';

@@ -1,6 +1,6 @@
 // src/features/teams/components/TeamMembersPanel.tsx
-import React, { useState, useMemo } from 'react';
-import { X, Search, UserPlus, Trash2 } from 'lucide-react';
+import { useState, useMemo } from 'react';
+import { Search, UserPlus, Trash2 } from 'lucide-react';
 import { Modal } from '@/components/ui/Modal';
 import { ConfirmDialog } from '@/components/ui/ConfirmDialog';
 import { useTeamMembers } from '../hooks/useTeamMembers';
@@ -11,7 +11,7 @@ import { TableSkeleton } from '@/components/ui/TableSkeleton';
 import { EmptyState } from '@/components/ui/EmptyState';
 import { ErrorState } from '@/components/ui/ErrorState';
 import { cn } from '@/utils/cn';
-import type { Team, TeamMember, User } from '@/types';
+import type { Team, TeamMember } from '@/types';
 
 interface TeamMembersPanelProps {
   team: Team;
@@ -42,7 +42,7 @@ export const TeamMembersPanel: React.FC<TeamMembersPanelProps> = ({
   onClose,
 }) => {
   const { data: members, isLoading: isLoadingMembers, isError: isErrorMembers, refetch } = useTeamMembers(team._id, isOpen);
-  const { data: users, isLoading: isLoadingUsers } = useUsers();
+  const { data: users } = useUsers();
 
   const addMemberMutation = useAddTeamMember();
   const removeMemberMutation = useRemoveTeamMember();

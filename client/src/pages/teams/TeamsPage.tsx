@@ -196,7 +196,7 @@ export default function TeamsPage() {
   if (isLoading) {
     return (
       <div className="space-y-5">
-        <PageHeader onCreateClick={handleOpenCreate} />
+        <PageHeader onCreateClick={handleOpenCreate} onShowWithoutLead={() => {}} />
         <TableSkeleton rows={8} columns={5} />
       </div>
     );
@@ -206,7 +206,7 @@ export default function TeamsPage() {
   if (isError) {
     return (
       <div className="space-y-5">
-        <PageHeader onCreateClick={handleOpenCreate} />
+        <PageHeader onCreateClick={handleOpenCreate} onShowWithoutLead={() => {}} />
         <ErrorState
           title="Failed to load teams"
           description="Something went wrong fetching your teams data. Please try again."
@@ -225,6 +225,7 @@ export default function TeamsPage() {
         onCreateClick={handleOpenCreate}
         teamCount={teams?.length}
         teamsWithoutLeadCount={teamsWithoutLeadCount}
+        onShowWithoutLead={() => setFilters({ search: '', department_id: '', status: 'active', without_lead: true })}
       />
 
       {/* -- Empty State -- */}
@@ -420,9 +421,10 @@ interface PageHeaderProps {
   onCreateClick: () => void;
   teamCount?: number;
   teamsWithoutLeadCount?: number;
+  onShowWithoutLead: () => void;
 }
 
-function PageHeader({ onCreateClick, teamCount, teamsWithoutLeadCount }: PageHeaderProps) {
+function PageHeader({ onCreateClick, teamCount, teamsWithoutLeadCount, onShowWithoutLead }: PageHeaderProps) {
   return (
     <div className="flex items-start justify-between gap-4">
       <div>
@@ -440,7 +442,7 @@ function PageHeader({ onCreateClick, teamCount, teamsWithoutLeadCount }: PageHea
           )}
           {teamsWithoutLeadCount !== undefined && teamsWithoutLeadCount > 0 && (
             <button
-              onClick={() => setFilters({ search: '', department_id: '', status: 'active', without_lead: true })}
+              onClick={onShowWithoutLead}
               className={cn(
                 'inline-flex items-center gap-1 text-[11px] font-semibold text-amber-700 bg-amber-50 border border-amber-200 rounded-full px-2 py-0.5',
                 'hover:bg-amber-100 transition-colors cursor-pointer'

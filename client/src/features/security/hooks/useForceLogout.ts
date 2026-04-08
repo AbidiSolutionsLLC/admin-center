@@ -25,7 +25,7 @@ export const useForceLogout = () => {
       toast.success('User has been logged out successfully');
     },
     onError: (error) => {
-      logger.error('Failed to force logout user', { error });
+      console.error('Failed to force logout user', error);
       toast.error('Failed to log out user. Please try again.');
     },
   });

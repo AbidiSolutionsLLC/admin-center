@@ -1,6 +1,6 @@
 // src/pages/security/SecurityPage.tsx
 import { useState } from 'react';
-import { Shield, FileText, Activity } from 'lucide-react';
+import { Shield, Activity } from 'lucide-react';
 import { SecurityPolicyForm } from '@/features/security/components/SecurityPolicyForm';
 import { AccessLogTable } from '@/features/security/components/AccessLogTable';
 

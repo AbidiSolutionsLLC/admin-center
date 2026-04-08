@@ -1,7 +1,7 @@
 // client/src/pages/apps/AppsPage.tsx
 import { useState } from 'react';
 import { Package, Users, Clock, AlertTriangle } from 'lucide-react';
-import { useApps, useAssignApp, useRevokeApp, useAppTimeline } from '@/features/apps/useApps';
+import { useApps, useAssignApp, useAppTimeline } from '@/features/apps/useApps';
 import { useRoles } from '@/features/roles/useRoles';
 import { AppCatalog } from '@/features/apps/AppCatalog';
 import { AccessTimeline } from '@/features/apps/AccessTimeline';
@@ -27,11 +27,10 @@ import type { App } from '@/types';
 export default function AppsPage() {
   // ── Server data ──────────────────────────────────────────────────────
   const { data: apps, isLoading: isLoadingApps, isError, refetch } = useApps();
-  const { data: roles, isLoading: isLoadingRoles } = useRoles();
+  const { data: roles } = useRoles();
 
   // Mutations
   const assignAppMutation = useAssignApp();
-  const revokeAppMutation = useRevokeApp();
 
   // ── State ────────────────────────────────────────────────────────────
   const [selectedApp, setSelectedApp] = useState<App | null>(null);
@@ -81,17 +80,6 @@ export default function AppsPage() {
     setIsAssignModalOpen(false);
   };
 
-  const handleRevokeAssignment = async (assignmentId: string) => {
-    if (!selectedApp) return;
-
-    if (!confirm('Revoke this assignment?')) return;
-
-    await revokeAppMutation.mutateAsync({
-      appId: selectedApp._id,
-      assignmentId,
-    });
-  };
-
   // ── Loading State ────────────────────────────────────────────────────
   if (isLoadingApps) {
     return (
@@ -109,8 +97,8 @@ export default function AppsPage() {
     return (
       <ErrorState
         title="Failed to load apps"
-        message="Please try again."
-        onRetry={() => refetch()}
+        description="Please try again."
+        onRetry={refetch}
       />
     );
   }

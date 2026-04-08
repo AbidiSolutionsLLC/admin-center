@@ -22,7 +22,7 @@ export const useUpdateSecurityPolicy = () => {
       toast.success('Security policy updated successfully');
     },
     onError: (error) => {
-      logger.error('Failed to update security policy', { error });
+      console.error('Failed to update security policy', error);
       toast.error('Failed to update security policy. Please try again.');
     },
   });

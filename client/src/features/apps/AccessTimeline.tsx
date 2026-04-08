@@ -1,5 +1,5 @@
 // client/src/features/apps/AccessTimeline.tsx
-import { Clock, User, ArrowDownLeft, ArrowUpRight } from 'lucide-react';
+import { Clock, ArrowDownLeft, ArrowUpRight } from 'lucide-react';
 import type { AppAssignment } from '@/types';
 
 interface AccessTimelineProps {

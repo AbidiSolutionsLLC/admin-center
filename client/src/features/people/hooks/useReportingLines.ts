@@ -2,8 +2,7 @@
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { apiClient } from '@/lib/apiClient';
 import { QUERY_KEYS } from '@/constants/queryKeys';
-import { toast } from '@/services/toast';
-import { logger } from '@/services/logger';
+import { toast } from 'sonner';
 import type { ReportingLineData, AddSecondaryManagerInput, ChangePrimaryManagerInput } from '@/types';
 
 /**
@@ -44,7 +43,6 @@ export const useAddSecondaryManager = (userId: string) => {
     onError: (error: any) => {
       const message = error?.response?.data?.error || 'Failed to add secondary manager';
       toast.error(message);
-      logger.error('Failed to add secondary manager', { error, userId });
     },
   });
 };
@@ -70,7 +68,6 @@ export const useRemoveSecondaryManager = (userId: string) => {
     onError: (error: any) => {
       const message = error?.response?.data?.error || 'Failed to remove secondary manager';
       toast.error(message);
-      logger.error('Failed to remove secondary manager', { error, userId });
     },
   });
 };
@@ -96,7 +93,6 @@ export const useChangePrimaryManager = (userId: string) => {
     onError: (error: any) => {
       const message = error?.response?.data?.error || 'Failed to change primary manager';
       toast.error(message);
-      logger.error('Failed to change primary manager', { error, userId });
     },
   });
 };

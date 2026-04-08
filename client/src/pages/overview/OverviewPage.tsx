@@ -11,7 +11,6 @@ import { StatCard } from '@/features/overview/StatCard';
 import { InsightCard } from '@/features/overview/InsightCard';
 import { SetupProgressCard } from '@/features/overview/SetupProgressCard';
 import { RecentActivityFeed } from '@/features/overview/RecentActivityFeed';
-import { TableSkeleton } from '@/components/ui/TableSkeleton';
 import { ErrorState } from '@/components/ui/ErrorState';
 import { EmptyState } from '@/components/ui/EmptyState';
 
@@ -61,7 +60,7 @@ export default function OverviewPage() {
     return (
       <ErrorState
         title="Failed to load dashboard"
-        message="Please try again."
+        description="Please try again."
         onRetry={() => window.location.reload()}
       />
     );

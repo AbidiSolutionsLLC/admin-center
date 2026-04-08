@@ -1,7 +1,8 @@
 // src/features/organization/components/DraggableOrgChart.tsx
-import React, { useState, useMemo } from 'react';
-import { DndContext, DragEndEvent, useSensor, useSensors, PointerSensor } from '@dnd-kit/core';
-import { ChevronRight, ChevronDown, Plus, Users, AlertTriangle, X } from 'lucide-react';
+import React, { useState } from 'react';
+import { DndContext, useSensor, useSensors, PointerSensor } from '@dnd-kit/core';
+import type { DragEndEvent } from '@dnd-kit/core';
+import { ChevronRight, ChevronDown, Plus, Users, AlertTriangle } from 'lucide-react';
 import { useMoveDepartment } from '../hooks/useMoveDepartment';
 import { DepartmentPanel } from './DepartmentPanel';
 import { cn } from '@/utils/cn';
@@ -83,7 +84,6 @@ export const DraggableOrgChart: React.FC<DraggableOrgChartProps> = ({ treeData }
     moveMutation.mutate({
       id: draggedId,
       parent_id: newParentId,
-      oldParentId: draggedNode.parent_id ?? null,
     });
   };
 
@@ -134,7 +134,6 @@ export const DraggableOrgChart: React.FC<DraggableOrgChartProps> = ({ treeData }
     const isExpanded = expandedNodes.has(node._id);
     const childCount = node.children?.length ?? 0;
     const hasChildren = childCount > 0;
-    const descendantIds = getDescendantIds(node);
 
     return (
       <div key={node._id} className="space-y-2">

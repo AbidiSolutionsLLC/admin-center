@@ -5,7 +5,6 @@ import { zodResolver } from '@hookform/resolvers/zod';
 import { z } from 'zod';
 import { useSecurityPolicy } from '../hooks/useSecurityPolicy';
 import { useUpdateSecurityPolicy } from '../hooks/useUpdateSecurityPolicy';
-import type { SecurityPolicySettings } from '@/types';
 
 const policyFormSchema = z.object({
   policy_name: z.string().min(1, 'Policy name is required'),
@@ -106,7 +105,6 @@ export function SecurityPolicyForm() {
     );
   }
 
-  const watchMFA = watch('settings.require_mfa');
   const watchIPWhitelist = watch('settings.ip_whitelist_enabled');
 
   return (
@@ -385,7 +383,7 @@ export function SecurityPolicyForm() {
                     settings: {
                       ...watch(),
                       ip_whitelist: ips,
-                    } as SecurityPolicySettings,
+                    } as any,
                   });
                 }}
               />

@@ -3,7 +3,6 @@ import { useState } from 'react';
 import { UserPlus, X, Users, ArrowRight, AlertCircle, Plus } from 'lucide-react';
 import { useReportingLine, useAddSecondaryManager, useRemoveSecondaryManager, useChangePrimaryManager } from '@/features/people/hooks/useReportingLines';
 import { useUsers } from '@/features/people/hooks/useUsers';
-import type { User } from '@/types';
 import { cn } from '@/utils/cn';
 
 interface ReportingLinesPanelProps {

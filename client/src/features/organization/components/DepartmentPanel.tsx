@@ -1,7 +1,6 @@
 // src/features/organization/components/DepartmentPanel.tsx
 import React from 'react';
 import { X, Building2, Users, AlertTriangle, ChevronRight } from 'lucide-react';
-import { cn } from '@/utils/cn';
 import type { OrgTreeNode } from '@/types';
 
 interface DepartmentPanelProps {

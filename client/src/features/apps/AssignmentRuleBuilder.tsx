@@ -2,7 +2,6 @@
 import { useState } from 'react';
 import { AlertTriangle, Check, Shield } from 'lucide-react';
 import { useCheckAppDependencies } from './useApps';
-import type { DependencyCheckResult } from '@/types';
 
 interface AssignmentRuleBuilderProps {
   appId: string;
@@ -36,14 +35,6 @@ export const AssignmentRuleBuilder: React.FC<AssignmentRuleBuilderProps> = ({
   );
 
   const hasUnmetDependencies = dependencyCheck && !dependencyCheck.dependencies_met;
-
-  const handleConfirm = () => {
-    if (hasUnmetDependencies) {
-      setShowWarning(true);
-    } else {
-      onConfirm();
-    }
-  };
 
   const handleForceAssign = () => {
     setShowWarning(false);

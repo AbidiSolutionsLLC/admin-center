@@ -1,6 +1,6 @@
 // src/features/organization/components/BusinessUnitsTab.tsx
 import React, { useState, useMemo } from 'react';
-import { Building2, Plus, Search, ChevronDown, X, AlertTriangle, Users, Layers } from 'lucide-react';
+import { Building2, Plus, Search, X, AlertTriangle, Users, Layers } from 'lucide-react';
 import { useBusinessUnits } from '../hooks/useBusinessUnits';
 import { useBUTree } from '../hooks/useBUTree';
 import { useCreateBU } from '../hooks/useCreateBU';

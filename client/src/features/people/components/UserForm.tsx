@@ -12,9 +12,7 @@ const schema = z.object({
   department_id: z.string().optional().nullable(),
   team_id: z.string().optional().nullable(),
   manager_id: z.string().optional().nullable(),
-  employment_type: z.enum(['full_time', 'part_time', 'contractor', 'intern'], {
-    required_error: 'Employment type is required',
-  }),
+  employment_type: z.enum(['full_time', 'part_time', 'contractor', 'intern']),
   hire_date: z.string().optional().nullable(),
   location_id: z.string().optional().nullable(),
 });

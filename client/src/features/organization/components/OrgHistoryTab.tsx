@@ -1,12 +1,11 @@
 // src/features/organization/components/OrgHistoryTab.tsx
-import React, { useState, useMemo } from 'react';
+import React, { useState } from 'react';
 import { ChevronDown, ChevronRight, Calendar, Filter } from 'lucide-react';
 import { useOrgHistory } from '../hooks/useOrgHistory';
 import { TableSkeleton } from '@/components/ui/TableSkeleton';
 import { ErrorState } from '@/components/ui/ErrorState';
 import { EmptyState } from '@/components/ui/EmptyState';
 import { cn } from '@/utils/cn';
-import type { AuditEvent } from '@/types';
 
 const OBJECT_TYPE_OPTIONS = [
   { value: '', label: 'All Types' },
@@ -160,7 +159,7 @@ export const OrgHistoryTab: React.FC = () => {
                     <td className="h-14 px-4 text-sm text-ink">{event.object_label}</td>
                   </tr>
 
-                  {isExpanded && (event.before_state || event.after_state) && (
+                  {isExpanded && Boolean(event.before_state || event.after_state) && (
                     <tr>
                       <td colSpan={5} className="px-4 py-4 bg-surface-alt border-b border-line">
                         <div className="grid grid-cols-2 gap-4">
@@ -169,7 +168,7 @@ export const OrgHistoryTab: React.FC = () => {
                             <h4 className="text-xs font-semibold text-ink-secondary mb-2">Before</h4>
                             <pre className="text-[11px] font-mono bg-white border border-line rounded p-3 overflow-auto max-h-48">
                               {event.before_state
-                                ? JSON.stringify(event.before_state, null, 2)
+                                ? (JSON.stringify(event.before_state, null, 2) as any)
                                 : 'null'}
                             </pre>
                           </div>
@@ -178,7 +177,7 @@ export const OrgHistoryTab: React.FC = () => {
                             <h4 className="text-xs font-semibold text-ink-secondary mb-2">After</h4>
                             <pre className="text-[11px] font-mono bg-white border border-line rounded p-3 overflow-auto max-h-48">
                               {event.after_state
-                                ? JSON.stringify(event.after_state, null, 2)
+                                ? (JSON.stringify(event.after_state, null, 2) as any)
                                 : 'null'}
                             </pre>
                           </div>

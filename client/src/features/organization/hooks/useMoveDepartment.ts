@@ -9,7 +9,6 @@ import type { OrgTreeNode } from '@/types';
 interface MoveDepartmentVariables {
   id: string;
   parent_id: string | null;
-  oldParentId: string | null;
 }
 
 /**
@@ -26,7 +25,7 @@ export const useMoveDepartment = () => {
       await apiClient.put(`/organization/${id}/move`, { parent_id });
     },
     // Optimistic update: update cache before API call
-    onMutate: async ({ id, parent_id, oldParentId }) => {
+    onMutate: async ({ id, parent_id }) => {
       // Cancel outgoing refetches to prevent overwriting optimistic update
       await queryClient.cancelQueries({ queryKey: QUERY_KEYS.ORG_TREE });
 
@@ -49,8 +48,8 @@ export const useMoveDepartment = () => {
     // On error, rollback to previous state and show error toast
     onError: (error, _variables, context) => {
       // Rollback optimistic update
-      if (context?.previousTree) {
-        queryClient.setQueryData(QUERY_KEYS.ORG_TREE, context.previousTree);
+      if ((context as any)?.previousTree) {
+        queryClient.setQueryData(QUERY_KEYS.ORG_TREE, (context as any).previousTree);
       }
 
       // Show user-friendly error message
@@ -102,7 +101,7 @@ function moveNodeInTree(
   if (!nodeToMove) return tree; // Node not found, return original
 
   // Update the node's parent_id
-  nodeToMove.parent_id = newParentId;
+  (nodeToMove as any).parent_id = newParentId;
 
   // If newParentId is null, add to root level
   if (!newParentId) {

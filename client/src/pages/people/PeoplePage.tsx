@@ -1,9 +1,7 @@
 // src/pages/people/PeoplePage.tsx
 import { useState, useMemo, useCallback } from 'react';
-import { Users, UserPlus, Search, ChevronDown, X, Edit2, RefreshCw } from 'lucide-react';
-import * as Tabs from '@radix-ui/react-tabs';
+import { Users, UserPlus, Search, ChevronDown, X, RefreshCw } from 'lucide-react';
 import { useUsers } from '@/features/people/hooks/useUsers';
-import { useUserDetail } from '@/features/people/hooks/useUserDetail';
 import { useUpdateUser } from '@/features/people/hooks/useUpdateUser';
 import { useUpdateLifecycle } from '@/features/people/hooks/useUpdateLifecycle';
 import { useUserStats } from '@/features/people/hooks/useUserStats';
@@ -16,7 +14,7 @@ import { TableSkeleton } from '@/components/ui/TableSkeleton';
 import { ErrorState } from '@/components/ui/ErrorState';
 import { EmptyState } from '@/components/ui/EmptyState';
 import { Modal } from '@/components/ui/Modal';
-import type { User, LifecycleState, EmploymentType, Department, DepartmentFilters } from '@/types';
+import type { User, LifecycleState, EmploymentType, Department } from '@/types';
 import { cn } from '@/utils/cn';
 import { toast } from 'sonner';
 
