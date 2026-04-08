@@ -2,7 +2,7 @@
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { apiClient } from '@/lib/apiClient';
 import { QUERY_KEYS } from '@/constants/queryKeys';
-import { Role, CreateRoleInput, UpdateRoleInput } from '@/types';
+import type { Role, CreateRoleInput, UpdateRoleInput } from '@/types';
 import { toast } from 'sonner';
 
 interface ApiResponse<T> {

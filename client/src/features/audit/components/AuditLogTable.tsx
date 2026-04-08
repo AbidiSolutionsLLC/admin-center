@@ -138,7 +138,7 @@ export function AuditLogTable({ events, isLoading, onRowClick }: AuditLogTablePr
                     <div className="text-xs text-ink-secondary font-mono">{event.actor_email}</div>
                   </td>
                   <td className="h-14 px-4 text-sm">
-                    <span className="inline-flex items-center font-mono text-xs bg-accent-light text-accent border border-indigo-200 rounded-md px-2 py-0.5">
+                    <span className="inline-flex items-center font-mono text-xs bg-primary-light text-primary border border-primary/20 rounded-md px-2 py-0.5">
                       {event.action}
                     </span>
                   </td>

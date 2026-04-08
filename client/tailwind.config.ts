@@ -11,6 +11,16 @@ const config: Config = {
       colors: {
         primary: {
           DEFAULT: '#E8870A',
+          50: '#FEF3E2',   // Lightest shade
+          100: '#FDE6C4',  // Very light
+          200: '#FCD9A6',  // Light
+          300: '#FACC88',  // Medium-light
+          400: '#F9BF6A',  // Medium
+          500: '#F8B24C',  // Medium-dark
+          600: '#E8870A',  // DEFAULT (main brand color)
+          700: '#C97208',  // hover state
+          800: '#AA5D06',  // Darker
+          900: '#8B4805',  // Darkest
           hover: '#C97208',
           light: '#FEF3E2',
           foreground: '#FFFFFF',
@@ -34,12 +44,15 @@ const config: Config = {
         surface: {
           DEFAULT: '#FFFFFF',
           alt: '#F1F3F7',
+          secondary: '#F1F3F7', // Alias for backwards compatibility
           elevated: '#FFFFFF',
         },
         ink: {
           DEFAULT: '#0F1629',
+          primary: '#0F1629', // Alias for consistency
           secondary: '#5A6478',
           muted: '#9BA5B7',
+          red: '#DC2626', // For critical/error states (alias of error.DEFAULT)
         },
         line: {
           DEFAULT: '#E2E6ED',

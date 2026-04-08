@@ -1,7 +1,7 @@
 // client/src/features/roles/PermissionMatrix.tsx
 import { useState, useMemo } from 'react';
 import { Check, Minus, X } from 'lucide-react';
-import { Permission, ResolvedPermission, PermissionUpdate } from '@/types';
+import type { Permission, ResolvedPermission, PermissionUpdate } from '@/types';
 
 interface PermissionMatrixProps {
   permissions: Permission[];
@@ -129,7 +129,7 @@ export const PermissionMatrix: React.FC<PermissionMatrixProps> = ({
     const bgColor = state === true
       ? 'bg-primary-50 text-primary-700'
       : state === false
-      ? 'bg-ink-red/10 text-ink-red'
+      ? 'bg-ink-red/10 text-error'
       : 'bg-surface';
 
     return (
@@ -155,8 +155,8 @@ export const PermissionMatrix: React.FC<PermissionMatrixProps> = ({
       <div className="overflow-x-auto rounded-lg border border-line bg-surface">
         <table className="w-full border-collapse">
           <thead>
-            <tr className="border-b border-line bg-surface-secondary">
-              <th className="sticky left-0 z-10 bg-surface-secondary p-3 text-left text-xs font-semibold text-ink-secondary uppercase tracking-wider">
+            <tr className="border-b border-line bg-surface-alt">
+              <th className="sticky left-0 z-10 bg-surface-alt p-3 text-left text-xs font-semibold text-ink-secondary uppercase tracking-wider">
                 Module
               </th>
               {actions.map((action) => (
@@ -172,8 +172,8 @@ export const PermissionMatrix: React.FC<PermissionMatrixProps> = ({
                 Actions
               </th>
             </tr>
-            <tr className="border-b border-line bg-surface-secondary/50">
-              <th className="sticky left-0 z-10 bg-surface-secondary/50 p-2 text-xs text-ink-muted">
+            <tr className="border-b border-line bg-surface-alt/50">
+              <th className="sticky left-0 z-10 bg-surface-alt/50 p-2 text-xs text-ink-muted">
                 Data Scope →
               </th>
               {actions.map((action) =>
@@ -195,11 +195,11 @@ export const PermissionMatrix: React.FC<PermissionMatrixProps> = ({
             {modules.map((module, moduleIdx) => (
               <tr
                 key={module}
-                className={`border-b border-line hover:bg-surface-secondary/30 transition-colors ${
-                  moduleIdx % 2 === 0 ? 'bg-surface' : 'bg-surface-secondary/20'
+                className={`border-b border-line hover:bg-surface-alt/30 transition-colors ${
+                  moduleIdx % 2 === 0 ? 'bg-surface' : 'bg-surface-alt/20'
                 }`}
               >
-                <td className="sticky left-0 z-10 p-3 text-sm font-medium text-ink-primary border-r border-line bg-inherit">
+                <td className="sticky left-0 z-10 p-3 text-sm font-medium text-ink border-r border-line bg-inherit">
                   <span className="capitalize">{module.replace('_', ' ')}</span>
                 </td>
                 {actions.map((action) =>
@@ -224,7 +224,7 @@ export const PermissionMatrix: React.FC<PermissionMatrixProps> = ({
                     </button>
                     <button
                       onClick={() => handleClearAll(module)}
-                      className="px-2 py-1 text-xs font-medium text-ink-muted hover:bg-surface-secondary rounded transition-colors"
+                      className="px-2 py-1 text-xs font-medium text-ink-muted hover:bg-surface-alt rounded transition-colors"
                     >
                       Clear
                     </button>
@@ -246,7 +246,7 @@ export const PermissionMatrix: React.FC<PermissionMatrixProps> = ({
           </div>
           <div className="flex items-center gap-2">
             <div className="h-4 w-4 rounded bg-ink-red/10 flex items-center justify-center">
-              <X className="h-3 w-3 text-ink-red" />
+              <X className="h-3 w-3 text-error" />
             </div>
             <span>Denied</span>
           </div>
@@ -265,8 +265,8 @@ export const PermissionMatrix: React.FC<PermissionMatrixProps> = ({
             h-9 px-4 text-sm font-medium rounded-md transition-all
             ${
               localState.size === 0 || isSaving
-                ? 'bg-surface-secondary text-ink-muted cursor-not-allowed'
-                : 'bg-primary-600 text-white hover:bg-primary-700'
+                ? 'bg-surface-alt text-ink-muted cursor-not-allowed'
+                : 'bg-primary text-white hover:bg-primary-700'
             }
           `}
         >

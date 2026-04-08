@@ -12,6 +12,8 @@ import LoginPage from './pages/auth/LoginPage';
 import OverviewPage from './pages/overview/OverviewPage';
 import OrganizationPage from './pages/organization/OrganizationPage';
 import PeoplePage from './pages/people/PeoplePage';
+import RolesPage from './pages/roles/RolesPage';
+import AppsPage from './pages/apps/AppsPage';
 import SecurityPage from './pages/security/SecurityPage';
 import AuditLogsPage from './pages/audit-logs/AuditLogsPage';
 
@@ -30,6 +32,8 @@ function App() {
               <Route path={ROUTES.OVERVIEW} element={<OverviewPage />} />
               <Route path={ROUTES.ORGANIZATION} element={<OrganizationPage />} />
               <Route path={ROUTES.PEOPLE} element={<PeoplePage />} />
+              <Route path={ROUTES.ROLES} element={<RolesPage />} />
+              <Route path={ROUTES.APPS} element={<AppsPage />} />
               <Route path={ROUTES.SECURITY} element={<SecurityPage />} />
               <Route path={ROUTES.AUDIT_LOGS} element={<AuditLogsPage />} />
             </Route>

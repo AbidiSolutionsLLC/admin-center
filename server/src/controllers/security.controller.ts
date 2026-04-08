@@ -19,12 +19,19 @@ import { AppError } from '../utils/AppError';
  * Returns the security policy for the current company.
  */
 export const getSecurityPolicy = asyncHandler(async (req: Request, res: Response) => {
-  const policy = await SecurityPolicy.findOne({
+  let policy = await SecurityPolicy.findOne({
     company_id: req.user.company_id,
   });
 
   if (!policy) {
-    throw new AppError('Security policy not found', 404, 'NOT_FOUND');
+    // Automatically create a default policy if missing
+    policy = await SecurityPolicy.create({
+      company_id: req.user.company_id,
+      policy_name: 'Default Security Policy',
+      description: 'Default security policy with standard protection settings',
+      is_enabled: true,
+      settings: {}, // Mongoose defaults will fill this
+    });
   }
 
   res.status(200).json({ success: true, data: policy });
@@ -60,12 +67,8 @@ export const updateSecurityPolicy = asyncHandler(async (req: Request, res: Respo
   const policy = await SecurityPolicy.findOneAndUpdate(
     { company_id: req.user.company_id },
     { $set: input },
-    { new: true, runValidators: true },
+    { new: true, runValidators: true, upsert: true, setDefaultsOnInsert: true },
   );
-
-  if (!policy) {
-    throw new AppError('Security policy not found', 404, 'NOT_FOUND');
-  }
 
   // MANDATORY: audit log
   await auditLogger.log({

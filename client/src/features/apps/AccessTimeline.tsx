@@ -22,7 +22,7 @@ export const AccessTimeline: React.FC<AccessTimelineProps> = ({
     return (
       <div className="space-y-3">
         {[1, 2, 3].map((i) => (
-          <div key={i} className="flex gap-3 p-3 bg-surface-secondary animate-pulse rounded-md">
+          <div key={i} className="flex gap-3 p-3 bg-surface-alt animate-pulse rounded-md">
             <div className="h-8 w-8 bg-surface rounded" />
             <div className="flex-1 space-y-2">
               <div className="h-4 bg-surface rounded w-3/4" />
@@ -65,7 +65,7 @@ export const AccessTimeline: React.FC<AccessTimelineProps> = ({
           className={`p-3 rounded-md border ${
             assignment.is_active
               ? 'bg-surface border-line'
-              : 'bg-surface-secondary/50 border-line/50'
+              : 'bg-surface-alt/50 border-line/50'
           }`}
         >
           <div className="flex items-start gap-3">
@@ -74,7 +74,7 @@ export const AccessTimeline: React.FC<AccessTimelineProps> = ({
               className={`h-8 w-8 rounded-full flex items-center justify-center ${
                 assignment.is_active
                   ? 'bg-success/10 text-success'
-                  : 'bg-ink-red/10 text-ink-red'
+                  : 'bg-ink-red/10 text-error'
               }`}
             >
               {assignment.is_active ? (
@@ -87,7 +87,7 @@ export const AccessTimeline: React.FC<AccessTimelineProps> = ({
             {/* Content */}
             <div className="flex-1 min-w-0">
               <div className="flex items-center gap-2">
-                <span className="text-sm font-medium text-ink-primary">
+                <span className="text-sm font-medium text-ink">
                   {assignment.is_active ? 'Granted' : 'Revoked'}
                 </span>
                 <span className="text-xs text-ink-muted">•</span>

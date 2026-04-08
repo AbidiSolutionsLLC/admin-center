@@ -97,7 +97,7 @@ export default function AppsPage() {
     return (
       <div className="space-y-6">
         <div className="flex items-center justify-between">
-          <div className="h-8 w-48 bg-surface-secondary animate-pulse rounded" />
+          <div className="h-8 w-48 bg-surface-alt animate-pulse rounded" />
         </div>
         <TableSkeleton rows={3} columns={3} />
       </div>
@@ -132,7 +132,7 @@ export default function AppsPage() {
       {/* Page Header */}
       <div className="flex items-center justify-between">
         <div>
-          <h1 className="text-2xl font-bold text-ink-primary">App Assignment</h1>
+          <h1 className="text-[22px] font-semibold tracking-tight text-ink">App Assignment</h1>
           <p className="text-sm text-ink-muted mt-1">
             Manage app access across roles, departments, and users
           </p>
@@ -141,14 +141,14 @@ export default function AppsPage() {
           <div className="flex items-center gap-2">
             <button
               onClick={handleOpenTimelineModal}
-              className="inline-flex items-center gap-2 h-9 px-4 text-sm font-medium text-ink-secondary border border-line rounded-md hover:bg-surface-secondary transition-colors"
+              className="inline-flex items-center gap-2 h-9 px-4 text-sm font-medium text-ink-secondary border border-line rounded-md hover:bg-surface-alt transition-colors"
             >
               <Clock className="h-4 w-4" />
               Timeline
             </button>
             <button
               onClick={handleOpenAssignModal}
-              className="inline-flex items-center gap-2 h-9 px-4 bg-primary-600 text-white text-sm font-medium rounded-md hover:bg-primary-700 transition-colors"
+              className="inline-flex items-center gap-2 h-9 px-4 bg-primary text-white text-sm font-medium rounded-md hover:bg-primary-hover transition-colors"
             >
               <Users className="h-4 w-4" />
               Assign App
@@ -170,7 +170,7 @@ export default function AppsPage() {
         <div className="bg-surface border border-line rounded-lg shadow-card p-6">
           <div className="flex items-start justify-between mb-4">
             <div>
-              <h2 className="text-lg font-semibold text-ink-primary">{selectedApp.name}</h2>
+              <h2 className="text-lg font-semibold text-ink">{selectedApp.name}</h2>
               <p className="text-sm text-ink-muted mt-1">
                 {selectedApp.description || 'No description'}
               </p>
@@ -189,7 +189,7 @@ export default function AppsPage() {
           </div>
 
           {selectedApp.dependencies && selectedApp.dependencies.length > 0 && (
-            <div className="p-3 bg-surface-secondary rounded-md border border-line mb-4">
+            <div className="p-3 bg-surface-alt rounded-md border border-line mb-4">
               <div className="flex items-center gap-2">
                 <AlertTriangle className="h-4 w-4 text-warning" />
                 <span className="text-xs font-medium text-ink-secondary">
@@ -223,7 +223,7 @@ export default function AppsPage() {
           <div className="space-y-4">
             {/* Target Type Selector */}
             <div>
-              <label className="block text-sm font-medium text-ink-primary mb-2">
+              <label className="block text-sm font-medium text-ink mb-2">
                 Assign To
               </label>
               <div className="flex gap-2">
@@ -236,8 +236,8 @@ export default function AppsPage() {
                     }}
                     className={`flex-1 h-9 text-sm font-medium rounded-md transition-colors ${
                       assignTargetType === type
-                        ? 'bg-primary-600 text-white'
-                        : 'bg-surface-secondary text-ink-secondary hover:bg-surface-secondary/80'
+                        ? 'bg-primary text-white'
+                        : 'bg-surface-alt text-ink-secondary hover:bg-surface-alt/80'
                     }`}
                   >
                     {type.charAt(0).toUpperCase() + type.slice(1)}
@@ -248,9 +248,9 @@ export default function AppsPage() {
 
             {/* Target Selector */}
             <div>
-              <label className="block text-sm font-medium text-ink-primary mb-1">
+              <label className="block text-sm font-medium text-ink mb-1">
                 Select {assignTargetType.charAt(0).toUpperCase() + assignTargetType.slice(1)}{' '}
-                <span className="text-ink-red">*</span>
+                <span className="text-error">*</span>
               </label>
               <select
                 value={assignTargetId}
@@ -269,7 +269,7 @@ export default function AppsPage() {
 
             {/* Reason (Optional) */}
             <div>
-              <label className="block text-sm font-medium text-ink-primary mb-1">
+              <label className="block text-sm font-medium text-ink mb-1">
                 Reason (Optional)
               </label>
               <input

@@ -113,8 +113,8 @@ export default function RolesPage() {
     return (
       <div className="space-y-6">
         <div className="flex items-center justify-between">
-          <div className="h-8 w-48 bg-surface-secondary animate-pulse rounded" />
-          <div className="h-9 w-32 bg-surface-secondary animate-pulse rounded" />
+          <div className="h-8 w-48 bg-surface-alt animate-pulse rounded" />
+          <div className="h-9 w-32 bg-surface-alt animate-pulse rounded" />
         </div>
         <TableSkeleton rows={6} columns={4} />
       </div>
@@ -151,14 +151,14 @@ export default function RolesPage() {
       {/* Page Header */}
       <div className="flex items-center justify-between">
         <div>
-          <h1 className="text-2xl font-bold text-ink-primary">Roles & Access</h1>
+          <h1 className="text-2xl font-bold text-ink">Roles & Access</h1>
           <p className="text-sm text-ink-muted mt-1">
             Manage roles and their permissions across your organization
           </p>
         </div>
         <button
           onClick={handleOpenCreateModal}
-          className="inline-flex items-center gap-2 h-9 px-4 bg-primary-600 text-white text-sm font-medium rounded-md hover:bg-primary-700 transition-colors"
+          className="inline-flex items-center gap-2 h-9 px-4 bg-primary text-white text-sm font-medium rounded-md hover:bg-primary-700 transition-colors"
         >
           <Plus className="h-4 w-4" />
           Create Role
@@ -169,7 +169,7 @@ export default function RolesPage() {
       <div className="bg-surface border border-line rounded-lg shadow-card">
         <table className="w-full">
           <thead>
-            <tr className="border-b border-line bg-surface-secondary">
+            <tr className="border-b border-line bg-surface-alt">
               <th className="p-3 text-left text-xs font-semibold text-ink-secondary uppercase tracking-wider">
                 Role Name
               </th>
@@ -191,20 +191,20 @@ export default function RolesPage() {
             {roles.map((role) => (
               <tr
                 key={role._id}
-                className="border-b border-line/50 hover:bg-surface-secondary/30 transition-colors"
+                className="border-b border-line/50 hover:bg-surface-alt/30 transition-colors"
               >
                 <td className="p-3">
                   <div className="flex items-center gap-2">
                     <Shield className="h-4 w-4 text-primary-600" />
-                    <span className="text-sm font-medium text-ink-primary">{role.name}</span>
+                    <span className="text-sm font-medium text-ink">{role.name}</span>
                   </div>
                 </td>
                 <td className="p-3">
                   <span
                     className={`inline-flex items-center px-2 py-1 text-xs font-medium rounded-md ${
                       role.type === 'system'
-                        ? 'bg-ink-primary/10 text-ink-primary'
-                        : 'bg-surface-secondary text-ink-secondary'
+                        ? 'bg-ink-primary/10 text-ink'
+                        : 'bg-surface-alt text-ink-secondary'
                     }`}
                   >
                     {role.type === 'system' ? 'System' : 'Custom'}
@@ -231,7 +231,7 @@ export default function RolesPage() {
                     </button>
                     <button
                       onClick={() => handleOpenEditModal(role)}
-                      className="p-2 text-ink-muted hover:text-ink-primary hover:bg-surface-secondary rounded-md transition-colors"
+                      className="p-2 text-ink-muted hover:text-ink hover:bg-surface-alt rounded-md transition-colors"
                       title="Edit Role"
                     >
                       <Edit2 className="h-4 w-4" />
@@ -239,7 +239,7 @@ export default function RolesPage() {
                     <button
                       onClick={() => handleDeleteRole(role)}
                       disabled={deleteMutation.isPending}
-                      className="p-2 text-ink-muted hover:text-ink-red hover:bg-ink-red/10 rounded-md transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                      className="p-2 text-ink-muted hover:text-error hover:bg-ink-red/10 rounded-md transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
                       title="Delete Role"
                     >
                       <Trash2 className="h-4 w-4" />
@@ -261,8 +261,8 @@ export default function RolesPage() {
       >
         <div className="space-y-4">
           <div>
-            <label className="block text-sm font-medium text-ink-primary mb-1">
-              Role Name <span className="text-ink-red">*</span>
+            <label className="block text-sm font-medium text-ink mb-1">
+              Role Name <span className="text-error">*</span>
             </label>
             <input
               type="text"
@@ -274,7 +274,7 @@ export default function RolesPage() {
           </div>
 
           <div>
-            <label className="block text-sm font-medium text-ink-primary mb-1">
+            <label className="block text-sm font-medium text-ink mb-1">
               Description
             </label>
             <textarea
@@ -288,14 +288,14 @@ export default function RolesPage() {
           <div className="flex justify-end gap-2 pt-2">
             <button
               onClick={() => setIsFormModalOpen(false)}
-              className="h-9 px-4 text-sm font-medium text-ink-secondary border border-line rounded-md hover:bg-surface-secondary transition-colors"
+              className="h-9 px-4 text-sm font-medium text-ink-secondary border border-line rounded-md hover:bg-surface-alt transition-colors"
             >
               Cancel
             </button>
             <button
               onClick={handleSaveRole}
               disabled={!formData.name.trim() || createMutation.isPending || updateMutation.isPending}
-              className="h-9 px-4 text-sm font-medium text-white bg-primary-600 rounded-md hover:bg-primary-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+              className="h-9 px-4 text-sm font-medium text-white bg-primary rounded-md hover:bg-primary-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
             >
               {createMutation.isPending || updateMutation.isPending
                 ? 'Saving...'

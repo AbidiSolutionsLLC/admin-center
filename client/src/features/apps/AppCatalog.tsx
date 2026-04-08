@@ -23,7 +23,7 @@ export const AppCatalog: React.FC<AppCatalogProps> = ({
     return (
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
         {[1, 2, 3, 4, 5, 6].map((i) => (
-          <div key={i} className="h-32 bg-surface-secondary animate-pulse rounded-lg" />
+          <div key={i} className="h-32 bg-surface-alt animate-pulse rounded-lg" />
         ))}
       </div>
     );
@@ -33,7 +33,7 @@ export const AppCatalog: React.FC<AppCatalogProps> = ({
     return (
       <div className="flex flex-col items-center justify-center py-12 text-center">
         <Package className="h-16 w-16 text-ink-muted mb-3" />
-        <p className="text-sm font-medium text-ink-primary">No apps yet</p>
+        <p className="text-sm font-medium text-ink">No apps yet</p>
         <p className="text-xs text-ink-muted mt-1">Add apps to start assigning them</p>
       </div>
     );
@@ -76,17 +76,17 @@ export const AppCatalog: React.FC<AppCatalogProps> = ({
             onClick={() => onSelect(app)}
             className={`p-4 rounded-lg border text-left transition-all hover:shadow-card ${
               isSelected
-                ? 'border-primary-600 bg-primary-50 shadow-card'
-                : 'border-line bg-surface hover:border-primary-600/50'
+                ? 'border-primary bg-primary-light shadow-card'
+                : 'border-line bg-surface hover:border-primary/50'
             }`}
           >
             <div className="flex items-start justify-between mb-2">
               <div className="flex items-center gap-2">
-                <div className="h-8 w-8 rounded-md bg-primary-100 flex items-center justify-center">
-                  <Icon className="h-4 w-4 text-primary-700" />
+                <div className="h-8 w-8 rounded-md bg-primary-light flex items-center justify-center">
+                  <Icon className="h-4 w-4 text-primary" />
                 </div>
                 <div>
-                  <h3 className="text-sm font-semibold text-ink-primary">{app.name}</h3>
+                  <h3 className="text-sm font-semibold text-ink">{app.name}</h3>
                   <p className="text-xs text-ink-muted">{app.category}</p>
                 </div>
               </div>

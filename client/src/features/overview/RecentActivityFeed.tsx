@@ -18,10 +18,10 @@ export const RecentActivityFeed: React.FC<RecentActivityFeedProps> = ({
   if (isLoading) {
     return (
       <div className="bg-surface border border-line rounded-lg shadow-card p-5">
-        <h3 className="text-sm font-semibold text-ink-primary mb-3">Recent Activity</h3>
+        <h3 className="text-sm font-semibold text-ink mb-3">Recent Activity</h3>
         <div className="space-y-3">
           {[1, 2, 3, 4, 5].map((i) => (
-            <div key={i} className="flex gap-3 p-3 bg-surface-secondary animate-pulse rounded-md">
+            <div key={i} className="flex gap-3 p-3 bg-surface-alt animate-pulse rounded-md">
               <div className="h-8 w-8 bg-surface rounded" />
               <div className="flex-1 space-y-2">
                 <div className="h-4 bg-surface rounded w-3/4" />
@@ -37,7 +37,7 @@ export const RecentActivityFeed: React.FC<RecentActivityFeedProps> = ({
   if (!events || events.length === 0) {
     return (
       <div className="bg-surface border border-line rounded-lg shadow-card p-5">
-        <h3 className="text-sm font-semibold text-ink-primary mb-3">Recent Activity</h3>
+        <h3 className="text-sm font-semibold text-ink mb-3">Recent Activity</h3>
         <div className="flex flex-col items-center justify-center py-8 text-center">
           <Clock className="h-12 w-12 text-ink-muted mb-2" />
           <p className="text-sm text-ink-muted">No activity yet</p>
@@ -76,7 +76,7 @@ export const RecentActivityFeed: React.FC<RecentActivityFeedProps> = ({
     switch (module) {
       case 'people':
       case 'users':
-        return 'bg-primary-50 text-primary-600';
+        return 'bg-primary-light text-primary';
       case 'organization':
       case 'departments':
         return 'bg-info/10 text-info';
@@ -86,13 +86,13 @@ export const RecentActivityFeed: React.FC<RecentActivityFeedProps> = ({
       case 'apps':
         return 'bg-success/10 text-success';
       default:
-        return 'bg-surface-secondary text-ink-secondary';
+        return 'bg-surface-alt text-ink-secondary';
     }
   };
 
   return (
     <div className="bg-surface border border-line rounded-lg shadow-card p-5">
-      <h3 className="text-sm font-semibold text-ink-primary mb-3">Recent Activity</h3>
+      <h3 className="text-sm font-semibold text-ink mb-3">Recent Activity</h3>
       <div className="space-y-2 max-h-96 overflow-y-auto">
         {events.map((event) => {
           const Icon = getModuleIcon(event.module);
@@ -101,7 +101,7 @@ export const RecentActivityFeed: React.FC<RecentActivityFeedProps> = ({
           return (
             <div
               key={event._id}
-              className="flex items-start gap-3 p-3 rounded-md hover:bg-surface-secondary/50 transition-colors"
+              className="flex items-start gap-3 p-3 rounded-md hover:bg-surface-alt/50 transition-colors"
             >
               {/* Icon */}
               <div className={`h-8 w-8 rounded-full flex items-center justify-center flex-shrink-0 ${colorClass}`}>

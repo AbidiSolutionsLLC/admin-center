@@ -354,12 +354,7 @@ export type SecurityEventType =
   | 'mfa_challenge'
   | 'mfa_verified'
   | 'mfa_failed'
-  | 'session_expired'
-  | 'token_refresh'
-  | 'token_revoked'
-  | 'suspicious_activity_detected'
-  | 'account_locked'
-  | 'account_unlocked';
+  | 'session_expired' | 'token_refresh' | 'token_revoked' | 'suspicious_activity_detected' | 'account_locked' | 'account_unlocked';
 
 export interface SecurityEvent {
   _id: string;

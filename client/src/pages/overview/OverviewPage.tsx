@@ -39,8 +39,8 @@ export default function OverviewPage() {
       <div className="space-y-6">
         <div className="flex items-start justify-between">
           <div>
-            <div className="h-7 w-32 bg-surface-secondary animate-pulse rounded" />
-            <div className="h-4 w-48 bg-surface-secondary animate-pulse rounded mt-1" />
+            <div className="h-7 w-32 bg-surface-alt animate-pulse rounded" />
+            <div className="h-4 w-48 bg-surface-alt animate-pulse rounded mt-1" />
           </div>
         </div>
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
@@ -146,8 +146,8 @@ export default function OverviewPage() {
                   <div key={severity} className="space-y-2">
                     {severity === 'critical' && severityInsights.length > 0 && (
                       <div className="flex items-center gap-2 px-1">
-                        <div className="h-2 w-2 rounded-full bg-ink-red" />
-                        <span className="text-xs font-semibold text-ink-red uppercase tracking-wide">
+                        <div className="h-2 w-2 rounded-full bg-error" />
+                        <span className="text-xs font-semibold text-error uppercase tracking-wide">
                           Critical ({severityInsights.length})
                         </span>
                       </div>

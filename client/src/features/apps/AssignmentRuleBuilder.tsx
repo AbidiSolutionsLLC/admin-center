@@ -53,10 +53,10 @@ export const AssignmentRuleBuilder: React.FC<AssignmentRuleBuilderProps> = ({
   return (
     <div className="space-y-3">
       {/* Assignment Summary */}
-      <div className="p-3 bg-surface-secondary rounded-md border border-line">
+      <div className="p-3 bg-surface-alt rounded-md border border-line">
         <div className="flex items-center gap-2 text-sm">
           <Shield className="h-4 w-4 text-primary-600" />
-          <span className="text-ink-primary font-medium">{appName}</span>
+          <span className="text-ink font-medium">{appName}</span>
           <span className="text-ink-muted">→</span>
           <span className="text-ink-secondary">{targetName}</span>
           <span className="text-ink-muted text-xs">({targetType})</span>
@@ -65,13 +65,13 @@ export const AssignmentRuleBuilder: React.FC<AssignmentRuleBuilderProps> = ({
 
       {/* Dependency Warning */}
       {isLoading ? (
-        <div className="h-12 bg-surface-secondary animate-pulse rounded" />
+        <div className="h-12 bg-surface-alt animate-pulse rounded" />
       ) : hasUnmetDependencies ? (
         <div className="p-3 bg-warning/10 border border-warning/30 rounded-md">
           <div className="flex items-start gap-2">
             <AlertTriangle className="h-5 w-5 text-warning flex-shrink-0 mt-0.5" />
             <div className="flex-1">
-              <p className="text-sm font-medium text-ink-primary">
+              <p className="text-sm font-medium text-ink">
                 Dependency Warning
               </p>
               <p className="text-xs text-ink-secondary mt-1">
@@ -103,7 +103,7 @@ export const AssignmentRuleBuilder: React.FC<AssignmentRuleBuilderProps> = ({
           <>
             <button
               onClick={() => setShowWarning(false)}
-              className="h-9 px-4 text-sm font-medium text-ink-secondary border border-line rounded-md hover:bg-surface-secondary transition-colors"
+              className="h-9 px-4 text-sm font-medium text-ink-secondary border border-line rounded-md hover:bg-surface-alt transition-colors"
             >
               Cancel
             </button>
@@ -118,7 +118,7 @@ export const AssignmentRuleBuilder: React.FC<AssignmentRuleBuilderProps> = ({
           <button
             onClick={onConfirm}
             disabled={isSubmitting}
-            className="h-9 px-4 text-sm font-medium text-white bg-primary-600 rounded-md hover:bg-primary-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+            className="h-9 px-4 text-sm font-medium text-white bg-primary rounded-md hover:bg-primary-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
           >
             {isSubmitting ? 'Assigning...' : 'Confirm Assignment'}
           </button>
@@ -132,7 +132,7 @@ export const AssignmentRuleBuilder: React.FC<AssignmentRuleBuilderProps> = ({
             <div className="flex items-start gap-3 mb-4">
               <AlertTriangle className="h-6 w-6 text-warning flex-shrink-0" />
               <div>
-                <h3 className="text-lg font-semibold text-ink-primary">
+                <h3 className="text-lg font-semibold text-ink">
                   Force Assignment?
                 </h3>
                 <p className="text-sm text-ink-secondary mt-1">
@@ -144,7 +144,7 @@ export const AssignmentRuleBuilder: React.FC<AssignmentRuleBuilderProps> = ({
             <div className="flex gap-2 justify-end mt-4">
               <button
                 onClick={() => setShowWarning(false)}
-                className="h-9 px-4 text-sm font-medium text-ink-secondary border border-line rounded-md hover:bg-surface-secondary transition-colors"
+                className="h-9 px-4 text-sm font-medium text-ink-secondary border border-line rounded-md hover:bg-surface-alt transition-colors"
               >
                 Cancel
               </button>

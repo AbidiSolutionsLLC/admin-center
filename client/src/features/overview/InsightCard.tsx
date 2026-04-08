@@ -22,10 +22,10 @@ export const InsightCard: React.FC<InsightCardProps> = ({
       case 'critical':
         return {
           icon: AlertTriangle,
-          bg: 'bg-ink-red/10',
-          border: 'border-ink-red/30',
-          iconColor: 'text-ink-red',
-          badgeBg: 'bg-ink-red',
+          bg: 'bg-error/10',
+          border: 'border-error/30',
+          iconColor: 'text-error',
+          badgeBg: 'bg-error',
           badgeText: 'text-white',
         };
       case 'warning':
@@ -49,7 +49,7 @@ export const InsightCard: React.FC<InsightCardProps> = ({
       default:
         return {
           icon: Info,
-          bg: 'bg-surface-secondary',
+          bg: 'bg-surface-alt',
           border: 'border-line',
           iconColor: 'text-ink-muted',
           badgeBg: 'bg-ink-muted',
@@ -88,7 +88,7 @@ export const InsightCard: React.FC<InsightCardProps> = ({
             <span className="text-xs text-ink-muted">{formatDate(insight.detected_at)}</span>
           </div>
 
-          <h4 className="text-sm font-semibold text-ink-primary mt-2">{insight.title}</h4>
+          <h4 className="text-sm font-semibold text-ink mt-2">{insight.title}</h4>
           <p className="text-xs text-ink-secondary mt-1">{insight.description}</p>
 
           {insight.reasoning && (
@@ -121,7 +121,7 @@ export const InsightCard: React.FC<InsightCardProps> = ({
             <button
               onClick={onDismiss}
               disabled={isDismissing}
-              className="inline-flex items-center gap-1 text-xs font-medium text-ink-secondary hover:text-ink-primary transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+              className="inline-flex items-center gap-1 text-xs font-medium text-ink-secondary hover:text-ink transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
             >
               <Check className="h-3 w-3" />
               {isDismissing ? 'Dismissing...' : 'Dismiss'}
