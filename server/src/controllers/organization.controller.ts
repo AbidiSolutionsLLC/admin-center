@@ -21,6 +21,11 @@ const CreateDepartmentSchema = z.object({
 
 const UpdateDepartmentSchema = CreateDepartmentSchema.partial();
 
+// Move department schema (only parent_id can change)
+const MoveDepartmentSchema = z.object({
+  parent_id: z.string().optional().nullable(),
+});
+
 // BU-specific schema (type is locked to 'business_unit')
 const CreateBUSchema = z.object({
   name: z.string().min(1, 'Name is required').max(100),
@@ -257,6 +262,86 @@ export const getOrgTree = asyncHandler(async (req: Request, res: Response) => {
 });
 
 /**
+ * PUT /organization/:id/move
+ * Moves a department to a new parent in the hierarchy.
+ * Validates:
+ * - Cannot move onto own descendant (prevents circular hierarchy)
+ * - Produces audit event: department.moved
+ */
+export const moveDepartment = asyncHandler(async (req: Request, res: Response) => {
+  const input = MoveDepartmentSchema.parse(req.body);
+
+  const dept = await Department.findOne({
+    _id: req.params.id,
+    company_id: req.user.company_id,
+    is_active: true,
+  } as any);
+
+  if (!dept) {
+    throw new AppError('Department not found', 404, 'NOT_FOUND');
+  }
+
+  const beforeState = dept.toObject();
+  const oldParentId = dept.parent_id;
+
+  // If parent_id is changing, validate no circular reference
+  if (input.parent_id !== undefined && input.parent_id !== oldParentId?.toString()) {
+    // Check for circular reference: new parent cannot be a descendant of this department
+    if (input.parent_id) {
+      const isDescendant = await isDescendantOf(dept._id.toString(), input.parent_id);
+      if (isDescendant) {
+        throw new AppError(
+          'Cannot move department to one of its own descendants. This would create a circular hierarchy.',
+          400,
+          'CIRCULAR_HIERARCHY'
+        );
+      }
+    }
+
+    dept.parent_id = input.parent_id || undefined;
+  }
+
+  await dept.save();
+
+  await auditLogger.log({
+    req,
+    action: 'department.moved',
+    module: 'organization',
+    object_type: 'Department',
+    object_id: dept._id.toString(),
+    object_label: dept.name,
+    before_state: { parent_id: oldParentId?.toString() ?? null },
+    after_state: { parent_id: dept.parent_id?.toString() ?? null },
+  });
+
+  runIntelligenceRules(req.user.company_id).catch(err => {
+    console.error('Intelligence rules failed:', err);
+  });
+
+  res.status(200).json({ success: true, data: dept });
+});
+
+/**
+ * Helper: Checks if targetId is a descendant of deptId.
+ * Traverses all children recursively to prevent circular hierarchy.
+ */
+async function isDescendantOf(deptId: string, targetId: string): Promise<boolean> {
+  // Get direct children of deptId
+  const children = await Department.find({
+    parent_id: deptId,
+    is_active: true,
+  } as any).lean();
+
+  for (const child of children) {
+    if (child._id.toString() === targetId) return true;
+    // Recursively check grandchildren
+    if (await isDescendantOf(child._id.toString(), targetId)) return true;
+  }
+
+  return false;
+}
+
+/**
  * GET /organization/bu-tree
  * Returns full hierarchy tree for all Business Units: BU → Departments → Teams
  */
@@ -309,11 +394,25 @@ export const getBUTree = asyncHandler(async (req: Request, res: Response) => {
     });
 
     // Build nested structure
-    const buildDeptTree = (parentId: string) => {
+    interface DeptTreeNode {
+      _id: string;
+      name: string;
+      slug: string;
+      type: string;
+      parent_id?: string;
+      primary_manager?: { full_name: string; avatar_url?: string };
+      headcount?: number;
+      has_intelligence_flag?: boolean;
+      teams: typeof teams;
+      team_count: number;
+      children: DeptTreeNode[];
+    }
+
+    const buildDeptTree = (parentId: string): DeptTreeNode[] => {
       const children = allDescendants.filter(
         (d) => d.parent_id?.toString() === parentId
       );
-      return children.map((child) => {
+      return children.map((child): DeptTreeNode => {
         const deptTeams = teams.filter(
           (t) => t.department_id?.toString() === child._id.toString()
         );
@@ -401,9 +500,10 @@ export const getBusinessUnits = asyncHandler(async (req: Request, res: Response)
 
     const descendantIds = findDescendants(bu._id.toString());
     const deptCount = descendantIds.length;
-    const teamCount = allTeams.filter((t) =>
-      descendantIds.includes(t.department_id?.toString())
-    ).length;
+    const teamCount = allTeams.filter((t) => {
+      const teamDeptId = t.department_id?.toString();
+      return teamDeptId && descendantIds.includes(teamDeptId);
+    }).length;
 
     return {
       ...bu,
@@ -489,7 +589,7 @@ export const assignUserOrg = asyncHandler(async (req: Request, res: Response) =>
 
   // Update department
   if (input.department_id !== undefined) {
-    user.department_id = input.department_id || undefined;
+    (user as any).department_id = input.department_id || undefined;
   }
 
   // Note: Team memberships are managed via TeamMember join table,

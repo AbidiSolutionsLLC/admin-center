@@ -7,6 +7,7 @@ import {
   updateDepartment,
   deleteDepartment,
   getOrgTree,
+  moveDepartment,
   getBUTree,
   getBusinessUnits,
   deleteBusinessUnit,
@@ -23,6 +24,7 @@ router.get('/business-units', getBusinessUnits);
 router.get('/:id', getDepartmentById);
 router.post('/', createDepartment);
 router.put('/:id', updateDepartment);
+router.put('/:id/move', moveDepartment);
 router.delete('/:id', deleteDepartment);
 router.delete('/business-units/:id', deleteBusinessUnit);
 
