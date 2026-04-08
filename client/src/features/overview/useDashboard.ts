@@ -2,7 +2,7 @@
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { apiClient } from '@/lib/apiClient';
 import { QUERY_KEYS } from '@/constants/queryKeys';
-import { DashboardStats, SetupProgress, AuditEvent, Insight } from '@/types';
+import type { DashboardStats, SetupProgress, AuditEvent, Insight } from '@/types';
 import { toast } from 'sonner';
 
 interface ApiResponse<T> {

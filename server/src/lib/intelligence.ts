@@ -5,6 +5,7 @@ import { Department } from '../models/Department.model';
 import { UserRole } from '../models/UserRole.model';
 import { Role } from '../models/Role.model';
 import { RolePermission } from '../models/RolePermission.model';
+import { SecurityPolicy } from '../models/SecurityPolicy.model';
 import { Insight } from '../models/Insight.model';
 
 /**
@@ -19,6 +20,7 @@ import { Insight } from '../models/Insight.model';
  * - RULE-04: User last_login > 90 days and still active
  * - RULE-05: Team (type='team') with no parent department (orphan)
  * - RULE-06: Role with excessive permissions (over-permissioned)
+ * - RULE-07: Admin user with MFA disabled (security risk)
  */
 export const runIntelligenceRules = async (companyId: string | Types.ObjectId): Promise<void> => {
   const companyObjectId = typeof companyId === 'string' ? new Types.ObjectId(companyId) : companyId;
@@ -170,6 +172,56 @@ export const runIntelligenceRules = async (companyId: string | Types.ObjectId): 
         is_resolved: false,
         detected_at: new Date(),
       });
+    }
+  }
+
+  // ────────────────────────────────────────────────────────────────────────────
+  // RULE-07: Admin user with MFA disabled (security risk)
+  // ────────────────────────────────────────────────────────────────────────────
+
+  // Get security policy to check if MFA is required
+  const securityPolicy = await SecurityPolicy.findOne({ company_id: companyObjectId }).lean();
+  const mfaRequired = securityPolicy?.settings.require_mfa ?? false;
+
+  // Only flag if MFA is required by policy OR if user has admin-level roles
+  if (mfaRequired) {
+    // Find all users with admin roles who don't have MFA enabled
+    const adminRoles = await Role.find({
+      company_id: companyObjectId,
+      name: { $in: ['super_admin', 'hr_admin', 'it_admin', 'ops_admin'] },
+      is_active: true,
+    }).lean();
+
+    const adminRoleIds = adminRoles.map((r) => r._id);
+
+    if (adminRoleIds.length > 0) {
+      const adminUserIds = await UserRole.distinct('user_id', {
+        role_id: { $in: adminRoleIds },
+      });
+
+      const adminUsersWithoutMfa = await User.find({
+        _id: { $in: adminUserIds },
+        mfa_enabled: false,
+        is_active: true,
+      }).lean();
+
+      for (const user of adminUsersWithoutMfa) {
+        insightsToUpsert.push({
+          company_id: companyObjectId,
+          category: 'health',
+          severity: 'critical',
+          title: `${user.full_name} (admin) has MFA disabled`,
+          description: 'Admin users without MFA are a security risk. Enable MFA to protect against unauthorized access.',
+          reasoning: `User "${user.full_name}" (${user.email}) has admin-level access but MFA is not enabled. Security policy requires MFA for all admin accounts.`,
+          affected_object_type: 'User',
+          affected_object_id: user._id.toString(),
+          affected_object_label: user.full_name,
+          remediation_url: `/people/${user._id}`,
+          remediation_action: 'Enable MFA for this user',
+          is_resolved: false,
+          detected_at: new Date(),
+        });
+      }
     }
   }
 
@@ -381,11 +433,12 @@ export const runIntelligenceRules = async (companyId: string | Types.ObjectId): 
   }).lean();
 
   for (const user of recentlyActiveUsers) {
+    // Use regex to match any insight title containing "inactive for X days"
     await Insight.updateMany(
       {
         company_id: companyObjectId,
         affected_object_id: user._id.toString(),
-        title: `${user.full_name} inactive for*`,
+        title: { $regex: /^.*inactive for \d+ days$/ },
         is_resolved: false,
       },
       {
@@ -431,6 +484,33 @@ export const runIntelligenceRules = async (companyId: string | Types.ObjectId): 
         }
       );
     }
+  }
+
+  // ────────────────────────────────────────────────────────────────────────────
+  // Auto-resolve RULE-07 insights where admin user enabled MFA
+  // ────────────────────────────────────────────────────────────────────────────
+
+  const adminUsersWithMfa = await User.find({
+    company_id: companyObjectId,
+    mfa_enabled: true,
+    is_active: true,
+  }).lean();
+
+  for (const user of adminUsersWithMfa) {
+    await Insight.updateMany(
+      {
+        company_id: companyObjectId,
+        affected_object_id: user._id.toString(),
+        title: { $regex: /^.*\(admin\) has MFA disabled$/ },
+        is_resolved: false,
+      },
+      {
+        $set: {
+          is_resolved: true,
+          resolved_at: new Date(),
+        }
+      }
+    );
   }
 };
 

@@ -229,6 +229,17 @@ export const refresh = asyncHandler(async (req: Request, res: Response) => {
     company_id: user.company_id.toString()
   });
 
+  // Log token refresh security event
+  await logSecurityEvent({
+    company_id: user.company_id,
+    user_id: user._id,
+    email: user.email,
+    event_type: 'token_refresh',
+    ip_address: req.ip,
+    user_agent: req.headers['user-agent'],
+    metadata: { lifecycle_state: user.lifecycle_state },
+  });
+
   res.status(200).json({
     success: true,
     data: {
@@ -242,7 +253,7 @@ export const logout = asyncHandler(async (req: Request, res: Response) => {
 
   if (token) {
     const tokenHash = crypto.createHash('sha256').update(token).digest('hex');
-    
+
     // Invalidate RefreshToken record
     await RefreshToken.updateMany(
       { token_hash: tokenHash },
@@ -252,6 +263,26 @@ export const logout = asyncHandler(async (req: Request, res: Response) => {
     // Optionally clear hash from User
     if (req.user) {
       await User.findByIdAndUpdate(req.user.userId, { $unset: { refresh_token_hash: 1 } });
+      
+      // Log logout security event
+      await logSecurityEvent({
+        company_id: req.user.company_id,
+        user_id: req.user.userId,
+        event_type: 'logout',
+        ip_address: req.ip,
+        user_agent: req.headers['user-agent'],
+        metadata: { token_revoked: true },
+      });
+
+      // Log token revocation event
+      await logSecurityEvent({
+        company_id: req.user.company_id,
+        user_id: req.user.userId,
+        event_type: 'token_revoked',
+        ip_address: req.ip,
+        user_agent: req.headers['user-agent'],
+        metadata: { reason: 'user_logout' },
+      });
     }
   }
 

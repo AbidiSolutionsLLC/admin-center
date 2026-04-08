@@ -1,5 +1,5 @@
 // client/src/features/overview/StatCard.tsx
-import { LucideIcon } from 'lucide-react';
+import type { LucideIcon } from 'lucide-react';
 
 interface StatCardProps {
   title: string;

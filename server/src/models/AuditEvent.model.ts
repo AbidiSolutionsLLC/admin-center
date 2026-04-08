@@ -31,4 +31,11 @@ const AuditEventSchema = new Schema<IAuditEvent>({
   user_agent: String,
 }, { timestamps: { createdAt: 'created_at' }, versionKey: false });
 
+// ── Indexes for efficient querying ──────────────────────────────────────────
+AuditEventSchema.index({ company_id: 1, created_at: -1 });
+AuditEventSchema.index({ company_id: 1, module: 1, created_at: -1 });
+AuditEventSchema.index({ company_id: 1, actor_id: 1, created_at: -1 });
+AuditEventSchema.index({ company_id: 1, action: 1, created_at: -1 });
+AuditEventSchema.index({ object_type: 1, object_id: 1 });
+
 export const AuditEvent = model<IAuditEvent>('AuditEvent', AuditEventSchema);

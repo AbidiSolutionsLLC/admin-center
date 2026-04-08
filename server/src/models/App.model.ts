@@ -20,7 +20,7 @@ export interface IApp extends Document {
 
 const AppSchema = new Schema<IApp>({
   name: { type: String, required: true },
-  slug: { type: String, required: true, index: true },
+  slug: { type: String, required: true },
   description: String,
   icon_url: String,
   category: { type: String, required: true },
@@ -31,7 +31,7 @@ const AppSchema = new Schema<IApp>({
     default: 'active',
   },
   is_system_app: { type: Boolean, default: false },
-  company_id: { type: Schema.Types.ObjectId, ref: 'Company', index: true },
+  company_id: { type: Schema.Types.ObjectId, ref: 'Company' },
   is_active: { type: Boolean, default: true },
   dependencies: [{ type: String }],
 }, { timestamps: { createdAt: 'created_at', updatedAt: 'updated_at' } });
