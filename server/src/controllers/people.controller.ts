@@ -15,14 +15,14 @@ import { AppError } from '../utils/AppError';
 const InviteUserSchema = z.object({
   full_name: z.string().min(1, 'Full name is required').max(100),
   email: z.string().email('Invalid email address'),
-  phone: z.string().optional(),
+  phone: z.string().optional().nullable(),
   department_id: z.string().optional().nullable(),
   team_id: z.string().optional().nullable(),
   manager_id: z.string().optional().nullable(),
-  employment_type: z.enum(['full_time', 'part_time', 'contractor', 'intern']).default('full_time'),
+  employment_type: z.enum(['full_time', 'part_time', 'contractor', 'intern']).optional(),
   hire_date: z.string().optional().nullable(),
   location_id: z.string().optional().nullable(),
-  custom_fields: z.record(z.unknown()).optional().default({}),
+  custom_fields: z.record(z.string(), z.any()).optional(),
 });
 
 const UpdateUserSchema = z.object({
@@ -36,7 +36,7 @@ const UpdateUserSchema = z.object({
   hire_date: z.string().optional().nullable(),
   termination_date: z.string().optional().nullable(),
   location_id: z.string().optional().nullable(),
-  custom_fields: z.record(z.unknown()).optional(),
+  custom_fields: z.record(z.string(), z.any()).optional(),
 });
 
 const UpdateLifecycleSchema = z.object({
@@ -50,10 +50,10 @@ const BulkInviteRowSchema = z.object({
   department_id: z.string().optional(),
   team_id: z.string().optional(),
   manager_id: z.string().optional(),
-  employment_type: z.enum(['full_time', 'part_time', 'contractor', 'intern']).default('full_time'),
+  employment_type: z.enum(['full_time', 'part_time', 'contractor', 'intern']).optional(),
   hire_date: z.string().optional(),
   location_id: z.string().optional(),
-  custom_fields: z.record(z.unknown()).optional().default({}),
+  custom_fields: z.record(z.string(), z.any()).optional(),
 });
 
 const BulkInviteSchema = z.object({
@@ -227,10 +227,9 @@ export const inviteUser = asyncHandler(async (req: Request, res: Response) => {
 
   // Return user without sensitive fields
   const userResponse = user.toObject();
-  delete userResponse.password_hash;
-  delete userResponse.refresh_token_hash;
+  const { password_hash: _ph, refresh_token_hash: _rth, ...safeUser } = userResponse;
 
-  res.status(201).json({ success: true, data: userResponse });
+  res.status(201).json({ success: true, data: safeUser });
 });
 
 /**
@@ -288,10 +287,9 @@ export const updateUser = asyncHandler(async (req: Request, res: Response) => {
 
   // Return user without sensitive fields
   const userResponse = user.toObject();
-  delete userResponse.password_hash;
-  delete userResponse.refresh_token_hash;
+  const { password_hash: _ph, refresh_token_hash: _rth, ...safeUser } = userResponse;
 
-  res.status(200).json({ success: true, data: userResponse });
+  res.status(200).json({ success: true, data: safeUser });
 });
 
 /**
@@ -348,6 +346,102 @@ export const updateUserLifecycle = asyncHandler(async (req: Request, res: Respon
 
   await user.save();
 
+  // ── Lifecycle Automations ─────────────────────────────────────────────
+  // Fire automations based on state transitions
+  const transitionKey = `${currentState}→${targetState}`;
+
+  try {
+    // invited → onboarding: Send welcome email
+    if (transitionKey === 'invited→onboarding') {
+      const company = await Company.findById(req.user.company_id);
+      if (company) {
+        await sendWelcomeEmail({
+          email: user.email,
+          full_name: user.full_name,
+          employee_id: user.employee_id,
+          company_name: company.name,
+          invite_link: `${process.env.CLIENT_URL}/onboarding?email=${user.email}`,
+        });
+        console.log(`[Automation] Welcome email sent for ${user.email} (invited→onboarding)`);
+
+        // Audit event for email sent
+        await auditLogger.log({
+          req,
+          action: 'user.welcome_email_sent',
+          module: 'people',
+          object_type: 'User',
+          object_id: user._id.toString(),
+          object_label: user.full_name,
+          before_state: null,
+          after_state: { email: user.email, transition: 'invited→onboarding' },
+        });
+      }
+    }
+
+    // onboarding → active: Assign default role
+    if (transitionKey === 'onboarding→active') {
+      console.log(`[Automation] Default role assignment triggered for ${user.email} (onboarding→active)`);
+
+      // Audit event for role assignment triggered
+      await auditLogger.log({
+        req,
+        action: 'user.role_assigned',
+        module: 'people',
+        object_type: 'User',
+        object_id: user._id.toString(),
+        object_label: user.full_name,
+        before_state: null,
+        after_state: { transition: 'onboarding→active', note: 'Default role assignment pending implementation' },
+      });
+      // TODO: Assign default role from department's role mapping
+    }
+
+    // active → terminated: Invalidate refresh tokens
+    if (transitionKey === 'active→terminated') {
+      (user as any).refresh_token_hash = undefined;
+      await user.save();
+      console.log(`[Automation] Refresh tokens invalidated for ${user.email} (active→terminated)`);
+
+      // Audit event for token revocation
+      await auditLogger.log({
+        req,
+        action: 'user.sessions_revoked',
+        module: 'people',
+        object_type: 'User',
+        object_id: user._id.toString(),
+        object_label: user.full_name,
+        before_state: null,
+        after_state: { transition: 'active→terminated', action: 'refresh_tokens_invalidated' },
+      });
+      // TODO: Add to pending_session_revocations log
+    }
+
+    // terminated → archived: Anonymize PII
+    if (transitionKey === 'terminated→archived') {
+      const beforeAnonymize = user.toObject();
+      user.full_name = 'Archived User';
+      (user as any).phone = undefined;
+      (user as any).avatar_url = undefined;
+      await user.save();
+      console.log(`[Automation] PII anonymized for ${user.email} (terminated→archived)`);
+
+      // Audit event for PII anonymization
+      await auditLogger.log({
+        req,
+        action: 'user.pii_anonymized',
+        module: 'people',
+        object_type: 'User',
+        object_id: user._id.toString(),
+        object_label: 'Archived User',
+        before_state: beforeAnonymize,
+        after_state: user.toObject(),
+      });
+    }
+  } catch (automationError) {
+    console.error(`[Automation] Error in ${transitionKey} automation:`, automationError);
+    // Don't fail the lifecycle change if automation fails
+  }
+
   // Audit log
   await auditLogger.log({
     req,
@@ -362,10 +456,9 @@ export const updateUserLifecycle = asyncHandler(async (req: Request, res: Respon
 
   // Return user without sensitive fields
   const userResponse = user.toObject();
-  delete userResponse.password_hash;
-  delete userResponse.refresh_token_hash;
+  const { password_hash: _ph, refresh_token_hash: _rth, ...safeUser } = userResponse;
 
-  res.status(200).json({ success: true, data: userResponse });
+  res.status(200).json({ success: true, data: safeUser });
 });
 
 /**

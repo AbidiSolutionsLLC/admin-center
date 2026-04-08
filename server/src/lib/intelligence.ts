@@ -2,21 +2,57 @@
 import { Types } from 'mongoose';
 import { User } from '../models/User.model';
 import { Department } from '../models/Department.model';
+import { UserRole } from '../models/UserRole.model';
 import { Insight } from '../models/Insight.model';
 
 /**
  * Runs all intelligence rules for a given company.
  * Detects health issues, misconfigurations, and data inconsistencies.
  * Upserts insights to avoid duplicates.
- * 
+ *
  * Rules implemented:
+ * - RULE-01: Active user with no role assigned
  * - RULE-02: Department with headcount > 0 and no primary_manager_id
+ * - RULE-03: Active user with no department
+ * - RULE-04: User last_login > 90 days and still active
  * - RULE-05: Team (type='team') with no parent department (orphan)
  */
 export const runIntelligenceRules = async (companyId: string | Types.ObjectId): Promise<void> => {
   const companyObjectId = typeof companyId === 'string' ? new Types.ObjectId(companyId) : companyId;
-  
+
   const insightsToUpsert: Partial<IInsight>[] = [];
+
+  // ────────────────────────────────────────────────────────────────────────────
+  // RULE-01: Active user with no role assigned
+  // ────────────────────────────────────────────────────────────────────────────
+
+  const activeUsers = await User.find({
+    company_id: companyObjectId,
+    lifecycle_state: 'active',
+    is_active: true
+  }).lean();
+
+  for (const user of activeUsers) {
+    const roleCount = await UserRole.countDocuments({ user_id: user._id });
+
+    if (roleCount === 0) {
+      insightsToUpsert.push({
+        company_id: companyObjectId,
+        category: 'health',
+        severity: 'critical',
+        title: `${user.full_name} has no role assigned`,
+        description: 'Active users without a role cannot access any module. Assign a role to restore access.',
+        reasoning: `User "${user.full_name}" (${user.email}) is in 'active' lifecycle state but has 0 roles assigned.`,
+        affected_object_type: 'User',
+        affected_object_id: user._id.toString(),
+        affected_object_label: user.full_name,
+        remediation_url: `/people/${user._id}`,
+        remediation_action: 'Assign a role to this user',
+        is_resolved: false,
+        detected_at: new Date(),
+      });
+    }
+  }
 
   // ────────────────────────────────────────────────────────────────────────────
   // RULE-02: Department with headcount > 0 and no manager
@@ -60,7 +96,7 @@ export const runIntelligenceRules = async (companyId: string | Types.ObjectId): 
   // ────────────────────────────────────────────────────────────────────────────
   // RULE-05: Orphan team (type='team' with no parent)
   // ────────────────────────────────────────────────────────────────────────────
-  
+
   const orphanTeams = await Department.find({
     company_id: companyObjectId,
     is_active: true,
@@ -84,6 +120,66 @@ export const runIntelligenceRules = async (companyId: string | Types.ObjectId): 
       affected_object_label: team.name,
       remediation_url: `/organization/${team._id}`,
       remediation_action: 'Assign this team to a parent department',
+      is_resolved: false,
+      detected_at: new Date(),
+    });
+  }
+
+  // ────────────────────────────────────────────────────────────────────────────
+  // RULE-03: Active user with no department
+  // ────────────────────────────────────────────────────────────────────────────
+
+  for (const user of activeUsers) {
+    if (!user.department_id) {
+      insightsToUpsert.push({
+        company_id: companyObjectId,
+        category: 'health',
+        severity: 'warning',
+        title: `${user.full_name} has no department`,
+        description: 'Active users should be assigned to a department for proper organization and management.',
+        reasoning: `User "${user.full_name}" (${user.email}) is in 'active' lifecycle state but has no department_id assigned.`,
+        affected_object_type: 'User',
+        affected_object_id: user._id.toString(),
+        affected_object_label: user.full_name,
+        remediation_url: `/people/${user._id}`,
+        remediation_action: 'Assign this user to a department',
+        is_resolved: false,
+        detected_at: new Date(),
+      });
+    }
+  }
+
+  // ────────────────────────────────────────────────────────────────────────────
+  // RULE-04: User last_login > 90 days and still active
+  // ────────────────────────────────────────────────────────────────────────────
+
+  const ninetyDaysAgo = new Date();
+  ninetyDaysAgo.setDate(ninetyDaysAgo.getDate() - 90);
+
+  const inactiveActiveUsers = await User.find({
+    company_id: companyObjectId,
+    lifecycle_state: 'active',
+    is_active: true,
+    last_login: { $lte: ninetyDaysAgo }
+  }).lean();
+
+  for (const user of inactiveActiveUsers) {
+    const daysSinceLogin = Math.floor(
+      (Date.now() - new Date(user.last_login!).getTime()) / (1000 * 60 * 60 * 24)
+    );
+
+    insightsToUpsert.push({
+      company_id: companyObjectId,
+      category: 'health',
+      severity: 'warning',
+      title: `${user.full_name} inactive for ${daysSinceLogin} days`,
+      description: 'Active users who haven\'t logged in for over 90 days may need review or offboarding.',
+      reasoning: `User "${user.full_name}" (${user.email}) last logged in ${daysSinceLogin} days ago but remains in 'active' state.`,
+      affected_object_type: 'User',
+      affected_object_id: user._id.toString(),
+      affected_object_label: user.full_name,
+      remediation_url: `/people/${user._id}`,
+      remediation_action: 'Review user activity or consider offboarding',
       is_resolved: false,
       detected_at: new Date(),
     });
@@ -152,6 +248,96 @@ export const runIntelligenceRules = async (companyId: string | Types.ObjectId): 
         company_id: companyObjectId,
         affected_object_id: team._id.toString(),
         title: `${team.name} is an orphan team`,
+        is_resolved: false,
+      },
+      {
+        $set: {
+          is_resolved: true,
+          resolved_at: new Date(),
+        }
+      }
+    );
+  }
+
+  // ────────────────────────────────────────────────────────────────────────────
+  // Auto-resolve RULE-01 insights where user now has a role
+  // ────────────────────────────────────────────────────────────────────────────
+
+  const activeUsersWithRoles = await User.find({
+    company_id: companyObjectId,
+    lifecycle_state: 'active',
+    is_active: true
+  }).lean();
+
+  for (const user of activeUsersWithRoles) {
+    const roleCount = await UserRole.countDocuments({ user_id: user._id });
+
+    if (roleCount > 0) {
+      await Insight.updateMany(
+        {
+          company_id: companyObjectId,
+          affected_object_id: user._id.toString(),
+          title: `${user.full_name} has no role assigned`,
+          is_resolved: false,
+        },
+        {
+          $set: {
+            is_resolved: true,
+            resolved_at: new Date(),
+          }
+        }
+      );
+    }
+  }
+
+  // ────────────────────────────────────────────────────────────────────────────
+  // Auto-resolve RULE-03 insights where user now has a department
+  // ────────────────────────────────────────────────────────────────────────────
+
+  const usersWithDepartments = await User.find({
+    company_id: companyObjectId,
+    lifecycle_state: 'active',
+    is_active: true,
+    department_id: { $exists: true, $ne: null }
+  }).lean();
+
+  for (const user of usersWithDepartments) {
+    await Insight.updateMany(
+      {
+        company_id: companyObjectId,
+        affected_object_id: user._id.toString(),
+        title: `${user.full_name} has no department`,
+        is_resolved: false,
+      },
+      {
+        $set: {
+          is_resolved: true,
+          resolved_at: new Date(),
+        }
+      }
+    );
+  }
+
+  // ────────────────────────────────────────────────────────────────────────────
+  // Auto-resolve RULE-04 insights where user logged in recently
+  // ────────────────────────────────────────────────────────────────────────────
+
+  const thirtyDaysAgo = new Date();
+  thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30);
+
+  const recentlyActiveUsers = await User.find({
+    company_id: companyObjectId,
+    lifecycle_state: 'active',
+    is_active: true,
+    last_login: { $gt: thirtyDaysAgo }
+  }).lean();
+
+  for (const user of recentlyActiveUsers) {
+    await Insight.updateMany(
+      {
+        company_id: companyObjectId,
+        affected_object_id: user._id.toString(),
+        title: `${user.full_name} inactive for*`,
         is_resolved: false,
       },
       {

@@ -4,7 +4,12 @@
       "Bash(npm run *)",
       "Bash(select-object *)",
       "Bash(npx *)",
-      "Bash(findstr *)"
+      "Bash(findstr *)",
+      "Bash(type *)",
+      "Bash(powershell *)",
+      "Bash(curl *)",
+      "Bash(taskkill *)",
+      "Bash(dir *)"
     ]
   },
   "$version": 3

@@ -8,8 +8,8 @@ interface LogParams {
   object_type: string;
   object_id: string;
   object_label: string;
-  before_state?: Record<string, unknown> | null;
-  after_state?: Record<string, unknown> | null;
+  before_state?: unknown | null;
+  after_state?: unknown | null;
 }
 
 export const auditLogger = {
@@ -24,8 +24,8 @@ export const auditLogger = {
         object_type: params.object_type,
         object_id: params.object_id,
         object_label: params.object_label,
-        before_state: params.before_state,
-        after_state: params.after_state,
+        before_state: params.before_state as any,
+        after_state: params.after_state as any,
         ip_address: params.req.ip,
         user_agent: params.req.headers['user-agent'],
       });

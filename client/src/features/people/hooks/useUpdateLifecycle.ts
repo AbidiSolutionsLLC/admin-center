@@ -12,7 +12,7 @@ export const useUpdateLifecycle = (userId: string) => {
 
   return useMutation<User, Error, UpdateLifecycleInput>({
     mutationFn: async (input: UpdateLifecycleInput) => {
-      const { data } = await apiClient.patch(`/people/${userId}/lifecycle`, input);
+      const { data } = await apiClient.put(`/people/${userId}/lifecycle`, input);
       return data.data;
     },
     onSuccess: () => {

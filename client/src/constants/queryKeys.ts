@@ -6,5 +6,7 @@ export const QUERY_KEYS = {
     filters ? ['insights', filters] as const : ['insights'] as const,
   // People
   USERS: ['users'] as const,
+  USERS_FILTERED: (filters: Record<string, unknown>) => ['users', filters] as const,
   USER_DETAIL: (id: string) => ['user', id] as const,
+  USER_STATS: ['users', 'stats'] as const,
 } as const;

@@ -5,7 +5,7 @@ import crypto from 'crypto';
 import { asyncHandler } from '../utils/asyncHandler';
 import { User, LifecycleState } from '../models/User.model';
 import { RefreshToken } from '../models/RefreshToken.model';
-import { signAccessToken, signRefreshToken } from '../lib/tokenService';
+import { signAccessToken, signRefreshToken, AdminClaim } from '../lib/tokenService';
 import { AppError } from '../utils/AppError';
 
 // 7 days in milliseconds
@@ -33,12 +33,12 @@ export const login = asyncHandler(async (req: Request, res: Response) => {
   }
 
   // Determine user role (for now, default to employee if not fully implemented in RBAC)
-  // In a full implementation, you would resolve this from UserRole, but we'll use a mocked or fallback role
-  const userRole = 'employee' as any;
+  const userRole: AdminClaim['user_role'] = 'employee';
 
   // Sign tokens
   const accessToken = signAccessToken({
     userId: user._id.toString(),
+    email: user.email,
     user_role: userRole,
     company_id: user.company_id.toString()
   });
@@ -121,7 +121,8 @@ export const refresh = asyncHandler(async (req: Request, res: Response) => {
   // Issue new access token
   const accessToken = signAccessToken({
     userId: user._id.toString(),
-    user_role: 'employee' as any,
+    email: user.email,
+    user_role: 'employee',
     company_id: user.company_id.toString()
   });
 
