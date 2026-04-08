@@ -16,6 +16,7 @@ export interface IUser extends Document {
   department_id?: Types.ObjectId;
   team_id?: Types.ObjectId;
   manager_id?: Types.ObjectId;
+  secondary_manager_id?: Types.ObjectId;
   lifecycle_state: LifecycleState;
   lifecycle_changed_at: Date;
   hire_date?: Date;
@@ -42,6 +43,7 @@ const UserSchema = new Schema<IUser>({
   department_id: { type: Schema.Types.ObjectId, ref: 'Department' },
   team_id: { type: Schema.Types.ObjectId, ref: 'Department' },
   manager_id: { type: Schema.Types.ObjectId, ref: 'User' },
+  secondary_manager_id: { type: Schema.Types.ObjectId, ref: 'User' },
   lifecycle_state: {
     type: String,
     enum: ['invited', 'onboarding', 'active', 'probation', 'on_leave', 'terminated', 'archived'],

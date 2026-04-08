@@ -73,7 +73,7 @@ export const SetupProgressCard: React.FC<SetupProgressCardProps> = ({
                 {module.completed}/{module.total}
               </span>
             </div>
-            <div className="w-full h-1.5 bg-surface-alt rounded-full overflow-hidden ml-6">
+            <div className="h-1.5 bg-surface-alt rounded-full overflow-hidden ml-6">
               <div
                 className={`h-full ${getProgressColor(module.percentage)} transition-all`}
                 style={{ width: `${module.percentage}%` }}

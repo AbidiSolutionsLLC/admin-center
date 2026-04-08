@@ -59,6 +59,64 @@ export interface DepartmentFilters {
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
+// Teams
+// ─────────────────────────────────────────────────────────────────────────────
+
+export interface Team {
+  _id: string;
+  company_id: string;
+  name: string;
+  slug: string;
+  description?: string;
+  department_id?: string | null;
+  department?: { _id: string; name: string; slug: string };
+  team_lead_id?: string | null;
+  team_lead?: { _id: string; full_name: string; avatar_url?: string; email: string };
+  is_active: boolean;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface CreateTeamInput {
+  name: string;
+  description?: string;
+  department_id?: string | null;
+  team_lead_id?: string | null;
+}
+
+export interface UpdateTeamInput extends Partial<CreateTeamInput> {}
+
+export type TeamMemberRole = 'member' | 'lead' | 'admin';
+
+export interface TeamMember {
+  _id: string;
+  company_id: string;
+  team_id: string;
+  user_id: string;
+  role: TeamMemberRole;
+  joined_at: string;
+  created_at: string;
+  updated_at: string;
+  user?: {
+    _id: string;
+    full_name: string;
+    email: string;
+    avatar_url?: string;
+    employee_id: string;
+  };
+}
+
+export interface AddTeamMemberInput {
+  user_id: string;
+  role?: TeamMemberRole;
+}
+
+export interface UpdateTeamMemberInput {
+  user_id?: string;
+  role?: TeamMemberRole;
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
 // People / Users
 // ─────────────────────────────────────────────────────────────────────────────
 
@@ -79,6 +137,8 @@ export interface User {
   team?: { _id: string; name: string; slug: string };
   manager_id?: string;
   manager?: { _id: string; full_name: string; email: string; avatar_url?: string };
+  secondary_manager_id?: string | null;
+  secondary_manager?: { _id: string; full_name: string; email: string; avatar_url?: string };
   lifecycle_state: LifecycleState;
   lifecycle_changed_at: string;
   hire_date?: string;
