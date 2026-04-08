@@ -11,6 +11,8 @@ import {
   getBUTree,
   getBusinessUnits,
   deleteBusinessUnit,
+  getOrgHealth,
+  getOrgHistory,
 } from '../controllers/organization.controller';
 
 const router = Router();
@@ -21,6 +23,8 @@ router.get('/', getDepartments);
 router.get('/tree', getOrgTree);
 router.get('/bu-tree', getBUTree);
 router.get('/business-units', getBusinessUnits);
+router.get('/health', getOrgHealth);
+router.get('/history', getOrgHistory);
 router.get('/:id', getDepartmentById);
 router.post('/', createDepartment);
 router.put('/:id', updateDepartment);

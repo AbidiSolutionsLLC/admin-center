@@ -2,6 +2,7 @@
 import { Types } from 'mongoose';
 import { User } from '../models/User.model';
 import { Department } from '../models/Department.model';
+import { Team } from '../models/Team.model';
 import { UserRole } from '../models/UserRole.model';
 import { Role } from '../models/Role.model';
 import { RolePermission } from '../models/RolePermission.model';
@@ -21,6 +22,8 @@ import { Insight } from '../models/Insight.model';
  * - RULE-05: Team (type='team') with no parent department (orphan)
  * - RULE-06: Role with excessive permissions (over-permissioned)
  * - RULE-07: Admin user with MFA disabled (security risk)
+ * - RULE-08: Team with no team lead assigned
+ * - RULE-09: Business Unit with no child departments
  */
 export const runIntelligenceRules = async (companyId: string | Types.ObjectId): Promise<void> => {
   const companyObjectId = typeof companyId === 'string' ? new Types.ObjectId(companyId) : companyId;
@@ -222,6 +225,70 @@ export const runIntelligenceRules = async (companyId: string | Types.ObjectId): 
           detected_at: new Date(),
         });
       }
+    }
+  }
+
+  // ────────────────────────────────────────────────────────────────────────────
+  // RULE-08: Team with no team lead assigned
+  // ────────────────────────────────────────────────────────────────────────────
+
+  const teamsWithoutLead = await Team.find({
+    company_id: companyObjectId,
+    is_active: true,
+    $or: [
+      { team_lead_id: { $exists: false } },
+      { team_lead_id: null }
+    ]
+  }).lean();
+
+  for (const team of teamsWithoutLead) {
+    insightsToUpsert.push({
+      company_id: companyObjectId,
+      category: 'health',
+      severity: 'warning',
+      title: `${team.name} has no team lead assigned`,
+      description: 'Teams should have a team lead to ensure proper oversight and accountability.',
+      reasoning: `Team "${team.name}" has no team_lead_id set.`,
+      affected_object_type: 'Team',
+      affected_object_id: team._id.toString(),
+      affected_object_label: team.name,
+      remediation_url: `/teams/${team._id}`,
+      remediation_action: 'Assign a team lead to this team',
+      is_resolved: false,
+      detected_at: new Date(),
+    });
+  }
+
+  // ────────────────────────────────────────────────────────────────────────────
+  // RULE-09: Business Unit with no child departments
+  // ────────────────────────────────────────────────────────────────────────────
+
+  const allDepts = await Department.find({
+    company_id: companyObjectId,
+    is_active: true,
+  }).lean();
+
+  const bus = allDepts.filter((d) => d.type === 'business_unit');
+
+  for (const bu of bus) {
+    const hasChildren = allDepts.some((d) => d.parent_id?.toString() === bu._id.toString());
+
+    if (!hasChildren) {
+      insightsToUpsert.push({
+        company_id: companyObjectId,
+        category: 'misconfiguration',
+        severity: 'info',
+        title: `${bu.name} has no child departments`,
+        description: 'Business Units should contain at least one child department or division.',
+        reasoning: `Business Unit "${bu.name}" has no departments assigned to it. Consider adding departments to organize the hierarchy.`,
+        affected_object_type: 'Department',
+        affected_object_id: bu._id.toString(),
+        affected_object_label: bu.name,
+        remediation_url: `/organization/${bu._id}`,
+        remediation_action: 'Add a department under this Business Unit',
+        is_resolved: false,
+        detected_at: new Date(),
+      });
     }
   }
 
@@ -511,6 +578,67 @@ export const runIntelligenceRules = async (companyId: string | Types.ObjectId): 
         }
       }
     );
+  }
+
+  // ────────────────────────────────────────────────────────────────────────────
+  // Auto-resolve RULE-08 insights where team now has a lead
+  // ────────────────────────────────────────────────────────────────────────────
+
+  const teamsWithLead = await Team.find({
+    company_id: companyObjectId,
+    is_active: true,
+    team_lead_id: { $exists: true, $ne: null }
+  }).lean();
+
+  for (const team of teamsWithLead) {
+    await Insight.updateMany(
+      {
+        company_id: companyObjectId,
+        affected_object_id: team._id.toString(),
+        title: `${team.name} has no team lead assigned`,
+        is_resolved: false,
+      },
+      {
+        $set: {
+          is_resolved: true,
+          resolved_at: new Date(),
+        }
+      }
+    );
+  }
+
+  // ────────────────────────────────────────────────────────────────────────────
+  // Auto-resolve RULE-09 insights where BU now has child departments
+  // ────────────────────────────────────────────────────────────────────────────
+
+  const allDeptsForResolve = await Department.find({
+    company_id: companyObjectId,
+    is_active: true,
+  }).lean();
+
+  const busForResolve = allDeptsForResolve.filter((d) => d.type === 'business_unit');
+
+  for (const bu of busForResolve) {
+    const hasChildren = allDeptsForResolve.some(
+      (d) => d.parent_id?.toString() === bu._id.toString()
+    );
+
+    if (hasChildren) {
+      await Insight.updateMany(
+        {
+          company_id: companyObjectId,
+          affected_object_id: bu._id.toString(),
+          title: `${bu.name} has no child departments`,
+          is_resolved: false,
+        },
+        {
+          $set: {
+            is_resolved: true,
+            resolved_at: new Date(),
+          }
+        }
+      );
+    }
   }
 };
 

@@ -1,6 +1,6 @@
 // src/pages/organization/OrganizationPage.tsx
 import { useState, useMemo } from 'react';
-import { Building2, Plus, LayoutGrid, List, Search, ChevronDown, X, FolderTree } from 'lucide-react';
+import { Building2, Plus, LayoutGrid, List, Search, ChevronDown, X, FolderTree, Activity, History } from 'lucide-react';
 import * as Tabs from '@radix-ui/react-tabs';
 import { useDepartments } from '@/features/organization/hooks/useDepartments';
 import { useOrgTree } from '@/features/organization/hooks/useOrgTree';
@@ -12,6 +12,8 @@ import { OrgChartView } from '@/features/organization/components/OrgChartView';
 import { DepartmentForm } from '@/features/organization/components/DepartmentForm';
 import type { DepartmentFormData } from '@/features/organization/components/DepartmentForm';
 import { BusinessUnitsTab } from '@/features/organization/components/BusinessUnitsTab';
+import { OrgHealthTab } from '@/features/organization/components/OrgHealthTab';
+import { OrgHistoryTab } from '@/features/organization/components/OrgHistoryTab';
 import { TableSkeleton } from '@/components/ui/TableSkeleton';
 import { ErrorState } from '@/components/ui/ErrorState';
 import { EmptyState } from '@/components/ui/EmptyState';
@@ -20,7 +22,8 @@ import { ConfirmDialog } from '@/components/ui/ConfirmDialog';
 import { IntelligenceBanner } from '@/components/ui/IntelligenceBanner';
 import { Button } from '@/components/ui/button';
 import { cn } from '@/utils/cn';
-import type { Department, DepartmentFilters } from '@/types';
+import type { Department, DepartmentFilters, Insight } from '@/types';
+import { useNavigate } from 'react-router-dom';
 
 const DEPT_TYPE_OPTIONS: { value: Department['type'] | ''; label: string }[] = [
   { value: '', label: 'All Types' },
@@ -44,6 +47,8 @@ const DEPT_TYPE_OPTIONS: { value: Department['type'] | ''; label: string }[] = [
  * - All 4 states: loading, error, empty, data
  */
 export default function OrganizationPage() {
+  const navigate = useNavigate();
+
   // ── Server data ──────────────────────────────────────────────────────
   const { data: departments, isLoading, isError, refetch } = useDepartments();
   const { data: treeData, isLoading: isTreeLoading } = useOrgTree();
@@ -58,6 +63,13 @@ export default function OrganizationPage() {
 
   // ── Confirm-archive dialog state ───────────────────────────────────────
   const [departmentToArchive, setDepartmentToArchive] = useState<Department | null>(null);
+
+  // ── Handlers ──────────────────────────────────────────────────────────
+  const handleNavigateToHealthRecord = (insight: Insight) => {
+    if (insight.remediation_url) {
+      navigate(insight.remediation_url);
+    }
+  };
 
   // ── Filters ────────────────────────────────────────────────────────────
   const [filters, setFilters] = useState<DepartmentFilters>({
@@ -180,7 +192,7 @@ export default function OrganizationPage() {
       {/* ── Intelligence Banner ── */}
       <IntelligenceBanner module="organization" />
 
-      {/* ── Main Tabs: Departments | Business Units ── */}
+      {/* ── Main Tabs: Departments | Business Units | Health | History ── */}
       <Tabs.Root defaultValue="departments" className="space-y-4">
         <Tabs.List className="flex bg-surface-alt p-1 rounded-lg gap-1 w-fit">
           <Tabs.Trigger
@@ -196,6 +208,20 @@ export default function OrganizationPage() {
           >
             <FolderTree className="w-4 h-4" />
             Business Units
+          </Tabs.Trigger>
+          <Tabs.Trigger
+            value="health"
+            className="flex items-center gap-1.5 px-4 py-2 text-sm font-medium rounded-md text-ink-secondary data-[state=active]:bg-white data-[state=active]:text-ink data-[state=active]:shadow-sm transition-all"
+          >
+            <Activity className="w-4 h-4" />
+            Health
+          </Tabs.Trigger>
+          <Tabs.Trigger
+            value="history"
+            className="flex items-center gap-1.5 px-4 py-2 text-sm font-medium rounded-md text-ink-secondary data-[state=active]:bg-white data-[state=active]:text-ink data-[state=active]:shadow-sm transition-all"
+          >
+            <History className="w-4 h-4" />
+            History
           </Tabs.Trigger>
         </Tabs.List>
 
@@ -362,6 +388,16 @@ export default function OrganizationPage() {
         {/* Business Units Tab */}
         <Tabs.Content value="business-units" className="focus:outline-none">
           <BusinessUnitsTab allDepartments={departments ?? []} />
+        </Tabs.Content>
+
+        {/* Health Tab */}
+        <Tabs.Content value="health" className="focus:outline-none">
+          <OrgHealthTab onNavigateToRecord={handleNavigateToHealthRecord} />
+        </Tabs.Content>
+
+        {/* History Tab */}
+        <Tabs.Content value="history" className="focus:outline-none">
+          <OrgHistoryTab />
         </Tabs.Content>
       </Tabs.Root>
 

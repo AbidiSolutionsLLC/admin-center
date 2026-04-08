@@ -5,6 +5,8 @@ import { asyncHandler } from '../utils/asyncHandler';
 import { Department } from '../models/Department.model';
 import { User } from '../models/User.model';
 import { Team } from '../models/Team.model';
+import { AuditEvent } from '../models/AuditEvent.model';
+import { Insight } from '../models/Insight.model';
 import { auditLogger } from '../lib/auditLogger';
 import { runIntelligenceRules } from '../lib/intelligence';
 import { AppError } from '../utils/AppError';
@@ -610,4 +612,70 @@ export const assignUserOrg = asyncHandler(async (req: Request, res: Response) =>
   });
 
   res.status(200).json({ success: true, data: user });
+});
+
+/**
+ * GET /organization/health
+ * Returns insights grouped by severity for the organization module.
+ */
+export const getOrgHealth = asyncHandler(async (req: Request, res: Response) => {
+  const insights = await Insight.find({
+    company_id: req.user.company_id,
+    is_resolved: false,
+  }).sort({ severity: 1, detected_at: -1 }).lean();
+
+  // Group by severity
+  const grouped = {
+    critical: insights.filter((i) => i.severity === 'critical'),
+    warning: insights.filter((i) => i.severity === 'warning'),
+    info: insights.filter((i) => i.severity === 'info'),
+  };
+
+  res.status(200).json({
+    success: true,
+    data: {
+      insights: grouped,
+      counts: {
+        critical: grouped.critical.length,
+        warning: grouped.warning.length,
+        info: grouped.info.length,
+        total: insights.length,
+      },
+    },
+  });
+});
+
+/**
+ * GET /organization/history
+ * Returns audit events for organization module (departments, teams, BUs).
+ * Supports filters: object_type, date_from, date_to
+ */
+export const getOrgHistory = asyncHandler(async (req: Request, res: Response) => {
+  const { object_type, date_from, date_to } = req.query;
+
+  const query: Record<string, unknown> = {
+    company_id: req.user.company_id,
+    module: 'organization',
+  };
+
+  if (object_type) {
+    query.object_type = object_type;
+  }
+
+  if (date_from || date_to) {
+    query.created_at = {};
+    if (date_from) {
+      (query.created_at as Record<string, unknown>).$gte = new Date(date_from as string);
+    }
+    if (date_to) {
+      (query.created_at as Record<string, unknown>).$lte = new Date(date_to as string);
+    }
+  }
+
+  const events = await AuditEvent.find(query)
+    .sort({ created_at: -1 })
+    .limit(100)
+    .lean();
+
+  res.status(200).json({ success: true, data: events });
 });
