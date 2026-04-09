@@ -1,8 +1,9 @@
 // src/features/people/components/UserForm.tsx
 import React from 'react';
-import { useForm } from 'react-hook-form';
+import { useForm, Controller } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { z } from 'zod';
+import { UserSelect } from '@/components/ui/UserSelect';
 import type { User, EmploymentType, Department } from '@/types';
 import { cn } from '@/utils/cn';
 
@@ -12,9 +13,7 @@ const schema = z.object({
   department_id: z.string().optional().nullable(),
   team_id: z.string().optional().nullable(),
   manager_id: z.string().optional().nullable(),
-  employment_type: z.enum(['full_time', 'part_time', 'contractor', 'intern'], {
-    required_error: 'Employment type is required',
-  }),
+  employment_type: z.enum(['full_time', 'part_time', 'contractor', 'intern']),
   hire_date: z.string().optional().nullable(),
   location_id: z.string().optional().nullable(),
 });
@@ -61,6 +60,7 @@ export const UserForm: React.FC<UserFormProps> = ({
   const {
     register,
     handleSubmit,
+    control,
     formState: { errors },
   } = useForm<UserFormData>({
     resolver: zodResolver(schema),
@@ -140,12 +140,18 @@ export const UserForm: React.FC<UserFormProps> = ({
         <label htmlFor="user-manager" className="text-sm font-medium text-ink">
           Manager ID
         </label>
-        <input
-          id="user-manager"
-          {...register('manager_id')}
-          placeholder="24-char MongoDB ObjectId"
-          disabled={isSubmitting}
-          className={inputClass(!!errors.manager_id)}
+        <Controller
+          name="manager_id"
+          control={control}
+          render={({ field }) => (
+            <UserSelect
+              value={field.value}
+              onChange={field.onChange}
+              disabled={isSubmitting}
+              hasError={!!errors.manager_id}
+              placeholder="Select manager..."
+            />
+          )}
         />
         <p className="text-[11px] text-ink-muted">
           Enter the 24-character hex ID of the manager.

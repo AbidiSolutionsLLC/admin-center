@@ -1,22 +1,24 @@
 
+import { useState } from 'react';
 import { NavLink, useLocation } from 'react-router-dom';
 import { cn } from '@/utils/cn';
 import { ROUTES } from '@/constants/routes';
-import { 
-  LayoutDashboard, 
-  Building2, 
-  MapPin, 
-  Users, 
-  Shield, 
-  LayoutGrid, 
-  FileText, 
-  GitBranch, 
-  Lock, 
-  Activity, 
-  Database, 
-  Bell, 
+import {
+  LayoutDashboard,
+  Building2,
+  Users,
+  MapPin,
+  Shield,
+  LayoutGrid,
+  FileText,
+  GitBranch,
+  Lock,
+  Activity,
+  Database,
+  Bell,
   Plug,
-  LogOut
+  LogOut,
+  MoreVertical
 } from 'lucide-react';
 import { useAuthStore } from '@/store/useAuthStore';
 
@@ -35,6 +37,7 @@ const navGroups = [
     label: 'Structure',
     items: [
       { label: 'Organization', href: ROUTES.ORGANIZATION, icon: Building2 },
+      { label: 'Teams', href: ROUTES.TEAMS, icon: Users },
       { label: 'Locations', href: ROUTES.LOCATIONS, icon: MapPin },
     ],
   },
@@ -66,7 +69,8 @@ const navGroups = [
 ];
 
 export const Sidebar = ({ className }: SidebarProps) => {
-  const { clearAuth } = useAuthStore();
+  const { clearAuth, userName, userRole } = useAuthStore();
+  const [showDropdown, setShowDropdown] = useState(false);
   const location = useLocation();
 
   return (
@@ -78,7 +82,7 @@ export const Sidebar = ({ className }: SidebarProps) => {
         <span className="text-white font-semibold tracking-wide">Admin Center</span>
       </div>
 
-      <nav className="flex-1 overflow-y-auto w-full px-2 space-y-4">
+      <nav className="flex-1 overflow-y-auto w-full px-2 space-y-4 [&::-webkit-scrollbar]:hidden [-ms-overflow-style:none] [scrollbar-width:none]">
         {navGroups.map((group, idx) => (
           <div key={idx} className="w-full">
             {group.label && (
@@ -110,14 +114,32 @@ export const Sidebar = ({ className }: SidebarProps) => {
         ))}
       </nav>
 
-      <div className="p-4 border-t border-sidebar-border mt-auto w-full">
-        <button
-          onClick={clearAuth}
-          className="h-9 flex items-center gap-2.5 px-3 w-full rounded-md text-[13px] font-medium text-sidebar-text hover:bg-sidebar-hover hover:text-white transition-colors border-l-2 border-transparent"
+      <div className="p-4 border-t border-sidebar-border mt-auto w-full relative">
+        <div 
+          onClick={() => setShowDropdown(!showDropdown)}
+          className="flex items-center gap-3 cursor-pointer hover:bg-sidebar-hover p-2 rounded-md transition-colors w-full"
         >
-          <LogOut className="w-4 h-4" />
-          Sign out
-        </button>
+          <div className="w-8 h-8 flex-shrink-0 rounded-full bg-primary-light flex items-center justify-center text-primary font-bold">
+            {userName?.charAt(0) || 'U'}
+          </div>
+          <div className="flex flex-col flex-1 min-w-0 pr-1">
+            <span className="text-sm font-semibold text-white truncate">{userName || 'Loading...'}</span>
+            <span className="text-[11px] text-sidebar-text capitalize truncate">{userRole?.replace('_', ' ') || ''}</span>
+          </div>
+          <MoreVertical className="w-4 h-4 text-sidebar-text flex-shrink-0" />
+        </div>
+        
+        {showDropdown && (
+          <div className="absolute bottom-[72px] right-4 left-4 bg-sidebar-active-bg border border-sidebar-border rounded-md shadow-lg overflow-hidden z-10">
+            <button
+              onClick={clearAuth}
+              className="h-9 flex items-center gap-2.5 px-3 w-full text-[13px] font-medium text-sidebar-text hover:bg-sidebar-hover hover:text-white transition-colors"
+            >
+              <LogOut className="w-4 h-4" />
+              Sign out
+            </button>
+          </div>
+        )}
       </div>
     </aside>
   );

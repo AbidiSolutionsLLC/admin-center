@@ -3,6 +3,7 @@ import cors from 'cors';
 import helmet from 'helmet';
 import cookieParser from 'cookie-parser';
 import { errorHandler } from './middleware/errorHandler';
+import './models';
 import routes from './routes';
 
 const app = express();

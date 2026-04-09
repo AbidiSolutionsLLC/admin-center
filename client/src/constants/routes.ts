@@ -3,6 +3,8 @@ export const ROUTES = {
   OVERVIEW: '/overview',
   ORGANIZATION: '/organization',
   DEPARTMENT_DETAIL: (id: string) => `/organization/${id}`,
+  TEAMS: '/teams',
+  TEAM_DETAIL: (id: string) => `/teams/${id}`,
   PEOPLE: '/people',
   USER_DETAIL: (id: string) => `/people/${id}`,
   ROLES: '/roles',

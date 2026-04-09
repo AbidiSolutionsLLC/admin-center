@@ -9,6 +9,8 @@ import {
   bulkInviteUsers,
   deleteUser,
 } from '../controllers/people.controller';
+import { assignUserOrg } from '../controllers/organization.controller';
+import reportingLinesRoutes from './reportingLines.routes';
 
 const router = Router();
 
@@ -59,5 +61,17 @@ router.put('/:id/lifecycle', updateUserLifecycle);
  * Archive a user (soft delete)
  */
 router.delete('/:id', deleteUser);
+
+/**
+ * POST /people/:id/assign-org
+ * Assign user to department and teams
+ */
+router.post('/:id/assign-org', assignUserOrg);
+
+/**
+ * Reporting lines routes
+ * All routes are nested under /:id/reporting-line
+ */
+router.use('/:id/reporting-line', reportingLinesRoutes);
 
 export default router;

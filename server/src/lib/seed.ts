@@ -2,6 +2,7 @@
 import { Permission } from '../models/Permission.model';
 import { Role } from '../models/Role.model';
 import { RolePermission } from '../models/RolePermission.model';
+import { SecurityPolicy } from '../models/SecurityPolicy.model';
 import { Types } from 'mongoose';
 
 /**
@@ -29,6 +30,7 @@ export const seedPermissions = async (): Promise<void> => {
     'notifications',
     'integrations',
     'audit_logs',
+    'insights',
   ];
 
   const actions: Array<'create' | 'read' | 'update' | 'delete' | 'export'> = [
@@ -130,7 +132,7 @@ export const seedSystemRoles = async (companyId: string | Types.ObjectId): Promi
           is_active: true,
         },
       },
-      { upsert: true, new: true }
+      { upsert: true, returnDocument: 'after' }
     );
 
     if (role) {
@@ -182,9 +184,9 @@ async function assignRolePermissions(roles: { [key: string]: Types.ObjectId }): 
     }
   }
 
-  // ── HR ADMIN: People, roles, org, audit logs ──
+  // ── HR ADMIN: People, roles, org, audit logs, insights ──
   if (roles['HR Admin']) {
-    const modules = ['people', 'roles', 'organization', 'audit_logs'];
+    const modules = ['people', 'roles', 'organization', 'audit_logs', 'insights'];
     const actions = ['create', 'read', 'update', 'delete', 'export'];
 
     for (const module of modules) {
@@ -205,10 +207,12 @@ async function assignRolePermissions(roles: { [key: string]: Types.ObjectId }): 
       }
     }
 
-    // IT Admin can also read people, org, audit logs
+    // IT Admin can also read people, org, audit logs, insights
     await assign(roles['IT Admin'], getPerm('people', 'read', 'all'), true);
     await assign(roles['IT Admin'], getPerm('organization', 'read', 'all'), true);
     await assign(roles['IT Admin'], getPerm('audit_logs', 'read', 'all'), true);
+    await assign(roles['IT Admin'], getPerm('insights', 'read', 'all'), true);
+    await assign(roles['IT Admin'], getPerm('insights', 'update', 'all'), true);
   }
 
   // ── OPS ADMIN: Workflows, policies, locations, notifications ──
@@ -222,10 +226,11 @@ async function assignRolePermissions(roles: { [key: string]: Types.ObjectId }): 
       }
     }
 
-    // Ops Admin can also read people, org, audit logs
+    // Ops Admin can also read people, org, audit logs, insights
     await assign(roles['Ops Admin'], getPerm('people', 'read', 'all'), true);
     await assign(roles['Ops Admin'], getPerm('organization', 'read', 'all'), true);
     await assign(roles['Ops Admin'], getPerm('audit_logs', 'read', 'all'), true);
+    await assign(roles['Ops Admin'], getPerm('insights', 'read', 'all'), true);
   }
 
   // ── MANAGER: Department-level access to people and org ──
@@ -235,10 +240,13 @@ async function assignRolePermissions(roles: { [key: string]: Types.ObjectId }): 
     await assign(roles['Manager'], getPerm('people', 'update', 'department'), true);
     await assign(roles['Manager'], getPerm('organization', 'read', 'department'), true);
     await assign(roles['Manager'], getPerm('apps', 'read', 'all'), true);
-    
+
     // Can read company-wide org structure and policies
     await assign(roles['Manager'], getPerm('organization', 'read', 'all'), true);
     await assign(roles['Manager'], getPerm('policies', 'read', 'all'), true);
+
+    // Can read insights
+    await assign(roles['Manager'], getPerm('insights', 'read', 'department'), true);
   }
 
   // ── EMPLOYEE: Own data only ──
@@ -255,19 +263,66 @@ async function assignRolePermissions(roles: { [key: string]: Types.ObjectId }): 
     
     // Can read policies
     await assign(roles['Employee'], getPerm('policies', 'read', 'all'), true);
+
+    // Can read insights assigned to them
+    await assign(roles['Employee'], getPerm('insights', 'read', 'own'), true);
   }
 }
 
 /**
- * Complete database seeding: permissions + system roles for a company.
- * 
+ * Seeds default SecurityPolicy for a company.
+ * Creates a default security policy with standard settings if one doesn't exist.
+ *
+ * @param companyId - The company to seed security policy for
+ */
+export const seedSecurityPolicy = async (companyId: string | Types.ObjectId): Promise<void> => {
+  console.log(`🌱 Seeding security policy for company ${companyId}...`);
+
+  const companyObjectId = typeof companyId === 'string' ? new Types.ObjectId(companyId) : companyId;
+
+  // Check if policy already exists
+  const existingPolicy = await SecurityPolicy.findOne({ company_id: companyObjectId });
+  if (existingPolicy) {
+    console.log('Security policy already exists.');
+    return;
+  }
+
+  // Create default security policy
+  await SecurityPolicy.create({
+    company_id: companyObjectId,
+    policy_name: 'Default Security Policy',
+    description: 'Default security policy with standard protection settings',
+    is_enabled: true,
+    settings: {
+      max_failed_login_attempts: 5,
+      lockout_duration_minutes: 30,
+      session_timeout_minutes: 480, // 8 hours
+      require_mfa: false,
+      password_min_length: 8,
+      password_require_uppercase: true,
+      password_require_lowercase: true,
+      password_require_numbers: true,
+      password_require_special_chars: true,
+      password_expiry_days: 90,
+      ip_whitelist_enabled: false,
+      ip_whitelist: [],
+    },
+  });
+
+  console.log('✅ Security policy seeded');
+};
+
+/**
+ * Complete database seeding: permissions + system roles + security policy for a company.
+ *
  * @param companyId - The company to seed roles for
  */
 export const seedDatabase = async (companyId: string | Types.ObjectId): Promise<void> => {
   console.log('🌱 Starting database seed...');
-  
+
   await seedPermissions();
   await seedSystemRoles(companyId);
-  
+  await seedSecurityPolicy(companyId);
+
   console.log('✅ Database seeding complete');
 };

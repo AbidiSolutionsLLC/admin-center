@@ -2,6 +2,7 @@
 import { Request, Response } from 'express';
 import { z } from 'zod';
 import { asyncHandler } from '../utils/asyncHandler';
+import { auditLogger } from '../lib/auditLogger';
 import { Insight } from '../models/Insight.model';
 import { runIntelligenceRules } from '../lib/intelligence';
 
@@ -73,20 +74,34 @@ export const runIntelligence = asyncHandler(async (req: Request, res: Response) 
 export const resolveInsight = asyncHandler(async (req: Request, res: Response) => {
   const insight = await Insight.findOne({
     _id: req.params.id,
-    company_id: req.user.company_id,
+    company_id: req.user!.company_id,
   });
 
   if (!insight) {
-    return res.status(404).json({ 
-      success: false, 
+    return res.status(404).json({
+      success: false,
       error: 'Insight not found',
-      code: 'NOT_FOUND' 
+      code: 'NOT_FOUND'
     });
   }
+
+  const beforeState = { ...insight.toObject() };
 
   insight.is_resolved = true;
   insight.resolved_at = new Date();
   await insight.save();
+
+  // Audit log
+  await auditLogger.log({
+    req,
+    action: 'insights.resolved',
+    module: 'insights',
+    object_type: 'Insight',
+    object_id: insight._id.toString(),
+    object_label: insight.title,
+    before_state: beforeState,
+    after_state: { ...insight.toObject() },
+  });
 
   res.status(200).json({ success: true, data: insight });
 });

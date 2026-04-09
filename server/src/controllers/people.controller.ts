@@ -5,6 +5,7 @@ import bcrypt from 'bcryptjs';
 import { asyncHandler } from '../utils/asyncHandler';
 import { User } from '../models/User.model';
 import { Company } from '../models/Company.model';
+import { RefreshToken } from '../models/RefreshToken.model';
 import { auditLogger } from '../lib/auditLogger';
 import { sendWelcomeEmail, sendBulkWelcomeEmails } from '../lib/emailService';
 import { isValidTransition, getTransitionErrorMessage, LifecycleState } from '../lib/lifecycle';
@@ -15,14 +16,14 @@ import { AppError } from '../utils/AppError';
 const InviteUserSchema = z.object({
   full_name: z.string().min(1, 'Full name is required').max(100),
   email: z.string().email('Invalid email address'),
-  phone: z.string().optional(),
+  phone: z.string().optional().nullable(),
   department_id: z.string().optional().nullable(),
   team_id: z.string().optional().nullable(),
   manager_id: z.string().optional().nullable(),
-  employment_type: z.enum(['full_time', 'part_time', 'contractor', 'intern']).default('full_time'),
+  employment_type: z.enum(['full_time', 'part_time', 'contractor', 'intern']).optional(),
   hire_date: z.string().optional().nullable(),
   location_id: z.string().optional().nullable(),
-  custom_fields: z.record(z.unknown()).optional().default({}),
+  custom_fields: z.record(z.string(), z.any()).optional(),
 });
 
 const UpdateUserSchema = z.object({
@@ -36,7 +37,7 @@ const UpdateUserSchema = z.object({
   hire_date: z.string().optional().nullable(),
   termination_date: z.string().optional().nullable(),
   location_id: z.string().optional().nullable(),
-  custom_fields: z.record(z.unknown()).optional(),
+  custom_fields: z.record(z.string(), z.any()).optional(),
 });
 
 const UpdateLifecycleSchema = z.object({
@@ -50,10 +51,10 @@ const BulkInviteRowSchema = z.object({
   department_id: z.string().optional(),
   team_id: z.string().optional(),
   manager_id: z.string().optional(),
-  employment_type: z.enum(['full_time', 'part_time', 'contractor', 'intern']).default('full_time'),
+  employment_type: z.enum(['full_time', 'part_time', 'contractor', 'intern']).optional(),
   hire_date: z.string().optional(),
   location_id: z.string().optional(),
-  custom_fields: z.record(z.unknown()).optional().default({}),
+  custom_fields: z.record(z.string(), z.any()).optional(),
 });
 
 const BulkInviteSchema = z.object({
@@ -77,9 +78,27 @@ const generateTemporaryPassword = (): string => {
 /**
  * Enriches user list with populated department and manager info
  */
-async function enrichUsers(users: ReturnType<(typeof User.prototype.toObject)>[]): Promise<typeof users> {
-  // Already populated via .populate() in the query, just return as-is
-  return users;
+/**
+ * Enriches user list with populated department and manager info
+ */
+async function enrichUsers(users: any[]): Promise<any[]> {
+  return users.map((user) => {
+    const data = { ...user };
+    // Map populated objects to the names expected by the frontend
+    if (data.department_id && typeof data.department_id === 'object') {
+      data.department = data.department_id;
+    }
+    if (data.team_id && typeof data.team_id === 'object') {
+      data.team = data.team_id;
+    }
+    if (data.location_id && typeof data.location_id === 'object') {
+      data.location = data.location_id;
+    }
+    if (data.manager_id && typeof data.manager_id === 'object') {
+      data.manager = data.manager_id;
+    }
+    return data;
+  });
 }
 
 // ── Controllers ──────────────────────────────────────────────────────────────
@@ -227,10 +246,9 @@ export const inviteUser = asyncHandler(async (req: Request, res: Response) => {
 
   // Return user without sensitive fields
   const userResponse = user.toObject();
-  delete userResponse.password_hash;
-  delete userResponse.refresh_token_hash;
+  const { password_hash: _ph, refresh_token_hash: _rth, ...safeUser } = userResponse;
 
-  res.status(201).json({ success: true, data: userResponse });
+  res.status(201).json({ success: true, data: safeUser });
 });
 
 /**
@@ -239,6 +257,7 @@ export const inviteUser = asyncHandler(async (req: Request, res: Response) => {
  * Does NOT change lifecycle_state (use PUT /people/:id/lifecycle for that).
  */
 export const updateUser = asyncHandler(async (req: Request, res: Response) => {
+  console.log("Update User Request Body:", req.body);
   const input = UpdateUserSchema.parse(req.body);
 
   const user = await User.findOne({
@@ -288,10 +307,9 @@ export const updateUser = asyncHandler(async (req: Request, res: Response) => {
 
   // Return user without sensitive fields
   const userResponse = user.toObject();
-  delete userResponse.password_hash;
-  delete userResponse.refresh_token_hash;
+  const { password_hash: _ph, refresh_token_hash: _rth, ...safeUser } = userResponse;
 
-  res.status(200).json({ success: true, data: userResponse });
+  res.status(200).json({ success: true, data: safeUser });
 });
 
 /**
@@ -299,6 +317,8 @@ export const updateUser = asyncHandler(async (req: Request, res: Response) => {
  * Transitions a user to a new lifecycle state.
  * Validates transition against VALID_TRANSITIONS.
  * Automatically updates lifecycle_changed_at via model hook.
+ * Fires automation handlers for specific transitions.
+ * Produces audit events for all state changes and automations.
  */
 export const updateUserLifecycle = asyncHandler(async (req: Request, res: Response) => {
   const input = UpdateLifecycleSchema.parse(req.body);
@@ -315,7 +335,7 @@ export const updateUserLifecycle = asyncHandler(async (req: Request, res: Respon
   const currentState = user.lifecycle_state as LifecycleState;
   const targetState = input.lifecycle_state as LifecycleState;
 
-  // Validate transition
+  // Validate transition against VALID_TRANSITIONS
   if (!isValidTransition(currentState, targetState)) {
     throw new AppError(
       getTransitionErrorMessage(currentState, targetState),
@@ -340,15 +360,140 @@ export const updateUserLifecycle = asyncHandler(async (req: Request, res: Respon
 
   if (targetState === 'archived') {
     user.is_active = false;
-    // Optionally anonymize PII for archived users (uncomment if desired)
-    // user.full_name = 'Archived User';
-    // user.phone = null;
-    // user.avatar_url = null;
   }
 
   await user.save();
 
-  // Audit log
+  // ── Lifecycle Automations ─────────────────────────────────────────────
+  // Each automation fires an audit event and performs its specific action
+
+  const transitionKey = `${currentState}→${targetState}`;
+
+  try {
+    // AUTOMATION 1: invited → onboarding: Send welcome email
+    if (transitionKey === 'invited→onboarding') {
+      const company = await Company.findById(req.user.company_id);
+      if (company) {
+        await sendWelcomeEmail({
+          email: user.email,
+          full_name: user.full_name,
+          employee_id: user.employee_id,
+          company_name: company.name,
+          invite_link: `${process.env.CLIENT_URL}/onboarding?email=${user.email}`,
+        });
+
+        // Audit event for welcome email
+        await auditLogger.log({
+          req,
+          action: 'user.lifecycle_automation',
+          module: 'people',
+          object_type: 'User',
+          object_id: user._id.toString(),
+          object_label: user.full_name,
+          before_state: { transition: 'invited→onboarding' },
+          after_state: { automation: 'welcome_email_sent', email: user.email },
+        });
+      }
+    }
+
+    // AUTOMATION 2: onboarding → active: Assign default Employee role
+    if (transitionKey === 'onboarding→active') {
+      // TODO: Assign default Employee role from department's role mapping
+      // For now, log the automation event
+      await auditLogger.log({
+        req,
+        action: 'user.lifecycle_automation',
+        module: 'people',
+        object_type: 'User',
+        object_id: user._id.toString(),
+        object_label: user.full_name,
+        before_state: { transition: 'onboarding→active' },
+        after_state: { automation: 'default_role_assigned', note: 'Employee role assignment pending RBAC integration' },
+      });
+    }
+
+    // AUTOMATION 3: active → terminated: Invalidate all refresh tokens
+    if (transitionKey === 'active→terminated') {
+      // Clear refresh token hash from user document
+      user.refresh_token_hash = undefined;
+      await user.save();
+
+      // Revoke all active refresh tokens in the RefreshToken collection
+      await RefreshToken.updateMany(
+        { user_id: user._id, is_revoked: false },
+        { $set: { is_revoked: true } }
+      );
+
+      // Audit event for session revocation
+      await auditLogger.log({
+        req,
+        action: 'user.lifecycle_automation',
+        module: 'people',
+        object_type: 'User',
+        object_id: user._id.toString(),
+        object_label: user.full_name,
+        before_state: { transition: 'active→terminated' },
+        after_state: { automation: 'sessions_revoked', refresh_tokens_invalidated: true },
+      });
+    }
+
+    // AUTOMATION 4: terminated → archived: Anonymize all PII
+    if (transitionKey === 'terminated→archived') {
+      const beforeAnonymize = user.toObject();
+
+      // Clear all PII fields
+      user.full_name = 'Archived User';
+      user.email = `archived-${user._id}@archived.local`;
+      user.phone = undefined;
+      user.avatar_url = undefined;
+      user.employee_id = `ARCHIVED-${user._id.toString().slice(-8)}`;
+      
+      // Clear optional PII
+      (user as any).department_id = undefined;
+      (user as any).team_id = undefined;
+      (user as any).manager_id = undefined;
+      (user as any).location_id = undefined;
+      (user as any).hire_date = undefined;
+      (user as any).termination_date = undefined;
+      (user as any).custom_fields = {};
+
+      await user.save();
+
+      // Audit event for PII anonymization
+      await auditLogger.log({
+        req,
+        action: 'user.lifecycle_automation',
+        module: 'people',
+        object_type: 'User',
+        object_id: user._id.toString(),
+        object_label: 'Archived User',
+        before_state: beforeAnonymize,
+        after_state: {
+          automation: 'pii_anonymized',
+          full_name: user.full_name,
+          email: user.email,
+          fields_cleared: ['full_name', 'email', 'phone', 'avatar_url', 'employee_id', 'department_id', 'team_id', 'manager_id', 'location_id', 'hire_date', 'termination_date', 'custom_fields'],
+        },
+      });
+    }
+  } catch (automationError) {
+    // Log automation errors but don't fail the lifecycle transition
+    console.error(`[Lifecycle Automation Error] ${transitionKey}:`, automationError);
+    
+    // Still log the error as an audit event
+    await auditLogger.log({
+      req,
+      action: 'user.lifecycle_automation_error',
+      module: 'people',
+      object_type: 'User',
+      object_id: user._id.toString(),
+      object_label: user.full_name,
+      before_state: { transition: transitionKey },
+      after_state: { error: automationError instanceof Error ? automationError.message : 'Unknown error' },
+    });
+  }
+
+  // MANDATORY: Main audit log for lifecycle change
   await auditLogger.log({
     req,
     action: 'user.lifecycle_changed',
@@ -362,10 +507,9 @@ export const updateUserLifecycle = asyncHandler(async (req: Request, res: Respon
 
   // Return user without sensitive fields
   const userResponse = user.toObject();
-  delete userResponse.password_hash;
-  delete userResponse.refresh_token_hash;
+  const { password_hash: _ph, refresh_token_hash: _rth, ...safeUser } = userResponse;
 
-  res.status(200).json({ success: true, data: userResponse });
+  res.status(200).json({ success: true, data: safeUser });
 });
 
 /**

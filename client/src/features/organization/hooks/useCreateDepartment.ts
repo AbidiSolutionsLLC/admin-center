@@ -13,6 +13,7 @@ export const useCreateDepartment = () => {
 
   return useMutation<Department, Error, CreateDepartmentInput>({
     mutationFn: async (input) => {
+      console.log("Payload:", input);
       const { data } = await apiClient.post('/organization', input);
       return data.data;
     },

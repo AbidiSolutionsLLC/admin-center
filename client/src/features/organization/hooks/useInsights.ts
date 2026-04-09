@@ -17,7 +17,7 @@ interface UseInsightsParams {
  */
 export const useInsights = (params?: UseInsightsParams) => {
   return useQuery<Insight[]>({
-    queryKey: QUERY_KEYS.INSIGHTS(params),
+    queryKey: QUERY_KEYS.INSIGHTS(params as Record<string, unknown> | undefined),
     queryFn: async () => {
       const { data } = await apiClient.get('/intelligence', { params });
       return data.data;

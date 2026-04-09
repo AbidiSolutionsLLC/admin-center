@@ -13,6 +13,7 @@ export const useUpdateDepartment = () => {
 
   return useMutation<Department, Error, { id: string; data: UpdateDepartmentInput }>({
     mutationFn: async ({ id, data: input }) => {
+      console.log("Payload:", input);
       const { data } = await apiClient.put(`/organization/${id}`, input);
       return data.data;
     },
