@@ -20,6 +20,7 @@ const DepartmentBaseSchema = z.object({
   parent_id: z.string().optional().nullable(),
   primary_manager_id: z.string().optional().nullable(),
   secondary_manager_id: z.string().optional().nullable(),
+  custom_fields: z.record(z.string(), z.unknown()).optional().default({}),
 });
 
 const CreateDepartmentSchema = DepartmentBaseSchema.refine(data => {
@@ -150,6 +151,7 @@ export const createDepartment = asyncHandler(async (req: Request, res: Response)
     parent_id: input.parent_id || undefined,
     primary_manager_id: input.primary_manager_id || undefined,
     secondary_manager_id: input.secondary_manager_id || undefined,
+    custom_fields: input.custom_fields || {},
     company_id: req.user.company_id,
   } as any);
 
@@ -197,6 +199,11 @@ export const updateDepartment = asyncHandler(async (req: Request, res: Response)
   if (updates.parent_id === '') updates.parent_id = null;
   if (updates.primary_manager_id === '') updates.primary_manager_id = null;
   if (updates.secondary_manager_id === '') updates.secondary_manager_id = null;
+
+  // Merge custom_fields if provided
+  if (input.custom_fields !== undefined) {
+    dept.custom_fields = input.custom_fields;
+  }
 
   Object.assign(dept, updates);
   await dept.save();

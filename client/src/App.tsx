@@ -19,6 +19,9 @@ import AppsPage from './pages/apps/AppsPage';
 import SecurityPage from './pages/security/SecurityPage';
 import AuditLogsPage from './pages/audit-logs/AuditLogsPage';
 import PoliciesPage from './pages/policies/PoliciesPage';
+import LocationsPage from './pages/locations/LocationsPage';
+import DataFieldsPage from './pages/data-fields/DataFieldsPage';
+import IntegrationsPage from './pages/integrations/IntegrationsPage';
 
 function App() {
   return (
@@ -42,6 +45,9 @@ function App() {
               <Route path={ROUTES.SECURITY} element={<SecurityPage />} />
               <Route path={ROUTES.AUDIT_LOGS} element={<AuditLogsPage />} />
               <Route path={ROUTES.POLICIES} element={<PoliciesPage />} />
+              <Route path={ROUTES.LOCATIONS} element={<LocationsPage />} />
+              <Route path={ROUTES.DATA_FIELDS} element={<DataFieldsPage />} />
+              <Route path={ROUTES.INTEGRATIONS} element={<IntegrationsPage />} />
             </Route>
           </Route>
         </Routes>

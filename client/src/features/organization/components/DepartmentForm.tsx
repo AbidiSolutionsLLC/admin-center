@@ -1,10 +1,12 @@
 // src/features/organization/components/DepartmentForm.tsx
-import React from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import { useForm, Controller } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { z } from 'zod';
 import { UserSelect } from '@/components/ui/UserSelect';
-import type { Department } from '@/types';
+import { DynamicCustomFields } from '@/features/data-fields/components/DynamicCustomFields';
+import { useCustomFields } from '@/features/data-fields/hooks/useCustomFields';
+import type { Department, CustomField } from '@/types';
 import { cn } from '@/utils/cn';
 
 const schema = z.object({
@@ -30,7 +32,7 @@ export type DepartmentFormData = z.infer<typeof schema>;
 
 interface DepartmentFormProps {
   initialData?: Department;
-  onSubmit: (data: DepartmentFormData) => void;
+  onSubmit: (data: DepartmentFormData & { custom_fields?: Record<string, unknown> }) => void;
   departments: Department[];
   isSubmitting?: boolean;
 }
@@ -57,6 +59,7 @@ const inputClass = (hasError?: boolean) =>
 /**
  * DepartmentForm Component
  * Create/edit form for departments with full Zod validation.
+ * Includes dynamic custom fields for all field types.
  * Submits via a hidden button (id="department-form") triggered from the modal footer.
  * Used on: OrganizationPage (create + edit modal).
  */
@@ -85,8 +88,52 @@ export const DepartmentForm: React.FC<DepartmentFormProps> = ({
   const selectedType = watch('type');
   const availableParents = departments.filter((d) => d._id !== initialData?._id);
 
+  // ── Custom fields ──────────────────────────────────────────────────────
+  const { data: customFields = [] } = useCustomFields('department');
+  const [customFieldValues, setCustomFieldValues] = useState<Record<string, unknown>>(
+    initialData?.custom_fields ?? {}
+  );
+  const [customFieldErrors, setCustomFieldErrors] = useState<Record<string, string>>({});
+
+  useEffect(() => {
+    if (initialData?.custom_fields && Object.keys(initialData.custom_fields).length > 0) {
+      setCustomFieldValues(initialData.custom_fields);
+    }
+  }, [initialData]);
+
+  const handleCustomFieldChange = useCallback((slug: string, value: unknown) => {
+    setCustomFieldValues((prev) => ({ ...prev, [slug]: value }));
+    setCustomFieldErrors((prev) => {
+      const next = { ...prev };
+      delete next[slug];
+      return next;
+    });
+  }, []);
+
+  const validateCustomFields = useCallback((): boolean => {
+    const newErrors: Record<string, string> = {};
+    for (const field of customFields) {
+      if (field.required) {
+        const value = customFieldValues[field.slug];
+        if (value === null || value === undefined || value === '') {
+          newErrors[field.slug] = `${field.label} is required`;
+        }
+      }
+    }
+    setCustomFieldErrors(newErrors);
+    return Object.keys(newErrors).length === 0;
+  }, [customFields, customFieldValues]);
+
+  const handleSubmitWithCustomFields = handleSubmit((data) => {
+    if (!validateCustomFields()) return;
+    onSubmit({
+      ...data,
+      custom_fields: customFieldValues,
+    });
+  });
+
   return (
-    <form id="department-form" onSubmit={handleSubmit(onSubmit)} className="space-y-5" noValidate>
+    <form id="department-form" onSubmit={(e) => { e.preventDefault(); handleSubmitWithCustomFields(); }} className="space-y-5" noValidate>
       {/* Name */}
       <div className="space-y-1.5">
         <label htmlFor="dept-name" className="text-sm font-medium text-ink">
@@ -183,6 +230,15 @@ export const DepartmentForm: React.FC<DepartmentFormProps> = ({
           <p className="text-xs text-red-500">{errors.primary_manager_id.message}</p>
         )}
       </div>
+
+      {/* ── Custom Fields ── */}
+      <DynamicCustomFields
+        fields={customFields}
+        values={customFieldValues}
+        onChange={handleCustomFieldChange}
+        errors={customFieldErrors}
+        disabled={isSubmitting}
+      />
 
       {/* Hidden submit — triggered by modal footer */}
       <button type="submit" className="hidden" aria-hidden="true" />

@@ -12,6 +12,9 @@ import securityRoutes from './security.routes';
 import auditLogsRoutes from './auditLogs.routes';
 import teamsRoutes from './teams.routes';
 import policiesRoutes from './policies.routes';
+import locationsRoutes from './locations.routes';
+import dataFieldsRoutes from './dataFields.routes';
+import integrationsRoutes from './integrations.routes';
 
 const router = Router();
 
@@ -27,6 +30,9 @@ router.use('/security', securityRoutes);
 router.use('/audit-logs', auditLogsRoutes);
 router.use('/teams', requireAuth, teamsRoutes);
 router.use('/policies', requireAuth, policiesRoutes);
+router.use('/locations', requireAuth, locationsRoutes);
+router.use('/data-fields', requireAuth, dataFieldsRoutes);
+router.use('/integrations', requireAuth, integrationsRoutes);
 
 // Protected test route for verifying JWT rejection logic
 router.get('/protected-test', requireAuth, (req, res) => {

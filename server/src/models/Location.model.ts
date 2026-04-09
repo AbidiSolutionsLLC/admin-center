@@ -51,4 +51,30 @@ LocationSchema.index({ company_id: 1, name: 1 });
 LocationSchema.index({ company_id: 1, type: 1 });
 LocationSchema.index({ parent_id: 1 });
 
+// ── Pre-save Hook: Validate only one HQ per company ─────────────────────────
+/**
+ * Ensures that only one location per company can be marked as headquarters.
+ * If a new location is being created with is_headquarters=true, or an existing
+ * one is being updated to is_headquarters=true, we check for existing HQ.
+ */
+LocationSchema.pre('save', async function () {
+  if (!this.is_headquarters) return;
+
+  // Only validate if is_headquarters is being set or modified
+  if (!this.isNew && !this.isModified('is_headquarters')) return;
+
+  const Model = model<ILocation>('Location');
+  const existingHQ = await Model.findOne({
+    company_id: this.company_id,
+    is_headquarters: true,
+    _id: { $ne: this._id }, // Exclude current document on updates
+  }).lean();
+
+  if (existingHQ) {
+    throw new Error(
+      `Another location "${existingHQ.name}" is already set as the headquarters. Only one HQ is allowed per company.`
+    );
+  }
+});
+
 export const Location = model<ILocation>('Location', LocationSchema);

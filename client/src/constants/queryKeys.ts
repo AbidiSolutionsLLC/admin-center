@@ -49,4 +49,16 @@ export const QUERY_KEYS = {
   POLICY_DETAIL: (id: string) => ['policy', id] as const,
   POLICY_ACKNOWLEDGMENTS: (id: string) => ['policy', id, 'acknowledgments'] as const,
   POLICY_ACKNOWLEDGMENT_STATUS: (id: string) => ['policy', id, 'acknowledgment-status'] as const,
+  // Locations
+  LOCATIONS: ['locations'] as const,
+  LOCATION_TREE: ['locations', 'tree'] as const,
+  LOCATION_DETAIL: (id: string) => ['location', id] as const,
+  // Custom Fields
+  CUSTOM_FIELDS: (targetObject?: string) =>
+    targetObject ? ['custom-fields', targetObject] as const : ['custom-fields'] as const,
+  CUSTOM_FIELD_DETAIL: (id: string) => ['custom-field', id] as const,
+  // Integrations
+  INTEGRATIONS: ['integrations'] as const,
+  INTEGRATION_DETAIL: (id: string) => ['integration', id] as const,
+  INTEGRATION_SYNC_LOGS: (id: string) => ['integration', id, 'sync-logs'] as const,
 } as const;

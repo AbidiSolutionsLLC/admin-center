@@ -493,7 +493,7 @@ function EditUserModal({ user, isOpen, onClose, departments }: EditUserModalProp
   const updateUser = useUpdateUser(user._id);
 
   const handleSubmit = useCallback(
-    (formData: UserFormData) => {
+    (formData: UserFormData & { custom_fields?: Record<string, unknown> }) => {
       const normalized = {
         ...formData,
         department_id: formData.department_id || null,
@@ -502,6 +502,7 @@ function EditUserModal({ user, isOpen, onClose, departments }: EditUserModalProp
         location_id: formData.location_id || null,
         hire_date: formData.hire_date || null,
         phone: formData.phone || null,
+        custom_fields: formData.custom_fields || {},
       };
 
       updateUser.mutate(normalized, {
