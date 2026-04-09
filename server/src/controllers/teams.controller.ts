@@ -13,7 +13,7 @@ import { AppError } from '../utils/AppError';
 const CreateTeamSchema = z.object({
   name: z.string().min(1, 'Name is required').max(100),
   description: z.string().max(500).optional(),
-  department_id: z.string().optional().nullable(),
+  department_id: z.string().min(1, 'Department is required'),
   team_lead_id: z.string().optional().nullable(),
 });
 
@@ -134,7 +134,7 @@ export const updateTeam = asyncHandler(async (req: Request, res: Response) => {
   const beforeState = team.toObject();
 
   const updates: Record<string, unknown> = { ...input };
-  if (updates.department_id === '') updates.department_id = null;
+  // No longer allowing department_id to be empty/null
   if (updates.team_lead_id === '') updates.team_lead_id = null;
 
   Object.assign(team, updates);
@@ -227,7 +227,13 @@ export const getTeamMembers = asyncHandler(async (req: Request, res: Response) =
     .sort({ joined_at: 1 })
     .lean();
 
-  res.status(200).json({ success: true, data: members });
+  // Map user_id (populated object) to user property for frontend
+  const enriched = members.map(m => ({
+    ...m,
+    user: m.user_id
+  }));
+
+  res.status(200).json({ success: true, data: enriched });
 });
 
 /**
@@ -277,9 +283,15 @@ export const addTeamMember = asyncHandler(async (req: Request, res: Response) =>
   });
 
   const populated = await TeamMember.findById(member._id)
-    .populate('user_id', 'full_name email avatar_url employee_id');
+    .populate('user_id', 'full_name email avatar_url employee_id')
+    .lean();
 
-  res.status(201).json({ success: true, data: populated });
+  const enriched = {
+    ...populated,
+    user: populated?.user_id
+  };
+
+  res.status(201).json({ success: true, data: enriched });
 });
 
 /**
@@ -326,9 +338,15 @@ export const updateTeamMember = asyncHandler(async (req: Request, res: Response)
   });
 
   const populated = await TeamMember.findById(member._id)
-    .populate('user_id', 'full_name email avatar_url employee_id');
+    .populate('user_id', 'full_name email avatar_url employee_id')
+    .lean();
 
-  res.status(200).json({ success: true, data: populated });
+  const enriched = {
+    ...populated,
+    user: populated?.user_id
+  };
+
+  res.status(200).json({ success: true, data: enriched });
 });
 
 /**
