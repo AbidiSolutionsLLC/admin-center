@@ -41,7 +41,7 @@ export const runIntelligenceRules = async (companyId: string | Types.ObjectId): 
   }).lean();
 
   for (const user of activeUsers) {
-    const roleCount = await UserRole.countDocuments({ user_id: user._id });
+    const roleCount = await UserRole.countDocuments({ user_id: user._id, company_id: companyObjectId });
 
     if (roleCount === 0) {
       insightsToUpsert.push({
@@ -78,6 +78,7 @@ export const runIntelligenceRules = async (companyId: string | Types.ObjectId): 
   for (const dept of deptsNoManager) {
     // Count active users in this department
     const headcount = await User.countDocuments({
+      company_id: companyObjectId,
       department_id: dept._id,
       is_active: true
     });
@@ -145,6 +146,7 @@ export const runIntelligenceRules = async (companyId: string | Types.ObjectId): 
   for (const role of allRoles) {
     const grantedPerms = await RolePermission.find({
       role_id: role._id,
+      company_id: companyObjectId,
       granted: true,
     }).lean();
 
@@ -437,7 +439,7 @@ export const runIntelligenceRules = async (companyId: string | Types.ObjectId): 
   }).lean();
 
   for (const user of activeUsersWithRoles) {
-    const roleCount = await UserRole.countDocuments({ user_id: user._id });
+    const roleCount = await UserRole.countDocuments({ user_id: user._id, company_id: companyObjectId });
 
     if (roleCount > 0) {
       await Insight.updateMany(
@@ -524,6 +526,7 @@ export const runIntelligenceRules = async (companyId: string | Types.ObjectId): 
   for (const role of allRoles) {
     const grantedPerms = await RolePermission.find({
       role_id: role._id,
+      company_id: companyObjectId,
       granted: true,
     }).lean();
 

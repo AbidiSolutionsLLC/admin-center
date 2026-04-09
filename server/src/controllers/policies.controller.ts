@@ -507,6 +507,12 @@ export const saveAssignmentRules = asyncHandler(async (req: Request, res: Respon
     throw new AppError('Policy version not found', 404, 'POLICY_VERSION_NOT_FOUND');
   }
 
+  // Capture existing rules before deletion (for audit trail)
+  const existingRules = await PolicyAssignment.find({
+    company_id: new Types.ObjectId(req.user.company_id),
+    policy_version_id: policyVersion._id,
+  }).select('target_type target_id target_label');
+
   // Delete existing assignment rules for this version
   await PolicyAssignment.deleteMany({
     company_id: new Types.ObjectId(req.user.company_id),
@@ -535,7 +541,9 @@ export const saveAssignmentRules = asyncHandler(async (req: Request, res: Respon
     object_type: 'PolicyVersion',
     object_id: policyVersion._id.toString(),
     object_label: `${policyVersion.title} v${policyVersion.version_number}`,
-    before_state: null,
+    before_state: existingRules.length > 0
+      ? { assignment_rules: existingRules.map((r) => ({ target_type: r.target_type, target_id: r.target_id, target_label: r.target_label })) }
+      : null,
     after_state: {
       assignment_rules: createdRules.map((r) => ({
         target_type: r.target_type,

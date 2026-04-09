@@ -517,6 +517,12 @@ export const reorderWorkflowSteps = asyncHandler(async (req: Request, res: Respo
     throw new AppError('Cannot reorder steps of an enabled workflow. Disable first.', 400, 'CANNOT_MODIFY_ENABLED');
   }
 
+  // Capture current order before update (for audit trail)
+  const currentSteps = await WorkflowStep.find({
+    company_id: new Types.ObjectId(req.user.company_id),
+    workflow_id: workflow._id,
+  }).sort({ step_order: 1 }).select('step_order name');
+
   // Update each step's step_order
   const updatePromises = input.steps.map((s) =>
     WorkflowStep.updateOne(
@@ -539,7 +545,11 @@ export const reorderWorkflowSteps = asyncHandler(async (req: Request, res: Respo
     object_type: 'Workflow',
     object_id: workflow._id.toString(),
     object_label: workflow.name,
-    before_state: null,
+    before_state: currentSteps.map((s) => ({
+      step_id: s._id.toString(),
+      step_order: s.step_order,
+      name: s.name,
+    })),
     after_state: {
       reordered_steps: input.steps.map((s) => ({
         step_id: s.step_id,
@@ -656,6 +666,27 @@ export const handleLifecycleTrigger = asyncHandler(async (req: Request, res: Res
   };
 
   const results = await handleLifecycleEvent(event);
+
+  // Audit log — the trigger event itself (individual runs logged by workflowEngine)
+  await auditLogger.log({
+    req,
+    action: 'workflows.lifecycle_triggered',
+    module: 'workflows',
+    object_type: 'User',
+    object_id: user_id,
+    object_label: user_name,
+    before_state: { lifecycle_from: lifecycle_from },
+    after_state: {
+      lifecycle_to: lifecycle_to,
+      workflows_fired: results.length,
+      results: results.map((r) => ({
+        workflow_run_id: r.runId,
+        status: r.status,
+        steps_executed: r.stepsExecuted,
+        steps_failed: r.stepsFailed,
+      })),
+    },
+  });
 
   res.status(200).json({ success: true, data: results });
 });

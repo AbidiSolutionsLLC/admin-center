@@ -338,7 +338,10 @@ export const assignApp = asyncHandler(async (req: Request, res: Response) => {
   const targetIdObj = new Types.ObjectId(validated.target_id);
   
   if (validated.target_type === 'role') {
-    affectedUsers = await UserRole.countDocuments({ role_id: targetIdObj });
+    affectedUsers = await UserRole.countDocuments({
+      role_id: targetIdObj,
+      company_id: new Types.ObjectId(companyId),
+    });
   } else if (validated.target_type === 'department') {
     affectedUsers = await User.countDocuments({
       company_id: companyId,
@@ -600,7 +603,10 @@ export const getAppUsers = asyncHandler(async (req: Request, res: Response) => {
     if (assignment.target_type === 'user') {
       userIds.add(assignment.target_id.toString());
     } else if (assignment.target_type === 'role') {
-      const userRoles = await UserRole.find({ role_id: assignment.target_id }).lean();
+      const userRoles = await UserRole.find({
+        role_id: assignment.target_id,
+        company_id: new Types.ObjectId(companyId),
+      }).lean();
       userRoles.forEach((ur) => userIds.add(ur.user_id.toString()));
     } else if (assignment.target_type === 'department') {
       const users = await User.find({

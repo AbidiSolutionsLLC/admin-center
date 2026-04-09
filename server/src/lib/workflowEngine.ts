@@ -257,6 +257,7 @@ export async function handleLifecycleEvent(event: LifecycleEvent): Promise<Workf
         affected_object_id: workflow._id.toString(),
         affected_object_label: workflow.name,
         remediation_url: `/workflows/${workflow._id}`,
+        remediation_action: 'review_workflow_steps',
         is_resolved: false,
         detected_at: new Date(),
       });

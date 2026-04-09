@@ -1,6 +1,7 @@
 // server/src/controllers/organization.controller.ts
 import { Request, Response } from 'express';
 import { z } from 'zod';
+import { Types } from 'mongoose';
 import { asyncHandler } from '../utils/asyncHandler';
 import { Department } from '../models/Department.model';
 import { User } from '../models/User.model';
@@ -49,13 +50,14 @@ const AssignUserOrgSchema = z.object({
  * - has_intelligence_flag: true if a department has active members but no primary manager
  */
 async function enrichDepartments(
-  departments: ReturnType<(typeof Department.prototype.toObject)>[]
+  departments: ReturnType<(typeof Department.prototype.toObject)>[],
+  companyId: string
 ): Promise<typeof departments> {
   const deptIds = departments.map((d) => d._id);
 
   // Count active users per department in one aggregation
   const headcounts = await User.aggregate([
-    { $match: { department_id: { $in: deptIds }, is_active: true } },
+    { $match: { company_id: new Types.ObjectId(companyId), department_id: { $in: deptIds }, is_active: true } },
     { $group: { _id: '$department_id', count: { $sum: 1 } } },
   ]);
   const headcountMap = new Map<string, number>(
@@ -92,7 +94,7 @@ export const getDepartments = asyncHandler(async (req: Request, res: Response) =
     .sort({ created_at: 1 })
     .lean();
 
-  const enriched = await enrichDepartments(raw);
+  const enriched = await enrichDepartments(raw, req.user.company_id);
   res.status(200).json({ success: true, data: enriched });
 });
 
@@ -111,7 +113,7 @@ export const getDepartmentById = asyncHandler(async (req: Request, res: Response
     throw new AppError('Department not found', 404, 'NOT_FOUND');
   }
 
-  const [enriched] = await enrichDepartments([dept.toObject()]);
+  const [enriched] = await enrichDepartments([dept.toObject()], req.user.company_id);
   res.status(200).json({ success: true, data: enriched });
 });
 
@@ -250,7 +252,7 @@ export const getOrgTree = asyncHandler(async (req: Request, res: Response) => {
     .populate('primary_manager_id', 'full_name avatar_url')
     .lean();
 
-  const enriched = await enrichDepartments(raw);
+  const enriched = await enrichDepartments(raw, req.user.company_id);
 
   // Build tree
   const map = new Map<string, typeof enriched[number] & { children: unknown[] }>();
@@ -387,7 +389,7 @@ export const getBUTree = asyncHandler(async (req: Request, res: Response) => {
     .lean();
 
   // Enrich departments with headcount and flags
-  const enrichedDepts = await enrichDepartments(departments);
+  const enrichedDepts = await enrichDepartments(departments, req.user.company_id);
 
   // Build hierarchy: BU → Departments → Teams
   const buTree = bus.map((bu) => {
