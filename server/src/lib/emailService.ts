@@ -68,7 +68,7 @@ let transporter: nodemailer.Transporter | null = null;
 /**
  * Gets or creates the email transporter
  */
-const getTransporter = (): nodemailer.Transporter => {
+export const getTransporter = (): nodemailer.Transporter => {
   if (!transporter) {
     transporter = createTransporter();
   }

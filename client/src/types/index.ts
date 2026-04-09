@@ -735,3 +735,120 @@ export interface WorkflowTestResult {
   executionTimeMs: number;
   errorMessage?: string;
 }
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Notifications
+// ─────────────────────────────────────────────────────────────────────────────
+
+export type NotificationChannel = 'email' | 'in_app' | 'both';
+export type NotificationDigestMode = 'immediate' | 'hourly' | 'daily';
+export type NotificationSeverity = 'info' | 'warning' | 'critical';
+
+export interface NotificationTemplate {
+  _id: string;
+  company_id: string;
+  name: string;
+  key: string;
+  description?: string;
+  channel: NotificationChannel;
+  severity: NotificationSeverity;
+  digest_mode: NotificationDigestMode;
+  subject: string;
+  body: string;
+  trigger_event: string;
+  is_active: boolean;
+  created_by: {
+    _id: string;
+    full_name: string;
+    email: string;
+  };
+  updated_by?: {
+    _id: string;
+    full_name: string;
+    email: string;
+  };
+  created_at: string;
+  updated_at: string;
+}
+
+export interface InAppNotification {
+  _id: string;
+  company_id: string;
+  user_id: string;
+  template_id?: {
+    _id: string;
+    key: string;
+    severity: NotificationSeverity;
+  };
+  title: string;
+  message: string;
+  severity: NotificationSeverity;
+  status: 'unread' | 'read';
+  link_url?: string;
+  read_at?: string;
+  created_at: string;
+}
+
+export interface NotificationEvent {
+  _id: string;
+  company_id: string;
+  template_id: {
+    _id: string;
+    name: string;
+    key: string;
+  };
+  recipient_user_id?: {
+    _id: string;
+    full_name: string;
+    email: string;
+  };
+  recipient_email?: string;
+  channel: 'email' | 'in_app';
+  status: 'pending' | 'sent' | 'failed' | 'queued_digest';
+  subject_rendered?: string;
+  body_rendered?: string;
+  error_message?: string;
+  triggered_by_event: string;
+  delivery_timestamp: string;
+}
+
+export interface CreateNotificationTemplateInput {
+  name: string;
+  key: string;
+  description?: string;
+  channel: NotificationChannel;
+  severity: NotificationSeverity;
+  digest_mode: NotificationDigestMode;
+  subject: string;
+  body: string;
+  trigger_event: string;
+}
+
+export interface UpdateNotificationTemplateInput {
+  name?: string;
+  key?: string;
+  description?: string;
+  channel?: NotificationChannel;
+  severity?: NotificationSeverity;
+  digest_mode?: NotificationDigestMode;
+  subject?: string;
+  body?: string;
+  trigger_event?: string;
+}
+
+export interface TestTemplateInput {
+  user_name: string;
+  user_email: string;
+  company_name?: string;
+  detail?: string;
+}
+
+export interface TestTemplateResult {
+  rendered_subject: string;
+  rendered_body: string;
+  variables_used: Record<string, string>;
+}
+
+export interface UnreadCount {
+  count: number;
+}

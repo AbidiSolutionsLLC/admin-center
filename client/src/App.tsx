@@ -20,6 +20,7 @@ import SecurityPage from './pages/security/SecurityPage';
 import AuditLogsPage from './pages/audit-logs/AuditLogsPage';
 import PoliciesPage from './pages/policies/PoliciesPage';
 import WorkflowsPage from './pages/workflows/WorkflowsPage';
+import NotificationsPage from './pages/notifications/NotificationsPage';
 
 function App() {
   return (
@@ -44,6 +45,7 @@ function App() {
               <Route path={ROUTES.AUDIT_LOGS} element={<AuditLogsPage />} />
               <Route path={ROUTES.POLICIES} element={<PoliciesPage />} />
               <Route path={ROUTES.WORKFLOWS} element={<WorkflowsPage />} />
+              <Route path={ROUTES.NOTIFICATIONS} element={<NotificationsPage />} />
             </Route>
           </Route>
         </Routes>

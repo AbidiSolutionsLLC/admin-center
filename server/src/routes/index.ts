@@ -13,6 +13,7 @@ import auditLogsRoutes from './auditLogs.routes';
 import teamsRoutes from './teams.routes';
 import policiesRoutes from './policies.routes';
 import workflowsRoutes from './workflows.routes';
+import notificationsRoutes from './notifications.routes';
 
 const router = Router();
 
@@ -29,6 +30,7 @@ router.use('/audit-logs', auditLogsRoutes);
 router.use('/teams', requireAuth, teamsRoutes);
 router.use('/policies', requireAuth, policiesRoutes);
 router.use('/workflows', requireAuth, workflowsRoutes);
+router.use('/notifications', requireAuth, notificationsRoutes);
 
 // Protected test route for verifying JWT rejection logic
 router.get('/protected-test', requireAuth, (req, res) => {

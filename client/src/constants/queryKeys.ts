@@ -57,4 +57,10 @@ export const QUERY_KEYS = {
   WORKFLOWS: ['workflows'] as const,
   WORKFLOW_DETAIL: (id: string) => ['workflow', id] as const,
   WORKFLOW_RUNS: (id: string) => ['workflow', id, 'runs'] as const,
+  // Notifications
+  NOTIFICATION_TEMPLATES: ['notification', 'templates'] as const,
+  NOTIFICATION_TEMPLATE_DETAIL: (id: string) => ['notification', 'template', id] as const,
+  NOTIFICATION_EVENTS: ['notification', 'events'] as const,
+  IN_APP_NOTIFICATIONS: ['notification', 'in-app'] as const,
+  UNREAD_NOTIFICATION_COUNT: ['notification', 'unread-count'] as const,
 } as const;
