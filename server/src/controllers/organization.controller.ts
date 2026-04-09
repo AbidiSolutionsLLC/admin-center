@@ -328,7 +328,7 @@ export const moveDepartment = asyncHandler(async (req: Request, res: Response) =
   if (input.parent_id !== undefined && input.parent_id !== oldParentId?.toString()) {
     // Check for circular reference: new parent cannot be a descendant of this department
     if (input.parent_id) {
-      const isDescendant = await isDescendantOf(dept._id.toString(), input.parent_id);
+      const isDescendant = await isDescendantOf(dept._id.toString(), input.parent_id, req.user.company_id as string);
       if (isDescendant) {
         throw new AppError(
           'Cannot move department to one of its own descendants. This would create a circular hierarchy.',
@@ -365,9 +365,10 @@ export const moveDepartment = asyncHandler(async (req: Request, res: Response) =
  * Helper: Checks if targetId is a descendant of deptId.
  * Traverses all children recursively to prevent circular hierarchy.
  */
-async function isDescendantOf(deptId: string, targetId: string): Promise<boolean> {
+async function isDescendantOf(deptId: string, targetId: string, companyId: string): Promise<boolean> {
   // Get direct children of deptId
   const children = await Department.find({
+    company_id: companyId,
     parent_id: deptId,
     is_active: true,
   } as any).lean();
@@ -375,7 +376,7 @@ async function isDescendantOf(deptId: string, targetId: string): Promise<boolean
   for (const child of children) {
     if (child._id.toString() === targetId) return true;
     // Recursively check grandchildren
-    if (await isDescendantOf(child._id.toString(), targetId)) return true;
+    if (await isDescendantOf(child._id.toString(), targetId, companyId)) return true;
   }
 
   return false;

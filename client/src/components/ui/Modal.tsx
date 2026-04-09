@@ -40,7 +40,7 @@ export const Modal: React.FC<ModalProps> = ({
         <Dialog.Overlay className="fixed inset-0 bg-black/50 backdrop-blur-[2px] z-50 transition-all duration-200" />
         <Dialog.Content
           className={cn(
-            'fixed left-[50%] top-[50%] translate-x-[-50%] translate-y-[-50%] w-[95%] bg-white rounded-xl shadow-[0_20px_60px_-10px_rgba(15,22,41,0.25)] p-0 overflow-hidden z-50 flex flex-col focus:outline-none transition-all duration-200',
+            'fixed left-[50%] top-[50%] translate-x-[-50%] translate-y-[-50%] w-[95%] bg-white rounded-xl shadow-modal p-0 overflow-hidden z-50 flex flex-col focus:outline-none transition-all duration-200',
             sizeClasses[size]
           )}
         >
@@ -68,7 +68,7 @@ export const Modal: React.FC<ModalProps> = ({
 
           {/* Footer */}
           {footer && (
-            <div className="px-6 py-4 border-t border-line bg-[#F7F8FA] flex justify-end gap-2 flex-shrink-0">
+            <div className="px-6 py-4 border-t border-line bg-surface-base flex justify-end gap-2 flex-shrink-0">
               {footer}
             </div>
           )}

@@ -78,7 +78,7 @@ export const ConfirmDialog: React.FC<ConfirmDialogProps> = ({
           </div>
 
           {/* Footer */}
-          <div className="px-6 py-4 border-t border-line bg-[#F7F8FA] flex justify-end gap-2 flex-shrink-0">
+          <div className="px-6 py-4 border-t border-line bg-surface-base flex justify-end gap-2 flex-shrink-0">
             <button
               onClick={onClose}
               disabled={isLoading}

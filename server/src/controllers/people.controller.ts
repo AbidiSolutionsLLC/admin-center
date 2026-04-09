@@ -85,11 +85,12 @@ const generateTemporaryPassword = (): string => {
 /**
  * Enriches user list with populated department, manager info, and team memberships
  */
-async function enrichUsers(users: any[]): Promise<any[]> {
+async function enrichUsers(users: any[], companyId: string): Promise<any[]> {
   const userIds = users.map(u => u._id);
-  
+
   // Fetch all team memberships for these users in one query
   const memberships = await TeamMember.find({
+    company_id: companyId,
     user_id: { $in: userIds }
   }).populate('team_id', 'name slug').lean();
 
@@ -172,7 +173,7 @@ export const getUsers = asyncHandler(async (req: Request, res: Response) => {
     .sort({ created_at: -1 })
     .lean();
 
-  const enriched = await enrichUsers(users);
+  const enriched = await enrichUsers(users, req.user.company_id);
   res.status(200).json({ success: true, data: enriched });
 });
 
@@ -195,7 +196,7 @@ export const getUserById = asyncHandler(async (req: Request, res: Response) => {
     throw new AppError('User not found', 404, 'NOT_FOUND');
   }
 
-  const [enriched] = await enrichUsers([user.toObject()]);
+  const [enriched] = await enrichUsers([user.toObject()], req.user.company_id);
   res.status(200).json({ success: true, data: enriched });
 });
 

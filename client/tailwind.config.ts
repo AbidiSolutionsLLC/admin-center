@@ -43,7 +43,8 @@ const config: Config = {
         },
         surface: {
           DEFAULT: '#FFFFFF',
-          alt: '#F1F3F7',
+          base: '#F7F8FA',    // Page background (light cool gray)
+          alt: '#F1F3F7',     // Alternate rows, hover states, modal footers
           secondary: '#F1F3F7', // Alias for backwards compatibility
           elevated: '#FFFFFF',
         },
@@ -54,6 +55,7 @@ const config: Config = {
           muted: '#9BA5B7',
           red: '#DC2626', // For critical/error states (alias of error.DEFAULT)
         },
+        skeleton: '#EDF0F5',  // Loading skeleton background
         line: {
           DEFAULT: '#E2E6ED',
           strong: '#C8CDD8',

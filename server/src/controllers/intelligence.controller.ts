@@ -60,10 +60,21 @@ export const getInsights = asyncHandler(async (req: Request, res: Response) => {
  */
 export const runIntelligence = asyncHandler(async (req: Request, res: Response) => {
   await runIntelligenceRules(req.user.company_id);
-  
-  res.status(200).json({ 
-    success: true, 
-    message: 'Intelligence rules executed successfully' 
+
+  await auditLogger.log({
+    req,
+    action: 'intelligence.executed',
+    module: 'intelligence',
+    object_type: 'System',
+    object_id: 'run-intelligence',
+    object_label: 'Intelligence rules executed',
+    before_state: null,
+    after_state: { trigger: 'manual', company_id: req.user.company_id },
+  });
+
+  res.status(200).json({
+    success: true,
+    message: 'Intelligence rules executed successfully'
   });
 });
 

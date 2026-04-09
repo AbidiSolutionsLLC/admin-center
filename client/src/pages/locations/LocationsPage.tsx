@@ -81,10 +81,10 @@ export default function LocationsPage() {
       <div className="space-y-5">
         <div className="flex items-start justify-between">
           <div>
-            <div className="h-7 w-40 bg-[#EDF0F5] rounded animate-pulse" />
-            <div className="h-4 w-64 bg-[#EDF0F5] rounded animate-pulse mt-2" />
+            <div className="h-7 w-40 bg-skeleton rounded animate-pulse" />
+            <div className="h-4 w-64 bg-skeleton rounded animate-pulse mt-2" />
           </div>
-          <div className="h-9 w-32 bg-[#EDF0F5] rounded animate-pulse" />
+          <div className="h-9 w-32 bg-skeleton rounded animate-pulse" />
         </div>
         <TableSkeleton rows={8} columns={6} />
       </div>

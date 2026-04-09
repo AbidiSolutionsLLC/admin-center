@@ -67,7 +67,7 @@ export const SyncLogViewer: React.FC<SyncLogViewerProps> = ({
       <div className="overflow-x-auto">
         <table className="w-full">
           <thead>
-            <tr className="bg-[#F7F8FA] border-b border-line">
+            <tr className="bg-surface-base border-b border-line">
               <th className="text-[11px] font-semibold text-ink-secondary uppercase tracking-wider px-4 py-2.5 text-left">Status</th>
               <th className="text-[11px] font-semibold text-ink-secondary uppercase tracking-wider px-4 py-2.5 text-left">Triggered By</th>
               <th className="text-[11px] font-semibold text-ink-secondary uppercase tracking-wider px-4 py-2.5 text-left">Started</th>
@@ -85,7 +85,7 @@ export const SyncLogViewer: React.FC<SyncLogViewerProps> = ({
               return (
                 <tr
                   key={log._id}
-                  className="border-b border-line last:border-0 hover:bg-[#F7F8FA] transition-colors duration-100"
+                  className="border-b border-line last:border-0 hover:bg-surface-base transition-colors duration-100"
                 >
                   <td className="px-4 py-3">
                     <span className={cn('inline-flex items-center gap-1 text-[11px] font-semibold border rounded-full px-2.5 py-0.5', statusConfig.class)}>

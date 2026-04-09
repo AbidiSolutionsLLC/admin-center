@@ -78,7 +78,7 @@ export const LocationTable: React.FC<LocationTableProps> = ({
       <div className="overflow-x-auto">
         <table className="w-full">
           <thead>
-            <tr className="bg-[#F7F8FA] border-b border-line">
+            <tr className="bg-surface-base border-b border-line">
               <th className="text-[11px] font-semibold text-ink-secondary uppercase tracking-wider px-4 py-2.5 text-left">Location</th>
               <th className="text-[11px] font-semibold text-ink-secondary uppercase tracking-wider px-4 py-2.5 text-left">Type</th>
               <th className="text-[11px] font-semibold text-ink-secondary uppercase tracking-wider px-4 py-2.5 text-left">Parent</th>
@@ -94,7 +94,7 @@ export const LocationTable: React.FC<LocationTableProps> = ({
               return (
                 <tr
                   key={loc._id}
-                  className="border-b border-line last:border-0 hover:bg-[#F7F8FA] transition-colors duration-100"
+                  className="border-b border-line last:border-0 hover:bg-surface-base transition-colors duration-100"
                 >
                   <td className="px-4 py-3 text-sm">
                     <div className="flex items-center gap-2">

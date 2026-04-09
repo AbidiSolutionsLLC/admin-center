@@ -219,7 +219,7 @@ export const BusinessUnitsTab: React.FC<BusinessUnitsTabProps> = ({ allDepartmen
       ) : (
         <div className="bg-white rounded-lg border border-line shadow-card overflow-hidden">
           <table className="w-full">
-            <thead className="bg-[#F7F8FA] border-b border-line">
+            <thead className="bg-surface-base border-b border-line">
               <tr>
                 <th className="text-[11px] font-semibold text-ink-secondary uppercase tracking-wider h-10 px-4 text-left">
                   Business Unit
@@ -242,7 +242,7 @@ export const BusinessUnitsTab: React.FC<BusinessUnitsTabProps> = ({ allDepartmen
               {filteredBUs.map((bu) => (
                 <tr
                   key={bu._id}
-                  className="border-b border-line last:border-0 hover:bg-[#F7F8FA] cursor-pointer transition-colors duration-100"
+                  className="border-b border-line last:border-0 hover:bg-surface-base cursor-pointer transition-colors duration-100"
                   onClick={() => handleOpenEdit(bu)}
                 >
                   <td className="h-14 px-4">

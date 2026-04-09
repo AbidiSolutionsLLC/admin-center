@@ -350,7 +350,7 @@ export const InviteModal: React.FC<InviteModalProps> = ({ isOpen, onClose, depar
 
               <div className="border border-line rounded-md overflow-hidden max-h-60 overflow-y-auto">
                 <table className="w-full text-xs">
-                  <thead className="bg-[#F7F8FA]">
+                  <thead className="bg-surface-base">
                     <tr>
                       <th className="h-8 px-3 text-left font-semibold text-ink-secondary">#</th>
                       <th className="h-8 px-3 text-left font-semibold text-ink-secondary">Name</th>
@@ -372,7 +372,7 @@ export const InviteModal: React.FC<InviteModalProps> = ({ isOpen, onClose, depar
                   </tbody>
                 </table>
                 {csvData.length > 10 && (
-                  <div className="px-3 py-2 text-xs text-ink-muted bg-[#F7F8FA] border-t border-line">
+                  <div className="px-3 py-2 text-xs text-ink-muted bg-surface-base border-t border-line">
                     ... and {csvData.length - 10} more rows
                   </div>
                 )}

@@ -30,11 +30,11 @@ export default function LoginPage() {
   };
 
   return (
-    <div className="flex h-screen w-full items-center justify-center bg-[#F7F8FA] p-4 text-[#0F1629] font-sans">
-      <Card className="w-full max-w-md border-[#E2E6ED]">
+    <div className="flex h-screen w-full items-center justify-center bg-surface-base p-4 text-ink font-sans">
+      <Card className="w-full max-w-md border-line">
         <CardHeader className="space-y-2 text-center pb-6">
           <CardTitle className="text-2xl font-semibold tracking-tight">Admin Center</CardTitle>
-          <CardDescription className="text-[#8B95AA]">
+          <CardDescription className="text-ink-muted">
             Sign in to your account to continue
           </CardDescription>
         </CardHeader>
@@ -49,7 +49,7 @@ export default function LoginPage() {
                 type="email"
                 placeholder="name@company.com"
                 {...register('email')}
-                className={`flex w-full ${errors.email ? 'border-red-500' : 'border-[#E2E6ED]'}`}
+                className={`flex w-full ${errors.email ? 'border-red-500' : 'border-line'}`}
               />
               {errors.email && (
                 <p className="text-sm text-red-500">{errors.email.message}</p>
@@ -63,7 +63,7 @@ export default function LoginPage() {
                 id="password"
                 type="password"
                 {...register('password')}
-                className={`flex w-full ${errors.password ? 'border-red-500' : 'border-[#E2E6ED]'}`}
+                className={`flex w-full ${errors.password ? 'border-red-500' : 'border-line'}`}
               />
               {errors.password && (
                 <p className="text-sm text-red-500">{errors.password.message}</p>
@@ -71,7 +71,7 @@ export default function LoginPage() {
             </div>
             <Button
               type="submit"
-              className="w-full bg-[#E8870A] hover:bg-[#E8870A]/90 text-white shadow-sm"
+              className="w-full bg-primary hover:bg-primary-hover/90 text-white shadow-sm"
               disabled={isPending}
             >
               {isPending ? 'Signing in...' : 'Sign In'}

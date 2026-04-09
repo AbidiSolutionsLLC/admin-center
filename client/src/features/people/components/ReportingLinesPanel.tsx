@@ -321,14 +321,14 @@ function ReportingLinesSkeleton() {
     <div className="space-y-4">
       {[1, 2, 3].map((i) => (
         <div key={i} className="bg-white rounded-lg border border-line shadow-card p-5">
-          <div className="h-4 bg-[#EDF0F5] rounded animate-pulse w-32 mb-3" />
+          <div className="h-4 bg-skeleton rounded animate-pulse w-32 mb-3" />
           <div className="space-y-2">
             {[1, 2].map((j) => (
               <div key={j} className="flex items-center gap-3">
-                <div className="w-8 h-8 bg-[#EDF0F5] rounded-full animate-pulse" />
+                <div className="w-8 h-8 bg-skeleton rounded-full animate-pulse" />
                 <div className="flex-1 space-y-1">
-                  <div className="h-3 bg-[#EDF0F5] rounded animate-pulse w-24" />
-                  <div className="h-2 bg-[#EDF0F5] rounded animate-pulse w-32" />
+                  <div className="h-3 bg-skeleton rounded animate-pulse w-24" />
+                  <div className="h-2 bg-skeleton rounded animate-pulse w-32" />
                 </div>
               </div>
             ))}

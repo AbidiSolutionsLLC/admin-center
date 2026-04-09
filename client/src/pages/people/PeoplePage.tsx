@@ -360,10 +360,10 @@ function StatsSkeleton() {
           className="bg-white rounded-lg border border-line shadow-card p-4"
         >
           <div className="flex items-center justify-between mb-2">
-            <div className="h-3 bg-[#EDF0F5] rounded animate-pulse w-16" />
-            <div className="w-4 h-4 bg-[#EDF0F5] rounded animate-pulse" />
+            <div className="h-3 bg-skeleton rounded animate-pulse w-16" />
+            <div className="w-4 h-4 bg-skeleton rounded animate-pulse" />
           </div>
-          <div className="h-8 bg-[#EDF0F5] rounded animate-pulse w-12" />
+          <div className="h-8 bg-skeleton rounded animate-pulse w-12" />
         </div>
       ))}
     </div>

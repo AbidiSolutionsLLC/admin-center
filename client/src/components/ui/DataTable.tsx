@@ -33,7 +33,7 @@ export function DataTable<TData, TValue>({
       <table className="w-full">
         <thead>
           {table.getHeaderGroups().map((headerGroup) => (
-            <tr key={headerGroup.id} className="bg-[#F7F8FA] border-b border-line">
+            <tr key={headerGroup.id} className="bg-surface-base border-b border-line">
               {headerGroup.headers.map((header) => (
                 <th
                   key={header.id}
@@ -53,7 +53,7 @@ export function DataTable<TData, TValue>({
               <tr
                 key={row.id}
                 className={cn(
-                  'border-b border-line last:border-0 hover:bg-[#F7F8FA] transition-colors duration-100',
+                  'border-b border-line last:border-0 hover:bg-surface-base transition-colors duration-100',
                   onRowClick && 'cursor-pointer'
                 )}
                 onClick={() => onRowClick?.(row.original)}

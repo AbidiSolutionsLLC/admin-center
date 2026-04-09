@@ -7,7 +7,7 @@ import type { Integration, IntegrationType } from '@/types';
 import { cn } from '@/utils/cn';
 
 const schema = z.object({
-  credentials: z.record(z.string(), z.unknown()).min(1, 'At least one credential is required'),
+  credentials: z.record(z.string(), z.unknown()).refine((val) => Object.keys(val).length > 0, 'At least one credential is required'),
   sync_enabled: z.boolean().default(false),
   sync_frequency: z.enum(['manual', 'hourly', 'daily', 'weekly']).default('manual'),
   field_mapping: z.record(z.string(), z.string()).optional().default({}),
@@ -100,20 +100,20 @@ export const IntegrationForm: React.FC<IntegrationFormProps> = ({
               {field.type === 'textarea' ? (
                 <textarea
                   id={`cred-${field.key}`}
-                  {...register('credentials' as any)}
+                  {...register(`credentials.${field.key}` as any)}
                   placeholder={field.placeholder}
                   disabled={isSubmitting}
                   rows={4}
-                  className={cn(inputClass(false), 'resize-y min-h-[80px] font-mono')}
+                  className={cn(inputClass(!!(errors.credentials as any)?.[field.key]), 'resize-y min-h-[80px] font-mono')}
                 />
               ) : (
                 <input
                   id={`cred-${field.key}`}
                   type={field.type}
-                  {...register('credentials' as any)}
+                  {...register(`credentials.${field.key}` as any)}
                   placeholder={field.placeholder}
                   disabled={isSubmitting}
-                  className={inputClass(false)}
+                  className={inputClass(!!(errors.credentials as any)?.[field.key])}
                 />
               )}
             </div>
