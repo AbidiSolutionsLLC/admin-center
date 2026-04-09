@@ -41,7 +41,7 @@ const UserSchema = new Schema<IUser>({
   phone: String,
   avatar_url: String,
   department_id: { type: Schema.Types.ObjectId, ref: 'Department' },
-  team_id: { type: Schema.Types.ObjectId, ref: 'Department' },
+  team_id: { type: Schema.Types.ObjectId, ref: 'Team' },
   manager_id: { type: Schema.Types.ObjectId, ref: 'User' },
   secondary_manager_ids: [{ type: Schema.Types.ObjectId, ref: 'User' }],
   lifecycle_state: {

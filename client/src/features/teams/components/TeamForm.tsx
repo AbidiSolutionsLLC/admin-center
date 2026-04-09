@@ -10,15 +10,11 @@ import { cn } from '@/utils/cn';
 const schema = z.object({
   name: z.string().min(1, 'Team name is required').max(100, 'Name too long'),
   description: z.string().max(500, 'Description too long').optional(),
-  department_id: z.string().min(1, 'Department is required').nullable(),
+  department_id: z.string().min(1, 'Department is required'),
   team_lead_id: z
     .string()
     .optional()
-    .nullable()
-    .refine(
-      (val) => !val || /^[a-fA-F0-9]{24}$/.test(val),
-      { message: 'Must be a valid 24-character MongoDB ObjectId' }
-    ),
+    .nullable(),
 });
 
 export type TeamFormData = z.infer<typeof schema>;

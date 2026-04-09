@@ -8,6 +8,7 @@ import { useUserStats } from '@/features/people/hooks/useUserStats';
 import { useDepartments } from '@/features/organization/hooks/useDepartments';
 import { UserTable } from '@/features/people/components/UserTable';
 import { InviteModal } from '@/features/people/components/InviteModal';
+import { UserOrgAssignmentModal } from '@/features/people/components/UserOrgAssignmentModal';
 import { UserForm, type UserFormData } from '@/features/people/components/UserForm';
 import { LifecycleStateSelector } from '@/features/people/components/LifecycleStateSelector';
 import { TableSkeleton } from '@/components/ui/TableSkeleton';
@@ -65,6 +66,7 @@ export default function PeoplePage() {
   // ── Modal state ──────────────────────────────────────────────────────
   const [isInviteModalOpen, setIsInviteModalOpen] = useState(false);
   const [editingUser, setEditingUser] = useState<User | null>(null);
+  const [assigningOrgUser, setAssigningOrgUser] = useState<User | null>(null);
   const [changingLifecycleUser, setChangingLifecycleUser] = useState<User | null>(null);
 
   // ── Filters ──────────────────────────────────────────────────────────
@@ -125,6 +127,14 @@ export default function PeoplePage() {
 
   const handleCloseEdit = useCallback(() => {
     setEditingUser(null);
+  }, []);
+
+  const handleOpenAssignOrg = useCallback((user: User) => {
+    setAssigningOrgUser(user);
+  }, []);
+
+  const handleCloseAssignOrg = useCallback(() => {
+    setAssigningOrgUser(null);
   }, []);
 
   const handleOpenLifecycleChange = useCallback((user: User) => {
@@ -222,6 +232,7 @@ export default function PeoplePage() {
             <UserTable
               users={filteredUsers}
               onEdit={handleOpenEdit}
+              onAssignOrg={handleOpenAssignOrg}
               onChangeState={handleOpenLifecycleChange}
             />
           )}
@@ -242,6 +253,15 @@ export default function PeoplePage() {
           isOpen={!!editingUser}
           onClose={handleCloseEdit}
           departments={departments}
+        />
+      )}
+
+      {/* ── Organization Assignment Modal ── */}
+      {assigningOrgUser && (
+        <UserOrgAssignmentModal
+          user={assigningOrgUser}
+          isOpen={!!assigningOrgUser}
+          onClose={handleCloseAssignOrg}
         />
       )}
 

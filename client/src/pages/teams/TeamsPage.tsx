@@ -140,8 +140,8 @@ export default function TeamsPage() {
   const handleSubmit = (formData: TeamFormData) => {
     const normalized = {
       ...formData,
-      department_id: formData.department_id || undefined,
-      team_lead_id: formData.team_lead_id || undefined,
+      department_id: formData.department_id, // Should never be undefined as it's required
+      team_lead_id: formData.team_lead_id || null,
     };
 
     if (editingTeam) {
