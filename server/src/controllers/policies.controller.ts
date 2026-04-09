@@ -183,7 +183,7 @@ export const publishPolicy = asyncHandler(async (req: Request, res: Response) =>
   // Find the latest version for this policy_key to determine next version number
   const latestVersion: typeof PolicyVersion.prototype | null = await PolicyVersion.findOne({
     company_id: new Types.ObjectId(req.user.company_id),
-    policy_key,
+    policy_key: policyKey,
   })
     .sort({ version_number: -1 });
 
