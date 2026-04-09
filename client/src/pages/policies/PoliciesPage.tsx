@@ -15,8 +15,11 @@ import {
   usePolicyVersionDiff,
   useSaveAssignmentRules,
   usePolicyConflictCheck,
+  usePolicyAssignments,
 } from '@/features/policies/hooks/usePolicies';
 import { useUserStats } from '@/features/people/hooks/useUserStats';
+import { useDepartments } from '@/features/organization/hooks/useDepartments';
+import { useRoles } from '@/features/roles/useRoles';
 import { TableSkeleton } from '@/components/ui/TableSkeleton';
 import { ErrorState } from '@/components/ui/ErrorState';
 import { EmptyState } from '@/components/ui/EmptyState';
@@ -992,11 +995,11 @@ function VersionDiffView({ policyKey, versionA, versionB, onClose }: VersionDiff
 function PolicyAcknowledgmentsView({ policyId }: { policyId: string }) {
   const { data: acknowledgments, isLoading } = usePolicyAcknowledgments(policyId);
   const { data: ackStatus } = useAcknowledgmentStatus(policyId);
+  const { data: userStats } = useUserStats();
 
-  // Calculate percentage (placeholder: assumes 100 total users)
-  const totalUsers = 100; // In production, fetch from /users/stats
+  const totalUsers = userStats?.total ?? 0;
   const acknowledgedCount = acknowledgments?.length || 0;
-  const percentage = Math.round((acknowledgedCount / totalUsers) * 100);
+  const percentage = totalUsers > 0 ? Math.round((acknowledgedCount / totalUsers) * 100) : 0;
 
   if (isLoading) return <TableSkeleton rows={4} columns={3} />;
 
@@ -1079,6 +1082,7 @@ function PolicyTargetingView({ policyId }: PolicyTargetingViewProps) {
   const [isTargetingModalOpen, setIsTargetingModalOpen] = useState(false);
   const assignmentMutation = useSaveAssignmentRules(policyId);
   const { data: conflicts } = usePolicyConflictCheck(policyId);
+  const { data: assignments, isLoading } = usePolicyAssignments(policyId);
 
   return (
     <div className="space-y-4">
@@ -1112,16 +1116,55 @@ function PolicyTargetingView({ policyId }: PolicyTargetingViewProps) {
         </div>
       )}
 
-      {/* Current Assignment Rules (placeholder — populated by API) */}
-      <div className="p-8 text-center border border-line rounded-md bg-surface-alt">
-        <Target className="w-8 h-8 text-ink-muted mx-auto mb-2" />
-        <p className="text-sm text-ink-secondary mb-1">
-          No assignment rules configured yet
-        </p>
-        <p className="text-xs text-ink-muted">
-          Click "Edit Targeting" to define who this policy applies to.
-        </p>
-      </div>
+      {/* Current Assignment Rules */}
+      {isLoading ? (
+        <TableSkeleton rows={3} columns={3} />
+      ) : assignments && assignments.length > 0 ? (
+        <div className="border border-line rounded-md overflow-hidden">
+          <table className="w-full">
+            <thead className="bg-[#F7F8FA] border-b border-line">
+              <tr>
+                <th className="text-[11px] font-semibold text-ink-secondary uppercase tracking-wider h-10 px-4 text-left">
+                  Target Type
+                </th>
+                <th className="text-[11px] font-semibold text-ink-secondary uppercase tracking-wider h-10 px-4 text-left">
+                  Target
+                </th>
+                <th className="text-[11px] font-semibold text-ink-secondary uppercase tracking-wider h-10 px-4 text-left">
+                  Created
+                </th>
+              </tr>
+            </thead>
+            <tbody>
+              {assignments.map((rule) => (
+                <tr key={rule._id} className="border-b border-line last:border-0">
+                  <td className="h-10 px-4">
+                    <span className="inline-flex items-center gap-1 text-[11px] font-semibold border rounded-full px-2.5 py-0.5 tracking-wide bg-accent-light text-accent">
+                      {TARGET_TYPE_LABELS[rule.target_type]}
+                    </span>
+                  </td>
+                  <td className="h-10 px-4 text-sm font-medium text-ink">
+                    {rule.target_label}
+                  </td>
+                  <td className="h-10 px-4 text-sm text-ink-secondary">
+                    {formatDate(rule.created_at)}
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      ) : (
+        <div className="p-8 text-center border border-line rounded-md bg-surface-alt">
+          <Target className="w-8 h-8 text-ink-muted mx-auto mb-2" />
+          <p className="text-sm text-ink-secondary mb-1">
+            No assignment rules configured yet
+          </p>
+          <p className="text-xs text-ink-muted">
+            Click "Edit Targeting" to define who this policy applies to.
+          </p>
+        </div>
+      )}
 
       {/* Targeting Modal */}
       {isTargetingModalOpen && (
@@ -1146,6 +1189,8 @@ interface TargetingModalProps {
 }
 
 function TargetingModal({ isOpen, onClose, saveMutation, onSaved }: TargetingModalProps) {
+  const { data: departments } = useDepartments();
+  const { data: roles } = useRoles();
   const [rules, setRules] = useState<Array<{ target_type: PolicyTargetType; target_id: string }>>([
     { target_type: 'all', target_id: 'all' },
   ]);
@@ -1165,8 +1210,68 @@ function TargetingModal({ isOpen, onClose, saveMutation, onSaved }: TargetingMod
   };
 
   const handleSave = () => {
-    const validRules = rules.filter((r) => r.target_id);
+    const validRules = rules.filter((r) => r.target_id && r.target_id !== '');
     saveMutation.mutate(validRules, { onSuccess: onSaved });
+  };
+
+  // Render target-specific selector based on target_type
+  const renderTargetSelector = (rule: { target_type: PolicyTargetType; target_id: string }, index: number) => {
+    if (rule.target_type === 'all') {
+      return (
+        <input
+          type="hidden"
+          value="all"
+          onChange={() => updateRule(index, 'target_id', 'all')}
+        />
+      );
+    }
+
+    if (rule.target_type === 'department') {
+      return (
+        <select
+          value={rule.target_id}
+          onChange={(e) => updateRule(index, 'target_id', e.target.value)}
+          className="flex-1 h-9 px-3 text-sm rounded-md border border-line bg-white text-ink focus:outline-none focus:ring-2 focus:ring-primary/30 focus:border-primary transition-all duration-150"
+          aria-label="Select department"
+        >
+          <option value="">Select department...</option>
+          {departments?.map((dept) => (
+            <option key={dept._id} value={dept._id}>
+              {dept.name}
+            </option>
+          ))}
+        </select>
+      );
+    }
+
+    if (rule.target_type === 'role') {
+      return (
+        <select
+          value={rule.target_id}
+          onChange={(e) => updateRule(index, 'target_id', e.target.value)}
+          className="flex-1 h-9 px-3 text-sm rounded-md border border-line bg-white text-ink focus:outline-none focus:ring-2 focus:ring-primary/30 focus:border-primary transition-all duration-150"
+          aria-label="Select role"
+        >
+          <option value="">Select role...</option>
+          {roles?.map((role) => (
+            <option key={role._id} value={role._id}>
+              {role.name}
+            </option>
+          ))}
+        </select>
+      );
+    }
+
+    // For 'user' and 'group', fall back to text input (these would need dedicated selectors in production)
+    return (
+      <input
+        type="text"
+        value={rule.target_id}
+        onChange={(e) => updateRule(index, 'target_id', e.target.value)}
+        placeholder={`Enter ${rule.target_type} ID...`}
+        className="flex-1 h-9 px-3 text-sm rounded-md border border-line bg-white text-ink placeholder:text-ink-muted focus:outline-none focus:ring-2 focus:ring-primary/30 focus:border-primary transition-all duration-150"
+      />
+    );
   };
 
   return (
@@ -1187,7 +1292,7 @@ function TargetingModal({ isOpen, onClose, saveMutation, onSaved }: TargetingMod
           </button>
           <button
             onClick={handleSave}
-            disabled={saveMutation.isPending}
+            disabled={saveMutation.isPending || rules.every((r) => !r.target_id)}
             className="h-9 px-4 text-sm font-medium rounded-md bg-primary hover:bg-primary-hover text-white transition-colors disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2"
           >
             <Save className="w-4 h-4" />
@@ -1201,8 +1306,14 @@ function TargetingModal({ isOpen, onClose, saveMutation, onSaved }: TargetingMod
           <div key={index} className="flex items-center gap-3">
             <select
               value={rule.target_type}
-              onChange={(e) => updateRule(index, 'target_type', e.target.value)}
+              onChange={(e) => {
+                const newType = e.target.value as PolicyTargetType;
+                updateRule(index, 'target_type', newType);
+                // Reset target_id when type changes
+                updateRule(index, 'target_id', newType === 'all' ? 'all' : '');
+              }}
               className="h-9 px-3 text-sm rounded-md border border-line bg-white text-ink focus:outline-none focus:ring-2 focus:ring-primary/30 focus:border-primary transition-all duration-150 w-40"
+              aria-label="Select target type"
             >
               {Object.entries(TARGET_TYPE_LABELS).map(([key, label]) => (
                 <option key={key} value={key}>
@@ -1211,18 +1322,11 @@ function TargetingModal({ isOpen, onClose, saveMutation, onSaved }: TargetingMod
               ))}
             </select>
 
-            <input
-              type="text"
-              value={rule.target_id}
-              onChange={(e) => updateRule(index, 'target_id', e.target.value)}
-              placeholder={rule.target_type === 'all' ? 'All users' : 'Enter ID...'}
-              disabled={rule.target_type === 'all'}
-              className="flex-1 h-9 px-3 text-sm rounded-md border border-line bg-white text-ink placeholder:text-ink-muted focus:outline-none focus:ring-2 focus:ring-primary/30 focus:border-primary transition-all duration-150 disabled:bg-surface-alt disabled:text-ink-muted"
-            />
+            {renderTargetSelector(rule, index)}
 
             <button
               onClick={() => removeRule(index)}
-              className="h-8 w-8 flex items-center justify-center rounded text-ink-secondary hover:text-error hover:bg-error-light transition-colors"
+              className="h-8 w-8 flex items-center justify-center rounded text-ink-secondary hover:text-error hover:bg-error-light transition-colors flex-shrink-0"
               aria-label="Remove rule"
             >
               <X className="w-4 h-4" />

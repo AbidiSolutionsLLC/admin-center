@@ -227,6 +227,7 @@ export const useSaveAssignmentRules = (policyId: string) => {
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: QUERY_KEYS.POLICY_DETAIL(policyId) });
+      queryClient.invalidateQueries({ queryKey: QUERY_KEYS.POLICY_ASSIGNMENTS(policyId) });
       toast.success('Assignment rules saved');
     },
     onError: (error: unknown) => {
@@ -279,6 +280,23 @@ export const usePolicyVersionDiff = (policyKey: string, versionA: string, versio
     },
     enabled: !!policyKey && !!versionA && !!versionB,
     staleTime: 1000 * 60 * 5,
+    retry: 2,
+  });
+};
+
+/**
+ * Fetches all assignment rules for a specific policy version.
+ * Used on: PoliciesPage (targeting view)
+ */
+export const usePolicyAssignments = (policyId: string) => {
+  return useQuery<PolicyAssignmentRule[]>({
+    queryKey: QUERY_KEYS.POLICY_ASSIGNMENTS(policyId),
+    queryFn: async () => {
+      const { data } = await apiClient.get(`/policies/${policyId}/assignments`);
+      return data.data;
+    },
+    enabled: !!policyId,
+    staleTime: 1000 * 60 * 2,
     retry: 2,
   });
 };

@@ -183,7 +183,7 @@ export const publishPolicy = asyncHandler(async (req: Request, res: Response) =>
   // Find the latest version for this policy_key to determine next version number
   const latestVersion: typeof PolicyVersion.prototype | null = await PolicyVersion.findOne({
     company_id: new Types.ObjectId(req.user.company_id),
-    policy_key,
+    policy_key: policyKey,
   })
     .sort({ version_number: -1 });
 
@@ -755,4 +755,26 @@ export const conflictCheckHandler = asyncHandler(async (req: Request, res: Respo
   );
 
   res.status(200).json({ success: true, data: conflicts });
+});
+
+/**
+ * GET /policies/:id/assignments
+ * Returns all assignment rules for a specific policy version.
+ */
+export const getPolicyAssignments = asyncHandler(async (req: Request, res: Response) => {
+  const policyVersion = await PolicyVersion.findOne({
+    _id: req.params.id,
+    company_id: new Types.ObjectId(req.user.company_id),
+  });
+
+  if (!policyVersion) {
+    throw new AppError('Policy version not found', 404, 'POLICY_VERSION_NOT_FOUND');
+  }
+
+  const assignments = await PolicyAssignment.find({
+    company_id: new Types.ObjectId(req.user.company_id),
+    policy_version_id: policyVersion._id,
+  }).sort({ created_at: 1 });
+
+  res.status(200).json({ success: true, data: assignments });
 });
