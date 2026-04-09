@@ -115,7 +115,7 @@ export default function UserDetailPage() {
       <div className="grid grid-cols-4 gap-4">
         <InfoCard label="Department" value={user.department?.name || 'Not assigned'} />
         <InfoCard label="Employment Type" value={formatEmploymentType(user.employment_type)} />
-        <InfoCard label="Location" value={user.location?.name || 'Not assigned'} />
+        <InfoCard label="Location" value={user.location ? `${user.location.name} (${user.location.timezone})` : 'Not assigned'} />
         <InfoCard
           label="Hire Date"
           value={user.hire_date ? formatDate(user.hire_date) : 'Not set'}

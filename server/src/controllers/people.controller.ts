@@ -143,7 +143,7 @@ export const getUsers = asyncHandler(async (req: Request, res: Response) => {
     .populate('department_id', 'name slug')
     .populate('team_id', 'name slug')
     .populate('manager_id', 'full_name email avatar_url')
-    .populate('location_id', 'name')
+    .populate('location_id', 'name timezone')
     .sort({ created_at: -1 })
     .lean();
 
@@ -164,7 +164,7 @@ export const getUserById = asyncHandler(async (req: Request, res: Response) => {
     .populate('department_id', 'name slug')
     .populate('team_id', 'name slug')
     .populate('manager_id', 'full_name email avatar_url')
-    .populate('location_id', 'name');
+    .populate('location_id', 'name timezone');
 
   if (!user) {
     throw new AppError('User not found', 404, 'NOT_FOUND');
@@ -293,6 +293,20 @@ export const updateUser = asyncHandler(async (req: Request, res: Response) => {
 
   Object.assign(user, updates);
   await user.save();
+
+  // Audit log — location change fires a dedicated event
+  if (updates.location_id && updates.location_id !== beforeState.location_id) {
+    await auditLogger.log({
+      req,
+      action: 'user.location_assigned',
+      module: 'people',
+      object_type: 'User',
+      object_id: user._id.toString(),
+      object_label: user.full_name,
+      before_state: { location_id: beforeState.location_id?.toString() ?? null },
+      after_state: { location_id: updates.location_id },
+    });
+  }
 
   // Audit log
   await auditLogger.log({

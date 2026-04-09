@@ -113,8 +113,23 @@ export const IdentityHealthBadge: React.FC<IdentityHealthBadgeProps> = ({ user, 
       });
     }
 
+    // Check location assignment
+    if (!user.location_id) {
+      signals.push({
+        status: 'warning',
+        label: 'No Location',
+        tooltip: 'User has no location assigned',
+      });
+    } else {
+      signals.push({
+        status: 'ok',
+        label: 'Location',
+        tooltip: `Location: ${user.location?.name || 'Assigned'}`,
+      });
+    }
+
     return signals;
-  }, [user]);
+  }, [user, user.location_id, user.location]);
 
   const hasCritical = healthSignals.some((s) => s.status === 'critical');
   const hasWarning = healthSignals.some((s) => s.status === 'warning');

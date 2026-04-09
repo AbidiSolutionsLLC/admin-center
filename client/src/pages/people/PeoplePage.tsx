@@ -6,6 +6,7 @@ import { useUpdateUser } from '@/features/people/hooks/useUpdateUser';
 import { useUpdateLifecycle } from '@/features/people/hooks/useUpdateLifecycle';
 import { useUserStats } from '@/features/people/hooks/useUserStats';
 import { useDepartments } from '@/features/organization/hooks/useDepartments';
+import { useLocations } from '@/features/locations/hooks/useLocations';
 import { UserTable } from '@/features/people/components/UserTable';
 import { InviteModal } from '@/features/people/components/InviteModal';
 import { UserForm, type UserFormData } from '@/features/people/components/UserForm';
@@ -14,7 +15,7 @@ import { TableSkeleton } from '@/components/ui/TableSkeleton';
 import { ErrorState } from '@/components/ui/ErrorState';
 import { EmptyState } from '@/components/ui/EmptyState';
 import { Modal } from '@/components/ui/Modal';
-import type { User, LifecycleState, EmploymentType, Department } from '@/types';
+import type { User, LifecycleState, EmploymentType, Department, Location } from '@/types';
 import { cn } from '@/utils/cn';
 import { toast } from 'sonner';
 
@@ -42,6 +43,7 @@ interface UserFilters {
   lifecycle_state: LifecycleState | '';
   department_id: string;
   employment_type: EmploymentType | '';
+  location_id: string;
 }
 
 /**
@@ -60,6 +62,7 @@ export default function PeoplePage() {
   // ── Server data ──────────────────────────────────────────────────────
   const { data: users, isLoading, isError, refetch } = useUsers();
   const { data: departments = [] } = useDepartments();
+  const { data: locations = [] } = useLocations();
   const { data: stats, isLoading: statsLoading } = useUserStats();
 
   // ── Modal state ──────────────────────────────────────────────────────
@@ -73,6 +76,7 @@ export default function PeoplePage() {
     lifecycle_state: '',
     department_id: '',
     employment_type: '',
+    location_id: '',
   });
 
   // ── Derived: apply client-side filtering ─────────────────────────────
@@ -94,11 +98,15 @@ export default function PeoplePage() {
       const matchesEmploymentType =
         !filters.employment_type || user.employment_type === filters.employment_type;
 
+      const matchesLocation =
+        !filters.location_id || user.location_id === filters.location_id;
+
       return (
         matchesSearch &&
         matchesLifecycleState &&
         matchesDepartment &&
-        matchesEmploymentType
+        matchesEmploymentType &&
+        matchesLocation
       );
     });
   }, [users, filters]);
@@ -108,6 +116,7 @@ export default function PeoplePage() {
     filters.lifecycle_state,
     filters.department_id,
     filters.employment_type,
+    filters.location_id,
   ].filter(Boolean).length;
 
   // ── Handlers ─────────────────────────────────────────────────────────
@@ -141,6 +150,7 @@ export default function PeoplePage() {
       lifecycle_state: '',
       department_id: '',
       employment_type: '',
+      location_id: '',
     });
   }, []);
 
@@ -199,6 +209,7 @@ export default function PeoplePage() {
             onClearFilters={handleClearFilters}
             activeFilterCount={activeFilterCount}
             departments={departments}
+            locations={locations}
           />
 
           {/* ── User Table ── */}
@@ -242,6 +253,7 @@ export default function PeoplePage() {
           isOpen={!!editingUser}
           onClose={handleCloseEdit}
           departments={departments}
+          locations={locations}
         />
       )}
 
@@ -356,6 +368,7 @@ interface FilterBarProps {
   onClearFilters: () => void;
   activeFilterCount: number;
   departments: Department[];
+  locations: Location[];
 }
 
 function FilterBar({
@@ -364,6 +377,7 @@ function FilterBar({
   onClearFilters,
   activeFilterCount,
   departments,
+  locations,
 }: FilterBarProps) {
   return (
     <div className="flex items-center gap-3 flex-wrap">
@@ -428,6 +442,25 @@ function FilterBar({
         <ChevronDown className="absolute right-2 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-ink-muted pointer-events-none" />
       </div>
 
+      {/* Location filter */}
+      <div className="relative">
+        <select
+          value={filters.location_id}
+          onChange={(e) =>
+            onFilterChange({ ...filters, location_id: e.target.value })
+          }
+          className="h-9 pl-3 pr-8 text-sm rounded-md border border-line bg-white text-ink focus:outline-none focus:ring-2 focus:ring-primary/30 focus:border-primary transition-all duration-150 appearance-none cursor-pointer"
+        >
+          <option value="">All Locations</option>
+          {locations.map((loc) => (
+            <option key={loc._id} value={loc._id}>
+              {loc.name}
+            </option>
+          ))}
+        </select>
+        <ChevronDown className="absolute right-2 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-ink-muted pointer-events-none" />
+      </div>
+
       {/* Employment type filter */}
       <div className="relative">
         <select
@@ -467,9 +500,10 @@ interface EditUserModalProps {
   isOpen: boolean;
   onClose: () => void;
   departments: Department[];
+  locations: Location[];
 }
 
-function EditUserModal({ user, isOpen, onClose, departments }: EditUserModalProps) {
+function EditUserModal({ user, isOpen, onClose, departments, locations }: EditUserModalProps) {
   const updateUser = useUpdateUser(user._id);
 
   const handleSubmit = useCallback(
@@ -536,6 +570,7 @@ function EditUserModal({ user, isOpen, onClose, departments }: EditUserModalProp
         initialData={user}
         onSubmit={handleSubmit}
         departments={departments}
+        locations={locations}
         isSubmitting={updateUser.isPending}
       />
     </Modal>

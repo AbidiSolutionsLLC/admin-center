@@ -145,7 +145,7 @@ export interface User {
   termination_date?: string;
   employment_type: EmploymentType;
   location_id?: string;
-  location?: { _id: string; name: string };
+  location?: { _id: string; name: string; timezone?: string };
   custom_fields: Record<string, unknown>;
   last_login?: string;
   mfa_enabled: boolean;
@@ -851,4 +851,28 @@ export interface TestTemplateResult {
 
 export interface UnreadCount {
   count: number;
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Locations
+// ─────────────────────────────────────────────────────────────────────────────
+
+export type LocationType = 'region' | 'country' | 'city' | 'office';
+
+export interface Location {
+  _id: string;
+  company_id: string;
+  name: string;
+  type: LocationType;
+  parent_id?: string;
+  timezone: string;
+  is_headquarters: boolean;
+  address?: string;
+  working_hours?: {
+    start: string;
+    end: string;
+    days: number[];
+  };
+  created_at: string;
+  updated_at: string;
 }
