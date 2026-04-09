@@ -67,7 +67,7 @@ export const updateSecurityPolicy = asyncHandler(async (req: Request, res: Respo
   const policy = await SecurityPolicy.findOneAndUpdate(
     { company_id: req.user.company_id },
     { $set: input },
-    { new: true, runValidators: true, upsert: true, setDefaultsOnInsert: true },
+    { returnDocument: 'after', runValidators: true, upsert: true, setDefaultsOnInsert: true },
   );
 
   // MANDATORY: audit log

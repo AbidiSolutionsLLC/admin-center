@@ -32,7 +32,7 @@ const createTransporter = () => {
       host: 'smtp.sendgrid.net',
       port: 587,
       auth: {
-        user: 'sowaye',
+        user: 'apikey',
         pass: process.env.SENDGRID_API_KEY,
       },
     });
@@ -53,14 +53,14 @@ const createTransporter = () => {
 
   // Development fallback: log emails to console
   console.warn('⚠️  No email service configured. Using ethereal.email test account.');
-  return nodemailer.createTransport({
+    return nodemailer.createTransport({
     host: 'smtp.ethereal.email',
     port: 587,
-    auth: {
+      auth: {
       user: 'ethereal.user@ethereal.email',
       pass: 'ethereal_password',
-    },
-  });
+      },
+    });
 };
 
 let transporter: nodemailer.Transporter | null = null;

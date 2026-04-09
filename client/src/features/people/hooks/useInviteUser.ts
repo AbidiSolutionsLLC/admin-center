@@ -21,9 +21,10 @@ export const useInviteUser = () => {
       queryClient.invalidateQueries({ queryKey: QUERY_KEYS.USERS });
       toast.success('User invited successfully');
     },
-    onError: (error) => {
-      console.error('User invite failed', error);
-      toast.error('Failed to invite user. Please try again.');
+    onError: (err: any) => {
+      console.error('User invite failed', err);
+      const message = err.response?.data?.error || 'Failed to invite user. Please try again.';
+      toast.error(message);
     },
   });
 };
