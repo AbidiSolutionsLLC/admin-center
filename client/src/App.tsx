@@ -22,6 +22,7 @@ import PoliciesPage from './pages/policies/PoliciesPage';
 import LocationsPage from './pages/locations/LocationsPage';
 import DataFieldsPage from './pages/data-fields/DataFieldsPage';
 import IntegrationsPage from './pages/integrations/IntegrationsPage';
+import WorkflowsPage from './pages/workflows/WorkflowsPage';
 
 function App() {
   return (
@@ -48,6 +49,7 @@ function App() {
               <Route path={ROUTES.LOCATIONS} element={<LocationsPage />} />
               <Route path={ROUTES.DATA_FIELDS} element={<DataFieldsPage />} />
               <Route path={ROUTES.INTEGRATIONS} element={<IntegrationsPage />} />
+              <Route path={ROUTES.WORKFLOWS} element={<WorkflowsPage />} />
             </Route>
           </Route>
         </Routes>

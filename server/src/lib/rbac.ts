@@ -39,7 +39,7 @@ export const resolveUserPermissions = async (
   companyId: Types.ObjectId
 ): Promise<UserEffectivePermissions> => {
   // Get all roles assigned to this user
-  const userRoles = await UserRole.find({ user_id: userId }).lean();
+  const userRoles = await UserRole.find({ user_id: userId, company_id: companyId }).lean();
 
   if (userRoles.length === 0) {
     return {
@@ -61,6 +61,7 @@ export const resolveUserPermissions = async (
   // Get all role permissions for these roles
   const rolePermissions = await RolePermission.find({
     role_id: { $in: roleIds },
+    company_id: companyId,
   }).lean();
 
   // Get all permission details
@@ -159,6 +160,7 @@ export const getRolePermissions = async (
   // Get role permissions
   const rolePermissions = await RolePermission.find({
     role_id: roleId,
+    company_id: companyId,
   }).lean();
 
   // Get permission details
@@ -246,7 +248,7 @@ export const simulateUserPermissions = async (
   hypotheticalRoleIds: Types.ObjectId[]
 ): Promise<UserEffectivePermissions> => {
   // Get current user roles
-  const userRoles = await UserRole.find({ user_id: userId }).lean();
+  const userRoles = await UserRole.find({ user_id: userId, company_id: companyId }).lean();
   const currentRoleIds = userRoles.map((ur) => ur.role_id);
 
   // Combine current and hypothetical roles
@@ -261,6 +263,7 @@ export const simulateUserPermissions = async (
   // Get all role permissions for these roles
   const rolePermissions = await RolePermission.find({
     role_id: { $in: allRoleIds },
+    company_id: companyId,
   }).lean();
 
   // Get all permission details

@@ -15,6 +15,7 @@ import {
   saveAssignmentRules,
   conflictCheckHandler,
   getPolicyVersionDiff,
+  getPolicyAssignments,
 } from '../controllers/policies.controller';
 
 const router = Router();
@@ -102,6 +103,12 @@ router.get('/:id/acknowledgment-status', getAcknowledgmentStatus);
  * Runs RULE-08 conflict check automatically
  */
 router.post('/:id/assignments', saveAssignmentRules);
+
+/**
+ * GET /policies/:id/assignments
+ * Get all assignment rules for a specific policy version.
+ */
+router.get('/:id/assignments', getPolicyAssignments);
 
 /**
  * GET /policies/:id/conflict-check

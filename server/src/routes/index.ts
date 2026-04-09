@@ -15,6 +15,7 @@ import policiesRoutes from './policies.routes';
 import locationsRoutes from './locations.routes';
 import dataFieldsRoutes from './dataFields.routes';
 import integrationsRoutes from './integrations.routes';
+import workflowsRoutes from './workflows.routes';
 
 const router = Router();
 
@@ -33,6 +34,7 @@ router.use('/policies', requireAuth, policiesRoutes);
 router.use('/locations', requireAuth, locationsRoutes);
 router.use('/data-fields', requireAuth, dataFieldsRoutes);
 router.use('/integrations', requireAuth, integrationsRoutes);
+router.use('/workflows', requireAuth, workflowsRoutes);
 
 // Protected test route for verifying JWT rejection logic
 router.get('/protected-test', requireAuth, (req, res) => {

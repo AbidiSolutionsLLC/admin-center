@@ -338,7 +338,10 @@ export const assignApp = asyncHandler(async (req: Request, res: Response) => {
   const targetIdObj = new Types.ObjectId(validated.target_id);
   
   if (validated.target_type === 'role') {
-    affectedUsers = await UserRole.countDocuments({ role_id: targetIdObj });
+    affectedUsers = await UserRole.countDocuments({
+      role_id: targetIdObj,
+      company_id: new Types.ObjectId(companyId),
+    });
   } else if (validated.target_type === 'department') {
     affectedUsers = await User.countDocuments({
       company_id: companyId,

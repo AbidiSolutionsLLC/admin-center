@@ -770,3 +770,129 @@ export interface PolicyConflictCheck {
     conflict_reason: string;
   }>;
 }
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Workflows
+// ─────────────────────────────────────────────────────────────────────────────
+
+export type WorkflowTrigger = 'user.lifecycle_changed';
+export type WorkflowStatus = 'draft' | 'enabled' | 'disabled';
+export type WorkflowActionType =
+  | 'send_email'
+  | 'assign_role'
+  | 'revoke_access'
+  | 'notify_manager'
+  | 'update_field'
+  | 'create_task'
+  | 'webhook';
+
+export interface WorkflowTriggerConfig {
+  lifecycle_from: string[];
+  lifecycle_to: string[];
+}
+
+export interface Workflow {
+  _id: string;
+  company_id: string;
+  name: string;
+  description?: string;
+  trigger: WorkflowTrigger;
+  trigger_config: WorkflowTriggerConfig;
+  status: WorkflowStatus;
+  is_active: boolean;
+  created_by: {
+    _id: string;
+    full_name: string;
+    email: string;
+  };
+  updated_by?: {
+    _id: string;
+    full_name: string;
+    email: string;
+  };
+  created_at: string;
+  updated_at: string;
+  steps?: WorkflowStep[]; // Populated on detail view
+}
+
+export interface WorkflowStep {
+  _id: string;
+  company_id: string;
+  workflow_id: string;
+  name: string;
+  description?: string;
+  action_type: WorkflowActionType;
+  action_config: Record<string, unknown>;
+  step_order: number;
+  is_active: boolean;
+  created_at: string;
+  updated_at: string;
+}
+
+export type WorkflowRunStatus = 'success' | 'failure' | 'partial';
+
+export interface WorkflowRun {
+  _id: string;
+  company_id: string;
+  workflow_id: string;
+  triggered_by: string;
+  triggered_by_object_id: string;
+  triggered_by_label: string;
+  status: WorkflowRunStatus;
+  steps_executed: number;
+  steps_succeeded: number;
+  steps_failed: number;
+  error_message?: string;
+  execution_time_ms: number;
+  created_at: string;
+}
+
+export interface CreateWorkflowInput {
+  name: string;
+  description?: string;
+  trigger: WorkflowTrigger;
+  trigger_config: WorkflowTriggerConfig;
+}
+
+export interface UpdateWorkflowInput {
+  name?: string;
+  description?: string;
+  trigger_config?: WorkflowTriggerConfig;
+}
+
+export interface CreateWorkflowStepInput {
+  name: string;
+  description?: string;
+  action_type: WorkflowActionType;
+  action_config?: Record<string, unknown>;
+  step_order: number;
+}
+
+export interface ReorderStepsInput {
+  steps: Array<{ step_id: string; step_order: number }>;
+}
+
+export interface TestWorkflowInput {
+  user_id: string;
+  user_name: string;
+  user_email: string;
+  lifecycle_from: string;
+  lifecycle_to: string;
+}
+
+export interface WorkflowTestResult {
+  runId: string;
+  status: WorkflowRunStatus;
+  stepsExecuted: number;
+  stepsSucceeded: number;
+  stepsFailed: number;
+  stepResults: Array<{
+    stepId: string;
+    stepName: string;
+    actionType: string;
+    success: boolean;
+    error?: string;
+  }>;
+  executionTimeMs: number;
+  errorMessage?: string;
+}

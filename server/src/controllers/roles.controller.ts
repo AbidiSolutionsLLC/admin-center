@@ -72,6 +72,7 @@ export const getRoles = asyncHandler(async (req: Request, res: Response) => {
     roles.map(async (role) => {
       const grantedCount = await RolePermission.countDocuments({
         role_id: role._id,
+        company_id: new Types.ObjectId(companyId),
         granted: true,
       });
 
@@ -245,6 +246,7 @@ export const deleteRole = asyncHandler(async (req: Request, res: Response) => {
   // Check if any users are assigned to this role
   const assignedUsersCount = await UserRole.countDocuments({
     role_id: roleId,
+    company_id: new Types.ObjectId(companyId),
   });
 
   if (assignedUsersCount > 0) {
