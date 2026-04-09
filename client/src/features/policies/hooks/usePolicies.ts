@@ -8,6 +8,10 @@ import type {
   PublishPolicyInput,
   PolicyAcknowledgment,
   AcknowledgmentStatus,
+  UpdatePolicyDraftInput,
+  PolicyAssignmentRule,
+  PolicyTargetType,
+  PolicyConflictCheck,
 } from '@/types';
 
 /**
@@ -48,7 +52,7 @@ export const usePolicyVersions = (policyKey: string) => {
 };
 
 /**
- * Fetches a specific policy version by ID.
+ * Fetches a specific policy version by ID, including assignment rules.
  * Used on: PoliciesPage (detail view)
  */
 export const usePolicyDetail = (policyId: string) => {
@@ -81,8 +85,63 @@ export const usePublishPolicy = () => {
       queryClient.invalidateQueries({ queryKey: QUERY_KEYS.POLICIES });
       toast.success('Policy published successfully');
     },
-    onError: (error: any) => {
-      const message = error?.response?.data?.error || 'Failed to publish policy';
+    onError: (error: unknown) => {
+      const err = error as { response?: { data?: { error?: string } } };
+      const message = err?.response?.data?.error || 'Failed to publish policy';
+      toast.error(message);
+    },
+  });
+};
+
+/**
+ * Updates a draft policy version before publishing.
+ * Produces audit event: policy.draft_updated
+ * Used on: PoliciesPage (edit modal)
+ */
+export const useUpdatePolicyDraft = (policyId: string) => {
+  const queryClient = useQueryClient();
+
+  return useMutation<PolicyVersion, Error, UpdatePolicyDraftInput>({
+    mutationFn: async (input: UpdatePolicyDraftInput) => {
+      const { data } = await apiClient.put(`/policies/${policyId}/draft`, input);
+      return data.data;
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: QUERY_KEYS.POLICIES });
+      if (policyId) {
+        queryClient.invalidateQueries({ queryKey: QUERY_KEYS.POLICY_DETAIL(policyId) });
+      }
+      toast.success('Draft saved successfully');
+    },
+    onError: (error: unknown) => {
+      const err = error as { response?: { data?: { error?: string } } };
+      const message = err?.response?.data?.error || 'Failed to save draft';
+      toast.error(message);
+    },
+  });
+};
+
+/**
+ * Archives a published policy version (soft delete, keeps history accessible).
+ * Produces audit event: policy.archived
+ * Used on: PoliciesPage (version actions)
+ */
+export const useArchivePolicy = () => {
+  const queryClient = useQueryClient();
+
+  return useMutation<PolicyVersion, Error, { policy_id: string }>({
+    mutationFn: async ({ policy_id }: { policy_id: string }) => {
+      const { data } = await apiClient.post(`/policies/${policy_id}/archive`);
+      return data.data;
+    },
+    onSuccess: (_, vars) => {
+      queryClient.invalidateQueries({ queryKey: QUERY_KEYS.POLICIES });
+      queryClient.invalidateQueries({ queryKey: QUERY_KEYS.POLICY_DETAIL(vars.policy_id) });
+      toast.success('Policy archived successfully');
+    },
+    onError: (error: unknown) => {
+      const err = error as { response?: { data?: { error?: string } } };
+      const message = err?.response?.data?.error || 'Failed to archive policy';
       toast.error(message);
     },
   });
@@ -106,8 +165,9 @@ export const useAcknowledgePolicy = (policyId: string) => {
       });
       toast.success('Policy acknowledged successfully');
     },
-    onError: (error: any) => {
-      const message = error?.response?.data?.error || 'Failed to acknowledge policy';
+    onError: (error: unknown) => {
+      const err = error as { response?: { data?: { error?: string } } };
+      const message = err?.response?.data?.error || 'Failed to acknowledge policy';
       toast.error(message);
     },
   });
@@ -143,6 +203,82 @@ export const useAcknowledgmentStatus = (policyId: string) => {
     },
     enabled: !!policyId,
     staleTime: 1000 * 60 * 2,
+    retry: 2,
+  });
+};
+
+/**
+ * Saves assignment rules (targeting) for a policy version.
+ * Produces audit event: policy.assignment_rules_updated
+ * Also runs RULE-08 conflict check.
+ * Used on: PoliciesPage (targeting modal)
+ */
+export const useSaveAssignmentRules = (policyId: string) => {
+  const queryClient = useQueryClient();
+
+  return useMutation<
+    PolicyAssignmentRule[],
+    Error,
+    Array<{ target_type: PolicyTargetType; target_id: string }>
+  >({
+    mutationFn: async (rules: Array<{ target_type: PolicyTargetType; target_id: string }>) => {
+      const { data } = await apiClient.post(`/policies/${policyId}/assignments`, { rules });
+      return data.data;
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: QUERY_KEYS.POLICY_DETAIL(policyId) });
+      toast.success('Assignment rules saved');
+    },
+    onError: (error: unknown) => {
+      const err = error as { response?: { data?: { error?: string } } };
+      const message = err?.response?.data?.error || 'Failed to save assignment rules';
+      toast.error(message);
+    },
+  });
+};
+
+/**
+ * Checks for conflicting policies on the same user population (RULE-08).
+ * Used on: PoliciesPage (after saving assignment rules)
+ */
+export const usePolicyConflictCheck = (policyId: string) => {
+  return useQuery<PolicyConflictCheck>({
+    queryKey: ['policy', policyId, 'conflicts'] as const,
+    queryFn: async () => {
+      const { data } = await apiClient.get(`/policies/${policyId}/conflict-check`);
+      return data.data;
+    },
+    enabled: !!policyId,
+    staleTime: 1000 * 60 * 1,
+    retry: 1,
+  });
+};
+
+/**
+ * Compares two versions of the same policy and returns a diff.
+ * Used on: PoliciesPage (version diff view)
+ */
+export const usePolicyVersionDiff = (policyKey: string, versionA: string, versionB: string) => {
+  return useQuery<{
+    policy_key: string;
+    version_a: { version_number: number; title: string; content: string };
+    version_b: { version_number: number; title: string; content: string };
+    diff_summary: {
+      added_lines: number;
+      removed_lines: number;
+      sample_added: string[];
+      sample_removed: string[];
+    };
+  }>({
+    queryKey: ['policy', policyKey, 'diff', versionA, versionB] as const,
+    queryFn: async () => {
+      const { data } = await apiClient.get(
+        `/policies/versions/diff?policy_key=${policyKey}&version_a=${versionA}&version_b=${versionB}`
+      );
+      return data.data;
+    },
+    enabled: !!policyKey && !!versionA && !!versionB,
+    staleTime: 1000 * 60 * 5,
     retry: 2,
   });
 };

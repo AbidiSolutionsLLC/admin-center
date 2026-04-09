@@ -520,6 +520,17 @@ export interface ChangePrimaryManagerInput {
 export type PolicyCategory = 'hr' | 'it' | 'security' | 'compliance' | 'operations' | 'other';
 export type PolicyStatus = 'draft' | 'published' | 'archived';
 
+export type PolicyTargetType = 'all' | 'role' | 'department' | 'group' | 'user';
+
+export interface PolicyAssignmentRule {
+  _id: string;
+  policy_version_id: string;
+  target_type: PolicyTargetType;
+  target_id: string;
+  target_label: string; // Resolved name (e.g., department name, role name)
+  created_at: string;
+}
+
 export interface PolicyVersion {
   _id: string;
   company_id: string;
@@ -538,6 +549,7 @@ export interface PolicyVersion {
   };
   published_at?: string;
   summary?: string;
+  assignment_rules?: PolicyAssignmentRule[]; // Populated on detail view
   is_active: boolean;
   created_at: string;
   updated_at: string;
@@ -566,8 +578,34 @@ export interface PublishPolicyInput {
   category: PolicyCategory;
   effective_date: string;
   summary?: string;
+  assignment_rules?: Array<{
+    target_type: PolicyTargetType;
+    target_id: string;
+  }>;
+}
+
+export interface UpdatePolicyDraftInput {
+  title?: string;
+  content?: string;
+  category?: PolicyCategory;
+  effective_date?: string;
+  summary?: string;
+}
+
+export interface ArchivePolicyInput {
+  policy_id: string;
 }
 
 export interface AcknowledgePolicyInput {
   policy_version_id: string;
+}
+
+export interface PolicyConflictCheck {
+  has_conflicts: boolean;
+  conflicting_policies: Array<{
+    policy_key: string;
+    title: string;
+    version_number: number;
+    conflict_reason: string;
+  }>;
 }

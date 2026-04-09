@@ -63,9 +63,16 @@ async function enrichDepartments(
   );
 
   return departments.map((dept) => {
+    const data = { ...dept };
     const headcount = headcountMap.get(dept._id.toString()) ?? 0;
     const has_intelligence_flag = headcount > 0 && !dept.primary_manager_id;
-    return { ...dept, headcount, has_intelligence_flag };
+    
+    // Map populated objects to the names expected by the frontend
+    if (data.primary_manager_id && typeof data.primary_manager_id === 'object') {
+      data.primary_manager = data.primary_manager_id as any;
+    }
+
+    return { ...data, headcount, has_intelligence_flag };
   });
 }
 
@@ -104,7 +111,8 @@ export const getDepartmentById = asyncHandler(async (req: Request, res: Response
     throw new AppError('Department not found', 404, 'NOT_FOUND');
   }
 
-  res.status(200).json({ success: true, data: dept });
+  const [enriched] = await enrichDepartments([dept.toObject()]);
+  res.status(200).json({ success: true, data: enriched });
 });
 
 /**

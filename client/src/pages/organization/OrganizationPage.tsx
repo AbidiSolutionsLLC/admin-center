@@ -239,7 +239,7 @@ export default function OrganizationPage() {
               {/* ── Filter Bar + View Toggle ── */}
               <div className="flex items-center justify-between gap-3 flex-wrap">
                 {/* Filter bar */}
-                <div className="flex items-center gap-2 flex-wrap flex-1">
+                <div className="flex items-center gap-2 flex-wrap flex-1 mb-4">
                   {/* Search */}
                   <div className="relative w-60">
                     <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-ink-muted pointer-events-none" />

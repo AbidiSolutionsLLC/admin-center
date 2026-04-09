@@ -10,6 +10,11 @@ import {
   acknowledgePolicy,
   getPolicyAcknowledgments,
   getAcknowledgmentStatus,
+  updatePolicyDraft,
+  archivePolicy,
+  saveAssignmentRules,
+  conflictCheckHandler,
+  getPolicyVersionDiff,
 } from '../controllers/policies.controller';
 
 const router = Router();
@@ -18,9 +23,10 @@ const router = Router();
  * All routes require authentication (requireAuth middleware applied below)
  * All routes are scoped to req.user.company_id from JWT
  *
- * NOTE: PolicyVersion is IMMUTABLE - no DELETE or PUT routes exist.
- * Once a policy version is published, it cannot be modified or deleted.
- * New versions must be created instead of updating existing ones.
+ * NOTE: PolicyVersion is IMMUTABLE once published (status='published').
+ * Draft versions can be updated via PUT /policies/:id/draft
+ * Published versions can only be archived (POST /policies/:id/archive)
+ * New versions must be created via POST /policies/publish
  */
 
 // Apply authentication to all routes
@@ -41,6 +47,13 @@ router.get('/', getPolicies);
 router.get('/versions', getPolicyVersions);
 
 /**
+ * GET /policies/versions/diff
+ * Compare two versions of the same policy
+ * Query params: policy_key, version_a, version_b
+ */
+router.get('/versions/diff', getPolicyVersionDiff);
+
+/**
  * GET /policies/:id
  * Get a specific policy version by ID
  */
@@ -52,6 +65,18 @@ router.get('/:id', getPolicyVersionById);
  * Requires super_admin or ops_admin role
  */
 router.post('/publish', requireRole(['super_admin', 'ops_admin']), publishPolicy);
+
+/**
+ * PUT /policies/:id/draft
+ * Update a draft policy version (only for status='draft')
+ */
+router.put('/:id/draft', updatePolicyDraft);
+
+/**
+ * POST /policies/:id/archive
+ * Archive a published policy version (soft delete)
+ */
+router.post('/:id/archive', archivePolicy);
 
 /**
  * POST /policies/:id/acknowledge
@@ -71,9 +96,17 @@ router.get('/:id/acknowledgments', getPolicyAcknowledgments);
  */
 router.get('/:id/acknowledgment-status', getAcknowledgmentStatus);
 
-// ── NO DELETE OR PUT ROUTES FOR POLICY VERSIONS ──────────────────────────────
-// PolicyVersion is immutable once published.
-// To "update" a policy, publish a new version using POST /policies/publish
-// This is enforced at the route level - no update/delete endpoints exist.
+/**
+ * POST /policies/:id/assignments
+ * Save assignment rules (targeting) for a policy version
+ * Runs RULE-08 conflict check automatically
+ */
+router.post('/:id/assignments', saveAssignmentRules);
+
+/**
+ * GET /policies/:id/conflict-check
+ * Check RULE-08: conflicting policies on same user population
+ */
+router.get('/:id/conflict-check', conflictCheckHandler);
 
 export default router;

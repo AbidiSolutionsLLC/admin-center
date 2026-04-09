@@ -26,6 +26,24 @@ const AddMemberSchema = z.object({
 
 const UpdateMemberSchema = AddMemberSchema.partial();
 
+// ── Helpers ──────────────────────────────────────────────────────────────────
+/**
+ * Enriches team list with populated lead and department info
+ */
+async function enrichTeams(teams: any[]): Promise<any[]> {
+  return teams.map((team) => {
+    const data = { ...team };
+    // Map populated objects to the names expected by the frontend
+    if (data.team_lead_id && typeof data.team_lead_id === 'object') {
+      data.team_lead = data.team_lead_id;
+    }
+    if (data.department_id && typeof data.department_id === 'object') {
+      data.department = data.department_id;
+    }
+    return data;
+  });
+}
+
 // ── Team Controllers ─────────────────────────────────────────────────────────
 
 /**
@@ -42,7 +60,8 @@ export const getTeams = asyncHandler(async (req: Request, res: Response) => {
     .sort({ created_at: 1 })
     .lean();
 
-  res.status(200).json({ success: true, data: teams });
+  const enriched = await enrichTeams(teams);
+  res.status(200).json({ success: true, data: enriched });
 });
 
 /**
@@ -62,7 +81,8 @@ export const getTeamById = asyncHandler(async (req: Request, res: Response) => {
     throw new AppError('Team not found', 404, 'NOT_FOUND');
   }
 
-  res.status(200).json({ success: true, data: team });
+  const [enriched] = await enrichTeams([team.toObject()]);
+  res.status(200).json({ success: true, data: enriched });
 });
 
 /**

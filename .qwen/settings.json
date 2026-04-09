@@ -11,7 +11,8 @@
       "Bash(taskkill *)",
       "Bash(dir *)",
       "Bash(del *)",
-      "Bash(select-string *)"
+      "Bash(select-string *)",
+      "Bash(node *)"
     ]
   },
   "$version": 3
