@@ -19,6 +19,7 @@ import AppsPage from './pages/apps/AppsPage';
 import SecurityPage from './pages/security/SecurityPage';
 import AuditLogsPage from './pages/audit-logs/AuditLogsPage';
 import PoliciesPage from './pages/policies/PoliciesPage';
+import WorkflowsPage from './pages/workflows/WorkflowsPage';
 
 function App() {
   return (
@@ -42,6 +43,7 @@ function App() {
               <Route path={ROUTES.SECURITY} element={<SecurityPage />} />
               <Route path={ROUTES.AUDIT_LOGS} element={<AuditLogsPage />} />
               <Route path={ROUTES.POLICIES} element={<PoliciesPage />} />
+              <Route path={ROUTES.WORKFLOWS} element={<WorkflowsPage />} />
             </Route>
           </Route>
         </Routes>

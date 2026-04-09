@@ -49,4 +49,12 @@ export const QUERY_KEYS = {
   POLICY_DETAIL: (id: string) => ['policy', id] as const,
   POLICY_ACKNOWLEDGMENTS: (id: string) => ['policy', id, 'acknowledgments'] as const,
   POLICY_ACKNOWLEDGMENT_STATUS: (id: string) => ['policy', id, 'acknowledgment-status'] as const,
+  POLICY_ASSIGNMENTS: (id: string) => ['policy', id, 'assignments'] as const,
+  POLICY_CONFLICTS: (id: string) => ['policy', id, 'conflicts'] as const,
+  POLICY_VERSION_DIFF: (policyKey: string, versionA: string, versionB: string) =>
+    ['policy', 'diff', policyKey, versionA, versionB] as const,
+  // Workflows
+  WORKFLOWS: ['workflows'] as const,
+  WORKFLOW_DETAIL: (id: string) => ['workflow', id] as const,
+  WORKFLOW_RUNS: (id: string) => ['workflow', id, 'runs'] as const,
 } as const;

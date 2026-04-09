@@ -9,6 +9,7 @@ import { RefreshToken } from '../models/RefreshToken.model';
 import { auditLogger } from '../lib/auditLogger';
 import { sendWelcomeEmail, sendBulkWelcomeEmails } from '../lib/emailService';
 import { isValidTransition, getTransitionErrorMessage, LifecycleState } from '../lib/lifecycle';
+import { handleLifecycleEvent } from '../lib/workflowEngine';
 import { AppError } from '../utils/AppError';
 
 // ── Zod Schemas ──────────────────────────────────────────────────────────────
@@ -503,6 +504,20 @@ export const updateUserLifecycle = asyncHandler(async (req: Request, res: Respon
     object_label: user.full_name,
     before_state: beforeState,
     after_state: user.toObject(),
+  });
+
+  // ── Workflow Engine: Fire lifecycle event to matching workflows ─────────
+  // Fire-and-forget: workflows execute asynchronously, don't block the response
+  handleLifecycleEvent({
+    companyId: req.user.company_id,
+    userId: user._id.toString(),
+    userName: user.full_name,
+    userEmail: user.email,
+    lifecycleFrom: currentState,
+    lifecycleTo: targetState,
+  }).catch((workflowError) => {
+    console.error('[Workflow Engine Error]', workflowError);
+    // Don't fail the lifecycle transition if workflow execution fails
   });
 
   // Return user without sensitive fields
