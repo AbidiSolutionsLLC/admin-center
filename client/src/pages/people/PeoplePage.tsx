@@ -1,12 +1,16 @@
 // src/pages/people/PeoplePage.tsx
 import { useState, useMemo, useCallback } from 'react';
-import { Users, UserPlus, Search, ChevronDown, X, RefreshCw } from 'lucide-react';
-import { useUsers } from '@/features/people/hooks/useUsers';
+import {
+  Users, UserPlus, Search, ChevronDown, X, RefreshCw,
+  Download, UserCheck, ArrowRightCircle,
+} from 'lucide-react';
+import { useUsers, useBulkLifecycleChange, useBulkAssignRole, useExportUsers } from '@/features/people/hooks/useUsers';
 import { useUpdateUser } from '@/features/people/hooks/useUpdateUser';
 import { useUpdateLifecycle } from '@/features/people/hooks/useUpdateLifecycle';
 import { useUserStats } from '@/features/people/hooks/useUserStats';
 import { useDepartments } from '@/features/organization/hooks/useDepartments';
 import { useLocations } from '@/features/locations/hooks/useLocations';
+import { useRoles } from '@/features/roles/useRoles';
 import { UserTable } from '@/features/people/components/UserTable';
 import { InviteModal } from '@/features/people/components/InviteModal';
 import { UserForm, type UserFormData } from '@/features/people/components/UserForm';
@@ -63,12 +67,87 @@ export default function PeoplePage() {
   const { data: users, isLoading, isError, refetch } = useUsers();
   const { data: departments = [] } = useDepartments();
   const { data: locations = [] } = useLocations();
+  const { data: roles = [] } = useRoles();
   const { data: stats, isLoading: statsLoading } = useUserStats();
+
+  // ── Bulk mutations ──────────────────────────────────────────────────
+  const bulkLifecycle = useBulkLifecycleChange();
+  const bulkRole = useBulkAssignRole();
+  const exportMutation = useExportUsers({
+    lifecycle_state: filters.lifecycle_state || undefined,
+    department_id: filters.department_id || undefined,
+    employment_type: filters.employment_type || undefined,
+  });
+
+  // ── Selection state ────────────────────────────────────────────────
+  const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
+
+  const isAllSelected = useMemo(() => {
+    if (!users || users.length === 0) return false;
+    return filteredUsers.length > 0 && filteredUsers.every((u) => selectedIds.has(u._id));
+  }, [users, filteredUsers, selectedIds]);
+
+  const toggleRow = useCallback((userId: string) => {
+    setSelectedIds((prev) => {
+      const next = new Set(prev);
+      if (next.has(userId)) next.delete(userId);
+      else next.add(userId);
+      return next;
+    });
+  }, []);
+
+  const toggleAll = useCallback(() => {
+    if (isAllSelected) {
+      setSelectedIds(new Set());
+    } else {
+      setSelectedIds(new Set(filteredUsers.map((u) => u._id)));
+    }
+  }, [isAllSelected, filteredUsers]);
+
+  const clearSelection = useCallback(() => setSelectedIds(new Set()), []);
+
+  // ── Bulk action handlers ───────────────────────────────────────────
+  const handleBulkLifecycle = useCallback(() => {
+    if (!bulkLifecycleTarget || selectedIds.size === 0) return;
+    bulkLifecycle.mutate(
+      { user_ids: Array.from(selectedIds), lifecycle_state: bulkLifecycleTarget },
+      {
+        onSuccess: () => {
+          setBulkAction(null);
+          setBulkLifecycleTarget('');
+          clearSelection();
+        },
+      }
+    );
+  }, [bulkLifecycleTarget, selectedIds, bulkLifecycle, clearSelection]);
+
+  const handleBulkRole = useCallback(() => {
+    if (!bulkRoleTarget || selectedIds.size === 0) return;
+    bulkRole.mutate(
+      { user_ids: Array.from(selectedIds), role_id: bulkRoleTarget },
+      {
+        onSuccess: () => {
+          setBulkAction(null);
+          setBulkRoleTarget('');
+          clearSelection();
+        },
+      }
+    );
+  }, [bulkRoleTarget, selectedIds, bulkRole, clearSelection]);
+
+  const handleExport = useCallback(() => {
+    exportMutation.mutate();
+  }, [exportMutation]);
 
   // ── Modal state ──────────────────────────────────────────────────────
   const [isInviteModalOpen, setIsInviteModalOpen] = useState(false);
   const [editingUser, setEditingUser] = useState<User | null>(null);
   const [changingLifecycleUser, setChangingLifecycleUser] = useState<User | null>(null);
+
+  // ── Bulk action modals ─────────────────────────────────────────────
+  const [bulkAction, setBulkAction] = useState<'lifecycle' | 'role' | null>(null);
+  const [bulkLifecycleTarget, setBulkLifecycleTarget] = useState<LifecycleState | ''>('');
+  const [bulkRoleTarget, setBulkRoleTarget] = useState('');
 
   // ── Filters ──────────────────────────────────────────────────────────
   const [filters, setFilters] = useState<UserFilters>({
@@ -230,11 +309,28 @@ export default function PeoplePage() {
               </button>
             </div>
           ) : (
-            <UserTable
-              users={filteredUsers}
-              onEdit={handleOpenEdit}
-              onChangeState={handleOpenLifecycleChange}
-            />
+            <>
+              {/* ── Bulk Action Bar ── */}
+              {selectedIds.size > 0 && (
+                <BulkActionBar
+                  selectedCount={selectedIds.size}
+                  onClearSelection={clearSelection}
+                  onChangeLifecycle={() => setBulkAction('lifecycle')}
+                  onAssignRole={() => setBulkAction('role')}
+                  onExport={handleExport}
+                />
+              )}
+
+              <UserTable
+                users={filteredUsers}
+                onEdit={handleOpenEdit}
+                onChangeState={handleOpenLifecycleChange}
+                selectedIds={selectedIds}
+                onToggleRow={toggleRow}
+                onToggleAll={toggleAll}
+                isAllSelected={isAllSelected}
+              />
+            </>
           )}
         </>
       )}
@@ -263,6 +359,33 @@ export default function PeoplePage() {
           user={changingLifecycleUser}
           isOpen={!!changingLifecycleUser}
           onClose={handleCloseLifecycleChange}
+        />
+      )}
+
+      {/* ── Bulk Lifecycle Modal ── */}
+      {bulkAction === 'lifecycle' && (
+        <BulkLifecycleModal
+          isOpen={bulkAction === 'lifecycle'}
+          onClose={() => { setBulkAction(null); setBulkLifecycleTarget(''); }}
+          selectedCount={selectedIds.size}
+          onSubmit={handleBulkLifecycle}
+          targetState={bulkLifecycleTarget}
+          onTargetChange={setBulkLifecycleTarget}
+          isPending={bulkLifecycle.isPending}
+        />
+      )}
+
+      {/* ── Bulk Role Modal ── */}
+      {bulkAction === 'role' && (
+        <BulkRoleModal
+          isOpen={bulkAction === 'role'}
+          onClose={() => { setBulkAction(null); setBulkRoleTarget(''); }}
+          selectedCount={selectedIds.size}
+          onSubmit={handleBulkRole}
+          targetRole={bulkRoleTarget}
+          onTargetChange={setBulkRoleTarget}
+          isPending={bulkRole.isPending}
+          roles={roles}
         />
       )}
     </div>
@@ -625,6 +748,178 @@ function LifecycleChangeModal({ user, isOpen, onClose }: LifecycleChangeModalPro
         onTransition={handleTransition}
         isPending={updateLifecycle.isPending}
       />
+    </Modal>
+  );
+}
+
+// ── Bulk Action Bar ───────────────────────────────────────────────────────
+
+interface BulkActionBarProps {
+  selectedCount: number;
+  onClearSelection: () => void;
+  onChangeLifecycle: () => void;
+  onAssignRole: () => void;
+  onExport: () => void;
+}
+
+function BulkActionBar({ selectedCount, onClearSelection, onChangeLifecycle, onAssignRole, onExport }: BulkActionBarProps) {
+  return (
+    <div className="bg-white rounded-lg border border-line shadow-card px-4 py-3 flex items-center gap-3">
+      <span className="text-sm font-medium text-ink">
+        {selectedCount} selected
+      </span>
+      <div className="h-5 w-px bg-line" />
+      <button
+        onClick={onChangeLifecycle}
+        className="h-8 px-3 text-xs font-medium rounded-md border border-line bg-white text-ink hover:bg-surface-alt transition-colors inline-flex items-center gap-1.5"
+      >
+        <ArrowRightCircle className="w-3.5 h-3.5" />
+        Change State
+      </button>
+      <button
+        onClick={onAssignRole}
+        className="h-8 px-3 text-xs font-medium rounded-md border border-line bg-white text-ink hover:bg-surface-alt transition-colors inline-flex items-center gap-1.5"
+      >
+        <UserCheck className="w-3.5 h-3.5" />
+        Assign Role
+      </button>
+      <button
+        onClick={onExport}
+        className="h-8 px-3 text-xs font-medium rounded-md border border-line bg-white text-ink hover:bg-surface-alt transition-colors inline-flex items-center gap-1.5 ml-auto"
+      >
+        <Download className="w-3.5 h-3.5" />
+        Export CSV
+      </button>
+      <button
+        onClick={onClearSelection}
+        className="h-8 px-3 text-xs font-medium rounded-md text-ink-secondary hover:text-ink transition-colors"
+      >
+        Clear
+      </button>
+    </div>
+  );
+}
+
+// ── Bulk Lifecycle Modal ──────────────────────────────────────────────────
+
+interface BulkLifecycleModalProps {
+  isOpen: boolean;
+  onClose: () => void;
+  selectedCount: number;
+  onSubmit: () => void;
+  targetState: LifecycleState | '';
+  onTargetChange: (state: LifecycleState | '') => void;
+  isPending: boolean;
+}
+
+function BulkLifecycleModal({ isOpen, onClose, selectedCount, onSubmit, targetState, onTargetChange, isPending }: BulkLifecycleModalProps) {
+  return (
+    <Modal
+      isOpen={isOpen}
+      onClose={onClose}
+      title="Bulk Change Lifecycle State"
+      description={`Apply a state transition to ${selectedCount} selected users. Invalid transitions will be skipped.`}
+      size="md"
+      footer={
+        <>
+          <button onClick={onClose} disabled={isPending} className="h-9 px-4 text-sm font-medium rounded-md border border-line bg-white text-ink hover:bg-surface-alt transition-colors disabled:opacity-50">
+            Cancel
+          </button>
+          <button
+            onClick={onSubmit}
+            disabled={isPending || !targetState}
+            className="h-9 px-4 text-sm font-medium rounded-md bg-primary hover:bg-primary-hover text-white transition-colors disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2"
+          >
+            <ArrowRightCircle className="w-4 h-4" />
+            {isPending ? 'Processing...' : `Apply to ${selectedCount} Users`}
+          </button>
+        </>
+      }
+    >
+      <div className="space-y-4">
+        <div>
+          <label className="text-sm font-medium text-ink block mb-1.5">
+            Target State <span className="text-error">*</span>
+          </label>
+          <select
+            value={targetState}
+            onChange={(e) => onTargetChange(e.target.value as LifecycleState | '')}
+            className="w-full h-9 px-3 text-sm rounded-md border border-line bg-white text-ink focus:outline-none focus:ring-2 focus:ring-primary/30 focus:border-primary transition-all duration-150"
+          >
+            <option value="">Select target state...</option>
+            {LIFECYCLE_STATE_OPTIONS.filter((o) => o.value !== '').map((opt) => (
+              <option key={opt.value} value={opt.value}>
+                {opt.label}
+              </option>
+            ))}
+          </select>
+        </div>
+        <div className="p-3 bg-warning-light border border-warning-border rounded-md">
+          <p className="text-xs text-warning">
+            <strong>Note:</strong> Each user is validated individually. Invalid transitions (e.g., archived → active) will be skipped with an error count shown in the result toast.
+          </p>
+        </div>
+      </div>
+    </Modal>
+  );
+}
+
+// ── Bulk Role Assign Modal ────────────────────────────────────────────────
+
+interface BulkRoleModalProps {
+  isOpen: boolean;
+  onClose: () => void;
+  selectedCount: number;
+  onSubmit: () => void;
+  targetRole: string;
+  onTargetChange: (roleId: string) => void;
+  isPending: boolean;
+  roles: Array<{ _id: string; name: string }>;
+}
+
+function BulkRoleModal({ isOpen, onClose, selectedCount, onSubmit, targetRole, onTargetChange, isPending, roles }: BulkRoleModalProps) {
+  return (
+    <Modal
+      isOpen={isOpen}
+      onClose={onClose}
+      title="Bulk Assign Role"
+      description={`Assign a role to ${selectedCount} selected users. Users who already have this role will be skipped.`}
+      size="md"
+      footer={
+        <>
+          <button onClick={onClose} disabled={isPending} className="h-9 px-4 text-sm font-medium rounded-md border border-line bg-white text-ink hover:bg-surface-alt transition-colors disabled:opacity-50">
+            Cancel
+          </button>
+          <button
+            onClick={onSubmit}
+            disabled={isPending || !targetRole}
+            className="h-9 px-4 text-sm font-medium rounded-md bg-primary hover:bg-primary-hover text-white transition-colors disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2"
+          >
+            <UserCheck className="w-4 h-4" />
+            {isPending ? 'Processing...' : `Assign to ${selectedCount} Users`}
+          </button>
+        </>
+      }
+    >
+      <div className="space-y-4">
+        <div>
+          <label className="text-sm font-medium text-ink block mb-1.5">
+            Role <span className="text-error">*</span>
+          </label>
+          <select
+            value={targetRole}
+            onChange={(e) => onTargetChange(e.target.value)}
+            className="w-full h-9 px-3 text-sm rounded-md border border-line bg-white text-ink focus:outline-none focus:ring-2 focus:ring-primary/30 focus:border-primary transition-all duration-150"
+          >
+            <option value="">Select role...</option>
+            {roles.map((role) => (
+              <option key={role._id} value={role._id}>
+                {role.name}
+              </option>
+            ))}
+          </select>
+        </div>
+      </div>
     </Modal>
   );
 }
