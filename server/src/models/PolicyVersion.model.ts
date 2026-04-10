@@ -16,6 +16,7 @@ export interface IPolicyVersion extends Document {
   published_by?: Types.ObjectId;  // User who published this version
   published_at?: Date;
   summary?: string;               // Brief description of changes in this version
+  custom_fields: Record<string, unknown>;
   is_active: boolean;
   created_at: Date;
   updated_at: Date;
@@ -33,6 +34,7 @@ const PolicyVersionSchema = new Schema<IPolicyVersion>({
   published_by: { type: Schema.Types.ObjectId, ref: 'User' },
   published_at: { type: Date },
   summary: { type: String },
+  custom_fields: { type: Schema.Types.Mixed, default: {} },
   is_active: { type: Boolean, default: true },
 }, { timestamps: { createdAt: 'created_at', updatedAt: 'updated_at' } });
 

@@ -4,6 +4,7 @@ import { Building2, Plus, Search, X, AlertTriangle, Users, Layers } from 'lucide
 import { useBusinessUnits } from '../hooks/useBusinessUnits';
 import { useBUTree } from '../hooks/useBUTree';
 import { useCreateBU } from '../hooks/useCreateBU';
+import { useUpdateDepartment } from '../hooks/useUpdateDepartment';
 import { useDeleteBU } from '../hooks/useDeleteBU';
 import { BUForm } from './BUForm';
 import type { BUFormData } from './BUForm';
@@ -42,6 +43,7 @@ export const BusinessUnitsTab: React.FC<BusinessUnitsTabProps> = ({ allDepartmen
   const { data: buTree, isLoading: isTreeLoading } = useBUTree();
 
   const createMutation = useCreateBU();
+  const updateMutation = useUpdateDepartment();
   const deleteMutation = useDeleteBU();
 
   const [isFormModalOpen, setIsFormModalOpen] = useState(false);
@@ -79,13 +81,16 @@ export const BusinessUnitsTab: React.FC<BusinessUnitsTabProps> = ({ allDepartmen
   const handleSubmit = (formData: BUFormData) => {
     const normalized = {
       name: formData.name,
+      parent_id: formData.parent_id || null,
       primary_manager_id: formData.primary_manager_id || null,
       secondary_manager_id: formData.secondary_manager_id || null,
     };
 
     if (editingBU) {
-      // TODO: Implement update when needed
-      console.log('Update not yet implemented');
+      updateMutation.mutate(
+        { id: editingBU._id, data: normalized },
+        { onSuccess: handleCloseModal }
+      );
     } else {
       createMutation.mutate(normalized, {
         onSuccess: handleCloseModal,
@@ -214,7 +219,7 @@ export const BusinessUnitsTab: React.FC<BusinessUnitsTabProps> = ({ allDepartmen
       ) : (
         <div className="bg-white rounded-lg border border-line shadow-card overflow-hidden">
           <table className="w-full">
-            <thead className="bg-[#F7F8FA] border-b border-line">
+            <thead className="bg-surface-base border-b border-line">
               <tr>
                 <th className="text-[11px] font-semibold text-ink-secondary uppercase tracking-wider h-10 px-4 text-left">
                   Business Unit
@@ -237,7 +242,7 @@ export const BusinessUnitsTab: React.FC<BusinessUnitsTabProps> = ({ allDepartmen
               {filteredBUs.map((bu) => (
                 <tr
                   key={bu._id}
-                  className="border-b border-line last:border-0 hover:bg-[#F7F8FA] cursor-pointer transition-colors duration-100"
+                  className="border-b border-line last:border-0 hover:bg-surface-base cursor-pointer transition-colors duration-100"
                   onClick={() => handleOpenEdit(bu)}
                 >
                   <td className="h-14 px-4">
@@ -331,13 +336,13 @@ export const BusinessUnitsTab: React.FC<BusinessUnitsTabProps> = ({ allDepartmen
             <Button
               form="bu-form"
               type="submit"
-              disabled={createMutation.isPending}
+              disabled={createMutation.isPending || updateMutation.isPending}
               className={cn(
                 'h-9 px-4 text-sm font-medium rounded-md bg-primary hover:bg-primary-hover text-white transition-colors',
                 'disabled:opacity-50 disabled:cursor-not-allowed'
               )}
             >
-              {createMutation.isPending
+              {createMutation.isPending || updateMutation.isPending
                 ? 'Saving...'
                 : editingBU
                 ? 'Save Changes'

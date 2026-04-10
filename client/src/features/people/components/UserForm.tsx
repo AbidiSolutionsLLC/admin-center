@@ -1,10 +1,16 @@
 // src/features/people/components/UserForm.tsx
-import React from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import { useForm, Controller } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { z } from 'zod';
 import { UserSelect } from '@/components/ui/UserSelect';
+<<<<<<< HEAD
 import type { User, EmploymentType, Department, Location } from '@/types';
+=======
+import { DynamicCustomFields } from '@/features/data-fields/components/DynamicCustomFields';
+import { useCustomFields } from '@/features/data-fields/hooks/useCustomFields';
+import type { User, EmploymentType, Department, CustomField } from '@/types';
+>>>>>>> 0212f123cbde2de2952f948712c61f2a54cfb53e
 import { cn } from '@/utils/cn';
 
 const schema = z.object({
@@ -49,6 +55,7 @@ const inputClass = (hasError?: boolean) =>
 /**
  * UserForm Component
  * Profile edit form for users with employment details, department, manager, etc.
+ * Includes dynamic custom fields for all field types.
  * Submits via a hidden button (id="user-form") triggered from the modal footer.
  * Used on: PeoplePage (edit modal), UserProfilePage.
  */
@@ -78,8 +85,56 @@ export const UserForm: React.FC<UserFormProps> = ({
     },
   });
 
+  // ── Custom fields ──────────────────────────────────────────────────────
+  const { data: customFields = [] } = useCustomFields('user');
+  const [customFieldValues, setCustomFieldValues] = useState<Record<string, unknown>>(
+    initialData?.custom_fields ?? {}
+  );
+  const [customFieldErrors, setCustomFieldErrors] = useState<Record<string, string>>({});
+
+  // Sync initial data when customFields or initialData change
+  useEffect(() => {
+    if (initialData?.custom_fields && Object.keys(initialData.custom_fields).length > 0) {
+      setCustomFieldValues(initialData.custom_fields);
+    }
+  }, [initialData]);
+
+  const handleCustomFieldChange = useCallback((slug: string, value: unknown) => {
+    setCustomFieldValues((prev) => ({ ...prev, [slug]: value }));
+    // Clear error on change
+    setCustomFieldErrors((prev) => {
+      const next = { ...prev };
+      delete next[slug];
+      return next;
+    });
+  }, []);
+
+  // Validate required custom fields before submit
+  const validateCustomFields = useCallback((): boolean => {
+    const newErrors: Record<string, string> = {};
+    for (const field of customFields) {
+      if (field.required) {
+        const value = customFieldValues[field.slug];
+        if (value === null || value === undefined || value === '') {
+          newErrors[field.slug] = `${field.label} is required`;
+        }
+      }
+    }
+    setCustomFieldErrors(newErrors);
+    return Object.keys(newErrors).length === 0;
+  }, [customFields, customFieldValues]);
+
+  // Wrap onSubmit to include custom fields
+  const handleSubmitWithCustomFields = handleSubmit((data) => {
+    if (!validateCustomFields()) return;
+    onSubmit({
+      ...data,
+      custom_fields: customFieldValues,
+    });
+  });
+
   return (
-    <form id="user-form" onSubmit={handleSubmit(onSubmit)} className="space-y-5" noValidate>
+    <form id="user-form" onSubmit={(e) => { e.preventDefault(); handleSubmitWithCustomFields(); }} className="space-y-5" noValidate>
       {/* Full Name */}
       <div className="space-y-1.5">
         <label htmlFor="user-name" className="text-sm font-medium text-ink">
@@ -224,6 +279,15 @@ export const UserForm: React.FC<UserFormProps> = ({
           <p className="text-xs text-red-500">{errors.hire_date.message}</p>
         )}
       </div>
+
+      {/* ── Custom Fields ── */}
+      <DynamicCustomFields
+        fields={customFields}
+        values={customFieldValues}
+        onChange={handleCustomFieldChange}
+        errors={customFieldErrors}
+        disabled={isSubmitting}
+      />
 
       {/* Hidden submit — triggered by modal footer */}
       <button type="submit" className="hidden" aria-hidden="true" />

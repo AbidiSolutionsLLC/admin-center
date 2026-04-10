@@ -19,7 +19,6 @@ import { cn } from '@/utils/cn';
 import type { Team } from '@/types';
 import { useDepartments } from '@/features/organization/hooks/useDepartments';
 import { toast } from 'sonner';
-import { apiClient } from '@/lib/apiClient';
 
 interface TeamsFilters {
   search: string;
@@ -140,8 +139,8 @@ export default function TeamsPage() {
   const handleSubmit = (formData: TeamFormData) => {
     const normalized = {
       ...formData,
-      department_id: formData.department_id || undefined,
-      team_lead_id: formData.team_lead_id || undefined,
+      department_id: formData.department_id, // Should never be undefined as it's required
+      team_lead_id: formData.team_lead_id || null,
     };
 
     if (editingTeam) {
@@ -161,23 +160,8 @@ export default function TeamsPage() {
     setTeamToArchive(team);
   };
 
-  const handleConfirmArchive = async () => {
+  const handleConfirmArchive = () => {
     if (!teamToArchive) return;
-
-    // Check if team has members before archiving
-    try {
-      const { data } = await apiClient.get(`/teams/${teamToArchive._id}/members`);
-      const memberCount = data?.data?.length ?? 0;
-
-      if (memberCount > 0) {
-        toast.error(`Cannot archive team "${teamToArchive.name}" — it has ${memberCount} active member${memberCount > 1 ? 's' : ''}. Remove all members first.`);
-        setTeamToArchive(null);
-        return;
-      }
-    } catch {
-      // If we can't fetch members, proceed with archive (server will block if needed)
-    }
-
     deleteMutation.mutate(teamToArchive._id, {
       onSuccess: () => setTeamToArchive(null),
       onError: () => setTeamToArchive(null),

@@ -4,7 +4,7 @@ import { Sidebar } from './Sidebar';
 
 export const AdminShell = () => {
   return (
-    <div className="flex h-screen bg-[#F7F8FA]">
+    <div className="flex h-screen bg-surface-base">
       <Sidebar className="w-60 flex-shrink-0" />
       <div className="flex flex-col flex-1 overflow-hidden">
         <main className="flex-1 overflow-y-auto p-6">

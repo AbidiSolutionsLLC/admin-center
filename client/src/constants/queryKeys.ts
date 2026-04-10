@@ -57,6 +57,18 @@ export const QUERY_KEYS = {
   WORKFLOWS: ['workflows'] as const,
   WORKFLOW_DETAIL: (id: string) => ['workflow', id] as const,
   WORKFLOW_RUNS: (id: string) => ['workflow', id, 'runs'] as const,
+  // Locations
+  LOCATIONS: ['locations'] as const,
+  LOCATION_TREE: ['locations', 'tree'] as const,
+  LOCATION_DETAIL: (id: string) => ['location', id] as const,
+  // Custom Fields
+  CUSTOM_FIELDS: (targetObject?: string) =>
+    targetObject ? ['custom-fields', targetObject] as const : ['custom-fields'] as const,
+  CUSTOM_FIELD_DETAIL: (id: string) => ['custom-field', id] as const,
+  // Integrations
+  INTEGRATIONS: ['integrations'] as const,
+  INTEGRATION_DETAIL: (id: string) => ['integration', id] as const,
+  INTEGRATION_SYNC_LOGS: (id: string) => ['integration', id, 'sync-logs'] as const,
   // Notifications
   NOTIFICATION_TEMPLATES: ['notification', 'templates'] as const,
   NOTIFICATION_TEMPLATE_DETAIL: (id: string) => ['notification', 'template', id] as const,

@@ -37,12 +37,19 @@ export const UserOrgAssignmentModal: React.FC<UserOrgAssignmentModalProps> = ({
   const assignMutation = useAssignUserOrg();
 
   const [selectedDeptId, setSelectedDeptId] = useState<string>(user?.department_id ?? '');
-  const [selectedTeamIds, setSelectedTeamIds] = useState<string[]>([]);
+  const [selectedTeamIds, setSelectedTeamIds] = useState<string[]>(
+    user?.teams?.map((t: any) => t._id) ?? []
+  );
 
   // Filter teams by selected department
   const availableTeams = useMemo(() => {
-    if (!teams || !selectedDeptId) return teams ?? [];
-    return teams.filter((t) => t.department_id === selectedDeptId);
+    if (!teams || !selectedDeptId) return [];
+    return teams.filter((t) => {
+      const deptId = typeof t.department_id === 'object' 
+        ? (t.department_id as any)?._id 
+        : t.department_id;
+      return deptId === selectedDeptId;
+    });
   }, [teams, selectedDeptId]);
 
   const handleSubmit = () => {
@@ -89,7 +96,7 @@ export const UserOrgAssignmentModal: React.FC<UserOrgAssignmentModalProps> = ({
           </button>
           <Button
             onClick={handleSubmit}
-            disabled={assignMutation.isPending}
+            disabled={assignMutation.isPending || !selectedDeptId}
             className={cn(
               'h-9 px-4 text-sm font-medium rounded-md bg-primary hover:bg-primary-hover text-white transition-colors',
               'disabled:opacity-50 disabled:cursor-not-allowed'
@@ -115,7 +122,7 @@ export const UserOrgAssignmentModal: React.FC<UserOrgAssignmentModalProps> = ({
             }}
             className={inputClass}
           >
-            <option value="">No department</option>
+            <option value="" disabled>Select a department</option>
             {(departments ?? []).map((dept: Department) => (
               <option key={dept._id} value={dept._id}>
                 {dept.name}

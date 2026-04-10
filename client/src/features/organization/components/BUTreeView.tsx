@@ -115,7 +115,10 @@ const BUNode: React.FC<BUNodeProps> = ({ node, depth }) => {
 
       {/* Children */}
       {isExpanded && (
-        <div className={cn('space-y-2', depth === 0 && 'ml-6 pl-4 border-l-2 border-primary/20')}>
+        <div className={cn(
+          'space-y-2 ml-4 pl-4 border-l-2',
+          depth === 0 ? 'border-primary/20' : 'border-line/50'
+        )}>
           {/* Teams under this department/BU */}
           {hasTeams && (
             <div className="space-y-1 ml-4 pl-4 border-l-2 border-accent/20">

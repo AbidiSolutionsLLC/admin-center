@@ -13,6 +13,7 @@ import { useLocations } from '@/features/locations/hooks/useLocations';
 import { useRoles } from '@/features/roles/useRoles';
 import { UserTable } from '@/features/people/components/UserTable';
 import { InviteModal } from '@/features/people/components/InviteModal';
+import { UserOrgAssignmentModal } from '@/features/people/components/UserOrgAssignmentModal';
 import { UserForm, type UserFormData } from '@/features/people/components/UserForm';
 import { LifecycleStateSelector } from '@/features/people/components/LifecycleStateSelector';
 import { TableSkeleton } from '@/components/ui/TableSkeleton';
@@ -142,6 +143,7 @@ export default function PeoplePage() {
   // ── Modal state ──────────────────────────────────────────────────────
   const [isInviteModalOpen, setIsInviteModalOpen] = useState(false);
   const [editingUser, setEditingUser] = useState<User | null>(null);
+  const [assigningOrgUser, setAssigningOrgUser] = useState<User | null>(null);
   const [changingLifecycleUser, setChangingLifecycleUser] = useState<User | null>(null);
 
   // ── Bulk action modals ─────────────────────────────────────────────
@@ -213,6 +215,14 @@ export default function PeoplePage() {
 
   const handleCloseEdit = useCallback(() => {
     setEditingUser(null);
+  }, []);
+
+  const handleOpenAssignOrg = useCallback((user: User) => {
+    setAssigningOrgUser(user);
+  }, []);
+
+  const handleCloseAssignOrg = useCallback(() => {
+    setAssigningOrgUser(null);
   }, []);
 
   const handleOpenLifecycleChange = useCallback((user: User) => {
@@ -309,6 +319,7 @@ export default function PeoplePage() {
               </button>
             </div>
           ) : (
+<<<<<<< HEAD
             <>
               {/* ── Bulk Action Bar ── */}
               {selectedIds.size > 0 && (
@@ -331,6 +342,14 @@ export default function PeoplePage() {
                 isAllSelected={isAllSelected}
               />
             </>
+=======
+            <UserTable
+              users={filteredUsers}
+              onEdit={handleOpenEdit}
+              onAssignOrg={handleOpenAssignOrg}
+              onChangeState={handleOpenLifecycleChange}
+            />
+>>>>>>> 0212f123cbde2de2952f948712c61f2a54cfb53e
           )}
         </>
       )}
@@ -350,6 +369,15 @@ export default function PeoplePage() {
           onClose={handleCloseEdit}
           departments={departments}
           locations={locations}
+        />
+      )}
+
+      {/* ── Organization Assignment Modal ── */}
+      {assigningOrgUser && (
+        <UserOrgAssignmentModal
+          user={assigningOrgUser}
+          isOpen={!!assigningOrgUser}
+          onClose={handleCloseAssignOrg}
         />
       )}
 
@@ -475,10 +503,10 @@ function StatsSkeleton() {
           className="bg-white rounded-lg border border-line shadow-card p-4"
         >
           <div className="flex items-center justify-between mb-2">
-            <div className="h-3 bg-[#EDF0F5] rounded animate-pulse w-16" />
-            <div className="w-4 h-4 bg-[#EDF0F5] rounded animate-pulse" />
+            <div className="h-3 bg-skeleton rounded animate-pulse w-16" />
+            <div className="w-4 h-4 bg-skeleton rounded animate-pulse" />
           </div>
-          <div className="h-8 bg-[#EDF0F5] rounded animate-pulse w-12" />
+          <div className="h-8 bg-skeleton rounded animate-pulse w-12" />
         </div>
       ))}
     </div>
@@ -630,7 +658,7 @@ function EditUserModal({ user, isOpen, onClose, departments, locations }: EditUs
   const updateUser = useUpdateUser(user._id);
 
   const handleSubmit = useCallback(
-    (formData: UserFormData) => {
+    (formData: UserFormData & { custom_fields?: Record<string, unknown> }) => {
       const normalized = {
         ...formData,
         department_id: formData.department_id || null,
@@ -639,6 +667,7 @@ function EditUserModal({ user, isOpen, onClose, departments, locations }: EditUs
         location_id: formData.location_id || null,
         hire_date: formData.hire_date || null,
         phone: formData.phone || null,
+        custom_fields: formData.custom_fields || {},
       };
 
       updateUser.mutate(normalized, {

@@ -8,6 +8,7 @@ import { Company } from '../models/Company.model';
 import { RefreshToken } from '../models/RefreshToken.model';
 import { Role } from '../models/Role.model';
 import { UserRole } from '../models/UserRole.model';
+import { TeamMember } from '../models/TeamMember.model';
 import { auditLogger } from '../lib/auditLogger';
 import { sendWelcomeEmail, sendBulkWelcomeEmails } from '../lib/emailService';
 import { isValidTransition, getTransitionErrorMessage, LifecycleState } from '../lib/lifecycle';
@@ -85,9 +86,35 @@ const generateTemporaryPassword = (): string => {
 /**
  * Enriches user list with populated department and manager info
  */
-async function enrichUsers(users: any[]): Promise<any[]> {
+/**
+ * Enriches user list with populated department, manager info, and team memberships
+ */
+async function enrichUsers(users: any[], companyId: string): Promise<any[]> {
+  const userIds = users.map(u => u._id);
+
+  // Fetch all team memberships for these users in one query
+  const memberships = await TeamMember.find({
+    company_id: companyId,
+    user_id: { $in: userIds }
+  }).populate('team_id', 'name slug').lean();
+
+  // Group memberships by user_id
+  const membershipMap = new Map<string, any[]>();
+  memberships.forEach(m => {
+    const userId = m.user_id.toString();
+    if (!membershipMap.has(userId)) {
+      membershipMap.set(userId, []);
+    }
+    membershipMap.get(userId)!.push(m.team_id);
+  });
+
   return users.map((user) => {
     const data = { ...user };
+    const userId = user._id.toString();
+
+    // Attach teams
+    data.teams = membershipMap.get(userId) || [];
+
     // Map populated objects to the names expected by the frontend
     if (data.department_id && typeof data.department_id === 'object') {
       data.department = data.department_id;
@@ -150,7 +177,7 @@ export const getUsers = asyncHandler(async (req: Request, res: Response) => {
     .sort({ created_at: -1 })
     .lean();
 
-  const enriched = await enrichUsers(users);
+  const enriched = await enrichUsers(users, req.user.company_id);
   res.status(200).json({ success: true, data: enriched });
 });
 
@@ -173,7 +200,8 @@ export const getUserById = asyncHandler(async (req: Request, res: Response) => {
     throw new AppError('User not found', 404, 'NOT_FOUND');
   }
 
-  res.status(200).json({ success: true, data: user });
+  const [enriched] = await enrichUsers([user.toObject()], req.user.company_id);
+  res.status(200).json({ success: true, data: enriched });
 });
 
 /**
@@ -465,7 +493,7 @@ export const updateUserLifecycle = asyncHandler(async (req: Request, res: Respon
       user.phone = undefined;
       user.avatar_url = undefined;
       user.employee_id = `ARCHIVED-${user._id.toString().slice(-8)}`;
-      
+
       // Clear optional PII
       (user as any).department_id = undefined;
       (user as any).team_id = undefined;
@@ -497,7 +525,7 @@ export const updateUserLifecycle = asyncHandler(async (req: Request, res: Respon
   } catch (automationError) {
     // Log automation errors but don't fail the lifecycle transition
     console.error(`[Lifecycle Automation Error] ${transitionKey}:`, automationError);
-    
+
     // Still log the error as an audit event
     await auditLogger.log({
       req,

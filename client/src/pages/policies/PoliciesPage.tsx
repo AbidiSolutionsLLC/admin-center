@@ -199,7 +199,7 @@ export default function PoliciesPage() {
           ) : (
             <div className="bg-white rounded-lg border border-line shadow-card overflow-hidden">
               <table className="w-full">
-                <thead className="bg-[#F7F8FA] border-b border-line">
+                <thead className="bg-surface-base border-b border-line">
                   <tr>
                     <th className="text-[11px] font-semibold text-ink-secondary uppercase tracking-wider h-10 px-4 text-left">
                       Policy
@@ -398,7 +398,7 @@ function PolicyRow({ policy, onView, onArchive }: PolicyRowProps) {
   const { data: ackStatus } = useAcknowledgmentStatus(policy._id);
 
   return (
-    <tr className="border-b border-line last:border-0 hover:bg-[#F7F8FA] transition-colors duration-100">
+    <tr className="border-b border-line last:border-0 hover:bg-surface-base transition-colors duration-100">
       <td className="h-14 px-4">
         <div>
           <p className="text-sm font-medium text-ink">{policy.title}</p>
@@ -847,7 +847,7 @@ function PolicyVersionsView({
 
       <div className="border border-line rounded-md overflow-hidden">
         <table className="w-full">
-          <thead className="bg-[#F7F8FA] border-b border-line">
+          <thead className="bg-surface-base border-b border-line">
             <tr>
               <th className="text-[11px] font-semibold text-ink-secondary uppercase tracking-wider h-10 px-4 text-left w-10">
                 {/* Checkbox column */}
@@ -871,7 +871,7 @@ function PolicyVersionsView({
               <tr
                 key={version._id}
                 className={cn(
-                  'border-b border-line last:border-0 hover:bg-[#F7F8FA] cursor-pointer transition-colors',
+                  'border-b border-line last:border-0 hover:bg-surface-base cursor-pointer transition-colors',
                   selectedVersions.includes(String(version.version_number)) && 'bg-primary-light'
                 )}
                 onClick={() => toggleVersion(String(version.version_number))}
@@ -1035,7 +1035,7 @@ function PolicyAcknowledgmentsView({ policyId }: { policyId: string }) {
         {acknowledgments && acknowledgments.length > 0 ? (
           <div className="border border-line rounded-md overflow-hidden max-h-64 overflow-y-auto">
             <table className="w-full">
-              <thead className="bg-[#F7F8FA] border-b border-line">
+              <thead className="bg-surface-base border-b border-line">
                 <tr>
                   <th className="text-[11px] font-semibold text-ink-secondary uppercase tracking-wider h-10 px-4 text-left">
                     User

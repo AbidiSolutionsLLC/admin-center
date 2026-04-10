@@ -120,12 +120,13 @@ export default function OrganizationPage() {
     setEditingDept(null);
   };
 
-  const handleSubmit = (formData: DepartmentFormData) => {
+  const handleSubmit = (formData: DepartmentFormData & { custom_fields?: Record<string, unknown> }) => {
     // Normalize empty strings → null for optional IDs
     const normalized = {
       ...formData,
       parent_id: formData.parent_id || null,
       primary_manager_id: formData.primary_manager_id || null,
+      custom_fields: formData.custom_fields || {},
     };
 
     if (editingDept) {

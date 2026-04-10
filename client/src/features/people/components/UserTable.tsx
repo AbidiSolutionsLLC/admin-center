@@ -1,7 +1,7 @@
 // src/features/people/components/UserTable.tsx
 import React, { useMemo } from 'react';
 import type { ColumnDef } from '@tanstack/react-table';
-import { Edit2, MoreVertical, AlertTriangle } from 'lucide-react';
+import { Edit2, MoreVertical, AlertTriangle, Building2 } from 'lucide-react';
 import type { User, LifecycleState } from '@/types';
 import { DataTable } from '@/components/ui/DataTable';
 import { StatusBadge } from '@/components/ui/StatusBadge';
@@ -10,6 +10,7 @@ import { formatDistanceToNow } from 'date-fns';
 interface UserTableProps {
   users: User[];
   onEdit: (user: User) => void;
+  onAssignOrg: (user: User) => void;
   onChangeState?: (user: User) => void;
   selectedIds?: Set<string>;
   onToggleRow?: (userId: string) => void;
@@ -36,9 +37,13 @@ const lifecycleStateConfig: Record<
  * Lifecycle State, Last Login, Actions.
  * Used on: PeoplePage.
  */
+<<<<<<< HEAD
 export const UserTable: React.FC<UserTableProps> = ({ users, onEdit, onChangeState, selectedIds, onToggleRow, onToggleAll, isAllSelected }) => {
   const hasSelection = !!selectedIds && !!onToggleRow && !!onToggleAll;
 
+=======
+export const UserTable: React.FC<UserTableProps> = ({ users, onEdit, onAssignOrg, onChangeState }) => {
+>>>>>>> 0212f123cbde2de2952f948712c61f2a54cfb53e
   const columns = useMemo<ColumnDef<User>[]>(
     () => {
       const cols: ColumnDef<User>[] = [];
@@ -199,6 +204,17 @@ export const UserTable: React.FC<UserTableProps> = ({ users, onEdit, onChangeSta
             >
               <Edit2 className="w-4 h-4" />
             </button>
+            <button
+              onClick={(e) => {
+                e.stopPropagation();
+                onAssignOrg(row.original);
+              }}
+              className="h-8 w-8 flex items-center justify-center rounded-md text-ink-secondary hover:text-ink hover:bg-surface-alt transition-colors"
+              aria-label={`Assign organization for ${row.original.full_name}`}
+              title="Assign Organization"
+            >
+              <Building2 className="w-4 h-4" />
+            </button>
             {onChangeState && (
               <button
                 onClick={(e) => {
@@ -215,11 +231,16 @@ export const UserTable: React.FC<UserTableProps> = ({ users, onEdit, onChangeSta
           </div>
         ),
       },
+<<<<<<< HEAD
       );
 
       return cols;
     },
     [onEdit, onChangeState, hasSelection, selectedIds, onToggleRow, onToggleAll, isAllSelected]
+=======
+    ],
+    [onEdit, onAssignOrg, onChangeState]
+>>>>>>> 0212f123cbde2de2952f948712c61f2a54cfb53e
   );
 
   return <DataTable columns={columns} data={users} onRowClick={onEdit} />;

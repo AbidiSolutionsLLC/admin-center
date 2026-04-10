@@ -329,10 +329,7 @@ export const updateRolePermissions = asyncHandler(async (req: Request, res: Resp
   }
 
   // Get before state for audit
-  const beforePermissions = await RolePermission.find({
-    role_id: roleId,
-    company_id: new Types.ObjectId(companyId),
-  }).lean();
+  const beforePermissions = await RolePermission.find({ role_id: roleId, company_id: companyId }).lean();
 
   // Convert string IDs to ObjectIds
   const updates = validated.permissions.map((p) => ({
@@ -348,10 +345,7 @@ export const updateRolePermissions = asyncHandler(async (req: Request, res: Resp
   );
 
   // Get after state for audit
-  const afterPermissions = await RolePermission.find({
-    role_id: roleId,
-    company_id: new Types.ObjectId(companyId),
-  }).lean();
+  const afterPermissions = await RolePermission.find({ role_id: roleId, company_id: companyId }).lean();
 
   // Audit log
   await auditLogger.log({
@@ -455,10 +449,7 @@ export const getRoleUsers = asyncHandler(async (req: Request, res: Response) => 
   }
 
   // Get user IDs assigned to this role
-  const userRoles = await UserRole.find({
-    role_id: roleId,
-    company_id: new Types.ObjectId(companyId),
-  }).lean();
+  const userRoles = await UserRole.find({ role_id: roleId, company_id: companyId }).lean();
   const userIds = userRoles.map((ur) => ur.user_id);
 
   const users = await User.find({

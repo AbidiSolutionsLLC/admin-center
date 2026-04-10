@@ -90,7 +90,10 @@ export default function AuditLogsPage() {
       {/* Error State */}
       {error && (
         <div className="bg-white rounded-lg border border-line shadow-card p-12 text-center">
-          <p className="text-sm text-error">Failed to load audit logs</p>
+          <p className="text-sm text-error mb-3">Failed to load audit logs</p>
+          <p className="text-sm text-ink-secondary mb-4">
+            Something went wrong. Check your connection and try again.
+          </p>
         </div>
       )}
 

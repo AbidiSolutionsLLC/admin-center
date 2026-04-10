@@ -10,6 +10,7 @@ export interface IDepartment extends Document {
   parent_id?: Types.ObjectId | string | null;
   primary_manager_id?: Types.ObjectId | string | null;
   secondary_manager_id?: Types.ObjectId | string | null;
+  custom_fields: Record<string, unknown>;
   is_active: boolean;
   created_at: Date;
   updated_at: Date;
@@ -23,6 +24,7 @@ const DepartmentSchema = new Schema<IDepartment>({
   parent_id: { type: Schema.Types.ObjectId, ref: 'Department' },
   primary_manager_id: { type: Schema.Types.ObjectId, ref: 'User' },
   secondary_manager_id: { type: Schema.Types.ObjectId, ref: 'User' },
+  custom_fields: { type: Schema.Types.Mixed, default: {} },
   is_active: { type: Boolean, default: true },
 }, { timestamps: { createdAt: 'created_at', updatedAt: 'updated_at' } });
 

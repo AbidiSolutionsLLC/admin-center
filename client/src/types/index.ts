@@ -10,6 +10,7 @@ export interface Department {
   primary_manager_id: string | null;
   secondary_manager_id?: string | null;
   primary_manager?: { _id: string; full_name: string; avatar_url?: string };
+  custom_fields: Record<string, unknown>;
   is_active: boolean;
   created_at: string;
   updated_at: string;
@@ -31,6 +32,166 @@ export interface UpdateDepartmentInput extends Partial<CreateDepartmentInput> {}
 
 export interface OrgTreeNode extends Department {
   children?: OrgTreeNode[];
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Locations
+// ─────────────────────────────────────────────────────────────────────────────
+
+export type LocationType = 'region' | 'country' | 'city' | 'office';
+
+export interface Location {
+  _id: string;
+  company_id: string;
+  name: string;
+  type: LocationType;
+  parent_id?: string | null;
+  parent?: { _id: string; name: string; type: LocationType };
+  timezone: string;
+  is_headquarters: boolean;
+  address?: string;
+  working_hours?: {
+    start: string;
+    end: string;
+    days: number[];
+  };
+  user_count?: number;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface LocationTreeNode extends Location {
+  children?: LocationTreeNode[];
+}
+
+export interface CreateLocationInput {
+  name: string;
+  type: LocationType;
+  parent_id?: string | null;
+  timezone: string;
+  is_headquarters?: boolean;
+  address?: string | null;
+  working_hours?: {
+    start: string;
+    end: string;
+    days: number[];
+  } | null;
+}
+
+export interface UpdateLocationInput extends Partial<CreateLocationInput> {}
+
+export interface LocationFilters {
+  search: string;
+  type: LocationType | '';
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Custom Fields
+// ─────────────────────────────────────────────────────────────────────────────
+
+export type FieldType = 'text' | 'number' | 'date' | 'select' | 'multi_select' | 'checkbox' | 'textarea';
+export type TargetObject = 'user' | 'department' | 'policy';
+export type VisibilityRule = 'all' | 'admin_only' | 'role_specific';
+
+export interface CustomField {
+  _id: string;
+  company_id: string;
+  name: string;
+  slug: string;
+  field_type: FieldType;
+  target_object: TargetObject;
+  label: string;
+  placeholder?: string;
+  description?: string;
+  required: boolean;
+  select_options?: string[];
+  visibility: VisibilityRule;
+  visible_roles?: string[];
+  display_order: number;
+  is_active: boolean;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface CreateCustomFieldInput {
+  name: string;
+  field_type: FieldType;
+  target_object: TargetObject;
+  label: string;
+  placeholder?: string | null;
+  description?: string | null;
+  required?: boolean;
+  select_options?: string[] | null;
+  visibility?: VisibilityRule;
+  visible_roles?: string[] | null;
+  display_order?: number;
+}
+
+export interface UpdateCustomFieldInput extends Partial<Omit<CreateCustomFieldInput, 'field_type'>> {}
+
+export interface CustomFieldFilters {
+  target_object: TargetObject | '';
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Integrations
+// ─────────────────────────────────────────────────────────────────────────────
+
+export type IntegrationType = 'slack' | 'jira' | 'google_workspace' | 'github' | 'custom';
+export type IntegrationStatus = 'connected' | 'disconnected' | 'error';
+export type SyncStatus = 'idle' | 'syncing' | 'success' | 'failed' | 'partial';
+export type SyncFrequency = 'manual' | 'hourly' | 'daily' | 'weekly';
+
+export interface Integration {
+  _id: string;
+  company_id: string;
+  name: string;
+  type: IntegrationType;
+  status: IntegrationStatus;
+  field_mapping: Record<string, string>;
+  sync_enabled: boolean;
+  sync_frequency: SyncFrequency;
+  last_sync_at?: string;
+  last_sync_status: SyncStatus;
+  last_sync_message?: string;
+  connected_at?: string;
+  disconnected_at?: string;
+  is_active: boolean;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface ConnectIntegrationInput {
+  type: IntegrationType;
+  credentials: Record<string, unknown>;
+  field_mapping?: Record<string, string>;
+  sync_enabled?: boolean;
+  sync_frequency?: SyncFrequency;
+}
+
+export interface UpdateIntegrationInput {
+  credentials?: Record<string, unknown>;
+  field_mapping?: Record<string, string>;
+  sync_enabled?: boolean;
+  sync_frequency?: SyncFrequency;
+}
+
+export interface IntegrationSyncLog {
+  _id: string;
+  company_id: string;
+  integration_id: string;
+  integration_type: string;
+  triggered_by: 'manual' | 'schedule' | 'webhook';
+  status: SyncStatus;
+  started_at: string;
+  completed_at?: string;
+  duration_ms?: number;
+  records_processed?: number;
+  records_created?: number;
+  records_updated?: number;
+  records_failed?: number;
+  error_message?: string;
+  created_at: string;
 }
 
 export interface Insight {

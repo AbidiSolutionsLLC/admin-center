@@ -103,35 +103,42 @@ export const runIntelligenceRules = async (companyId: string | Types.ObjectId): 
   }
 
   // ────────────────────────────────────────────────────────────────────────────
-  // RULE-05: Orphan team (type='team' with no parent)
+  // RULE-05: Orphan team (Team model with department_id pointing to non-existent dept)
   // ────────────────────────────────────────────────────────────────────────────
 
-  const orphanTeams = await Department.find({
+  // Get all active teams
+  const allTeams = await Team.find({
     company_id: companyObjectId,
     is_active: true,
-    type: 'team',
-    $or: [
-      { parent_id: { $exists: false } },
-      { parent_id: null }
-    ]
   }).lean();
 
-  for (const team of orphanTeams) {
-    insightsToUpsert.push({
-      company_id: companyObjectId,
-      category: 'health',
-      severity: 'warning',
-      title: `${team.name} is an orphan team`,
-      description: 'Teams should be nested under a parent department or division for proper organizational structure.',
-      reasoning: `Team "${team.name}" has no parent_id set, making it disconnected from the organizational hierarchy.`,
-      affected_object_type: 'Department',
-      affected_object_id: team._id.toString(),
-      affected_object_label: team.name,
-      remediation_url: `/organization/${team._id}`,
-      remediation_action: 'Assign this team to a parent department',
-      is_resolved: false,
-      detected_at: new Date(),
-    });
+  // Get all active department IDs for RULE-05
+  const allDeptsForRule05 = await Department.find({
+    company_id: companyObjectId,
+    is_active: true,
+  }).lean();
+
+  const deptIdSet = new Set(allDeptsForRule05.map((d) => d._id.toString()));
+
+  for (const team of allTeams) {
+    const deptId = team.department_id?.toString();
+    if (!deptId || !deptIdSet.has(deptId)) {
+      insightsToUpsert.push({
+        company_id: companyObjectId,
+        category: 'health',
+        severity: 'warning',
+        title: `${team.name} is an orphan team`,
+        description: 'Teams should be nested under a parent department or division for proper organizational structure.',
+        reasoning: `Team "${team.name}" has no valid parent department (department_id: ${deptId ?? 'null'}). It is disconnected from the organizational hierarchy.`,
+        affected_object_type: 'Team',
+        affected_object_id: team._id.toString(),
+        affected_object_label: team.name,
+        remediation_url: `/teams/${team._id}`,
+        remediation_action: 'Assign this team to a valid parent department',
+        is_resolved: false,
+        detected_at: new Date(),
+      });
+    }
   }
 
   // ────────────────────────────────────────────────────────────────────────────
@@ -403,29 +410,39 @@ export const runIntelligenceRules = async (companyId: string | Types.ObjectId): 
     );
   }
 
-  // Resolve RULE-05 insights where the team now has a parent
-  const resolvedParentInsights = await Department.find({
+  // Resolve RULE-05 insights where the team now has a valid parent department
+  const resolvedParentInsights = await Team.find({
     company_id: companyObjectId,
     is_active: true,
-    type: 'team',
-    parent_id: { $exists: true, $ne: null }
+    department_id: { $exists: true, $ne: null }
   }).lean();
 
+  // Get valid department IDs
+  const validDeptIds = await Department.find({
+    company_id: companyObjectId,
+    is_active: true,
+  }).distinct('_id');
+
+  const validDeptIdSet = new Set(validDeptIds.map((id) => id.toString()));
+
   for (const team of resolvedParentInsights) {
-    await Insight.updateMany(
-      {
-        company_id: companyObjectId,
-        affected_object_id: team._id.toString(),
-        title: `${team.name} is an orphan team`,
-        is_resolved: false,
-      },
-      {
-        $set: {
-          is_resolved: true,
-          resolved_at: new Date(),
+    const deptId = team.department_id?.toString();
+    if (deptId && validDeptIdSet.has(deptId)) {
+      await Insight.updateMany(
+        {
+          company_id: companyObjectId,
+          affected_object_id: team._id.toString(),
+          title: `${team.name} is an orphan team`,
+          is_resolved: false,
+        },
+        {
+          $set: {
+            is_resolved: true,
+            resolved_at: new Date(),
+          }
         }
-      }
-    );
+      );
+    }
   }
 
   // ────────────────────────────────────────────────────────────────────────────

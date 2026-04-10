@@ -1,10 +1,12 @@
 // src/features/organization/components/DepartmentForm.tsx
-import React from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import { useForm, Controller } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { z } from 'zod';
 import { UserSelect } from '@/components/ui/UserSelect';
-import type { Department } from '@/types';
+import { DynamicCustomFields } from '@/features/data-fields/components/DynamicCustomFields';
+import { useCustomFields } from '@/features/data-fields/hooks/useCustomFields';
+import type { Department, CustomField } from '@/types';
 import { cn } from '@/utils/cn';
 
 const schema = z.object({
@@ -14,18 +16,23 @@ const schema = z.object({
   primary_manager_id: z
     .string()
     .optional()
-    .nullable()
-    .refine(
-      (val) => !val || /^[a-fA-F0-9]{24}$/.test(val),
-      { message: 'Must be a valid 24-character MongoDB ObjectId' }
-    ),
+    .nullable(),
+}).refine(data => {
+  // Only Business Units are allowed to be top-level (no parent_id)
+  if (data.type !== 'business_unit' && !data.parent_id) {
+    return false;
+  }
+  return true;
+}, {
+  message: 'All units except Business Units must have a parent to avoid being orphaned.',
+  path: ['parent_id'],
 });
 
 export type DepartmentFormData = z.infer<typeof schema>;
 
 interface DepartmentFormProps {
   initialData?: Department;
-  onSubmit: (data: DepartmentFormData) => void;
+  onSubmit: (data: DepartmentFormData & { custom_fields?: Record<string, unknown> }) => void;
   departments: Department[];
   isSubmitting?: boolean;
 }
@@ -52,6 +59,7 @@ const inputClass = (hasError?: boolean) =>
 /**
  * DepartmentForm Component
  * Create/edit form for departments with full Zod validation.
+ * Includes dynamic custom fields for all field types.
  * Submits via a hidden button (id="department-form") triggered from the modal footer.
  * Used on: OrganizationPage (create + edit modal).
  */
@@ -65,21 +73,67 @@ export const DepartmentForm: React.FC<DepartmentFormProps> = ({
     register,
     handleSubmit,
     control,
+    watch,
     formState: { errors },
   } = useForm<DepartmentFormData>({
     resolver: zodResolver(schema),
     defaultValues: {
       name: initialData?.name ?? '',
       type: initialData?.type ?? 'department',
-      parent_id: initialData?.parent_id ?? '',
-      primary_manager_id: initialData?.primary_manager_id ?? '',
+      parent_id: typeof initialData?.parent_id === 'object' ? (initialData.parent_id as any)?._id : initialData?.parent_id ?? '',
+      primary_manager_id: typeof initialData?.primary_manager_id === 'object' ? (initialData.primary_manager_id as any)?._id : (initialData?.primary_manager_id as any) ?? '',
     },
   });
 
+  const selectedType = watch('type');
   const availableParents = departments.filter((d) => d._id !== initialData?._id);
 
+  // ── Custom fields ──────────────────────────────────────────────────────
+  const { data: customFields = [] } = useCustomFields('department');
+  const [customFieldValues, setCustomFieldValues] = useState<Record<string, unknown>>(
+    initialData?.custom_fields ?? {}
+  );
+  const [customFieldErrors, setCustomFieldErrors] = useState<Record<string, string>>({});
+
+  useEffect(() => {
+    if (initialData?.custom_fields && Object.keys(initialData.custom_fields).length > 0) {
+      setCustomFieldValues(initialData.custom_fields);
+    }
+  }, [initialData]);
+
+  const handleCustomFieldChange = useCallback((slug: string, value: unknown) => {
+    setCustomFieldValues((prev) => ({ ...prev, [slug]: value }));
+    setCustomFieldErrors((prev) => {
+      const next = { ...prev };
+      delete next[slug];
+      return next;
+    });
+  }, []);
+
+  const validateCustomFields = useCallback((): boolean => {
+    const newErrors: Record<string, string> = {};
+    for (const field of customFields) {
+      if (field.required) {
+        const value = customFieldValues[field.slug];
+        if (value === null || value === undefined || value === '') {
+          newErrors[field.slug] = `${field.label} is required`;
+        }
+      }
+    }
+    setCustomFieldErrors(newErrors);
+    return Object.keys(newErrors).length === 0;
+  }, [customFields, customFieldValues]);
+
+  const handleSubmitWithCustomFields = handleSubmit((data) => {
+    if (!validateCustomFields()) return;
+    onSubmit({
+      ...data,
+      custom_fields: customFieldValues,
+    });
+  });
+
   return (
-    <form id="department-form" onSubmit={handleSubmit(onSubmit)} className="space-y-5" noValidate>
+    <form id="department-form" onSubmit={(e) => { e.preventDefault(); handleSubmitWithCustomFields(); }} className="space-y-5" noValidate>
       {/* Name */}
       <div className="space-y-1.5">
         <label htmlFor="dept-name" className="text-sm font-medium text-ink">
@@ -122,15 +176,18 @@ export const DepartmentForm: React.FC<DepartmentFormProps> = ({
       {/* Parent Department */}
       <div className="space-y-1.5">
         <label htmlFor="dept-parent" className="text-sm font-medium text-ink">
-          Parent Department
+          Parent Department {selectedType !== 'business_unit' && <span className="text-red-500">*</span>}
         </label>
         <select
           id="dept-parent"
           {...register('parent_id')}
           disabled={isSubmitting}
-          className={inputClass(false)}
+          className={inputClass(!!errors.parent_id)}
         >
-          <option value="">None (Top Level)</option>
+          {selectedType === 'business_unit' && <option value="">None (Top Level)</option>}
+          <option value="" disabled={selectedType !== 'business_unit'}>
+            {selectedType === 'business_unit' ? 'None (Top Level)' : 'Select a parent...'}
+          </option>
           {availableParents.map((d) => (
             <option key={d._id} value={d._id}>
               {d.name}
@@ -138,8 +195,13 @@ export const DepartmentForm: React.FC<DepartmentFormProps> = ({
             </option>
           ))}
         </select>
+        {errors.parent_id && (
+          <p className="text-xs text-red-500">{errors.parent_id.message}</p>
+        )}
         <p className="text-[11px] text-ink-muted">
-          Leave empty to create a top-level unit.
+          {selectedType === 'business_unit' 
+            ? 'Leave empty to create a top-level unit.' 
+            : 'Every unit must belong to a Business Unit hierarchy.'}
         </p>
       </div>
 
@@ -168,6 +230,15 @@ export const DepartmentForm: React.FC<DepartmentFormProps> = ({
           <p className="text-xs text-red-500">{errors.primary_manager_id.message}</p>
         )}
       </div>
+
+      {/* ── Custom Fields ── */}
+      <DynamicCustomFields
+        fields={customFields}
+        values={customFieldValues}
+        onChange={handleCustomFieldChange}
+        errors={customFieldErrors}
+        disabled={isSubmitting}
+      />
 
       {/* Hidden submit — triggered by modal footer */}
       <button type="submit" className="hidden" aria-hidden="true" />

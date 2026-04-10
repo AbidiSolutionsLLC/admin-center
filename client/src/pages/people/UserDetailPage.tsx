@@ -5,6 +5,7 @@ import { useUserDetail } from '@/features/people/hooks/useUserDetail';
 import { ReportingLinesPanel } from '@/features/people/components/ReportingLinesPanel';
 import { TableSkeleton } from '@/components/ui/TableSkeleton';
 import { ErrorState } from '@/components/ui/ErrorState';
+import { EmptyState } from '@/components/ui/EmptyState';
 import { ROUTES } from '@/constants/routes';
 import { cn } from '@/utils/cn';
 
@@ -41,8 +42,8 @@ export default function UserDetailPage() {
             <ArrowLeft className="w-5 h-5 text-ink-secondary" />
           </button>
           <div>
-            <div className="h-6 bg-[#EDF0F5] rounded animate-pulse w-48 mb-2" />
-            <div className="h-3 bg-[#EDF0F5] rounded animate-pulse w-32" />
+            <div className="h-6 bg-surface-alt rounded animate-pulse w-48 mb-2" />
+            <div className="h-3 bg-surface-alt rounded animate-pulse w-32" />
           </div>
         </div>
         <TableSkeleton rows={3} columns={1} />
@@ -62,11 +63,20 @@ export default function UserDetailPage() {
           </button>
           <h1 className="text-[22px] font-semibold tracking-tight text-ink">User Details</h1>
         </div>
-        <ErrorState
-          title="Failed to load user details"
-          description="Something went wrong fetching user data. Please try again."
-          onRetry={refetch}
-        />
+        {!user ? (
+          <EmptyState
+            icon={Users}
+            title="User not found"
+            description="This user may have been archived or does not exist."
+            action={{ label: 'Back to People', onClick: () => navigate(ROUTES.PEOPLE) }}
+          />
+        ) : (
+          <ErrorState
+            title="Failed to load user details"
+            description="Something went wrong fetching user data. Please try again."
+            onRetry={refetch}
+          />
+        )}
       </div>
     );
   }

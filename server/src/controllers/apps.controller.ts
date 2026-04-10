@@ -603,10 +603,7 @@ export const getAppUsers = asyncHandler(async (req: Request, res: Response) => {
     if (assignment.target_type === 'user') {
       userIds.add(assignment.target_id.toString());
     } else if (assignment.target_type === 'role') {
-      const userRoles = await UserRole.find({
-        role_id: assignment.target_id,
-        company_id: new Types.ObjectId(companyId),
-      }).lean();
+      const userRoles = await UserRole.find({ role_id: assignment.target_id, company_id: companyId }).lean();
       userRoles.forEach((ur) => userIds.add(ur.user_id.toString()));
     } else if (assignment.target_type === 'department') {
       const users = await User.find({
