@@ -1013,27 +1013,3 @@ export interface TestTemplateResult {
 export interface UnreadCount {
   count: number;
 }
-
-// ─────────────────────────────────────────────────────────────────────────────
-// Locations
-// ─────────────────────────────────────────────────────────────────────────────
-
-export type LocationType = 'region' | 'country' | 'city' | 'office';
-
-export interface Location {
-  _id: string;
-  company_id: string;
-  name: string;
-  type: LocationType;
-  parent_id?: string;
-  timezone: string;
-  is_headquarters: boolean;
-  address?: string;
-  working_hours?: {
-    start: string;
-    end: string;
-    days: number[];
-  };
-  created_at: string;
-  updated_at: string;
-}

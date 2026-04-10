@@ -30,7 +30,6 @@ import type {
   WorkflowStatus,
   WorkflowTrigger,
   WorkflowActionType,
-  WorkflowStep,
   WorkflowRun,
 } from '@/types';
 
@@ -212,8 +211,6 @@ export default function WorkflowsPage() {
                         setSelectedWorkflow(wf);
                         setActiveDetailTab('steps');
                       }}
-                      onEnable={() => enableMutation.mutate()}
-                      onDisable={() => disableMutation.mutate()}
                       onDelete={() => deleteMutation.mutate({ workflow_id: wf._id })}
                     />
                   ))}
@@ -356,12 +353,10 @@ function FilterBar({
 interface WorkflowRowProps {
   workflow: Workflow;
   onView: () => void;
-  onEnable: () => void;
-  onDisable: () => void;
   onDelete: () => void;
 }
 
-function WorkflowRow({ workflow, onView, onEnable, onDisable, onDelete }: WorkflowRowProps) {
+function WorkflowRow({ workflow, onView, onDelete }: WorkflowRowProps) {
   const enableMutation = useEnableWorkflow(workflow._id);
   const disableMutation = useDisableWorkflow(workflow._id);
 
@@ -406,7 +401,7 @@ function WorkflowRow({ workflow, onView, onEnable, onDisable, onDelete }: Workfl
           </button>
           {workflow.status === 'draft' && (
             <button
-              onClick={onEnable}
+              onClick={() => enableMutation.mutate()}
               disabled={enableMutation.isPending}
               className="h-7 px-2 text-xs font-medium rounded-md border border-line bg-white text-emerald-600 hover:bg-emerald-50 transition-colors inline-flex items-center gap-1 disabled:opacity-50"
               title="Enable workflow"
@@ -416,7 +411,7 @@ function WorkflowRow({ workflow, onView, onEnable, onDisable, onDelete }: Workfl
           )}
           {workflow.status === 'enabled' && (
             <button
-              onClick={onDisable}
+              onClick={() => disableMutation.mutate()}
               disabled={disableMutation.isPending}
               className="h-7 px-2 text-xs font-medium rounded-md border border-line bg-white text-warning hover:bg-warning-light transition-colors inline-flex items-center gap-1 disabled:opacity-50"
               title="Disable workflow"
@@ -693,7 +688,7 @@ function WorkflowStepsView({ workflowId, status }: { workflowId: string; status:
   // Drag-and-drop reordering
   const handleDragStart = useCallback(
     (index: number) => {
-      (window as unknown as Record<number>).dragIndex = index;
+      (window as unknown as Record<string, number>).dragIndex = index;
     },
     []
   );
@@ -704,7 +699,7 @@ function WorkflowStepsView({ workflowId, status }: { workflowId: string; status:
 
   const handleDrop = useCallback(
     (dropIndex: number) => {
-      const dragIndex = (window as unknown as Record<number>).dragIndex;
+      const dragIndex = (window as unknown as Record<string, number>).dragIndex;
       if (dragIndex === undefined || dragIndex === dropIndex || !isEditable) return;
 
       const reorderedSteps = [...steps];
@@ -766,6 +761,7 @@ function WorkflowStepsView({ workflowId, status }: { workflowId: string; status:
             <div
               key={step._id}
               draggable={isEditable}
+              onDragStart={isEditable ? () => handleDragStart(index) : undefined}
               onDragOver={isEditable ? handleDragOver : undefined}
               onDrop={isEditable ? () => handleDrop(index) : undefined}
               className={cn(
