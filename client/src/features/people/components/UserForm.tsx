@@ -4,13 +4,9 @@ import { useForm, Controller } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { z } from 'zod';
 import { UserSelect } from '@/components/ui/UserSelect';
-<<<<<<< HEAD
-import type { User, EmploymentType, Department, Location } from '@/types';
-=======
 import { DynamicCustomFields } from '@/features/data-fields/components/DynamicCustomFields';
 import { useCustomFields } from '@/features/data-fields/hooks/useCustomFields';
-import type { User, EmploymentType, Department, CustomField } from '@/types';
->>>>>>> 0212f123cbde2de2952f948712c61f2a54cfb53e
+import type { User, EmploymentType, Department, CustomField, Location } from '@/types';
 import { cn } from '@/utils/cn';
 
 const schema = z.object({

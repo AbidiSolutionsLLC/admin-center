@@ -319,7 +319,6 @@ export default function PeoplePage() {
               </button>
             </div>
           ) : (
-<<<<<<< HEAD
             <>
               {/* ── Bulk Action Bar ── */}
               {selectedIds.size > 0 && (
@@ -335,6 +334,7 @@ export default function PeoplePage() {
               <UserTable
                 users={filteredUsers}
                 onEdit={handleOpenEdit}
+                onAssignOrg={handleOpenAssignOrg}
                 onChangeState={handleOpenLifecycleChange}
                 selectedIds={selectedIds}
                 onToggleRow={toggleRow}
@@ -342,14 +342,6 @@ export default function PeoplePage() {
                 isAllSelected={isAllSelected}
               />
             </>
-=======
-            <UserTable
-              users={filteredUsers}
-              onEdit={handleOpenEdit}
-              onAssignOrg={handleOpenAssignOrg}
-              onChangeState={handleOpenLifecycleChange}
-            />
->>>>>>> 0212f123cbde2de2952f948712c61f2a54cfb53e
           )}
         </>
       )}
@@ -369,6 +361,15 @@ export default function PeoplePage() {
           onClose={handleCloseEdit}
           departments={departments}
           locations={locations}
+        />
+      )}
+
+      {/* ── Organization Assignment Modal ── */}
+      {assigningOrgUser && (
+        <UserOrgAssignmentModal
+          user={assigningOrgUser}
+          isOpen={!!assigningOrgUser}
+          onClose={handleCloseAssignOrg}
         />
       )}
 
