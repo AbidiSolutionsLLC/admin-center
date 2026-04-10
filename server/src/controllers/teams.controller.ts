@@ -7,6 +7,7 @@ import { TeamMember } from '../models/TeamMember.model';
 import { User } from '../models/User.model';
 import { auditLogger } from '../lib/auditLogger';
 import { AppError } from '../utils/AppError';
+import { slugify } from '../utils/slugify';
 
 // ── Zod Schemas ──────────────────────────────────────────────────────────────
 
@@ -92,6 +93,22 @@ export const getTeamById = asyncHandler(async (req: Request, res: Response) => {
 export const createTeam = asyncHandler(async (req: Request, res: Response) => {
   const input = CreateTeamSchema.parse(req.body);
 
+  // Check for duplicate slug within the same company
+  const slug = slugify(input.name);
+  const existing = await Team.findOne({
+    company_id: req.user.company_id,
+    slug,
+    is_active: true,
+  } as any);
+
+  if (existing) {
+    throw new AppError(
+      `A team with the name "${input.name}" already exists.`,
+      400,
+      'DUPLICATE_TEAM_NAME'
+    );
+  }
+
   const team = await Team.create({
     ...input,
     department_id: input.department_id || undefined,
@@ -120,6 +137,25 @@ export const createTeam = asyncHandler(async (req: Request, res: Response) => {
 export const updateTeam = asyncHandler(async (req: Request, res: Response) => {
   console.log("Update Team Request Body:", req.body);
   const input = UpdateTeamSchema.parse(req.body);
+
+  // If name is being changed, check for duplicate slug
+  if (input.name) {
+    const slug = slugify(input.name);
+    const existing = await Team.findOne({
+      company_id: req.user.company_id,
+      slug,
+      _id: { $ne: req.params.id },
+      is_active: true,
+    } as any);
+
+    if (existing) {
+      throw new AppError(
+        `Another team with the name "${input.name}" already exists.`,
+        400,
+        'DUPLICATE_TEAM_NAME'
+      );
+    }
+  }
 
   const team = await Team.findOne({
     _id: req.params.id,

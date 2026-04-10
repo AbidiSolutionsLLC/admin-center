@@ -10,15 +10,29 @@ interface LogParams {
   object_label: string;
   before_state?: unknown | null;
   after_state?: unknown | null;
+  actor_override?: {
+    userId: string;
+    email: string;
+    company_id: any;
+  };
 }
 
 export const auditLogger = {
   log: async (params: LogParams): Promise<void> => {
     try {
+      const company_id = params.actor_override?.company_id || params.req.user?.company_id;
+      const actor_id = params.actor_override?.userId || params.req.user?.userId;
+      const actor_email = params.actor_override?.email || params.req.user?.email;
+
+      if (!company_id) {
+        console.warn(`[AuditLog] Missing company_id for action: ${params.action}`);
+        return;
+      }
+
       await AuditEvent.create({
-        company_id: params.req.user.company_id,
-        actor_id: params.req.user.userId,
-        actor_email: params.req.user.email,
+        company_id,
+        actor_id: actor_id || 'system',
+        actor_email: actor_email || 'system@admin-center.com',
         action: params.action,
         module: params.module,
         object_type: params.object_type,

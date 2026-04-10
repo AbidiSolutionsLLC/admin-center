@@ -9,6 +9,7 @@ import { ROUTES } from './constants/routes';
 
 // Pages
 import LoginPage from './pages/auth/LoginPage';
+import OnboardingPage from './pages/auth/OnboardingPage';
 import OverviewPage from './pages/overview/OverviewPage';
 import OrganizationPage from './pages/organization/OrganizationPage';
 import TeamsPage from './pages/teams/TeamsPage';
@@ -31,6 +32,7 @@ function App() {
         <Routes>
           <Route element={<GuestGuard />}>
             <Route path={ROUTES.LOGIN} element={<LoginPage />} />
+            <Route path={ROUTES.ONBOARDING} element={<OnboardingPage />} />
           </Route>
 
           <Route element={<AuthGuard />}>

@@ -16,7 +16,9 @@ export type SecurityEventType =
   | 'token_revoked'
   | 'suspicious_activity_detected'
   | 'account_locked'
-  | 'account_unlocked';
+  | 'account_unlocked'
+  | 'password_setup_success'
+  | 'password_setup_failure';
 
 export interface ISecurityEvent extends Document {
   company_id: Types.ObjectId;
@@ -52,6 +54,8 @@ const SecurityEventSchema = new Schema<ISecurityEvent>({
       'suspicious_activity_detected',
       'account_locked',
       'account_unlocked',
+      'password_setup_success',
+      'password_setup_failure',
     ],
     required: true,
   },

@@ -12,6 +12,7 @@ import { Insight } from '../models/Insight.model';
 import { auditLogger } from '../lib/auditLogger';
 import { runIntelligenceRules } from '../lib/intelligence';
 import { AppError } from '../utils/AppError';
+import { slugify } from '../utils/slugify';
 
 // ── Zod Schemas ──────────────────────────────────────────────────────────────
 
@@ -147,6 +148,22 @@ export const getDepartmentById = asyncHandler(async (req: Request, res: Response
 export const createDepartment = asyncHandler(async (req: Request, res: Response) => {
   const input = CreateDepartmentSchema.parse(req.body);
 
+  // Check for duplicate slug within the same company
+  const slug = slugify(input.name);
+  const existing = await Department.findOne({
+    company_id: req.user.company_id,
+    slug,
+    is_active: true,
+  } as any);
+
+  if (existing) {
+    throw new AppError(
+      `A department with the name "${input.name}" already exists.`,
+      400,
+      'DUPLICATE_DEPARTMENT_NAME'
+    );
+  }
+
   const dept = await Department.create({
     ...input,
     // Normalize empty strings → undefined so Mongoose doesn't store ''
@@ -183,6 +200,25 @@ export const createDepartment = asyncHandler(async (req: Request, res: Response)
 export const updateDepartment = asyncHandler(async (req: Request, res: Response) => {
   console.log("Update Department Request Body:", req.body);
   const input = UpdateDepartmentSchema.parse(req.body);
+
+  // If name is being changed, check for duplicate slug
+  if (input.name) {
+    const slug = slugify(input.name);
+    const existing = await Department.findOne({
+      company_id: req.user.company_id,
+      slug,
+      _id: { $ne: req.params.id },
+      is_active: true,
+    } as any);
+
+    if (existing) {
+      throw new AppError(
+        `Another department with the name "${input.name}" already exists.`,
+        400,
+        'DUPLICATE_DEPARTMENT_NAME'
+      );
+    }
+  }
 
   const dept = await Department.findOne({
     _id: req.params.id,

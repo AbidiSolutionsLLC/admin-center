@@ -20,4 +20,5 @@ export const ROUTES = {
   INTEGRATIONS: '/integrations',
   AUDIT_LOGS: '/audit-logs',
   LOGIN: '/login',
+  ONBOARDING: '/onboarding',
 } as const;

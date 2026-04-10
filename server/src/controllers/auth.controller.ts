@@ -9,6 +9,8 @@ import { SecurityEvent } from '../models/SecurityEvent.model';
 import { SecurityPolicy } from '../models/SecurityPolicy.model';
 import { signAccessToken, signRefreshToken, AdminClaim } from '../lib/tokenService';
 import { AppError } from '../utils/AppError';
+import { z } from 'zod';
+import { auditLogger } from '../lib/auditLogger';
 
 // 7 days in milliseconds
 const REFRESH_TOKEN_MAX_AGE = 7 * 24 * 60 * 60 * 1000;
@@ -308,5 +310,89 @@ export const getMe = asyncHandler(async (req: Request, res: Response) => {
     data: {
       user
     }
+  });
+});
+
+const SetupPasswordSchema = z.object({
+  email: z.string().email(),
+  token: z.string().min(1),
+  newPassword: z.string().min(8),
+});
+
+export const setupPassword = asyncHandler(async (req: Request, res: Response) => {
+  const result = SetupPasswordSchema.safeParse(req.body);
+  if (!result.success) {
+    throw new AppError(result.error.errors[0].message, 400, 'BAD_REQUEST');
+  }
+  const { email, token, newPassword } = result.data;
+
+  // Find user by email
+  const user = await User.findOne({ email: email.toLowerCase() }).select('+password_hash');
+  
+  if (!user) {
+    throw new AppError('User not found', 404, 'NOT_FOUND');
+  }
+
+  // Verify token (current temporary password)
+  const isMatch = await bcrypt.compare(token, user.password_hash);
+  if (!isMatch) {
+    await logSecurityEvent({
+      company_id: user.company_id,
+      user_id: user._id,
+      email: email.toLowerCase(),
+      event_type: 'password_setup_failure',
+      ip_address: req.ip,
+      user_agent: req.headers['user-agent'],
+      is_suspicious: true,
+      metadata: { reason: 'invalid_token' },
+    });
+    throw new AppError('Invalid or expired token', 400, 'INVALID_TOKEN');
+  }
+
+  // Hash new password
+  const salt = await bcrypt.genSalt(10);
+  const password_hash = await bcrypt.hash(newPassword, salt);
+
+  // Update user
+  const oldState = user.lifecycle_state;
+  user.password_hash = password_hash;
+  user.lifecycle_state = 'active'; // Transition to active
+  user.is_active = true;
+  await user.save();
+
+  // Log Security Event
+  await logSecurityEvent({
+    company_id: user.company_id,
+    user_id: user._id,
+    email: email.toLowerCase(),
+    event_type: 'password_setup_success',
+    ip_address: req.ip,
+    user_agent: req.headers['user-agent'],
+    metadata: { 
+      previous_state: oldState,
+      new_state: 'active'
+    },
+  });
+
+  // Log Audit Event
+  await auditLogger.log({
+    req,
+    action: 'user.lifecycle_changed',
+    module: 'auth',
+    object_type: 'User',
+    object_id: user._id.toString(),
+    object_label: user.full_name,
+    before_state: { lifecycle_state: oldState },
+    after_state: { lifecycle_state: 'active' },
+    actor_override: {
+      userId: user._id.toString(),
+      email: user.email,
+      company_id: user.company_id,
+    },
+  });
+
+  res.status(200).json({
+    success: true,
+    message: 'Password set up successfully. You can now log in.',
   });
 });
