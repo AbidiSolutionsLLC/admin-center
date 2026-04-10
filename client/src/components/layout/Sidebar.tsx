@@ -4,19 +4,8 @@ import { NavLink, useLocation } from 'react-router-dom';
 import { cn } from '@/utils/cn';
 import { ROUTES } from '@/constants/routes';
 import {
-  LayoutDashboard,
   Building2,
   Users,
-  MapPin,
-  Shield,
-  LayoutGrid,
-  FileText,
-  GitBranch,
-  Lock,
-  Activity,
-  Database,
-  Bell,
-  Plug,
   LogOut,
   MoreVertical
 } from 'lucide-react';
@@ -28,42 +17,16 @@ interface SidebarProps {
 
 const navGroups = [
   {
-    label: null,
-    items: [
-      { label: 'Overview', href: ROUTES.OVERVIEW, icon: LayoutDashboard },
-    ],
-  },
-  {
     label: 'Structure',
     items: [
       { label: 'Organization', href: ROUTES.ORGANIZATION, icon: Building2 },
       { label: 'Teams', href: ROUTES.TEAMS, icon: Users },
-      { label: 'Locations', href: ROUTES.LOCATIONS, icon: MapPin },
     ],
   },
   {
     label: 'People',
     items: [
       { label: 'People', href: ROUTES.PEOPLE, icon: Users },
-      { label: 'Roles & Access', href: ROUTES.ROLES, icon: Shield },
-      { label: 'App Assignment', href: ROUTES.APPS, icon: LayoutGrid },
-    ],
-  },
-  {
-    label: 'Governance',
-    items: [
-      { label: 'Policies', href: ROUTES.POLICIES, icon: FileText },
-      { label: 'Workflows', href: ROUTES.WORKFLOWS, icon: GitBranch },
-      { label: 'Security', href: ROUTES.SECURITY, icon: Lock },
-      { label: 'Audit Logs', href: ROUTES.AUDIT_LOGS, icon: Activity },
-    ],
-  },
-  {
-    label: 'Configuration',
-    items: [
-      { label: 'Data & Fields', href: ROUTES.DATA_FIELDS, icon: Database },
-      { label: 'Notifications', href: ROUTES.NOTIFICATIONS, icon: Bell },
-      { label: 'Integrations', href: ROUTES.INTEGRATIONS, icon: Plug },
     ],
   },
 ];

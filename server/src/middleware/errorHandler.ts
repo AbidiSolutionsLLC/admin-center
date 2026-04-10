@@ -18,7 +18,7 @@ export const errorHandler = (err: any, req: Request, res: Response, next: NextFu
       success: false,
       error: 'Validation failed',
       code: 'VALIDATION_ERROR',
-      details: err.errors.map(e => ({ path: e.path.join('.'), message: e.message }))
+      details: err.issues.map((e: any) => ({ path: e.path.join('.'), message: e.message }))
     });
   }
 

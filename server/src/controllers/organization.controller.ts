@@ -458,7 +458,7 @@ export const getBUTree = asyncHandler(async (req: Request, res: Response) => {
     .lean();
 
   // Enrich departments with headcount and flags
-  const enrichedDepts = await enrichDepartments(departments);
+  const enrichedDepts = await enrichDepartments(departments, req.user.company_id);
   
   // Combine all organization units (BUs + enriched Departments) for recursive lookup
   const allOrgUnits = [...allBUs, ...enrichedDepts];

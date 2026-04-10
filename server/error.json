@@ -1,5 +1,0 @@
-{
-  "message": "next is not a function",
-  "stack": "TypeError: next is not a function\n    at model.<anonymous> (C:\\Users\\TayyabSaleem\\Desktop\\admin-center\\server\\src\\models\\User.model.ts:104:3)\n    at processTicksAndRejections (node:internal/process/task_queues:95:5)\n    at async Kareem.execPre (C:\\Users\\TayyabSaleem\\Desktop\\admin-center\\server\\node_modules\\kareem\\index.js:70:24)\n    at async model.$__save (C:\\Users\\TayyabSaleem\\Desktop\\admin-center\\server\\node_modules\\mongoose\\lib\\model.js:397:5)\n    at async model.save (C:\\Users\\TayyabSaleem\\Desktop\\admin-center\\server\\node_modules\\mongoose\\lib\\model.js:667:5)\n    at async Function.create (C:\\Users\\TayyabSaleem\\Desktop\\admin-center\\server\\node_modules\\mongoose\\lib\\model.js:2754:5)\n    at async seed (C:\\Users\\TayyabSaleem\\Desktop\\admin-center\\server\\src\\scripts\\seed.ts:47:25)",
-  "name": "TypeError"
-}
