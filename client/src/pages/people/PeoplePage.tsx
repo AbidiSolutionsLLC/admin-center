@@ -83,11 +83,6 @@ export default function PeoplePage() {
   // ── Bulk mutations ──────────────────────────────────────────────────
   const bulkLifecycle = useBulkLifecycleChange();
   const bulkRole = useBulkAssignRole();
-  const exportMutation = useExportUsers({
-    lifecycle_state: filters.lifecycle_state || undefined,
-    department_id: filters.department_id || undefined,
-    employment_type: filters.employment_type || undefined,
-  });
 
   // ── Selection state ────────────────────────────────────────────────
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
@@ -191,6 +186,54 @@ export default function PeoplePage() {
   const [bulkAction, setBulkAction] = useState<'lifecycle' | 'role' | null>(null);
   const [bulkLifecycleTarget, setBulkLifecycleTarget] = useState<LifecycleState | ''>('');
   const [bulkRoleTarget, setBulkRoleTarget] = useState('');
+
+  // ── Filters ──────────────────────────────────────────────────────────
+  const [filters, setFilters] = useState<UserFilters>({
+    search: '',
+    lifecycle_state: '',
+    department_id: '',
+    employment_type: '',
+    location_id: '',
+  });
+
+  // ── Export mutation (depends on filters) ────────────────────────────
+  const exportMutation = useExportUsers({
+    lifecycle_state: filters.lifecycle_state || undefined,
+    department_id: filters.department_id || undefined,
+    employment_type: filters.employment_type || undefined,
+  });
+
+  // ── Derived: apply client-side filtering ─────────────────────────────
+  const filteredUsers = useMemo(() => {
+    if (!users) return [];
+    return users.filter((user) => {
+      const matchesSearch =
+        !filters.search ||
+        user.full_name.toLowerCase().includes(filters.search.toLowerCase()) ||
+        user.email.toLowerCase().includes(filters.search.toLowerCase()) ||
+        user.employee_id.toLowerCase().includes(filters.search.toLowerCase());
+
+      const matchesLifecycleState =
+        !filters.lifecycle_state || user.lifecycle_state === filters.lifecycle_state;
+
+      const matchesDepartment =
+        !filters.department_id || user.department_id === filters.department_id;
+
+      const matchesEmploymentType =
+        !filters.employment_type || user.employment_type === filters.employment_type;
+
+      const matchesLocation =
+        !filters.location_id || user.location_id === filters.location_id;
+
+      return (
+        matchesSearch &&
+        matchesLifecycleState &&
+        matchesDepartment &&
+        matchesEmploymentType &&
+        matchesLocation
+      );
+    });
+  }, [users, filters]);
 
   const activeFilterCount = [
     filters.search,

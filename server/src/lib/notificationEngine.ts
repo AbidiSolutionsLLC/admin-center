@@ -29,6 +29,7 @@ export interface NotificationPayload {
   templateKey: string;
   user_id: string;
   user_name: string;
+  user_full_name: string;  // Added for dot notation support
   user_email: string;
   company_name?: string;
   detail?: string;              // Replaces {{detail}} token
@@ -60,11 +61,12 @@ function substituteVariables(
 
 /**
  * Resolves variables for a given payload.
- * Supports exactly 4 tokens: {{user_name}}, {{user_email}}, {{company_name}}, {{detail}}.
+ * Supports 5 tokens: {{user_name}}, {{user.full_name}}, {{user_email}}, {{company_name}}, {{detail}}.
  */
 function resolveVariables(payload: NotificationPayload): Record<string, string> {
   return {
     '{{user_name}}': payload.user_name,
+    '{{user.full_name}}': payload.user_full_name,
     '{{user_email}}': payload.user_email,
     '{{company_name}}': payload.company_name ?? 'Admin Center',
     '{{detail}}': payload.detail ?? '',
@@ -270,6 +272,7 @@ export async function sendWorkflowFailureNotification(
     templateKey: 'workflow_failure',
     user_id: '', // No specific user for workflow failure notifications
     user_name: 'System',
+    user_full_name: 'System',
     user_email: userEmail,
     company_name: undefined,
     detail: `Workflow "${workflowName}" failed: ${errorMessage}`,

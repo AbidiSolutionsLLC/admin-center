@@ -5,6 +5,10 @@ import { asyncHandler } from '../utils/asyncHandler';
 import { PolicyVersion } from '../models/PolicyVersion.model';
 import { PolicyAcknowledgment } from '../models/PolicyAcknowledgment.model';
 import { PolicyAssignment } from '../models/PolicyAssignment.model';
+import { User } from '../models/User.model';
+import { InAppNotification } from '../models/InAppNotification.model';
+import { NotificationEvent } from '../models/NotificationEvent.model';
+import { Insight } from '../models/Insight.model';
 import { auditLogger } from '../lib/auditLogger';
 import { AppError } from '../utils/AppError';
 import { Types } from 'mongoose';
@@ -72,6 +76,66 @@ async function resolveTargetLabel(
 
   // For now, use a generic label. In production, resolve from actual collections.
   return `${TARGET_LABELS[targetType] || 'Target'} (${targetId})`;
+}
+
+// ── Helper Functions ─────────────────────────────────────────────────────────
+
+/**
+ * Resolves targeted users based on assignment rules.
+ * Handles target types: 'all', 'role', 'department', 'group', 'user'.
+ */
+async function resolveTargetedUsers(
+  companyId: string,
+  rules: Array<{ target_type: string; target_id: string }>
+): Promise<Array<typeof User.prototype>> {
+  const allUsers = await User.find({
+    company_id: new Types.ObjectId(companyId),
+    is_active: true,
+  });
+
+  const targetedUserIds = new Set<string>();
+
+  for (const rule of rules) {
+    switch (rule.target_type) {
+      case 'all':
+        // All active users
+        allUsers.forEach((u) => targetedUserIds.add(u._id.toString()));
+        break;
+
+      case 'department':
+        // Users in specific department
+        allUsers
+          .filter((u) => u.department_id?.toString() === rule.target_id)
+          .forEach((u) => targetedUserIds.add(u._id.toString()));
+        break;
+
+      case 'role':
+        // Users with specific role (via UserRole)
+        const { UserRole } = await import('../models/UserRole.model');
+        const userRoles = await UserRole.find({
+          company_id: new Types.ObjectId(companyId),
+          role_id: new Types.ObjectId(rule.target_id),
+        });
+        userRoles.forEach((ur) => targetedUserIds.add(ur.user_id.toString()));
+        break;
+
+      case 'user':
+        // Direct user targeting
+        targetedUserIds.add(rule.target_id);
+        break;
+
+      case 'group':
+        // TODO: Implement group targeting when Team model supports it
+        // For now, skip group targeting
+        break;
+
+      default:
+        console.warn(`[resolveTargetedUsers] Unknown target type: ${rule.target_type}`);
+    }
+  }
+
+  // Return unique users
+  return allUsers.filter((u) => targetedUserIds.has(u._id.toString()));
 }
 
 // ── Controllers ──────────────────────────────────────────────────────────────
@@ -251,12 +315,61 @@ export const publishPolicy = asyncHandler(async (req: Request, res: Response) =>
     },
   });
 
+  // ── Send notifications to targeted users ─────────────────────────────────
+  // If assignment rules were provided, resolve targeted users and create in-app notifications
+  let notificationCount = 0;
+  if (input.assignment_rules && input.assignment_rules.length > 0) {
+    const targetedUsers = await resolveTargetedUsers(
+      req.user.company_id,
+      input.assignment_rules
+    );
+
+    for (const user of targetedUsers) {
+      try {
+        // Create in-app notification
+        const inAppNotif = await InAppNotification.create({
+          company_id: new Types.ObjectId(req.user.company_id),
+          user_id: user._id,
+          title: 'New Policy Published',
+          message: `A new policy "${policyVersion.title}" has been published. Please review and acknowledge it.`,
+          severity: 'warning',
+          status: 'unread',
+          link_url: `/policies/${policyVersion._id}`,
+        });
+
+        // Log delivery event
+        await NotificationEvent.create({
+          company_id: new Types.ObjectId(req.user.company_id),
+          recipient_user_id: user._id,
+          recipient_email: user.email,
+          channel: 'in_app',
+          status: 'sent',
+          subject_rendered: 'New Policy Published',
+          body_rendered: `A new policy "${policyVersion.title}" has been published. Please review and acknowledge it.`,
+          triggered_by_event: 'policy.published',
+          triggered_by_object_type: 'PolicyVersion',
+          triggered_by_object_id: policyVersion._id.toString(),
+          delivery_timestamp: new Date(),
+        });
+
+        notificationCount++;
+      } catch (notifError) {
+        console.error(`[Policy Notification] Failed to notify user ${user._id}:`, notifError);
+        // Don't fail the entire publish if notification fails
+      }
+    }
+  }
+
   const populatedPolicy = await PolicyVersion.findById(policyVersion._id).populate(
     'published_by',
     'full_name email avatar_url'
   );
 
-  res.status(201).json({ success: true, data: populatedPolicy });
+  res.status(201).json({
+    success: true,
+    data: populatedPolicy,
+    meta: { notifications_sent: notificationCount },
+  });
 });
 
 /**
@@ -559,6 +672,25 @@ export const saveAssignmentRules = asyncHandler(async (req: Request, res: Respon
     policyVersion._id.toString(),
     input.rules
   );
+
+  // Create intelligence insight if conflicts are detected
+  if (conflicts.has_conflicts) {
+    await Insight.create({
+      company_id: new Types.ObjectId(req.user.company_id),
+      category: 'misconfiguration',
+      severity: 'warning',
+      title: `Conflicting policies detected: "${policyVersion.title}"`,
+      description: `Policy "${policyVersion.title}" has assignment rules that conflict with other published policies in the same category.`,
+      reasoning: `The following policies target the same user population: ${conflicts.conflicting_policies.map(c => `"${c.title}"`).join(', ')}. This may cause confusion about which policy applies.`,
+      affected_object_type: 'PolicyVersion',
+      affected_object_id: policyVersion._id.toString(),
+      affected_object_label: policyVersion.title,
+      remediation_url: `/policies/${policyVersion._id}`,
+      remediation_action: 'Review and resolve conflicting policy assignments',
+      is_resolved: false,
+      detected_at: new Date(),
+    });
+  }
 
   const populatedRules = createdRules.map((r) => ({
     _id: r._id,

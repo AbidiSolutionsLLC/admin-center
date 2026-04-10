@@ -24,6 +24,7 @@ import { Insight } from '../models/Insight.model';
  * - RULE-07: Admin user with MFA disabled (security risk)
  * - RULE-08: Team with no team lead assigned
  * - RULE-09: Business Unit with no child departments
+ * - RULE-10: Duplicate users (same full_name in the same company)
  */
 export const runIntelligenceRules = async (companyId: string | Types.ObjectId): Promise<void> => {
   const companyObjectId = typeof companyId === 'string' ? new Types.ObjectId(companyId) : companyId;
@@ -298,6 +299,50 @@ export const runIntelligenceRules = async (companyId: string | Types.ObjectId): 
         is_resolved: false,
         detected_at: new Date(),
       });
+    }
+  }
+
+  // ────────────────────────────────────────────────────────────────────────────
+  // RULE-10: Duplicate users (same full_name in the same company)
+  // ────────────────────────────────────────────────────────────────────────────
+
+  const allUsers = await User.find({
+    company_id: companyObjectId,
+    is_active: true,
+  }).lean();
+
+  // Group users by full_name
+  const nameUserMap = new Map<string, typeof allUsers>();
+  for (const user of allUsers) {
+    const normalizedName = user.full_name.toLowerCase().trim();
+    if (!nameUserMap.has(normalizedName)) {
+      nameUserMap.set(normalizedName, []);
+    }
+    nameUserMap.get(normalizedName)!.push(user);
+  }
+
+  // Flag users with duplicate names
+  for (const [name, users] of nameUserMap.entries()) {
+    if (users.length > 1) {
+      // Create an insight for each duplicate user
+      for (const user of users) {
+        const duplicateEmails = users.map(u => u.email).join(', ');
+        insightsToUpsert.push({
+          company_id: companyObjectId,
+          category: 'data_consistency',
+          severity: 'warning',
+          title: `Potential duplicate user: "${user.full_name}"`,
+          description: `Multiple user accounts exist with the same full name "${user.full_name}". This may indicate duplicate accounts that should be merged or reviewed.`,
+          reasoning: `Found ${users.length} user(s) with name "${user.full_name}". Emails: ${duplicateEmails}. Verify if these are separate individuals or duplicate accounts.`,
+          affected_object_type: 'User',
+          affected_object_id: user._id.toString(),
+          affected_object_label: user.full_name,
+          remediation_url: `/people/${user._id}`,
+          remediation_action: 'Review and merge duplicate user accounts if necessary',
+          is_resolved: false,
+          detected_at: new Date(),
+        });
+      }
     }
   }
 
@@ -649,6 +694,47 @@ export const runIntelligenceRules = async (companyId: string | Types.ObjectId): 
           company_id: companyObjectId,
           affected_object_id: bu._id.toString(),
           title: `${bu.name} has no child departments`,
+          is_resolved: false,
+        },
+        {
+          $set: {
+            is_resolved: true,
+            resolved_at: new Date(),
+          }
+        }
+      );
+    }
+  }
+
+  // ────────────────────────────────────────────────────────────────────────────
+  // Auto-resolve RULE-10 insights where duplicate users no longer exist
+  // ────────────────────────────────────────────────────────────────────────────
+
+  // Re-fetch users to check for resolved duplicates
+  const allUsersForResolve = await User.find({
+    company_id: companyObjectId,
+    is_active: true,
+  }).lean();
+
+  // Group users by full_name again
+  const nameUserMapForResolve = new Map<string, typeof allUsersForResolve>();
+  for (const user of allUsersForResolve) {
+    const normalizedName = user.full_name.toLowerCase().trim();
+    if (!nameUserMapForResolve.has(normalizedName)) {
+      nameUserMapForResolve.set(normalizedName, []);
+    }
+    nameUserMapForResolve.get(normalizedName)!.push(user);
+  }
+
+  // Resolve insights for users that no longer have duplicates
+  for (const [name, users] of nameUserMapForResolve.entries()) {
+    if (users.length === 1) {
+      // Only one user with this name - resolve any duplicate insights
+      await Insight.updateMany(
+        {
+          company_id: companyObjectId,
+          affected_object_id: users[0]._id.toString(),
+          title: { $regex: /^Potential duplicate user:/ },
           is_resolved: false,
         },
         {
