@@ -28,6 +28,7 @@ const UpdateTemplateSchema = CreateTemplateSchema.partial();
 
 const TestTemplateSchema = z.object({
   user_name: z.string().default('Test User'),
+  user_full_name: z.string().default('Test User Full Name'),
   user_email: z.string().email(),
   company_name: z.string().optional(),
   detail: z.string().optional(),
@@ -223,6 +224,7 @@ export const testTemplate = asyncHandler(async (req: Request, res: Response) => 
   const company = await Company.findById(req.user.company_id);
   const variables: Record<string, string> = {
     '{{user_name}}': input.user_name,
+    '{{user.full_name}}': input.user_full_name,
     '{{user_email}}': input.user_email,
     '{{company_name}}': input.company_name ?? company?.name ?? 'Admin Center',
     '{{detail}}': input.detail ?? '',

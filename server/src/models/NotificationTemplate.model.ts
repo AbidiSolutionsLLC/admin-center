@@ -7,9 +7,15 @@ export type NotificationSeverity = 'info' | 'warning' | 'critical';
 
 /**
  * Supported variable tokens for template substitution.
- * Available tokens: {{user_name}}, {{user_email}}, {{company_name}}, {{detail}}
+ * Available tokens: {{user_name}}, {{user.full_name}}, {{user_email}}, {{company_name}}, {{detail}}
  */
-export const SUPPORTED_VARIABLES = ['{{user_name}}', '{{user_email}}', '{{company_name}}', '{{detail}}'] as const;
+export const SUPPORTED_VARIABLES = [
+  '{{user_name}}',
+  '{{user.full_name}}',
+  '{{user_email}}',
+  '{{company_name}}',
+  '{{detail}}',
+] as const;
 
 export interface INotificationTemplate extends Document {
   company_id: Types.ObjectId;

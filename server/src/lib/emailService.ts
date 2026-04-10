@@ -70,7 +70,7 @@ const createTransporter = () => {
 
 let transporter: nodemailer.Transporter | null = null;
 
-const getTransporter = (): nodemailer.Transporter => {
+export const getTransporter = (): nodemailer.Transporter => {
   if (!transporter) {
     transporter = createTransporter();
   }

@@ -322,7 +322,7 @@ const SetupPasswordSchema = z.object({
 export const setupPassword = asyncHandler(async (req: Request, res: Response) => {
   const result = SetupPasswordSchema.safeParse(req.body);
   if (!result.success) {
-    throw new AppError(result.error.errors[0].message, 400, 'BAD_REQUEST');
+    throw new AppError(result.error.message, 400, 'BAD_REQUEST');
   }
   const { email, token, newPassword } = result.data;
 

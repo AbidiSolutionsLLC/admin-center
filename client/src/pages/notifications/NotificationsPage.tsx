@@ -65,7 +65,7 @@ const EVENT_STATUS_ICONS: Record<string, { color: string; label: string }> = {
   queued_digest: { color: 'text-warning', label: 'Queued' },
 };
 
-const SUPPORTED_VARIABLES = ['{{user_name}}', '{{user_email}}', '{{company_name}}', '{{detail}}'];
+const SUPPORTED_VARIABLES = ['{{user_name}}', '{{user.full_name}}', '{{user_email}}', '{{company_name}}', '{{detail}}'];
 
 /**
  * NotificationsPage Component
@@ -579,7 +579,13 @@ interface TestModalProps {
 
 function TestModal({ isOpen, onClose, templateId }: TestModalProps) {
   const testMutation = useTestTemplate(templateId);
-  const [formData, setFormData] = useState({ user_name: 'Test User', user_email: 'test@example.com', company_name: '', detail: '' });
+  const [formData, setFormData] = useState({
+    user_name: 'Test User',
+    user_full_name: 'Test User Full Name',
+    user_email: 'test@example.com',
+    company_name: '',
+    detail: '',
+  });
 
   return (
     <Modal
@@ -609,19 +615,23 @@ function TestModal({ isOpen, onClose, templateId }: TestModalProps) {
             <input type="text" value={formData.user_name} onChange={(e) => setFormData({ ...formData, user_name: e.target.value })} className="w-full h-9 px-3 text-sm rounded-md border border-line bg-white text-ink focus:outline-none focus:ring-2 focus:ring-primary/30 focus:border-primary transition-all duration-150" />
           </div>
           <div>
-            <label className="text-sm font-medium text-ink block mb-1.5">User Email</label>
-            <input type="email" value={formData.user_email} onChange={(e) => setFormData({ ...formData, user_email: e.target.value })} className="w-full h-9 px-3 text-sm rounded-md border border-line bg-white text-ink focus:outline-none focus:ring-2 focus:ring-primary/30 focus:border-primary transition-all duration-150" />
+            <label className="text-sm font-medium text-ink block mb-1.5">User Full Name</label>
+            <input type="text" value={formData.user_full_name} onChange={(e) => setFormData({ ...formData, user_full_name: e.target.value })} className="w-full h-9 px-3 text-sm rounded-md border border-line bg-white text-ink focus:outline-none focus:ring-2 focus:ring-primary/30 focus:border-primary transition-all duration-150" />
           </div>
         </div>
         <div className="grid grid-cols-2 gap-4">
           <div>
+            <label className="text-sm font-medium text-ink block mb-1.5">User Email</label>
+            <input type="email" value={formData.user_email} onChange={(e) => setFormData({ ...formData, user_email: e.target.value })} className="w-full h-9 px-3 text-sm rounded-md border border-line bg-white text-ink focus:outline-none focus:ring-2 focus:ring-primary/30 focus:border-primary transition-all duration-150" />
+          </div>
+          <div>
             <label className="text-sm font-medium text-ink block mb-1.5">Company Name</label>
             <input type="text" value={formData.company_name} onChange={(e) => setFormData({ ...formData, company_name: e.target.value })} className="w-full h-9 px-3 text-sm rounded-md border border-line bg-white text-ink focus:outline-none focus:ring-2 focus:ring-primary/30 focus:border-primary transition-all duration-150" />
           </div>
-          <div>
-            <label className="text-sm font-medium text-ink block mb-1.5">Detail</label>
-            <input type="text" value={formData.detail} onChange={(e) => setFormData({ ...formData, detail: e.target.value })} className="w-full h-9 px-3 text-sm rounded-md border border-line bg-white text-ink focus:outline-none focus:ring-2 focus:ring-primary/30 focus:border-primary transition-all duration-150" />
-          </div>
+        </div>
+        <div>
+          <label className="text-sm font-medium text-ink block mb-1.5">Detail</label>
+          <input type="text" value={formData.detail} onChange={(e) => setFormData({ ...formData, detail: e.target.value })} className="w-full h-9 px-3 text-sm rounded-md border border-line bg-white text-ink focus:outline-none focus:ring-2 focus:ring-primary/30 focus:border-primary transition-all duration-150" />
         </div>
 
         {testMutation.data && (

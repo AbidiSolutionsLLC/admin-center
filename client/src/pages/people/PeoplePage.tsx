@@ -74,11 +74,6 @@ export default function PeoplePage() {
   // ── Bulk mutations ──────────────────────────────────────────────────
   const bulkLifecycle = useBulkLifecycleChange();
   const bulkRole = useBulkAssignRole();
-  const exportMutation = useExportUsers({
-    lifecycle_state: filters.lifecycle_state || undefined,
-    department_id: filters.department_id || undefined,
-    employment_type: filters.employment_type || undefined,
-  });
 
   // ── Selection state ────────────────────────────────────────────────
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
@@ -158,6 +153,13 @@ export default function PeoplePage() {
     department_id: '',
     employment_type: '',
     location_id: '',
+  });
+
+  // ── Export mutation (depends on filters) ────────────────────────────
+  const exportMutation = useExportUsers({
+    lifecycle_state: filters.lifecycle_state || undefined,
+    department_id: filters.department_id || undefined,
+    employment_type: filters.employment_type || undefined,
   });
 
   // ── Derived: apply client-side filtering ─────────────────────────────
