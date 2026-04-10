@@ -24,6 +24,7 @@ import LocationsPage from './pages/locations/LocationsPage';
 import DataFieldsPage from './pages/data-fields/DataFieldsPage';
 import IntegrationsPage from './pages/integrations/IntegrationsPage';
 import WorkflowsPage from './pages/workflows/WorkflowsPage';
+import NotificationsPage from './pages/notifications/NotificationsPage';
 
 function App() {
   return (
@@ -52,6 +53,7 @@ function App() {
               <Route path={ROUTES.DATA_FIELDS} element={<DataFieldsPage />} />
               <Route path={ROUTES.INTEGRATIONS} element={<IntegrationsPage />} />
               <Route path={ROUTES.WORKFLOWS} element={<WorkflowsPage />} />
+              <Route path={ROUTES.NOTIFICATIONS} element={<NotificationsPage />} />
             </Route>
           </Route>
         </Routes>

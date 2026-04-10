@@ -69,4 +69,10 @@ export const QUERY_KEYS = {
   INTEGRATIONS: ['integrations'] as const,
   INTEGRATION_DETAIL: (id: string) => ['integration', id] as const,
   INTEGRATION_SYNC_LOGS: (id: string) => ['integration', id, 'sync-logs'] as const,
+  // Notifications
+  NOTIFICATION_TEMPLATES: ['notification', 'templates'] as const,
+  NOTIFICATION_TEMPLATE_DETAIL: (id: string) => ['notification', 'template', id] as const,
+  NOTIFICATION_EVENTS: ['notification', 'events'] as const,
+  IN_APP_NOTIFICATIONS: ['notification', 'in-app'] as const,
+  UNREAD_NOTIFICATION_COUNT: ['notification', 'unread-count'] as const,
 } as const;

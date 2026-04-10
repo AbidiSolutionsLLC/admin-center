@@ -7,6 +7,9 @@ import {
   updateUser,
   updateUserLifecycle,
   bulkInviteUsers,
+  bulkUpdateLifecycle,
+  bulkAssignRole,
+  exportUsers,
   deleteUser,
 } from '../controllers/people.controller';
 import { assignUserOrg } from '../controllers/organization.controller';
@@ -73,5 +76,23 @@ router.post('/:id/assign-org', assignUserOrg);
  * All routes are nested under /:id/reporting-line
  */
 router.use('/:id/reporting-line', reportingLinesRoutes);
+
+/**
+ * PUT /people/bulk-lifecycle
+ * Bulk lifecycle state change for multiple users
+ */
+router.put('/bulk-lifecycle', bulkUpdateLifecycle);
+
+/**
+ * POST /people/bulk-assign-role
+ * Bulk assign a role to multiple users
+ */
+router.post('/bulk-assign-role', bulkAssignRole);
+
+/**
+ * GET /people/export
+ * Export users as CSV
+ */
+router.get('/export', exportUsers);
 
 export default router;

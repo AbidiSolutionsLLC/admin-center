@@ -6,12 +6,15 @@ import { asyncHandler } from '../utils/asyncHandler';
 import { User } from '../models/User.model';
 import { Company } from '../models/Company.model';
 import { RefreshToken } from '../models/RefreshToken.model';
+import { Role } from '../models/Role.model';
+import { UserRole } from '../models/UserRole.model';
 import { TeamMember } from '../models/TeamMember.model';
 import { auditLogger } from '../lib/auditLogger';
 import { sendWelcomeEmail, sendBulkWelcomeEmails } from '../lib/emailService';
 import { isValidTransition, getTransitionErrorMessage, LifecycleState } from '../lib/lifecycle';
 import { handleLifecycleEvent } from '../lib/workflowEngine';
 import { AppError } from '../utils/AppError';
+import { Types } from 'mongoose';
 
 // ── Zod Schemas ──────────────────────────────────────────────────────────────
 
@@ -108,7 +111,7 @@ async function enrichUsers(users: any[], companyId: string): Promise<any[]> {
   return users.map((user) => {
     const data = { ...user };
     const userId = user._id.toString();
-    
+
     // Attach teams
     data.teams = membershipMap.get(userId) || [];
 
@@ -170,7 +173,7 @@ export const getUsers = asyncHandler(async (req: Request, res: Response) => {
     .populate('department_id', 'name slug')
     .populate('team_id', 'name slug')
     .populate('manager_id', 'full_name email avatar_url')
-    .populate('location_id', 'name')
+    .populate('location_id', 'name timezone')
     .sort({ created_at: -1 })
     .lean();
 
@@ -191,7 +194,7 @@ export const getUserById = asyncHandler(async (req: Request, res: Response) => {
     .populate('department_id', 'name slug')
     .populate('team_id', 'name slug')
     .populate('manager_id', 'full_name email avatar_url')
-    .populate('location_id', 'name');
+    .populate('location_id', 'name timezone');
 
   if (!user) {
     throw new AppError('User not found', 404, 'NOT_FOUND');
@@ -321,6 +324,20 @@ export const updateUser = asyncHandler(async (req: Request, res: Response) => {
 
   Object.assign(user, updates);
   await user.save();
+
+  // Audit log — location change fires a dedicated event
+  if (updates.location_id && updates.location_id !== beforeState.location_id) {
+    await auditLogger.log({
+      req,
+      action: 'user.location_assigned',
+      module: 'people',
+      object_type: 'User',
+      object_id: user._id.toString(),
+      object_label: user.full_name,
+      before_state: { location_id: beforeState.location_id?.toString() ?? null },
+      after_state: { location_id: updates.location_id },
+    });
+  }
 
   // Audit log
   await auditLogger.log({
@@ -476,7 +493,7 @@ export const updateUserLifecycle = asyncHandler(async (req: Request, res: Respon
       user.phone = undefined;
       user.avatar_url = undefined;
       user.employee_id = `ARCHIVED-${user._id.toString().slice(-8)}`;
-      
+
       // Clear optional PII
       (user as any).department_id = undefined;
       (user as any).team_id = undefined;
@@ -508,7 +525,7 @@ export const updateUserLifecycle = asyncHandler(async (req: Request, res: Respon
   } catch (automationError) {
     // Log automation errors but don't fail the lifecycle transition
     console.error(`[Lifecycle Automation Error] ${transitionKey}:`, automationError);
-    
+
     // Still log the error as an audit event
     await auditLogger.log({
       req,
@@ -744,4 +761,274 @@ export const deleteUser = asyncHandler(async (req: Request, res: Response) => {
   });
 
   res.status(200).json({ success: true, data: {} });
+});
+
+// ── Bulk Actions ──────────────────────────────────────────────────────────────
+
+const BulkLifecycleSchema = z.object({
+  user_ids: z.array(z.string()).min(1, 'At least one user ID is required').max(500),
+  lifecycle_state: z.enum(['invited', 'onboarding', 'active', 'probation', 'on_leave', 'terminated', 'archived']),
+});
+
+const BulkAssignRoleSchema = z.object({
+  user_ids: z.array(z.string()).min(1).max(500),
+  role_id: z.string().min(1, 'Role ID is required'),
+});
+
+/**
+ * PUT /people/bulk-lifecycle
+ * Bulk lifecycle state change for multiple users.
+ * Each user is validated individually against VALID_TRANSITIONS.
+ * Invalid transitions are skipped with per-row error reporting.
+ * Each successful transition produces an individual audit event.
+ */
+export const bulkUpdateLifecycle = asyncHandler(async (req: Request, res: Response) => {
+  const input = BulkLifecycleSchema.parse(req.body);
+
+  const results: Array<{ user_id: string; user_name: string; success: boolean; error?: string }> = [];
+  let successCount = 0;
+  let skippedCount = 0;
+
+  for (const userId of input.user_ids) {
+    const user = await User.findOne({
+      _id: userId,
+      company_id: req.user.company_id,
+    } as any);
+
+    if (!user) {
+      results.push({ user_id: userId, user_name: 'Unknown', success: false, error: 'User not found' });
+      skippedCount++;
+      continue;
+    }
+
+    const currentState = user.lifecycle_state as LifecycleState;
+    const targetState = input.lifecycle_state as LifecycleState;
+
+    if (!isValidTransition(currentState, targetState)) {
+      results.push({
+        user_id: userId,
+        user_name: user.full_name,
+        success: false,
+        error: `Cannot transition from '${currentState}' to '${targetState}'`,
+      });
+      skippedCount++;
+      continue;
+    }
+
+    const beforeState = user.toObject();
+    user.lifecycle_state = targetState;
+    await user.save();
+
+    // Individual audit event for each user
+    await auditLogger.log({
+      req,
+      action: 'user.lifecycle_changed',
+      module: 'people',
+      object_type: 'User',
+      object_id: user._id.toString(),
+      object_label: user.full_name,
+      before_state: beforeState,
+      after_state: user.toObject(),
+    });
+
+    successCount++;
+    results.push({ user_id: userId, user_name: user.full_name, success: true });
+  }
+
+  // Summary audit event for the bulk operation
+  await auditLogger.log({
+    req,
+    action: 'user.bulk_lifecycle_changed',
+    module: 'people',
+    object_type: 'User',
+    object_id: req.user.userId,
+    object_label: `Bulk lifecycle change to ${input.lifecycle_state}`,
+    before_state: null,
+    after_state: {
+      target_state: input.lifecycle_state,
+      total: input.user_ids.length,
+      successful: successCount,
+      skipped: skippedCount,
+    },
+  });
+
+  res.status(200).json({
+    success: true,
+    data: {
+      total: input.user_ids.length,
+      successful: successCount,
+      skipped: skippedCount,
+      results,
+    },
+  });
+});
+
+/**
+ * POST /people/bulk-assign-role
+ * Bulk assign a role to multiple users.
+ * Each assignment produces an individual audit event.
+ * Duplicate assignments (user already has the role) are silently skipped.
+ */
+export const bulkAssignRole = asyncHandler(async (req: Request, res: Response) => {
+  const input = BulkAssignRoleSchema.parse(req.body);
+
+  // Verify role exists and belongs to company
+  const role = await Role.findOne({
+    _id: input.role_id,
+    company_id: req.user.company_id,
+    is_active: true,
+  });
+
+  if (!role) {
+    throw new AppError('Role not found', 404, 'ROLE_NOT_FOUND');
+  }
+
+  const results: Array<{ user_id: string; user_name: string; success: boolean; error?: string }> = [];
+  let successCount = 0;
+  let skippedCount = 0;
+
+  for (const userId of input.user_ids) {
+    const user = await User.findOne({
+      _id: userId,
+      company_id: req.user.company_id,
+    } as any);
+
+    if (!user) {
+      results.push({ user_id: userId, user_name: 'Unknown', success: false, error: 'User not found' });
+      skippedCount++;
+      continue;
+    }
+
+    // Check for duplicate assignment
+    const existing = await UserRole.findOne({
+      user_id: user._id,
+      role_id: role._id,
+    });
+
+    if (existing) {
+      results.push({ user_id: userId, user_name: user.full_name, success: false, error: 'Role already assigned' });
+      skippedCount++;
+      continue;
+    }
+
+    // Assign the role
+    await UserRole.create({
+      user_id: user._id,
+      role_id: role._id,
+      assigned_by: new Types.ObjectId(req.user.userId),
+      assigned_at: new Date(),
+    });
+
+    // Audit event for each assignment
+    await auditLogger.log({
+      req,
+      action: 'user.role_assigned',
+      module: 'people',
+      object_type: 'User',
+      object_id: user._id.toString(),
+      object_label: user.full_name,
+      before_state: null,
+      after_state: { role_id: role._id.toString(), role_name: role.name },
+    });
+
+    successCount++;
+    results.push({ user_id: userId, user_name: user.full_name, success: true });
+  }
+
+  // Summary audit event
+  await auditLogger.log({
+    req,
+    action: 'user.bulk_role_assigned',
+    module: 'people',
+    object_type: 'Role',
+    object_id: role._id.toString(),
+    object_label: role.name,
+    before_state: null,
+    after_state: {
+      role_id: role._id.toString(),
+      role_name: role.name,
+      total: input.user_ids.length,
+      successful: successCount,
+      skipped: skippedCount,
+    },
+  });
+
+  res.status(200).json({
+    success: true,
+    data: {
+      total: input.user_ids.length,
+      successful: successCount,
+      skipped: skippedCount,
+      results,
+    },
+  });
+});
+
+/**
+ * GET /people/export
+ * Exports users as CSV with all visible columns.
+ * Audit event logged with filter params and row count.
+ */
+export const exportUsers = asyncHandler(async (req: Request, res: Response) => {
+  const { lifecycle_state, department_id, employment_type } = req.query;
+
+  const filter: Record<string, unknown> = {
+    company_id: req.user.company_id,
+  };
+
+  if (lifecycle_state) filter.lifecycle_state = lifecycle_state;
+  if (department_id) filter.department_id = department_id;
+  if (employment_type) filter.employment_type = employment_type;
+
+  const users = await User.find(filter)
+    .populate('department_id', 'name')
+    .populate('manager_id', 'full_name')
+    .populate('location_id', 'name')
+    .sort({ created_at: -1 })
+    .lean();
+
+  // Build CSV
+  const headers = ['Employee ID', 'Full Name', 'Email', 'Phone', 'Department', 'Manager', 'Location', 'Lifecycle State', 'Employment Type', 'Hire Date', 'Last Login', 'Created At'];
+
+  const rows = users.map((u: any) => {
+    const dept = typeof u.department_id === 'object' ? u.department_id?.name : '';
+    const manager = typeof u.manager_id === 'object' ? u.manager_id?.full_name : '';
+    const location = typeof u.location_id === 'object' ? u.location_id?.name : '';
+
+    return [
+      u.employee_id,
+      `"${(u.full_name || '').replace(/"/g, '""')}"`,
+      u.email,
+      u.phone || '',
+      dept,
+      manager,
+      location,
+      u.lifecycle_state,
+      u.employment_type,
+      u.hire_date ? new Date(u.hire_date).toISOString().split('T')[0] : '',
+      u.last_login ? new Date(u.last_login).toISOString() : '',
+      u.created_at ? new Date(u.created_at).toISOString() : '',
+    ].join(',');
+  });
+
+  const csvContent = [headers.join(','), ...rows].join('\n');
+
+  // Audit log
+  await auditLogger.log({
+    req,
+    action: 'user.exported',
+    module: 'people',
+    object_type: 'User',
+    object_id: req.user.userId,
+    object_label: `Export: ${users.length} users`,
+    before_state: null,
+    after_state: {
+      row_count: users.length,
+      filters: { lifecycle_state, department_id, employment_type },
+    },
+  });
+
+  res.setHeader('Content-Type', 'text/csv');
+  res.setHeader('Content-Disposition', `attachment; filename=users_export_${new Date().toISOString().split('T')[0]}.csv`);
+  res.status(200).send(csvContent);
 });

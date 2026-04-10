@@ -4,9 +4,13 @@ import { useForm, Controller } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { z } from 'zod';
 import { UserSelect } from '@/components/ui/UserSelect';
+<<<<<<< HEAD
+import type { User, EmploymentType, Department, Location } from '@/types';
+=======
 import { DynamicCustomFields } from '@/features/data-fields/components/DynamicCustomFields';
 import { useCustomFields } from '@/features/data-fields/hooks/useCustomFields';
 import type { User, EmploymentType, Department, CustomField } from '@/types';
+>>>>>>> 0212f123cbde2de2952f948712c61f2a54cfb53e
 import { cn } from '@/utils/cn';
 
 const schema = z.object({
@@ -26,6 +30,7 @@ interface UserFormProps {
   initialData?: User;
   onSubmit: (data: UserFormData) => void;
   departments: Department[];
+  locations?: Location[];
   isSubmitting?: boolean;
 }
 
@@ -58,6 +63,7 @@ export const UserForm: React.FC<UserFormProps> = ({
   initialData,
   onSubmit,
   departments,
+  locations = [],
   isSubmitting = false,
 }) => {
   const {
@@ -183,6 +189,29 @@ export const UserForm: React.FC<UserFormProps> = ({
         </select>
         <p className="text-[11px] text-ink-muted">
           Assign the user to a department.
+        </p>
+      </div>
+
+      {/* Location */}
+      <div className="space-y-1.5">
+        <label htmlFor="user-location" className="text-sm font-medium text-ink">
+          Location
+        </label>
+        <select
+          id="user-location"
+          {...register('location_id')}
+          disabled={isSubmitting}
+          className={inputClass(false)}
+        >
+          <option value="">No location</option>
+          {locations.map((loc) => (
+            <option key={loc._id} value={loc._id}>
+              {loc.name} ({loc.timezone})
+            </option>
+          ))}
+        </select>
+        <p className="text-[11px] text-ink-muted">
+          Assign the user to a physical location.
         </p>
       </div>
 

@@ -12,6 +12,10 @@ interface UserTableProps {
   onEdit: (user: User) => void;
   onAssignOrg: (user: User) => void;
   onChangeState?: (user: User) => void;
+  selectedIds?: Set<string>;
+  onToggleRow?: (userId: string) => void;
+  onToggleAll?: () => void;
+  isAllSelected?: boolean;
 }
 
 const lifecycleStateConfig: Record<
@@ -33,9 +37,45 @@ const lifecycleStateConfig: Record<
  * Lifecycle State, Last Login, Actions.
  * Used on: PeoplePage.
  */
+<<<<<<< HEAD
+export const UserTable: React.FC<UserTableProps> = ({ users, onEdit, onChangeState, selectedIds, onToggleRow, onToggleAll, isAllSelected }) => {
+  const hasSelection = !!selectedIds && !!onToggleRow && !!onToggleAll;
+
+=======
 export const UserTable: React.FC<UserTableProps> = ({ users, onEdit, onAssignOrg, onChangeState }) => {
+>>>>>>> 0212f123cbde2de2952f948712c61f2a54cfb53e
   const columns = useMemo<ColumnDef<User>[]>(
-    () => [
+    () => {
+      const cols: ColumnDef<User>[] = [];
+
+      // Checkbox column (only when selection is enabled)
+      if (hasSelection) {
+        cols.push({
+          id: 'select',
+          header: () => (
+            <input
+              type="checkbox"
+              checked={isAllSelected ?? false}
+              onChange={onToggleAll}
+              onClick={(e) => e.stopPropagation()}
+              className="h-4 w-4 rounded border-line text-primary focus:ring-primary/30 cursor-pointer"
+              aria-label="Select all rows"
+            />
+          ),
+          cell: ({ row }) => (
+            <input
+              type="checkbox"
+              checked={selectedIds?.has(row.original._id) ?? false}
+              onChange={() => onToggleRow(row.original._id)}
+              onClick={(e) => e.stopPropagation()}
+              className="h-4 w-4 rounded border-line text-primary focus:ring-primary/30 cursor-pointer"
+              aria-label={`Select ${row.original.full_name}`}
+            />
+          ),
+        });
+      }
+
+      cols.push(
       {
         accessorKey: 'full_name',
         header: 'Name',
@@ -191,8 +231,16 @@ export const UserTable: React.FC<UserTableProps> = ({ users, onEdit, onAssignOrg
           </div>
         ),
       },
+<<<<<<< HEAD
+      );
+
+      return cols;
+    },
+    [onEdit, onChangeState, hasSelection, selectedIds, onToggleRow, onToggleAll, isAllSelected]
+=======
     ],
     [onEdit, onAssignOrg, onChangeState]
+>>>>>>> 0212f123cbde2de2952f948712c61f2a54cfb53e
   );
 
   return <DataTable columns={columns} data={users} onRowClick={onEdit} />;

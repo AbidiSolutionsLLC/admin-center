@@ -14,6 +14,7 @@ import { Workflow, WorkflowStatus } from '../models/Workflow.model';
 import { WorkflowStep } from '../models/WorkflowStep.model';
 import { WorkflowRun, WorkflowRunStatus } from '../models/WorkflowRun.model';
 import { Insight } from '../models/Insight.model';
+import { sendWorkflowFailureNotification } from './notificationEngine';
 import { Types } from 'mongoose';
 
 export interface LifecycleEvent {
@@ -192,6 +193,18 @@ export async function executeWorkflow(
       remediation_action: 'review_workflow_steps',
       is_resolved: false,
       detected_at: new Date(),
+    });
+
+    // Send critical notification via email for workflow failure
+    sendWorkflowFailureNotification(
+      event.companyId,
+      workflow.name,
+      workflow._id.toString(),
+      event.userName,
+      event.userEmail,
+      errorMessage || 'Unknown error'
+    ).catch((notifError) => {
+      console.error('[NotificationEngine] Workflow failure notification failed:', notifError);
     });
   }
 
