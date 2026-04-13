@@ -23,8 +23,6 @@ export const useInviteUser = () => {
     },
     onError: (err: any) => {
       console.error('User invite failed', err);
-      const message = err.response?.data?.error || 'Failed to invite user. Please try again.';
-      toast.error(message);
     },
   });
 };

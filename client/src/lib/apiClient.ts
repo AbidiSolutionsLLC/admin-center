@@ -40,18 +40,25 @@ apiClient.interceptors.response.use(
     }
 
     // 2. Global Error Notification
-    // We skip 401s as they are handled above or lead to login
-    // We also skip cases where there's no response (network error) as we might want a different message
-    if (err.response && err.response.status !== 401) {
-      const errorMessage = err.response.data?.error || err.message || 'An unexpected error occurred';
-      const errorCode = err.response.data?.code;
+    // Skip notification if _skipErrorNotify is set or if it's a 401 (handled above)
+    if (err.response && err.response.status !== 401 && !originalRequest._skipErrorNotify) {
+      const errorData = err.response.data;
+      const errorMessage = errorData?.error || errorData?.message || err.message || 'An unexpected error occurred';
+      const errorCode = errorData?.code;
       
-      // Optionally format message based on code
-      toast.error(errorMessage, {
-        description: errorCode ? `Error Code: ${errorCode}` : undefined,
+      // Ensure the first letter is capitalized for professional look
+      const formattedMessage = errorMessage.charAt(0).toUpperCase() + errorMessage.slice(1);
+
+      // Hide technical codes for user-friendly operational errors
+      const hiddenCodes = ['DUPLICATE_KEY_ERROR', 'VALIDATION_ERROR', 'DATABASE_VALIDATION_ERROR'];
+      const shouldShowDescription = errorCode && !hiddenCodes.includes(errorCode);
+
+      toast.error(formattedMessage, {
+        description: shouldShowDescription ? `Error Code: ${errorCode}` : undefined,
+        duration: 5000,
       });
-    } else if (!err.response) {
-      toast.error('Network error. Please check your connection.');
+    } else if (!err.response && !originalRequest?._skipErrorNotify) {
+      toast.error('Network error. Please check your internet connection and try again.');
     }
 
     return Promise.reject(err);

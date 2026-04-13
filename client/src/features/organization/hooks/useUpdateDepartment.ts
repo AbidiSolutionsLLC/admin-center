@@ -25,7 +25,6 @@ export const useUpdateDepartment = () => {
     },
     onError: (error) => {
       console.error('Department update failed', error);
-      toast.error('Failed to update department. Please try again.');
     },
   });
 };

@@ -24,7 +24,6 @@ export const useCreateTeam = () => {
     },
     onError: (error) => {
       console.error('Team creation failed', error);
-      toast.error('Failed to create team. Please try again.');
     },
   });
 };

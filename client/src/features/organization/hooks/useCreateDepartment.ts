@@ -24,7 +24,6 @@ export const useCreateDepartment = () => {
     },
     onError: (error) => {
       console.error('Department creation failed', error);
-      toast.error('Failed to create department. Please try again.');
     },
   });
 };

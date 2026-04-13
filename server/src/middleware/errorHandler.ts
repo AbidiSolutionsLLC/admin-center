@@ -16,7 +16,7 @@ export const errorHandler = (err: any, req: Request, res: Response, next: NextFu
   if (err instanceof ZodError) {
     return res.status(400).json({
       success: false,
-      error: 'Validation failed',
+      error: 'Validation failed. Please check your input.',
       code: 'VALIDATION_ERROR',
       details: err.issues.map((e: any) => ({ path: e.path.join('.'), message: e.message }))
     });
@@ -24,15 +24,37 @@ export const errorHandler = (err: any, req: Request, res: Response, next: NextFu
 
   // 3. Handle MongoDB Duplicate Key Errors (11000)
   if (err.code === 11000) {
-    const field = Object.keys(err.keyValue || {})[0] || 'field';
-    const value = Object.values(err.keyValue || {})[0] || 'value';
-    const message = `A record with this ${field} ("${value}") already exists.`;
+    const keyValue = err.keyValue || {};
+    const fields = Object.keys(keyValue);
+    const firstField = fields[0] || 'record';
+    const firstValue = keyValue[firstField] || 'value';
+
+    // Friendly mapping for technical field names
+    const friendlyFieldNames: Record<string, string> = {
+      name: 'name',
+      email: 'email address',
+      slug: 'name',
+      company_id: 'company identifier',
+      id: 'ID',
+      _id: 'ID',
+      username: 'username'
+    };
+
+    let message = '';
+    
+    // Handle composite index for Department (company_id + slug/name)
+    if (fields.includes('company_id') && (fields.includes('slug') || fields.includes('name'))) {
+      message = `A department with this name already exists in your organization.`;
+    } else {
+      const friendlyName = friendlyFieldNames[firstField] || firstField;
+      message = `A record with this ${friendlyName} ("${firstValue}") already exists.`;
+    }
     
     return res.status(409).json({
       success: false,
       error: message,
       code: 'DUPLICATE_KEY_ERROR',
-      field
+      fields
     });
   }
 
@@ -44,7 +66,7 @@ export const errorHandler = (err: any, req: Request, res: Response, next: NextFu
     }));
     return res.status(400).json({
       success: false,
-      error: 'Database validation failed',
+      error: 'Database validation failed. Please ensure all required fields are correctly filled.',
       code: 'DATABASE_VALIDATION_ERROR',
       details
     });
@@ -54,7 +76,7 @@ export const errorHandler = (err: any, req: Request, res: Response, next: NextFu
   if (err.name === 'CastError') {
     return res.status(400).json({
       success: false,
-      error: `Invalid ${err.path}: ${err.value}`,
+      error: `Invalid format for ${err.path}: ${err.value}.`,
       code: 'INVALID_ID_FORMAT'
     });
   }
@@ -70,7 +92,7 @@ export const errorHandler = (err: any, req: Request, res: Response, next: NextFu
   if (err.name === 'JsonWebTokenError') {
     return res.status(401).json({
       success: false,
-      error: 'Invalid authentication token.',
+      error: 'Invalid authentication token. Please log in again.',
       code: 'INVALID_TOKEN'
     });
   }
@@ -80,8 +102,8 @@ export const errorHandler = (err: any, req: Request, res: Response, next: NextFu
   
   // Don't leak stack traces in production
   const message = process.env.NODE_ENV === 'production' 
-    ? 'Internal server error' 
-    : err.message || 'Internal server error';
+    ? 'Something went wrong on our end. Please try again later.' 
+    : err.message || 'An internal server error occurred.';
 
   return res.status(500).json({
     success: false,

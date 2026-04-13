@@ -80,14 +80,6 @@ export default function PeoplePage() {
   const { data: roles = [] } = useRoles();
   const { data: stats, isLoading: statsLoading } = useUserStats();
 
-  // ── Bulk mutations ──────────────────────────────────────────────────
-  const bulkLifecycle = useBulkLifecycleChange();
-  const bulkRole = useBulkAssignRole();
-
-  // ── Selection state ────────────────────────────────────────────────
-  const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
-
-  // ── Derived: apply client-side filtering ─────────────────────────────
   const filteredUsers = useMemo(() => {
     if (!users) return [];
     return users.filter((user) => {
@@ -119,12 +111,29 @@ export default function PeoplePage() {
     });
   }, [users, filters]);
 
-  // ── Export mutation (depends on filters) ────────────────────────────
+  const activeFilterCount = [
+    filters.search,
+    filters.lifecycle_state,
+    filters.department_id,
+    filters.employment_type,
+    filters.location_id,
+  ].filter(Boolean).length;
+
   const exportMutation = useExportUsers({
     lifecycle_state: filters.lifecycle_state || undefined,
     department_id: filters.department_id || undefined,
     employment_type: filters.employment_type || undefined,
   });
+
+  // ── Selection & Bulk mutations ──────────────────────────────────────
+  const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
+  const bulkLifecycle = useBulkLifecycleChange();
+  const bulkRole = useBulkAssignRole();
+
+  const isAllSelected = useMemo(() => {
+    if (!users || users.length === 0) return false;
+    return filteredUsers.length > 0 && filteredUsers.every((u) => selectedIds.has(u._id));
+  }, [users, filteredUsers, selectedIds]);
 
   // ── Modal state ──────────────────────────────────────────────────────
   const [isInviteModalOpen, setIsInviteModalOpen] = useState(false);
@@ -132,16 +141,12 @@ export default function PeoplePage() {
   const [assigningOrgUser, setAssigningOrgUser] = useState<User | null>(null);
   const [changingLifecycleUser, setChangingLifecycleUser] = useState<User | null>(null);
 
-  // ── Bulk action modals ─────────────────────────────────────────────
+  // ── Bulk action modal targets ──────────────────────────────────────
   const [bulkAction, setBulkAction] = useState<'lifecycle' | 'role' | null>(null);
   const [bulkLifecycleTarget, setBulkLifecycleTarget] = useState<LifecycleState | ''>('');
   const [bulkRoleTarget, setBulkRoleTarget] = useState('');
 
-  const isAllSelected = useMemo(() => {
-    if (!users || users.length === 0) return false;
-    return filteredUsers.length > 0 && filteredUsers.every((u) => selectedIds.has(u._id));
-  }, [users, filteredUsers, selectedIds]);
-
+  // ── Handlers ─────────────────────────────────────────────────────────
   const toggleRow = useCallback((userId: string) => {
     setSelectedIds((prev) => {
       const next = new Set(prev);
@@ -161,7 +166,6 @@ export default function PeoplePage() {
 
   const clearSelection = useCallback(() => setSelectedIds(new Set()), []);
 
-  // ── Bulk action handlers ───────────────────────────────────────────
   const handleBulkLifecycle = useCallback(() => {
     if (!bulkLifecycleTarget || selectedIds.size === 0) return;
     bulkLifecycle.mutate(
@@ -194,15 +198,6 @@ export default function PeoplePage() {
     exportMutation.mutate();
   }, [exportMutation]);
 
-  const activeFilterCount = [
-    filters.search,
-    filters.lifecycle_state,
-    filters.department_id,
-    filters.employment_type,
-    filters.location_id,
-  ].filter(Boolean).length;
-
-  // ── Handlers ─────────────────────────────────────────────────────────
   const handleOpenInvite = useCallback(() => {
     setIsInviteModalOpen(true);
   }, []);
@@ -244,6 +239,7 @@ export default function PeoplePage() {
       location_id: '',
     });
   }, []);
+
 
   // ── Render: Loading ──────────────────────────────────────────────────
   if (isLoading) {
@@ -374,6 +370,7 @@ export default function PeoplePage() {
           onClose={handleCloseAssignOrg}
         />
       )}
+
 
       {/* ── Lifecycle Change Modal ── */}
       {changingLifecycleUser && (

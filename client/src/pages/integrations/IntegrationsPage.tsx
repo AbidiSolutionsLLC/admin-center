@@ -4,6 +4,7 @@ import { Plug, Plus, Clock } from 'lucide-react';
 import { useIntegrations } from '@/features/integrations/hooks/useIntegrations';
 import { useConnectIntegration } from '@/features/integrations/hooks/useConnectIntegration';
 import { useSyncLogs } from '@/features/integrations/hooks/useSyncLogs';
+import { useUpdateFieldMapping } from '@/features/integrations/hooks/useUpdateFieldMapping';
 import { IntegrationCard } from '@/features/integrations/components/IntegrationCard';
 import { IntegrationForm, type IntegrationFormData } from '@/features/integrations/components/IntegrationForm';
 import { SyncLogViewer } from '@/features/integrations/components/SyncLogViewer';
@@ -41,6 +42,7 @@ export default function IntegrationsPage() {
   const { data: integrations, isLoading, isError, refetch } = useIntegrations();
 
   const connectMutation = useConnectIntegration();
+  const updateFieldMapping = useUpdateFieldMapping();
 
   // ── Modal state ──────────────────────────────────────────────────────
   const [isConnectModalOpen, setIsConnectModalOpen] = useState(false);
@@ -302,8 +304,10 @@ export default function IntegrationsPage() {
               <FieldMappingTable
                 integration={selectedIntegration}
                 onSave={(mapping) => {
-                  // TODO: Call update API
-                  console.log('Save mapping:', mapping);
+                  updateFieldMapping.mutate({
+                    id: selectedIntegration._id,
+                    field_mapping: mapping,
+                  });
                 }}
               />
             )}

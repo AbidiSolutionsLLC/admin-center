@@ -236,6 +236,11 @@ export const addSecondaryManager = asyncHandler(async (req: Request, res: Respon
     throw new AppError('Cannot assign yourself as your own manager', 400, 'SELF_ASSIGNMENT_NOT_ALLOWED');
   }
 
+  // Enforce maximum 2 secondary managers (US-07)
+  if (user.secondary_manager_ids && user.secondary_manager_ids.length >= 2) {
+    throw new AppError('A user can have at most 2 secondary managers', 400, 'MAX_SECONDARY_MANAGERS_EXCEEDED');
+  }
+
   // Check for circular reporting chain
   const wouldCreateCircular = await wouldCreateCircularChain(
     user._id.toString(),

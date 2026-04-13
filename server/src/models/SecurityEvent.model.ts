@@ -21,7 +21,7 @@ export type SecurityEventType =
   | 'password_setup_failure';
 
 export interface ISecurityEvent extends Document {
-  company_id: Types.ObjectId;
+  company_id?: Types.ObjectId;
   user_id?: Types.ObjectId;
   email?: string;
   event_type: SecurityEventType;
@@ -33,7 +33,7 @@ export interface ISecurityEvent extends Document {
 }
 
 const SecurityEventSchema = new Schema<ISecurityEvent>({
-  company_id: { type: Schema.Types.ObjectId, ref: 'Company', required: true, index: true },
+  company_id: { type: Schema.Types.ObjectId, ref: 'Company', index: true },
   user_id: { type: Schema.Types.ObjectId, ref: 'User' },
   email: { type: String, lowercase: true },
   event_type: {

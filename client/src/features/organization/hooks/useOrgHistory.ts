@@ -16,7 +16,7 @@ interface UseOrgHistoryParams {
  */
 export const useOrgHistory = (params?: UseOrgHistoryParams) => {
   return useQuery<AuditEvent[]>({
-    queryKey: QUERY_KEYS.ORG_HISTORY,
+    queryKey: QUERY_KEYS.ORG_HISTORY(params),
     queryFn: async () => {
       const { data } = await apiClient.get('/organization/history', { params });
       return data.data;

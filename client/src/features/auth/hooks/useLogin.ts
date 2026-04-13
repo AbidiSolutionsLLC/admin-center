@@ -28,8 +28,7 @@ export const useLogin = () => {
       navigate(ROUTES.OVERVIEW, { replace: true });
     },
     onError: (error: any) => {
-      const message = error.response?.data?.error || 'Failed to login';
-      toast.error(message);
+      console.error('Login failed', error);
     },
   });
 };
