@@ -29,7 +29,6 @@ export const useCreateBU = () => {
     },
     onError: (error) => {
       console.error('BU creation failed', error);
-      toast.error('Failed to create Business Unit. Please try again.');
     },
   });
 };

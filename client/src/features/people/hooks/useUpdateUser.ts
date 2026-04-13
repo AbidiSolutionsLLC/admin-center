@@ -24,7 +24,6 @@ export const useUpdateUser = (userId: string) => {
     },
     onError: (error) => {
       console.error('User update failed', error);
-      toast.error('Failed to update user. Please try again.');
     },
   });
 };

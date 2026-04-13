@@ -23,11 +23,16 @@ const OBJECT_TYPE_OPTIONS = [
  * - Reuses audit log diff pattern
  */
 export const OrgHistoryTab: React.FC = () => {
-  const { data: events, isLoading, isError, refetch } = useOrgHistory();
-  const [expandedRows, setExpandedRows] = useState<Set<string>>(new Set());
   const [objectType, setObjectType] = useState('');
   const [dateFrom, setDateFrom] = useState('');
   const [dateTo, setDateTo] = useState('');
+  const [expandedRows, setExpandedRows] = useState<Set<string>>(new Set());
+
+  const { data: events, isLoading, isError, refetch } = useOrgHistory({
+    object_type: objectType || undefined,
+    date_from: dateFrom || undefined,
+    date_to: dateTo || undefined,
+  });
 
   const toggleRow = (eventId: string) => {
     const newExpanded = new Set(expandedRows);

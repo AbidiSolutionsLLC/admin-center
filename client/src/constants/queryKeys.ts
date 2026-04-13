@@ -3,7 +3,7 @@ export const QUERY_KEYS = {
   DEPARTMENT_DETAIL: (id: string) => ['department', id] as const,
   ORG_TREE: ['org', 'tree'] as const,
   ORG_HEALTH: ['org', 'health'] as const,
-  ORG_HISTORY: ['org', 'history'] as const,
+  ORG_HISTORY: (params?: Record<string, unknown>) => ['org', 'history', params] as const,
   BUSINESS_UNITS: ['business-units'] as const,
   BU_TREE: ['bu-tree'] as const,
   INSIGHTS: (filters?: Record<string, unknown>) =>

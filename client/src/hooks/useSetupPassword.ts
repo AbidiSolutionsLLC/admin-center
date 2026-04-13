@@ -18,8 +18,7 @@ export const useSetupPassword = () => {
       toast.success('Password set up successfully! You can now log in.');
     },
     onError: (error: any) => {
-      const message = error.response?.data?.error || 'Failed to set up password';
-      toast.error(message);
+      console.error('Password setup failed', error);
     },
   });
 };

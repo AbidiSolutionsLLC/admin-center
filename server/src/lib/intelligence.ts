@@ -25,6 +25,7 @@ import { Insight } from '../models/Insight.model';
  * - RULE-08: Team with no team lead assigned
  * - RULE-09: Business Unit with no child departments
  * - RULE-10: Duplicate users (same full_name in the same company)
+ * - RULE-10: Setup progress < 50% after 7 days (company onboarding)
  */
 export const runIntelligenceRules = async (companyId: string | Types.ObjectId): Promise<void> => {
   const companyObjectId = typeof companyId === 'string' ? new Types.ObjectId(companyId) : companyId;
@@ -407,6 +408,48 @@ export const runIntelligenceRules = async (companyId: string | Types.ObjectId): 
   }
 
   // ────────────────────────────────────────────────────────────────────────────
+  // RULE-10: Setup progress < 50% after 7 days (company not completing onboarding)
+  // ────────────────────────────────────────────────────────────────────────────
+
+  const { Company } = await import('../models/Company.model');
+  const companies = await Company.find({
+    _id: companyObjectId,
+    is_active: true,
+  }).lean();
+
+  for (const company of companies) {
+    // Calculate setup progress percentage
+    const modules = ['org', 'users', 'roles', 'apps', 'security'] as const;
+    const completedModules = modules.filter(
+      (m) => company.setup_progress?.[m] === true
+    ).length;
+    const progressPercentage = (completedModules / modules.length) * 100;
+
+    // Check if company is older than 7 days
+    const sevenDaysAgo = new Date();
+    sevenDaysAgo.setDate(sevenDaysAgo.getDate() - 7);
+    const companyOlderThan7Days = company.created_at <= sevenDaysAgo;
+
+    if (companyOlderThan7Days && progressPercentage < 50) {
+      insightsToUpsert.push({
+        company_id: companyObjectId,
+        category: 'recommendation',
+        severity: 'info',
+        title: `Setup is ${progressPercentage.toFixed(0)}% complete after 7+ days`,
+        description: 'Your Admin Center setup is less than 50% complete. Finish configuring all modules to unlock the full potential of the platform.',
+        reasoning: `Company "${company.name}" was created on ${company.created_at.toISOString().split('T')[0]} (${Math.floor((Date.now() - company.created_at.getTime()) / (1000 * 60 * 60 * 24))} days ago). Setup progress: ${completedModules}/${modules.length} modules completed (${(['org', 'users', 'roles', 'apps', 'security'] as const).filter(m => !company.setup_progress?.[m]).join(', ')} remaining).`,
+        affected_object_type: 'Company',
+        affected_object_id: company._id.toString(),
+        affected_object_label: company.name,
+        remediation_url: '/overview',
+        remediation_action: 'Complete setup from Overview page',
+        is_resolved: false,
+        detected_at: new Date(),
+      });
+    }
+  }
+
+  // ────────────────────────────────────────────────────────────────────────────
   // Upsert insights (avoid duplicates)
   // ────────────────────────────────────────────────────────────────────────────
   
@@ -735,6 +778,40 @@ export const runIntelligenceRules = async (companyId: string | Types.ObjectId): 
           company_id: companyObjectId,
           affected_object_id: users[0]._id.toString(),
           title: { $regex: /^Potential duplicate user:/ },
+          is_resolved: false,
+        },
+        {
+          $set: {
+            is_resolved: true,
+            resolved_at: new Date(),
+          }
+        }
+      );
+    }
+  }
+
+  // ────────────────────────────────────────────────────────────────────────────
+  // Auto-resolve RULE-10 insights where setup progress is now >= 50%
+  // ────────────────────────────────────────────────────────────────────────────
+
+  const companiesForResolve10 = await Company.find({
+    _id: companyObjectId,
+    is_active: true,
+  }).lean();
+
+  for (const company of companiesForResolve10) {
+    const modules = ['org', 'users', 'roles', 'apps', 'security'] as const;
+    const completedModules = modules.filter(
+      (m) => company.setup_progress?.[m] === true
+    ).length;
+    const progressPercentage = (completedModules / modules.length) * 100;
+
+    if (progressPercentage >= 50) {
+      await Insight.updateMany(
+        {
+          company_id: companyObjectId,
+          affected_object_id: company._id.toString(),
+          title: { $regex: /^Setup is \d+% complete after 7\+ days$/ },
           is_resolved: false,
         },
         {

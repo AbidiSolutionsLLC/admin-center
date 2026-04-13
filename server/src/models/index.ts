@@ -27,3 +27,16 @@ export * from './PolicyAcknowledgment.model';
 export * from './CustomField.model';
 export * from './Integration.model';
 export * from './IntegrationSyncLog.model';
+
+// Notification models
+export * from './NotificationTemplate.model';
+export * from './NotificationEvent.model';
+export * from './InAppNotification.model';
+
+// Workflow models
+export * from './Workflow.model';
+export * from './WorkflowStep.model';
+export * from './WorkflowRun.model';
+
+// Policy models
+export * from './PolicyAssignment.model';

@@ -71,82 +71,7 @@ export default function PeoplePage() {
   const { data: roles = [] } = useRoles();
   const { data: stats, isLoading: statsLoading } = useUserStats();
 
-  // ── Bulk mutations ──────────────────────────────────────────────────
-  const bulkLifecycle = useBulkLifecycleChange();
-  const bulkRole = useBulkAssignRole();
-
-  // ── Selection state ────────────────────────────────────────────────
-  const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
-
-  const isAllSelected = useMemo(() => {
-    if (!users || users.length === 0) return false;
-    return filteredUsers.length > 0 && filteredUsers.every((u) => selectedIds.has(u._id));
-  }, [users, filteredUsers, selectedIds]);
-
-  const toggleRow = useCallback((userId: string) => {
-    setSelectedIds((prev) => {
-      const next = new Set(prev);
-      if (next.has(userId)) next.delete(userId);
-      else next.add(userId);
-      return next;
-    });
-  }, []);
-
-  const toggleAll = useCallback(() => {
-    if (isAllSelected) {
-      setSelectedIds(new Set());
-    } else {
-      setSelectedIds(new Set(filteredUsers.map((u) => u._id)));
-    }
-  }, [isAllSelected, filteredUsers]);
-
-  const clearSelection = useCallback(() => setSelectedIds(new Set()), []);
-
-  // ── Bulk action handlers ───────────────────────────────────────────
-  const handleBulkLifecycle = useCallback(() => {
-    if (!bulkLifecycleTarget || selectedIds.size === 0) return;
-    bulkLifecycle.mutate(
-      { user_ids: Array.from(selectedIds), lifecycle_state: bulkLifecycleTarget },
-      {
-        onSuccess: () => {
-          setBulkAction(null);
-          setBulkLifecycleTarget('');
-          clearSelection();
-        },
-      }
-    );
-  }, [bulkLifecycleTarget, selectedIds, bulkLifecycle, clearSelection]);
-
-  const handleBulkRole = useCallback(() => {
-    if (!bulkRoleTarget || selectedIds.size === 0) return;
-    bulkRole.mutate(
-      { user_ids: Array.from(selectedIds), role_id: bulkRoleTarget },
-      {
-        onSuccess: () => {
-          setBulkAction(null);
-          setBulkRoleTarget('');
-          clearSelection();
-        },
-      }
-    );
-  }, [bulkRoleTarget, selectedIds, bulkRole, clearSelection]);
-
-  const handleExport = useCallback(() => {
-    exportMutation.mutate();
-  }, [exportMutation]);
-
-  // ── Modal state ──────────────────────────────────────────────────────
-  const [isInviteModalOpen, setIsInviteModalOpen] = useState(false);
-  const [editingUser, setEditingUser] = useState<User | null>(null);
-  const [assigningOrgUser, setAssigningOrgUser] = useState<User | null>(null);
-  const [changingLifecycleUser, setChangingLifecycleUser] = useState<User | null>(null);
-
-  // ── Bulk action modals ─────────────────────────────────────────────
-  const [bulkAction, setBulkAction] = useState<'lifecycle' | 'role' | null>(null);
-  const [bulkLifecycleTarget, setBulkLifecycleTarget] = useState<LifecycleState | ''>('');
-  const [bulkRoleTarget, setBulkRoleTarget] = useState('');
-
-  // ── Filters ──────────────────────────────────────────────────────────
+  // ── Filters & Derived Data ──────────────────────────────────────────
   const [filters, setFilters] = useState<UserFilters>({
     search: '',
     lifecycle_state: '',
@@ -155,14 +80,6 @@ export default function PeoplePage() {
     location_id: '',
   });
 
-  // ── Export mutation (depends on filters) ────────────────────────────
-  const exportMutation = useExportUsers({
-    lifecycle_state: filters.lifecycle_state || undefined,
-    department_id: filters.department_id || undefined,
-    employment_type: filters.employment_type || undefined,
-  });
-
-  // ── Derived: apply client-side filtering ─────────────────────────────
   const filteredUsers = useMemo(() => {
     if (!users) return [];
     return users.filter((user) => {
@@ -202,7 +119,85 @@ export default function PeoplePage() {
     filters.location_id,
   ].filter(Boolean).length;
 
+  const exportMutation = useExportUsers({
+    lifecycle_state: filters.lifecycle_state || undefined,
+    department_id: filters.department_id || undefined,
+    employment_type: filters.employment_type || undefined,
+  });
+
+  // ── Selection & Bulk mutations ──────────────────────────────────────
+  const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
+  const bulkLifecycle = useBulkLifecycleChange();
+  const bulkRole = useBulkAssignRole();
+
+  const isAllSelected = useMemo(() => {
+    if (!users || users.length === 0) return false;
+    return filteredUsers.length > 0 && filteredUsers.every((u) => selectedIds.has(u._id));
+  }, [users, filteredUsers, selectedIds]);
+
+  // ── Modal state ──────────────────────────────────────────────────────
+  const [isInviteModalOpen, setIsInviteModalOpen] = useState(false);
+  const [editingUser, setEditingUser] = useState<User | null>(null);
+  const [assigningOrgUser, setAssigningOrgUser] = useState<User | null>(null);
+  const [changingLifecycleUser, setChangingLifecycleUser] = useState<User | null>(null);
+
+  // ── Bulk action modal targets ──────────────────────────────────────
+  const [bulkAction, setBulkAction] = useState<'lifecycle' | 'role' | null>(null);
+  const [bulkLifecycleTarget, setBulkLifecycleTarget] = useState<LifecycleState | ''>('');
+  const [bulkRoleTarget, setBulkRoleTarget] = useState('');
+
   // ── Handlers ─────────────────────────────────────────────────────────
+  const toggleRow = useCallback((userId: string) => {
+    setSelectedIds((prev) => {
+      const next = new Set(prev);
+      if (next.has(userId)) next.delete(userId);
+      else next.add(userId);
+      return next;
+    });
+  }, []);
+
+  const toggleAll = useCallback(() => {
+    if (isAllSelected) {
+      setSelectedIds(new Set());
+    } else {
+      setSelectedIds(new Set(filteredUsers.map((u) => u._id)));
+    }
+  }, [isAllSelected, filteredUsers]);
+
+  const clearSelection = useCallback(() => setSelectedIds(new Set()), []);
+
+  const handleBulkLifecycle = useCallback(() => {
+    if (!bulkLifecycleTarget || selectedIds.size === 0) return;
+    bulkLifecycle.mutate(
+      { user_ids: Array.from(selectedIds), lifecycle_state: bulkLifecycleTarget },
+      {
+        onSuccess: () => {
+          setBulkAction(null);
+          setBulkLifecycleTarget('');
+          clearSelection();
+        },
+      }
+    );
+  }, [bulkLifecycleTarget, selectedIds, bulkLifecycle, clearSelection]);
+
+  const handleBulkRole = useCallback(() => {
+    if (!bulkRoleTarget || selectedIds.size === 0) return;
+    bulkRole.mutate(
+      { user_ids: Array.from(selectedIds), role_id: bulkRoleTarget },
+      {
+        onSuccess: () => {
+          setBulkAction(null);
+          setBulkRoleTarget('');
+          clearSelection();
+        },
+      }
+    );
+  }, [bulkRoleTarget, selectedIds, bulkRole, clearSelection]);
+
+  const handleExport = useCallback(() => {
+    exportMutation.mutate();
+  }, [exportMutation]);
+
   const handleOpenInvite = useCallback(() => {
     setIsInviteModalOpen(true);
   }, []);
@@ -244,6 +239,7 @@ export default function PeoplePage() {
       location_id: '',
     });
   }, []);
+
 
   // ── Render: Loading ──────────────────────────────────────────────────
   if (isLoading) {
@@ -375,14 +371,6 @@ export default function PeoplePage() {
         />
       )}
 
-      {/* ── Organization Assignment Modal ── */}
-      {assigningOrgUser && (
-        <UserOrgAssignmentModal
-          user={assigningOrgUser}
-          isOpen={!!assigningOrgUser}
-          onClose={handleCloseAssignOrg}
-        />
-      )}
 
       {/* ── Lifecycle Change Modal ── */}
       {changingLifecycleUser && (

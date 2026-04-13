@@ -79,8 +79,7 @@ export const useDismissInsight = () => {
       toast.success('Insight dismissed');
     },
     onError: (error: any) => {
-      const message = error.response?.data?.error || 'Failed to dismiss insight';
-      toast.error(message);
+      console.error('Failed to dismiss insight', error);
     },
   });
 };
@@ -101,8 +100,7 @@ export const useRunIntelligence = () => {
       toast.success('Intelligence rules executed');
     },
     onError: (error: any) => {
-      const message = error.response?.data?.error || 'Failed to run intelligence';
-      toast.error(message);
+      console.error('Failed to run intelligence', error);
     },
   });
 };
