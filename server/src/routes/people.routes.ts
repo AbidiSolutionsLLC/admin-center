@@ -15,6 +15,7 @@ import {
 } from '../controllers/people.controller';
 import { assignUserOrg } from '../controllers/organization.controller';
 import { requireRole } from '../middleware/requireRole';
+import { PERMISSION_GROUPS } from '../constants/roles';
 import reportingLinesRoutes from './reportingLines.routes';
 
 const router = Router();
@@ -40,10 +41,9 @@ router.get('/:id', getUserById);
 /**
  * POST /people/invite
  * Invite a new user (sends welcome email)
+ * Requires: Super Admin, Admin, or HR
  */
-const PEOPLE_ADMIN_ROLES = ['super_admin', 'admin', 'hr_admin'];
-
-router.post('/invite', requireRole(PEOPLE_ADMIN_ROLES), inviteUser);
+router.post('/invite', requireRole([...PERMISSION_GROUPS.PEOPLE_ADMINS]), inviteUser);
 
 /**
  * POST /people/:id/resend-invite
@@ -54,26 +54,30 @@ router.post('/:id/resend-invite', resendInvite);
 /**
  * POST /people/bulk-invite
  * Bulk invite up to 500 users
+ * Requires: Super Admin, Admin, or HR
  */
-router.post('/bulk-invite', requireRole(PEOPLE_ADMIN_ROLES), bulkInviteUsers);
+router.post('/bulk-invite', requireRole([...PERMISSION_GROUPS.PEOPLE_ADMINS]), bulkInviteUsers);
 
 /**
  * PUT /people/:id
  * Update user profile information
+ * Requires: Super Admin, Admin, or HR
  */
-router.put('/:id', updateUser);
+router.put('/:id', requireRole([...PERMISSION_GROUPS.PEOPLE_ADMINS]), updateUser);
 
 /**
  * PUT /people/:id/lifecycle
  * Transition user to a new lifecycle state
+ * Requires: Super Admin, Admin, or HR
  */
-router.put('/:id/lifecycle', requireRole(PEOPLE_ADMIN_ROLES), updateUserLifecycle);
+router.put('/:id/lifecycle', requireRole([...PERMISSION_GROUPS.PEOPLE_ADMINS]), updateUserLifecycle);
 
 /**
  * DELETE /people/:id
  * Archive a user (soft delete)
+ * Requires: Super Admin, Admin, or HR
  */
-router.delete('/:id', deleteUser);
+router.delete('/:id', requireRole([...PERMISSION_GROUPS.PEOPLE_ADMINS]), deleteUser);
 
 /**
  * POST /people/:id/assign-org
@@ -90,8 +94,9 @@ router.use('/:id/reporting-line', reportingLinesRoutes);
 /**
  * PUT /people/bulk-lifecycle
  * Bulk lifecycle state change for multiple users
+ * Requires: Super Admin, Admin, or HR
  */
-router.put('/bulk-lifecycle', requireRole(PEOPLE_ADMIN_ROLES), bulkUpdateLifecycle);
+router.put('/bulk-lifecycle', requireRole([...PERMISSION_GROUPS.PEOPLE_ADMINS]), bulkUpdateLifecycle);
 
 /**
  * POST /people/bulk-assign-role

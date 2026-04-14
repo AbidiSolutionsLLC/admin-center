@@ -27,6 +27,7 @@ const InviteUserSchema = z.object({
   department_id: z.string().optional().nullable(),
   team_id: z.string().optional().nullable(),
   manager_id: z.string().optional().nullable(),
+  role: z.enum(['Super Admin', 'Admin', 'HR', 'Manager', 'Employee', 'Technician']).optional(),
   employment_type: z.enum(['full_time', 'part_time', 'contractor', 'intern']).optional(),
   hire_date: z.string().optional().nullable(),
   location_id: z.string().optional().nullable(),
@@ -40,6 +41,7 @@ const UpdateUserSchema = z.object({
   department_id: z.string().optional().nullable(),
   team_id: z.string().optional().nullable(),
   manager_id: z.string().optional().nullable(),
+  role: z.enum(['Super Admin', 'Admin', 'HR', 'Manager', 'Employee', 'Technician']).optional(),
   employment_type: z.enum(['full_time', 'part_time', 'contractor', 'intern']).optional(),
   hire_date: z.string().optional().nullable(),
   termination_date: z.string().optional().nullable(),
@@ -58,6 +60,7 @@ const BulkInviteRowSchema = z.object({
   department_id: z.string().optional(),
   team_id: z.string().optional(),
   manager_id: z.string().optional(),
+  role: z.enum(['Super Admin', 'Admin', 'HR', 'Manager', 'Employee', 'Technician']).optional(),
   employment_type: z.enum(['full_time', 'part_time', 'contractor', 'intern']).optional(),
   hire_date: z.string().optional(),
   location_id: z.string().optional(),
@@ -163,7 +166,7 @@ async function runLifecycleAutomations(
       full_name: user.full_name,
       employee_id: user.employee_id,
       company_name: company.name,
-      invite_link: `${process.env.CLIENT_URL}/onboarding?token=${rawToken}`,
+      invite_link: `${process.env.CLIENT_URL}/onboarding?token=${rawToken}&email=${encodeURIComponent(user.email)}`,
     });
 
     await auditLogger.log({
@@ -338,6 +341,7 @@ export const inviteUser = asyncHandler(async (req: Request, res: Response) => {
     ...input,
     company_id: req.user.company_id,
     password_hash,
+    role: input.role || 'Employee', // Default to 'Employee' if not provided
     lifecycle_state: 'invited',
     is_active: false, // User is not active until they complete onboarding
     // Normalize empty strings → undefined
@@ -365,7 +369,7 @@ export const inviteUser = asyncHandler(async (req: Request, res: Response) => {
       full_name: user.full_name,
       employee_id: user.employee_id,
       company_name: company.name,
-      invite_link: `${process.env.CLIENT_URL}/onboarding?token=${rawToken}`,
+      invite_link: `${process.env.CLIENT_URL}/onboarding?token=${rawToken}&email=${encodeURIComponent(user.email)}`,
     });
   } catch (error) {
     console.error('Failed to send welcome email:', error);
@@ -420,6 +424,7 @@ export const updateUser = asyncHandler(async (req: Request, res: Response) => {
   if (updates.termination_date === '') updates.termination_date = null;
   if (updates.avatar_url === '') updates.avatar_url = null;
   if (updates.phone === '') updates.phone = null;
+  if (updates.role === '') updates.role = null;
 
   // Convert date strings to Date objects
   if (updates.hire_date && typeof updates.hire_date === 'string') {
@@ -629,6 +634,7 @@ export const bulkInviteUsers = asyncHandler(async (req: Request, res: Response) 
         ...validatedRow,
         company_id: req.user.company_id,
         password_hash,
+        role: validatedRow.role || 'Employee', // Default to 'Employee' if not provided
         lifecycle_state: 'invited',
         is_active: false,
         department_id: validatedRow.department_id || undefined,
@@ -692,7 +698,7 @@ export const bulkInviteUsers = asyncHandler(async (req: Request, res: Response) 
           full_name: u.full_name,
           employee_id: u.employee_id,
           company_name: company.name,
-          invite_link: `${process.env.CLIENT_URL}/onboarding?token=${(u as any).token}`,
+          invite_link: `${process.env.CLIENT_URL}/onboarding?token=${(u as any).token}&email=${encodeURIComponent(u.email)}`,
         }))
       );
 
@@ -1068,11 +1074,8 @@ export const verifyInviteToken = asyncHandler(async (req: Request, res: Response
   const user = await User.findById(record.user_id).select('email full_name company_id');
   if (!user) throw new AppError('User not found', 404, 'NOT_FOUND');
 
-  // Mark token as used
-  record.is_used = true;
-  record.used_at = new Date();
-  await record.save();
-
+  // Do not consume the invite token here. The token is validated on page load,
+  // and it should be consumed only when the user successfully sets their password.
   res.json({ success: true, data: { email: user.email, full_name: user.full_name, company_id: user.company_id } });
 });
 
@@ -1112,7 +1115,7 @@ export const resendInvite = asyncHandler(async (req: Request, res: Response) => 
     full_name: user.full_name,
     employee_id: user.employee_id,
     company_name: company.name,
-    invite_link: `${process.env.CLIENT_URL}/onboarding?token=${rawToken}`,
+    invite_link: `${process.env.CLIENT_URL}/onboarding?token=${rawToken}&email=${encodeURIComponent(user.email)}`,
   });
 
   await auditLogger.log({

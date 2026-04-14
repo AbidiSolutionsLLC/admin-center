@@ -1,7 +1,9 @@
 // server/src/models/User.model.ts
 import { Schema, model, Document, Types } from 'mongoose';
 import { Company } from './Company.model';
+import { generateEmployeeId } from '../services/employeeId';
 
+export type UserRoleType = 'Super Admin' | 'Admin' | 'HR' | 'Manager' | 'Employee' | 'Technician';
 export type LifecycleState = 'invited' | 'onboarding' | 'active' | 'probation' | 'on_leave' | 'terminated' | 'archived';
 export type EmploymentType = 'full_time' | 'part_time' | 'contractor' | 'intern';
 
@@ -17,6 +19,7 @@ export interface IUser extends Document {
   team_id?: Types.ObjectId;
   manager_id?: Types.ObjectId;
   secondary_manager_ids?: Types.ObjectId[];
+  role: UserRoleType;
   lifecycle_state: LifecycleState;
   lifecycle_changed_at: Date;
   hire_date?: Date;
@@ -44,6 +47,12 @@ const UserSchema = new Schema<IUser>({
   team_id: { type: Schema.Types.ObjectId, ref: 'Team' },
   manager_id: { type: Schema.Types.ObjectId, ref: 'User' },
   secondary_manager_ids: [{ type: Schema.Types.ObjectId, ref: 'User' }],
+  role: { 
+    type: String, 
+    enum: ['Super Admin', 'Admin', 'HR', 'Manager', 'Employee', 'Technician'],
+    default: 'Employee',
+    required: true,
+  },
   lifecycle_state: {
     type: String,
     enum: ['invited', 'onboarding', 'active', 'probation', 'on_leave', 'terminated', 'archived'],
@@ -69,6 +78,7 @@ UserSchema.index({ company_id: 1, department_id: 1 });
 UserSchema.index({ last_login: 1 });
 UserSchema.index({ company_id: 1, manager_id: 1 });
 UserSchema.index({ company_id: 1, secondary_manager_ids: 1 });
+UserSchema.index({ company_id: 1, role: 1 });
 
 // ── Pre-save Hook: Auto-generate employee_id ────────────────────────────────
 /**
@@ -90,15 +100,19 @@ UserSchema.pre('save', async function() {
       throw new Error(`Company not found: ${this.company_id}`);
     }
 
-    // Parse the format string and generate the employee_id
-    const format = company.employee_id_format;
-    const counter = company.employee_id_counter;
-
-    // Replace {counter:N} with zero-padded counter value
-    // Example: 'EMP-{counter:5}' with counter=42 → 'EMP-00042'
-    this.employee_id = format.replace(/\{counter:(\d+)\}/, (match, digits) => {
-      const paddingLength = parseInt(digits, 10);
-      return counter.toString().padStart(paddingLength, '0');
+    this.employee_id = generateEmployeeId(company.employee_id_format, {
+      date: new Date(),
+      company: {
+        name: company.name,
+        code: company.slug,
+      },
+      user: {
+        department: undefined,
+        departmentCode: undefined,
+        location: undefined,
+        jobTitle: undefined,
+      },
+      counter: company.employee_id_counter,
     });
   }
 });

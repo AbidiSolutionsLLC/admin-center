@@ -7,6 +7,7 @@ import { User, LifecycleState } from '../models/User.model';
 import { RefreshToken } from '../models/RefreshToken.model';
 import { SecurityEvent } from '../models/SecurityEvent.model';
 import { SecurityPolicy } from '../models/SecurityPolicy.model';
+import { InviteToken } from '../models/InviteToken.model';
 import { signAccessToken, signRefreshToken, AdminClaim } from '../lib/tokenService';
 import { AppError } from '../utils/AppError';
 import { z } from 'zod';
@@ -126,8 +127,8 @@ export const login = asyncHandler(async (req: Request, res: Response) => {
     throw new AppError('Account is terminated or archived', 403, 'FORBIDDEN');
   }
 
-  // Determine user role (for now, default to employee if not fully implemented in RBAC)
-  const userRole: AdminClaim['user_role'] = 'employee';
+  // Get user role from the User model
+  const userRole = user.role;
 
   // Sign tokens
   const accessToken = signAccessToken({
@@ -223,11 +224,11 @@ export const refresh = asyncHandler(async (req: Request, res: Response) => {
     throw new AppError('Account is terminated or archived', 403, 'FORBIDDEN');
   }
 
-  // Issue new access token
+  // Issue new access token with user's role from the model
   const accessToken = signAccessToken({
     userId: user._id.toString(),
     email: user.email,
-    user_role: 'employee',
+    user_role: user.role,
     company_id: user.company_id.toString()
   });
 
@@ -326,25 +327,38 @@ export const setupPassword = asyncHandler(async (req: Request, res: Response) =>
   }
   const { email, token, newPassword } = result.data;
 
-  // Find user by email
-  const user = await User.findOne({ email: email.toLowerCase() }).select('+password_hash');
-  
-  if (!user) {
-    throw new AppError('User not found', 404, 'NOT_FOUND');
-  }
+  const tokenHash = crypto.createHash('sha256').update(token).digest('hex');
+  const inviteRecord = await InviteToken.findOne({
+    token_hash: tokenHash,
+    is_used: false,
+    expires_at: { $gt: new Date() },
+  });
 
-  // Verify token (current temporary password)
-  const isMatch = await bcrypt.compare(token, user.password_hash);
-  if (!isMatch) {
+  if (!inviteRecord) {
     await logSecurityEvent({
-      company_id: user.company_id,
-      user_id: user._id,
-      email: email.toLowerCase(),
+      company_id: null,
       event_type: 'password_setup_failure',
       ip_address: req.ip,
       user_agent: req.headers['user-agent'],
       is_suspicious: true,
-      metadata: { reason: 'invalid_token' },
+      metadata: { reason: 'invalid_or_expired_token' },
+    });
+    throw new AppError('Invalid or expired token', 400, 'INVALID_TOKEN');
+  }
+
+  const user = await User.findOne({
+    _id: inviteRecord.user_id,
+    email: email.toLowerCase(),
+  }).select('+password_hash');
+
+  if (!user) {
+    await logSecurityEvent({
+      company_id: null,
+      event_type: 'password_setup_failure',
+      ip_address: req.ip,
+      user_agent: req.headers['user-agent'],
+      is_suspicious: true,
+      metadata: { reason: 'invalid_email_or_token' },
     });
     throw new AppError('Invalid or expired token', 400, 'INVALID_TOKEN');
   }
@@ -359,6 +373,10 @@ export const setupPassword = asyncHandler(async (req: Request, res: Response) =>
   user.lifecycle_state = 'active'; // Transition to active
   user.is_active = true;
   await user.save();
+
+  inviteRecord.is_used = true;
+  inviteRecord.used_at = new Date();
+  await inviteRecord.save();
 
   // Log Security Event
   await logSecurityEvent({

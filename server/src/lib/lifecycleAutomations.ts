@@ -24,7 +24,7 @@ export async function runLifecycleAutomations(
           full_name: user.full_name,
           employee_id: user.employee_id,
           company_name: company.name,
-          invite_link: `${process.env.CLIENT_URL}/onboarding?token=PLACEHOLDER`, // Token already sent in invite
+          invite_link: `${process.env.CLIENT_URL}/onboarding?token=PLACEHOLDER&email=${encodeURIComponent(user.email)}`, // Token already sent in invite
         });
         await auditLogger.log({
           req,

@@ -12,6 +12,7 @@ import LoginPage from './pages/auth/LoginPage';
 import OnboardingPage from './pages/auth/OnboardingPage';
 import OverviewPage from './pages/overview/OverviewPage';
 import OrganizationPage from './pages/organization/OrganizationPage';
+import CompanySettingsPage from './pages/company/CompanySettingsPage';
 import TeamsPage from './pages/teams/TeamsPage';
 import PeoplePage from './pages/people/PeoplePage';
 import UserDetailPage from './pages/people/UserDetailPage';
@@ -41,6 +42,7 @@ function App() {
               <Route index element={<Navigate to={ROUTES.ORGANIZATION} replace />} />
               <Route path={ROUTES.OVERVIEW} element={<OverviewPage />} />
               <Route path={ROUTES.ORGANIZATION} element={<OrganizationPage />} />
+              <Route path={ROUTES.COMPANY_SETTINGS} element={<CompanySettingsPage />} />
               <Route path={ROUTES.TEAMS} element={<TeamsPage />} />
               <Route path={ROUTES.PEOPLE} element={<PeoplePage />} />
               <Route path="/people/:id" element={<UserDetailPage />} />

@@ -5,13 +5,24 @@ import { Company } from '../models/Company.model';
 import { AppError } from '../utils/AppError';
 import { auditLogger } from '../lib/auditLogger';
 import { z } from 'zod';
+import { validateEmployeeIdFormat } from '../services/employeeId';
 
 const UpdateEmployeeIdFormatSchema = z.object({
   employee_id_format: z
     .string()
     .min(1)
     .max(50)                                     // FIX-12: max length guard
-    .regex(/\{counter:\d+\}/, 'Format must contain a {counter:N} placeholder'), // FIX-05 from docs
+    .superRefine((value, ctx) => {
+      const validation = validateEmployeeIdFormat(value);
+      if (!validation.valid) {
+        validation.errors.forEach((error) => {
+          ctx.addIssue({
+            code: z.ZodIssueCode.custom,
+            message: error.message,
+          });
+        });
+      }
+    }),
 });
 
 export const getCompanySettings = asyncHandler(async (req: Request, res: Response) => {

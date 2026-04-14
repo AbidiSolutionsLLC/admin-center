@@ -1,0 +1,1 @@
+src/models/index.ts(18,1): error TS2308: Module './User.model' has already exported a member named 'UserRole'. Consider explicitly re-exporting to resolve the ambiguity.
