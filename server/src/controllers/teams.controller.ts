@@ -9,6 +9,22 @@ import { auditLogger } from '../lib/auditLogger';
 import { AppError } from '../utils/AppError';
 import { slugify } from '../utils/slugify';
 
+// ── Types & Interfaces ───────────────────────────────────────────────────────
+
+interface TeamFilter {
+  company_id: string | Types.ObjectId;
+  is_active?: boolean;
+  slug?: string;
+  _id?: string | Types.ObjectId | { $ne: string | Types.ObjectId };
+  department_id?: string | Types.ObjectId;
+}
+
+interface TeamMemberFilter {
+  company_id: string | Types.ObjectId;
+  team_id: string | Types.ObjectId;
+  _id?: string | Types.ObjectId;
+}
+
 // ── Zod Schemas ──────────────────────────────────────────────────────────────
 
 const CreateTeamSchema = z.object({
@@ -52,10 +68,12 @@ async function enrichTeams(teams: any[]): Promise<any[]> {
  * Returns all active teams for the requesting company.
  */
 export const getTeams = asyncHandler(async (req: Request, res: Response) => {
-  const teams = await Team.find({
+  const filter: TeamFilter = {
     company_id: req.user.company_id,
     is_active: true,
-  } as any)
+  };
+
+  const teams = await Team.find(filter)
     .populate('team_lead_id', 'full_name avatar_url email')
     .populate('department_id', 'name slug')
     .sort({ created_at: 1 })
@@ -70,11 +88,13 @@ export const getTeams = asyncHandler(async (req: Request, res: Response) => {
  * Returns a single team by ID, scoped to the company.
  */
 export const getTeamById = asyncHandler(async (req: Request, res: Response) => {
-  const team = await Team.findOne({
+  const filter: TeamFilter = {
     _id: req.params.id,
     company_id: req.user.company_id,
     is_active: true,
-  } as any)
+  };
+
+  const team = await Team.findOne(filter)
     .populate('team_lead_id', 'full_name avatar_url email')
     .populate('department_id', 'name slug');
 
@@ -99,7 +119,7 @@ export const createTeam = asyncHandler(async (req: Request, res: Response) => {
     company_id: req.user.company_id,
     slug,
     is_active: true,
-  } as any);
+  });
 
   if (existing) {
     throw new AppError(
@@ -109,12 +129,37 @@ export const createTeam = asyncHandler(async (req: Request, res: Response) => {
     );
   }
 
+  // ── Validation ─────────────────────────────────────────────────────────────
+  
+  // 1. Validate department
+  const dept = await Department.findOne({
+    _id: input.department_id,
+    company_id: req.user.company_id,
+    is_active: true,
+  });
+
+  if (!dept) {
+    throw new AppError('Department not found, inactive, or belonging to another company', 404, 'NOT_FOUND');
+  }
+
+  // 2. Validate team lead (if provided)
+  if (input.team_lead_id) {
+    const lead = await User.findOne({
+      _id: input.team_lead_id,
+      company_id: req.user.company_id,
+      is_active: true,
+    });
+    if (!lead) {
+      throw new AppError('Team lead user not found, inactive, or belonging to another company', 404, 'NOT_FOUND');
+    }
+  }
+
   const team = await Team.create({
     ...input,
-    department_id: input.department_id || undefined,
+    department_id: input.department_id,
     team_lead_id: input.team_lead_id || undefined,
     company_id: req.user.company_id,
-  } as any);
+  });
 
   await auditLogger.log({
     req,
@@ -135,18 +180,19 @@ export const createTeam = asyncHandler(async (req: Request, res: Response) => {
  * Updates an existing team, scoped to the company tenant.
  */
 export const updateTeam = asyncHandler(async (req: Request, res: Response) => {
-  console.log("Update Team Request Body:", req.body);
   const input = UpdateTeamSchema.parse(req.body);
 
   // If name is being changed, check for duplicate slug
   if (input.name) {
     const slug = slugify(input.name);
-    const existing = await Team.findOne({
+    const filter: TeamFilter = {
       company_id: req.user.company_id,
       slug,
       _id: { $ne: req.params.id },
       is_active: true,
-    } as any);
+    };
+
+    const existing = await Team.findOne(filter);
 
     if (existing) {
       throw new AppError(
@@ -157,17 +203,45 @@ export const updateTeam = asyncHandler(async (req: Request, res: Response) => {
     }
   }
 
-  const team = await Team.findOne({
+  const teamFilter: TeamFilter = {
     _id: req.params.id,
     company_id: req.user.company_id,
     is_active: true,
-  } as any);
+  };
+
+  const team = await Team.findOne(teamFilter);
 
   if (!team) {
     throw new AppError('Team not found', 404, 'NOT_FOUND');
   }
 
   const beforeState = team.toObject();
+
+  // ── Validation ─────────────────────────────────────────────────────────────
+  
+  // 1. If department_id is being updated, validate it
+  if (input.department_id) {
+    const dept = await Department.findOne({
+      _id: input.department_id,
+      company_id: req.user.company_id,
+      is_active: true,
+    });
+    if (!dept) {
+      throw new AppError('Department not found, inactive, or access denied', 404, 'NOT_FOUND');
+    }
+  }
+
+  // 2. If team_lead_id is being updated, validate it
+  if (input.team_lead_id) {
+    const lead = await User.findOne({
+      _id: input.team_lead_id,
+      company_id: req.user.company_id,
+      is_active: true,
+    });
+    if (!lead) {
+      throw new AppError('Team lead user not found, inactive, or access denied', 404, 'NOT_FOUND');
+    }
+  }
 
   const updates: Record<string, unknown> = { ...input };
   // No longer allowing department_id to be empty/null
@@ -195,11 +269,13 @@ export const updateTeam = asyncHandler(async (req: Request, res: Response) => {
  * Soft-deletes a team. Blocked if team has active members (409).
  */
 export const deleteTeam = asyncHandler(async (req: Request, res: Response) => {
-  const team = await Team.findOne({
+  const filter: TeamFilter = {
     _id: req.params.id,
     company_id: req.user.company_id,
     is_active: true,
-  } as any);
+  };
+
+  const team = await Team.findOne(filter);
 
   if (!team) {
     throw new AppError('Team not found', 404, 'NOT_FOUND');
@@ -209,7 +285,7 @@ export const deleteTeam = asyncHandler(async (req: Request, res: Response) => {
   const memberCount = await TeamMember.countDocuments({
     company_id: req.user.company_id,
     team_id: team._id,
-  } as any);
+  });
 
   if (memberCount > 0) {
     throw new AppError(
@@ -245,20 +321,24 @@ export const deleteTeam = asyncHandler(async (req: Request, res: Response) => {
  * Returns all members of a specific team.
  */
 export const getTeamMembers = asyncHandler(async (req: Request, res: Response) => {
-  const team = await Team.findOne({
+  const teamFilter: TeamFilter = {
     _id: req.params.id,
     company_id: req.user.company_id,
     is_active: true,
-  } as any);
+  };
+
+  const team = await Team.findOne(teamFilter);
 
   if (!team) {
     throw new AppError('Team not found', 404, 'NOT_FOUND');
   }
 
-  const members = await TeamMember.find({
+  const membersFilter: TeamMemberFilter = {
     company_id: req.user.company_id,
     team_id: team._id,
-  } as any)
+  };
+
+  const members = await TeamMember.find(membersFilter)
     .populate('user_id', 'full_name email avatar_url employee_id')
     .sort({ joined_at: 1 })
     .lean();
@@ -279,11 +359,13 @@ export const getTeamMembers = asyncHandler(async (req: Request, res: Response) =
 export const addTeamMember = asyncHandler(async (req: Request, res: Response) => {
   const input = AddMemberSchema.parse(req.body);
 
-  const team = await Team.findOne({
+  const teamFilter: TeamFilter = {
     _id: req.params.id,
     company_id: req.user.company_id,
     is_active: true,
-  } as any);
+  };
+
+  const team = await Team.findOne(teamFilter);
 
   if (!team) {
     throw new AppError('Team not found', 404, 'NOT_FOUND');
@@ -294,7 +376,7 @@ export const addTeamMember = asyncHandler(async (req: Request, res: Response) =>
     _id: input.user_id,
     company_id: req.user.company_id,
     is_active: true,
-  } as any);
+  });
 
   if (!user) {
     throw new AppError('User not found', 404, 'NOT_FOUND');
@@ -305,7 +387,7 @@ export const addTeamMember = asyncHandler(async (req: Request, res: Response) =>
     team_id: team._id,
     user_id: user._id,
     role: input.role,
-  } as any);
+  });
 
   await auditLogger.log({
     req,
@@ -337,21 +419,25 @@ export const addTeamMember = asyncHandler(async (req: Request, res: Response) =>
 export const updateTeamMember = asyncHandler(async (req: Request, res: Response) => {
   const input = UpdateMemberSchema.parse(req.body);
 
-  const team = await Team.findOne({
+  const teamFilter: TeamFilter = {
     _id: req.params.id,
     company_id: req.user.company_id,
     is_active: true,
-  } as any);
+  };
+
+  const team = await Team.findOne(teamFilter);
 
   if (!team) {
     throw new AppError('Team not found', 404, 'NOT_FOUND');
   }
 
-  const member = await TeamMember.findOne({
+  const memberFilter: TeamMemberFilter = {
     _id: req.params.memberId,
     company_id: req.user.company_id,
     team_id: team._id,
-  } as any);
+  };
+
+  const member = await TeamMember.findOne(memberFilter);
 
   if (!member) {
     throw new AppError('Team member not found', 404, 'NOT_FOUND');
@@ -390,21 +476,25 @@ export const updateTeamMember = asyncHandler(async (req: Request, res: Response)
  * Removes a user from a team.
  */
 export const removeTeamMember = asyncHandler(async (req: Request, res: Response) => {
-  const team = await Team.findOne({
+  const teamFilter: TeamFilter = {
     _id: req.params.id,
     company_id: req.user.company_id,
     is_active: true,
-  } as any);
+  };
+
+  const team = await Team.findOne(teamFilter);
 
   if (!team) {
     throw new AppError('Team not found', 404, 'NOT_FOUND');
   }
 
-  const member = await TeamMember.findOne({
+  const memberFilter: TeamMemberFilter = {
     _id: req.params.memberId,
     company_id: req.user.company_id,
     team_id: team._id,
-  } as any);
+  };
+
+  const member = await TeamMember.findOne(memberFilter);
 
   if (!member) {
     throw new AppError('Team member not found', 404, 'NOT_FOUND');
