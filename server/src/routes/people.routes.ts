@@ -11,8 +11,10 @@ import {
   bulkAssignRole,
   exportUsers,
   deleteUser,
+  resendInvite,
 } from '../controllers/people.controller';
 import { assignUserOrg } from '../controllers/organization.controller';
+import { requireRole } from '../middleware/requireRole';
 import reportingLinesRoutes from './reportingLines.routes';
 
 const router = Router();
@@ -39,13 +41,21 @@ router.get('/:id', getUserById);
  * POST /people/invite
  * Invite a new user (sends welcome email)
  */
-router.post('/invite', inviteUser);
+const PEOPLE_ADMIN_ROLES = ['super_admin', 'admin', 'hr_admin'];
+
+router.post('/invite', requireRole(PEOPLE_ADMIN_ROLES), inviteUser);
+
+/**
+ * POST /people/:id/resend-invite
+ * Resend invitation email to an invited user
+ */
+router.post('/:id/resend-invite', resendInvite);
 
 /**
  * POST /people/bulk-invite
  * Bulk invite up to 500 users
  */
-router.post('/bulk-invite', bulkInviteUsers);
+router.post('/bulk-invite', requireRole(PEOPLE_ADMIN_ROLES), bulkInviteUsers);
 
 /**
  * PUT /people/:id
@@ -57,7 +67,7 @@ router.put('/:id', updateUser);
  * PUT /people/:id/lifecycle
  * Transition user to a new lifecycle state
  */
-router.put('/:id/lifecycle', updateUserLifecycle);
+router.put('/:id/lifecycle', requireRole(PEOPLE_ADMIN_ROLES), updateUserLifecycle);
 
 /**
  * DELETE /people/:id
@@ -81,7 +91,7 @@ router.use('/:id/reporting-line', reportingLinesRoutes);
  * PUT /people/bulk-lifecycle
  * Bulk lifecycle state change for multiple users
  */
-router.put('/bulk-lifecycle', bulkUpdateLifecycle);
+router.put('/bulk-lifecycle', requireRole(PEOPLE_ADMIN_ROLES), bulkUpdateLifecycle);
 
 /**
  * POST /people/bulk-assign-role

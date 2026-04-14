@@ -27,7 +27,15 @@ const CompanySchema = new Schema<ICompany>({
   slug: { type: String, required: true, unique: true },
   logo_url: String,
   domain: String,
-  employee_id_format: { type: String, default: 'EMP-{counter:5}' },
+  employee_id_format: { 
+    type: String, 
+    default: 'EMP-{counter:5}',
+    maxlength: [50, 'employee_id_format must be 50 characters or fewer'], // FIX-12: Max length guard
+    validate: { // FIX-12: Validator for {counter:N} placeholder
+      validator: (v: string) => /\{counter:\d+\}/.test(v),
+      message: 'employee_id_format must contain a {counter:N} placeholder (e.g. EMP-{counter:5})',
+    },
+  },
   employee_id_counter: { type: Number, default: 1 },
   setup_progress: {
     org: { type: Boolean, default: false },

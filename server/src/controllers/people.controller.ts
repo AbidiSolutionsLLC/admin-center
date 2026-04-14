@@ -15,6 +15,8 @@ import { isValidTransition, getTransitionErrorMessage, LifecycleState } from '..
 import { handleLifecycleEvent } from '../lib/workflowEngine';
 import { AppError } from '../utils/AppError';
 import { Types } from 'mongoose';
+import crypto from 'crypto';
+import { InviteToken } from '../models/InviteToken.model';
 
 // ── Zod Schemas ──────────────────────────────────────────────────────────────
 
@@ -130,6 +132,102 @@ async function enrichUsers(users: any[], companyId: string): Promise<any[]> {
     }
     return data;
   });
+}
+
+async function runLifecycleAutomations(
+  user: any,
+  currentState: LifecycleState,
+  targetState: LifecycleState,
+  req: Request,
+): Promise<void> {
+  const transitionKey = `${currentState}_to_${targetState}`;
+
+  if (transitionKey === 'invited_to_onboarding') {
+    const company = await Company.findById(req.user.company_id);
+
+    if (!company) {
+      return;
+    }
+
+    const rawToken = crypto.randomBytes(32).toString('hex');
+    const tokenHash = crypto.createHash('sha256').update(rawToken).digest('hex');
+
+    await InviteToken.create({
+      user_id: user._id,
+      token_hash: tokenHash,
+      expires_at: new Date(Date.now() + 72 * 60 * 60 * 1000),
+    });
+
+    await sendWelcomeEmail({
+      email: user.email,
+      full_name: user.full_name,
+      employee_id: user.employee_id,
+      company_name: company.name,
+      invite_link: `${process.env.CLIENT_URL}/onboarding?token=${rawToken}`,
+    });
+
+    await auditLogger.log({
+      req,
+      action: 'user.lifecycle_automation',
+      module: 'people',
+      object_type: 'User',
+      object_id: user._id.toString(),
+      object_label: user.full_name,
+      before_state: { transition: transitionKey },
+      after_state: { automation: 'welcome_email_sent', email: user.email },
+    });
+  }
+
+  if (transitionKey === 'active_to_terminated') {
+    user.refresh_token_hash = undefined;
+    user.is_active = false;
+    await user.save();
+
+    await RefreshToken.updateMany(
+      { user_id: user._id, is_revoked: false },
+      { $set: { is_revoked: true } }
+    );
+
+    await auditLogger.log({
+      req,
+      action: 'user.lifecycle_automation',
+      module: 'people',
+      object_type: 'User',
+      object_id: user._id.toString(),
+      object_label: user.full_name,
+      before_state: { transition: transitionKey },
+      after_state: { automation: 'sessions_revoked', refresh_tokens_invalidated: true },
+    });
+  }
+
+  if (transitionKey === 'terminated_to_archived') {
+    user.full_name = 'Archived User';
+    user.email = `archived-${user._id}@archived.local`;
+    user.phone = undefined;
+    user.avatar_url = undefined;
+    user.employee_id = `ARCHIVED-${user._id.toString().slice(-8)}`;
+    user.is_active = false;
+    (user as any).department_id = undefined;
+    (user as any).team_id = undefined;
+    (user as any).manager_id = undefined;
+    (user as any).location_id = undefined;
+    (user as any).hire_date = undefined;
+    (user as any).termination_date = undefined;
+    (user as any).custom_fields = {};
+
+    await user.save();
+
+    await auditLogger.log({
+      req,
+      action: 'user.lifecycle_automation',
+      module: 'people',
+      object_type: 'User',
+      object_id: user._id.toString(),
+      object_label: user.full_name,
+      before_state: { transition: transitionKey },
+      after_state: { automation: 'pii_anonymized' },
+    });
+  }
 }
 
 // ── Controllers ──────────────────────────────────────────────────────────────
@@ -250,6 +348,16 @@ export const inviteUser = asyncHandler(async (req: Request, res: Response) => {
     hire_date: input.hire_date ? new Date(input.hire_date) : undefined,
   } as any);
 
+  // Generate secure invite token
+  const rawToken = crypto.randomBytes(32).toString('hex');
+  const tokenHash = crypto.createHash('sha256').update(rawToken).digest('hex');
+
+  await InviteToken.create({
+    user_id: user._id,
+    token_hash: tokenHash,
+    expires_at: new Date(Date.now() + 72 * 60 * 60 * 1000), // 72 hours
+  });
+
   // Send welcome email
   try {
     await sendWelcomeEmail({
@@ -257,7 +365,7 @@ export const inviteUser = asyncHandler(async (req: Request, res: Response) => {
       full_name: user.full_name,
       employee_id: user.employee_id,
       company_name: company.name,
-      invite_link: `${process.env.CLIENT_URL}/onboarding?token=${tempPassword}&email=${user.email}`,
+      invite_link: `${process.env.CLIENT_URL}/onboarding?token=${rawToken}`,
     });
   } catch (error) {
     console.error('Failed to send welcome email:', error);
@@ -289,7 +397,6 @@ export const inviteUser = asyncHandler(async (req: Request, res: Response) => {
  * Does NOT change lifecycle_state (use PUT /people/:id/lifecycle for that).
  */
 export const updateUser = asyncHandler(async (req: Request, res: Response) => {
-  console.log("Update User Request Body:", req.body);
   const input = UpdateUserSchema.parse(req.body);
 
   const user = await User.findOne({
@@ -412,121 +519,12 @@ export const updateUserLifecycle = asyncHandler(async (req: Request, res: Respon
 
   // ── Lifecycle Automations ─────────────────────────────────────────────
   // Each automation fires an audit event and performs its specific action
-
-  const transitionKey = `${currentState}→${targetState}`;
-
   try {
-    // AUTOMATION 1: invited → onboarding: Send welcome email
-    if (transitionKey === 'invited→onboarding') {
-      const company = await Company.findById(req.user.company_id);
-      if (company) {
-        await sendWelcomeEmail({
-          email: user.email,
-          full_name: user.full_name,
-          employee_id: user.employee_id,
-          company_name: company.name,
-          invite_link: `${process.env.CLIENT_URL}/onboarding?email=${user.email}`,
-        });
-
-        // Audit event for welcome email
-        await auditLogger.log({
-          req,
-          action: 'user.lifecycle_automation',
-          module: 'people',
-          object_type: 'User',
-          object_id: user._id.toString(),
-          object_label: user.full_name,
-          before_state: { transition: 'invited→onboarding' },
-          after_state: { automation: 'welcome_email_sent', email: user.email },
-        });
-      }
-    }
-
-    // AUTOMATION 2: onboarding → active: Assign default Employee role
-    if (transitionKey === 'onboarding→active') {
-      // TODO: Assign default Employee role from department's role mapping
-      // For now, log the automation event
-      await auditLogger.log({
-        req,
-        action: 'user.lifecycle_automation',
-        module: 'people',
-        object_type: 'User',
-        object_id: user._id.toString(),
-        object_label: user.full_name,
-        before_state: { transition: 'onboarding→active' },
-        after_state: { automation: 'default_role_assigned', note: 'Employee role assignment pending RBAC integration' },
-      });
-    }
-
-    // AUTOMATION 3: active → terminated: Invalidate all refresh tokens
-    if (transitionKey === 'active→terminated') {
-      // Clear refresh token hash from user document
-      user.refresh_token_hash = undefined;
-      await user.save();
-
-      // Revoke all active refresh tokens in the RefreshToken collection
-      await RefreshToken.updateMany(
-        { user_id: user._id, is_revoked: false },
-        { $set: { is_revoked: true } }
-      );
-
-      // Audit event for session revocation
-      await auditLogger.log({
-        req,
-        action: 'user.lifecycle_automation',
-        module: 'people',
-        object_type: 'User',
-        object_id: user._id.toString(),
-        object_label: user.full_name,
-        before_state: { transition: 'active→terminated' },
-        after_state: { automation: 'sessions_revoked', refresh_tokens_invalidated: true },
-      });
-    }
-
-    // AUTOMATION 4: terminated → archived: Anonymize all PII
-    if (transitionKey === 'terminated→archived') {
-      const beforeAnonymize = user.toObject();
-
-      // Clear all PII fields
-      user.full_name = 'Archived User';
-      user.email = `archived-${user._id}@archived.local`;
-      user.phone = undefined;
-      user.avatar_url = undefined;
-      user.employee_id = `ARCHIVED-${user._id.toString().slice(-8)}`;
-
-      // Clear optional PII
-      (user as any).department_id = undefined;
-      (user as any).team_id = undefined;
-      (user as any).manager_id = undefined;
-      (user as any).location_id = undefined;
-      (user as any).hire_date = undefined;
-      (user as any).termination_date = undefined;
-      (user as any).custom_fields = {};
-
-      await user.save();
-
-      // Audit event for PII anonymization
-      await auditLogger.log({
-        req,
-        action: 'user.lifecycle_automation',
-        module: 'people',
-        object_type: 'User',
-        object_id: user._id.toString(),
-        object_label: 'Archived User',
-        before_state: beforeAnonymize,
-        after_state: {
-          automation: 'pii_anonymized',
-          full_name: user.full_name,
-          email: user.email,
-          fields_cleared: ['full_name', 'email', 'phone', 'avatar_url', 'employee_id', 'department_id', 'team_id', 'manager_id', 'location_id', 'hire_date', 'termination_date', 'custom_fields'],
-        },
-      });
-    }
+    await runLifecycleAutomations(user, currentState, targetState, req);
   } catch (automationError) {
-    // Log automation errors but don't fail the lifecycle transition
+    const transitionKey = `${currentState}_to_${targetState}`;
     console.error(`[Lifecycle Automation Error] ${transitionKey}:`, automationError);
 
-    // Still log the error as an audit event
     await auditLogger.log({
       req,
       action: 'user.lifecycle_automation_error',
@@ -534,7 +532,7 @@ export const updateUserLifecycle = asyncHandler(async (req: Request, res: Respon
       object_type: 'User',
       object_id: user._id.toString(),
       object_label: user.full_name,
-      before_state: { transition: transitionKey },
+      before_state: { transition: `${currentState}_to_${targetState}` },
       after_state: { error: automationError instanceof Error ? automationError.message : 'Unknown error' },
     });
   }
@@ -595,7 +593,7 @@ export const bulkInviteUsers = asyncHandler(async (req: Request, res: Response) 
     error?: string;
   }> = [];
 
-  const createdUsers: Array<{ email: string; full_name: string; employee_id: string }> = [];
+  const createdUsers: Array<{ email: string; full_name: string; employee_id: string; token: string }> = [];
 
   // Process each user
   for (let i = 0; i < input.users.length; i++) {
@@ -641,10 +639,20 @@ export const bulkInviteUsers = asyncHandler(async (req: Request, res: Response) 
       } as any);
 
       // Track created user for email sending
+      const rawToken = crypto.randomBytes(32).toString('hex');
+      const tokenHash = crypto.createHash('sha256').update(rawToken).digest('hex');
+
+      await InviteToken.create({
+        user_id: user._id,
+        token_hash: tokenHash,
+        expires_at: new Date(Date.now() + 72 * 60 * 60 * 1000), // 72 hours
+      });
+
       createdUsers.push({
         email: user.email,
         full_name: user.full_name,
         employee_id: user.employee_id,
+        token: rawToken,
       });
 
       // Audit log
@@ -684,7 +692,7 @@ export const bulkInviteUsers = asyncHandler(async (req: Request, res: Response) 
           full_name: u.full_name,
           employee_id: u.employee_id,
           company_name: company.name,
-          invite_link: `${process.env.CLIENT_URL}/onboarding?email=${u.email}`,
+          invite_link: `${process.env.CLIENT_URL}/onboarding?token=${(u as any).token}`,
         }))
       );
 
@@ -818,6 +826,12 @@ export const bulkUpdateLifecycle = asyncHandler(async (req: Request, res: Respon
     const beforeState = user.toObject();
     user.lifecycle_state = targetState;
     await user.save();
+
+    try {
+      await runLifecycleAutomations(user, currentState, targetState, req);
+    } catch (automationError) {
+      console.error(`[Bulk Lifecycle Automation Error] ${user._id}:`, automationError);
+    }
 
     // Individual audit event for each user
     await auditLogger.log({
@@ -1031,4 +1045,86 @@ export const exportUsers = asyncHandler(async (req: Request, res: Response) => {
   res.setHeader('Content-Type', 'text/csv');
   res.setHeader('Content-Disposition', `attachment; filename=users_export_${new Date().toISOString().split('T')[0]}.csv`);
   res.status(200).send(csvContent);
+});
+
+/**
+ * POST /api/v1/people/verify-invite
+ * Verifies an invite token and returns user info.
+ * This endpoint is public (no authentication required).
+ */
+export const verifyInviteToken = asyncHandler(async (req: Request, res: Response) => {
+  const { token } = req.body;
+  if (!token) throw new AppError('Token is required', 400, 'BAD_REQUEST');
+
+  const tokenHash = crypto.createHash('sha256').update(token).digest('hex');
+  const record = await InviteToken.findOne({
+    token_hash: tokenHash,
+    is_used: false,
+    expires_at: { $gt: new Date() },
+  });
+
+  if (!record) throw new AppError('Invalid or expired invite link', 400, 'INVALID_INVITE_TOKEN');
+
+  const user = await User.findById(record.user_id).select('email full_name company_id');
+  if (!user) throw new AppError('User not found', 404, 'NOT_FOUND');
+
+  // Mark token as used
+  record.is_used = true;
+  record.used_at = new Date();
+  await record.save();
+
+  res.json({ success: true, data: { email: user.email, full_name: user.full_name, company_id: user.company_id } });
+});
+
+/**
+ * POST /people/:id/resend-invite
+ * Resends the invitation email with a fresh secure token.
+ */
+export const resendInvite = asyncHandler(async (req: Request, res: Response) => {
+  const user = await User.findOne({
+    _id: req.params.id,
+    company_id: req.user.company_id,
+  } as any);
+
+  if (!user) {
+    throw new AppError('User not found', 404, 'NOT_FOUND');
+  }
+
+  if (user.lifecycle_state !== 'invited') {
+    throw new AppError('Only users in "invited" state can have their invitation resent', 400, 'BAD_REQUEST');
+  }
+
+  const company = await Company.findById(req.user.company_id);
+  if (!company) throw new AppError('Company not found', 404, 'COMPANY_NOT_FOUND');
+
+  // Generate a new secure token
+  const rawToken = crypto.randomBytes(32).toString('hex');
+  const tokenHash = crypto.createHash('sha256').update(rawToken).digest('hex');
+
+  await InviteToken.create({
+    user_id: user._id,
+    token_hash: tokenHash,
+    expires_at: new Date(Date.now() + 72 * 60 * 60 * 1000),
+  });
+
+  await sendWelcomeEmail({
+    email: user.email,
+    full_name: user.full_name,
+    employee_id: user.employee_id,
+    company_name: company.name,
+    invite_link: `${process.env.CLIENT_URL}/onboarding?token=${rawToken}`,
+  });
+
+  await auditLogger.log({
+    req,
+    action: 'user.invite_resent',
+    module: 'people',
+    object_type: 'User',
+    object_id: user._id.toString(),
+    object_label: user.full_name,
+    before_state: null,
+    after_state: { email: user.email },
+  });
+
+  res.json({ success: true, message: 'Invitation resent successfully' });
 });
