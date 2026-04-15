@@ -47,15 +47,17 @@ const UpdateMemberSchema = AddMemberSchema.partial();
 /**
  * Enriches team list with populated lead and department info
  */
-async function enrichTeams(teams: any[]): Promise<any[]> {
+async function enrichTeams(
+  teams: ReturnType<(typeof Team.prototype.toObject)>[]
+): Promise<any[]> {
   return teams.map((team) => {
     const data = { ...team };
     // Map populated objects to the names expected by the frontend
     if (data.team_lead_id && typeof data.team_lead_id === 'object') {
-      data.team_lead = data.team_lead_id;
+      data.team_lead = data.team_lead_id as Record<string, unknown>;
     }
     if (data.department_id && typeof data.department_id === 'object') {
-      data.department = data.department_id;
+      data.department = data.department_id as Record<string, unknown>;
     }
     return data;
   });
@@ -335,7 +337,7 @@ export const getTeamMembers = asyncHandler(async (req: Request, res: Response) =
 
   const membersFilter: TeamMemberFilter = {
     company_id: req.user.company_id,
-    team_id: team._id,
+    team_id: team._id as Types.ObjectId,
   };
 
   const members = await TeamMember.find(membersFilter)

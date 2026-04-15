@@ -1,5 +1,7 @@
 // server/src/routes/people.routes.ts
 import { Router } from 'express';
+import { requireAuth } from '../middleware/auth';
+import { requireRole } from '../middleware/requireRole';
 import {
   getUsers,
   getUserById,
@@ -17,17 +19,54 @@ import reportingLinesRoutes from './reportingLines.routes';
 
 const router = Router();
 
+// All routes require authentication
+router.use(requireAuth);
+
+const PEOPLE_MANAGERS = ['Super Admin', 'HR Admin', 'Ops Admin'];
+
 /**
- * All routes require authentication (requireAuth middleware applied in index.ts)
- * All routes are scoped to req.user.company_id from JWT
+ * ── Static Routes (Registered First) ─────────────────────────────────────────
  */
 
 /**
  * GET /people
  * List all users with optional filters
- * Query params: lifecycle_state, department_id, employment_type, search
  */
 router.get('/', getUsers);
+
+/**
+ * GET /people/export
+ * Export users as CSV
+ */
+router.get('/export', requireRole(PEOPLE_MANAGERS), exportUsers);
+
+/**
+ * POST /people/invite
+ * Invite a new user
+ */
+router.post('/invite', requireRole(PEOPLE_MANAGERS), inviteUser);
+
+/**
+ * POST /people/bulk-invite
+ * Bulk invite users
+ */
+router.post('/bulk-invite', requireRole(PEOPLE_MANAGERS), bulkInviteUsers);
+
+/**
+ * PUT /people/bulk-lifecycle
+ * Bulk lifecycle state change
+ */
+router.put('/bulk-lifecycle', requireRole(PEOPLE_MANAGERS), bulkUpdateLifecycle);
+
+/**
+ * POST /people/bulk-assign-role
+ * Bulk assign roles
+ */
+router.post('/bulk-assign-role', requireRole(PEOPLE_MANAGERS), bulkAssignRole);
+
+/**
+ * ── Parameterized Routes (Registered Last) ───────────────────────────────────
+ */
 
 /**
  * GET /people/:id
@@ -36,63 +75,33 @@ router.get('/', getUsers);
 router.get('/:id', getUserById);
 
 /**
- * POST /people/invite
- * Invite a new user (sends welcome email)
- */
-router.post('/invite', inviteUser);
-
-/**
- * POST /people/bulk-invite
- * Bulk invite up to 500 users
- */
-router.post('/bulk-invite', bulkInviteUsers);
-
-/**
  * PUT /people/:id
- * Update user profile information
+ * Update user profile
  */
-router.put('/:id', updateUser);
+router.put('/:id', requireRole(PEOPLE_MANAGERS), updateUser);
 
 /**
  * PUT /people/:id/lifecycle
- * Transition user to a new lifecycle state
+ * Transition user lifecycle
  */
-router.put('/:id/lifecycle', updateUserLifecycle);
+router.put('/:id/lifecycle', requireRole(PEOPLE_MANAGERS), updateUserLifecycle);
 
 /**
  * DELETE /people/:id
- * Archive a user (soft delete)
+ * Archive a user
  */
-router.delete('/:id', deleteUser);
+router.delete('/:id', requireRole(PEOPLE_MANAGERS), deleteUser);
 
 /**
  * POST /people/:id/assign-org
  * Assign user to department and teams
  */
-router.post('/:id/assign-org', assignUserOrg);
+router.post('/:id/assign-org', requireRole(PEOPLE_MANAGERS), assignUserOrg);
 
 /**
  * Reporting lines routes
- * All routes are nested under /:id/reporting-line
+ * Nested under /:id/reporting-line
  */
 router.use('/:id/reporting-line', reportingLinesRoutes);
-
-/**
- * PUT /people/bulk-lifecycle
- * Bulk lifecycle state change for multiple users
- */
-router.put('/bulk-lifecycle', bulkUpdateLifecycle);
-
-/**
- * POST /people/bulk-assign-role
- * Bulk assign a role to multiple users
- */
-router.post('/bulk-assign-role', bulkAssignRole);
-
-/**
- * GET /people/export
- * Export users as CSV
- */
-router.get('/export', exportUsers);
 
 export default router;

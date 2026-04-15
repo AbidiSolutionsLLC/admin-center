@@ -616,13 +616,13 @@ export const getBUTree = asyncHandler(async (req: Request, res: Response) => {
     const children = buildTree(buId);
     
     // Total counts for the root BU
-    const totalDepts = children.reduce((acc, child) => {
+    const totalDepts = children.reduce((acc, child: any) => {
        const isDept = child.type !== 'business_unit';
-       return acc + (isDept ? 1 : 0) + (child as any).dept_count;
+       return acc + (isDept ? 1 : 0) + child.dept_count;
     }, 0);
 
-    const totalTeams = children.reduce((acc, child) => {
-       return acc + child.team_count + (child as any).total_team_count;
+    const totalTeams = children.reduce((acc, child: any) => {
+       return acc + child.team_count + child.total_team_count;
     }, 0);
 
     return {
@@ -714,7 +714,22 @@ export const deleteBusinessUnit = asyncHandler(async (req: Request, res: Respons
     throw new AppError('Business Unit not found', 404, 'NOT_FOUND');
   }
 
-  // Check for child departments
+  // 1. Check for active users assigned directly to this BU
+  const activeUserCount = await User.countDocuments({
+    company_id: req.user.company_id,
+    department_id: bu._id,
+    is_active: true,
+  });
+
+  if (activeUserCount > 0) {
+    throw new AppError(
+      `Cannot delete Business Unit "${bu.name}" — it has ${activeUserCount} active user${activeUserCount > 1 ? 's' : ''}. Reassign employees before deleting.`,
+      409,
+      'BU_HAS_ACTIVE_USERS'
+    );
+  }
+
+  // 2. Check for child departments
   const childFilter: DepartmentFilter = {
     company_id: req.user.company_id,
     parent_id: bu._id,
@@ -728,6 +743,21 @@ export const deleteBusinessUnit = asyncHandler(async (req: Request, res: Respons
       `Cannot delete Business Unit "${bu.name}" — it has ${childCount} child department${childCount > 1 ? 's' : ''}. Remove or reassign all child departments first.`,
       409,
       'BU_HAS_CHILD_DEPARTMENTS'
+    );
+  }
+
+  // 3. Check for associated teams
+  const teamCount = await Team.countDocuments({
+    company_id: req.user.company_id,
+    department_id: bu._id,
+    is_active: true,
+  });
+
+  if (teamCount > 0) {
+    throw new AppError(
+      `Cannot delete Business Unit "${bu.name}" — it has ${teamCount} active team${teamCount > 1 ? 's' : ''}. Delete or reassign teams first.`,
+      409,
+      'BU_HAS_TEAMS'
     );
   }
 

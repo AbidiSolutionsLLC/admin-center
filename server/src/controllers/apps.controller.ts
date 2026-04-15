@@ -331,7 +331,7 @@ export const assignApp = asyncHandler(async (req: Request, res: Response) => {
     reason: validated.reason,
   };
   
-  const assignment = await AppAssignment.create(assignmentData as any) as IAppAssignment;
+  const assignment = await AppAssignment.create(assignmentData) as IAppAssignment;
 
   // Calculate affected users count
   let affectedUsers = 0;
