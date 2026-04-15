@@ -823,7 +823,7 @@ export const bulkUpdateLifecycle = asyncHandler(async (req: Request, res: Respon
         user_id: userId,
         user_name: user.full_name,
         success: false,
-        error: `Cannot transition from '${currentState}' to '${targetState}'`,
+        error: getTransitionErrorMessage(currentState, targetState),
       });
       skippedCount++;
       continue;
@@ -853,6 +853,18 @@ export const bulkUpdateLifecycle = asyncHandler(async (req: Request, res: Respon
 
     successCount++;
     results.push({ user_id: userId, user_name: user.full_name, success: true });
+
+    // ── Workflow Engine: Fire lifecycle event for each successful transition ──
+    handleLifecycleEvent({
+      companyId: req.user.company_id,
+      userId: user._id.toString(),
+      userName: user.full_name,
+      userEmail: user.email,
+      lifecycleFrom: currentState,
+      lifecycleTo: targetState,
+    }).catch((workflowError) => {
+      console.error(`[Bulk Workflow Error] ${user._id}:`, workflowError);
+    });
   }
 
   // Summary audit event for the bulk operation

@@ -28,15 +28,14 @@ const router = Router();
 /**
  * GET /people
  * List all users with optional filters
- * Query params: lifecycle_state, department_id, employment_type, search
  */
 router.get('/', getUsers);
 
 /**
- * GET /people/:id
- * Get a single user by ID
+ * GET /people/export
+ * Export users as CSV
  */
-router.get('/:id', getUserById);
+router.get('/export', exportUsers);
 
 /**
  * POST /people/invite
@@ -46,17 +45,36 @@ router.get('/:id', getUserById);
 router.post('/invite', requireRole([...PERMISSION_GROUPS.PEOPLE_ADMINS]), inviteUser);
 
 /**
- * POST /people/:id/resend-invite
- * Resend invitation email to an invited user
- */
-router.post('/:id/resend-invite', resendInvite);
-
-/**
  * POST /people/bulk-invite
  * Bulk invite up to 500 users
  * Requires: Super Admin, Admin, or HR
  */
 router.post('/bulk-invite', requireRole([...PERMISSION_GROUPS.PEOPLE_ADMINS]), bulkInviteUsers);
+
+/**
+ * PUT /people/bulk-lifecycle
+ * Bulk lifecycle state change for multiple users
+ * Requires: Super Admin, Admin, or HR
+ */
+router.put('/bulk-lifecycle', requireRole([...PERMISSION_GROUPS.PEOPLE_ADMINS]), bulkUpdateLifecycle);
+
+/**
+ * POST /people/bulk-assign-role
+ * Bulk assign a role to multiple users
+ */
+router.post('/bulk-assign-role', bulkAssignRole);
+
+/**
+ * GET /people/:id
+ * Get a single user by ID
+ */
+router.get('/:id', getUserById);
+
+/**
+ * POST /people/:id/resend-invite
+ * Resend invitation email to an invited user
+ */
+router.post('/:id/resend-invite', resendInvite);
 
 /**
  * PUT /people/:id
@@ -90,24 +108,5 @@ router.post('/:id/assign-org', assignUserOrg);
  * All routes are nested under /:id/reporting-line
  */
 router.use('/:id/reporting-line', reportingLinesRoutes);
-
-/**
- * PUT /people/bulk-lifecycle
- * Bulk lifecycle state change for multiple users
- * Requires: Super Admin, Admin, or HR
- */
-router.put('/bulk-lifecycle', requireRole([...PERMISSION_GROUPS.PEOPLE_ADMINS]), bulkUpdateLifecycle);
-
-/**
- * POST /people/bulk-assign-role
- * Bulk assign a role to multiple users
- */
-router.post('/bulk-assign-role', bulkAssignRole);
-
-/**
- * GET /people/export
- * Export users as CSV
- */
-router.get('/export', exportUsers);
 
 export default router;

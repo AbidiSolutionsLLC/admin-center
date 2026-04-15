@@ -54,6 +54,11 @@ const run = async () => {
     throw new Error(`Expected valid format, got errors: ${validResult.errors.map((e) => e.message).join('; ')}`);
   }
 
+  const validSevenDigitResult = validateEmployeeIdFormat('EMP-{counter:7}');
+  if (!validSevenDigitResult.valid) {
+    throw new Error(`Expected valid 7-digit counter format, got errors: ${validSevenDigitResult.errors.map((e) => e.message).join('; ')}`);
+  }
+
   const invalidResult = validateEmployeeIdFormat('EMP-$COUNTER:4');
   if (invalidResult.valid) {
     throw new Error('Expected invalid format to fail validation.');
@@ -72,6 +77,18 @@ const run = async () => {
     throw new Error(`Unexpected generated ID: ${generated}`);
   }
   console.log('   ✓ Token generation works correctly: ', generated);
+
+  const generatedSevenDigit = generateEmployeeId('EMP-{counter:7}', {
+    date: new Date('2026-04-14T00:00:00Z'),
+    company: { name: 'Test Corp', code: 'TST' },
+    user: { department: 'Engineering', departmentCode: 'ENG', location: 'NYC', jobTitle: 'Developer' },
+    counter: 12,
+  });
+
+  if (generatedSevenDigit !== 'EMP-0000012') {
+    throw new Error(`Unexpected generated 7-digit ID: ${generatedSevenDigit}`);
+  }
+  console.log('   ✓ 7-digit counter generation works correctly: ', generatedSevenDigit);
 
   console.log('▶️ Testing atomic user creation and counter increment...');
   const testUser1 = await persist();

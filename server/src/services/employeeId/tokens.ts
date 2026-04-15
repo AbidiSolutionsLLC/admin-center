@@ -79,12 +79,12 @@ export const ALLOWED_TOKENS: Record<string, TokenDefinition> = {
   counter: {
     token: 'counter',
     description: 'Sequential number with padding',
-    example: '00001',
+    example: '0000001',
     hasArgument: true,
     argumentPattern: /^\d{1,2}$/,
-    argumentDescription: 'Number of digits (1-6)',
+    argumentDescription: 'Number of digits (1-7)',
     resolve: (ctx, arg) => {
-      const digits = Math.min(Math.max(parseInt(arg || '4', 10), 1), 6);
+      const digits = Math.min(Math.max(parseInt(arg || '4', 10), 1), 7);
       return ctx.counter.toString().padStart(digits, '0');
     },
   },

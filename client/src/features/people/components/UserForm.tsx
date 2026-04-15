@@ -6,8 +6,17 @@ import { z } from 'zod';
 import { UserSelect } from '@/components/ui/UserSelect';
 import { DynamicCustomFields } from '@/features/data-fields/components/DynamicCustomFields';
 import { useCustomFields } from '@/features/data-fields/hooks/useCustomFields';
-import type { User, EmploymentType, Department, CustomField, Location } from '@/types';
+import type { User, EmploymentType, Department, CustomField, Location, UserRole } from '@/types';
 import { cn } from '@/utils/cn';
+
+const ROLE_OPTIONS: { value: UserRole; label: string }[] = [
+  { value: 'Super Admin', label: 'Super Admin' },
+  { value: 'Admin', label: 'Admin' },
+  { value: 'HR', label: 'HR' },
+  { value: 'Manager', label: 'Manager' },
+  { value: 'Employee', label: 'Employee' },
+  { value: 'Technician', label: 'Technician' },
+];
 
 const schema = z.object({
   full_name: z.string().min(1, 'Full name is required').max(150, 'Name too long'),
@@ -15,6 +24,7 @@ const schema = z.object({
   department_id: z.string().optional().nullable(),
   team_id: z.string().optional().nullable(),
   manager_id: z.string().optional().nullable(),
+  role: z.enum(['Super Admin', 'Admin', 'HR', 'Manager', 'Employee', 'Technician']),
   employment_type: z.enum(['full_time', 'part_time', 'contractor', 'intern']),
   hire_date: z.string().optional().nullable(),
   location_id: z.string().optional().nullable(),
@@ -75,6 +85,7 @@ export const UserForm: React.FC<UserFormProps> = ({
       department_id: initialData?.department_id ?? '',
       team_id: initialData?.team_id ?? '',
       manager_id: initialData?.manager_id ?? '',
+      role: initialData?.role ?? 'Employee',
       employment_type: initialData?.employment_type ?? 'full_time',
       hire_date: initialData?.hire_date ?? '',
       location_id: initialData?.location_id ?? '',
@@ -185,6 +196,28 @@ export const UserForm: React.FC<UserFormProps> = ({
         </select>
         <p className="text-[11px] text-ink-muted">
           Assign the user to a department.
+        </p>
+      </div>
+
+      {/* Role */}
+      <div className="space-y-1.5">
+        <label htmlFor="user-role" className="text-sm font-medium text-ink">
+          Role <span className="text-red-500">*</span>
+        </label>
+        <select
+          id="user-role"
+          {...register('role')}
+          disabled={isSubmitting}
+          className={inputClass(false)}
+        >
+          {ROLE_OPTIONS.map((opt) => (
+            <option key={opt.value} value={opt.value}>
+              {opt.label}
+            </option>
+          ))}
+        </select>
+        <p className="text-[11px] text-ink-muted">
+          Set the user's access role.
         </p>
       </div>
 

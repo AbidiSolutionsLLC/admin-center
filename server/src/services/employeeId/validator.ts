@@ -29,7 +29,7 @@ const CONSTRAINTS = {
   MAX_LENGTH: 50,
   MAX_TOKENS: 10,
   MIN_COUNTER_DIGITS: 1,
-  MAX_COUNTER_DIGITS: 6,
+  MAX_COUNTER_DIGITS: 7,
   FORBIDDEN_PATTERNS: [
     /\$\{/,        // No JS template literals
     /\{\{/,        // No nested braces
