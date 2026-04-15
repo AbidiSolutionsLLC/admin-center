@@ -57,7 +57,7 @@ async function wouldCreateCircularChain(
     const manager = await User.findOne({
       _id: new Types.ObjectId(currentManagerId),
       company_id: new Types.ObjectId(companyId),
-    }).lean() as any;
+    }).lean();
 
     if (!manager) {
       break;
@@ -404,7 +404,7 @@ export const changePrimaryManager = asyncHandler(async (req: Request, res: Respo
   // If setting to null (removing primary manager)
   if (!input.manager_id) {
     const beforeState = user.toObject();
-    user.manager_id = undefined as any;
+    user.manager_id = undefined;
     await user.save();
 
     await auditLogger.log({
@@ -458,7 +458,7 @@ export const changePrimaryManager = asyncHandler(async (req: Request, res: Respo
   const beforeState = user.toObject();
 
   // Update the primary manager
-  user.manager_id = new Types.ObjectId(input.manager_id) as any;
+  user.manager_id = new Types.ObjectId(input.manager_id);
   await user.save();
 
   // Audit log

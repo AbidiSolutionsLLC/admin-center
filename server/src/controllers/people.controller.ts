@@ -12,9 +12,25 @@ import { TeamMember } from '../models/TeamMember.model';
 import { auditLogger } from '../lib/auditLogger';
 import { sendWelcomeEmail, sendBulkWelcomeEmails } from '../lib/emailService';
 import { isValidTransition, getTransitionErrorMessage, LifecycleState } from '../lib/lifecycle';
-import { handleLifecycleEvent } from '../lib/workflowEngine';
 import { AppError } from '../utils/AppError';
 import { Types } from 'mongoose';
+import { Department } from '../models/Department.model';
+import { Location } from '../models/Location.model';
+
+// ── Types & Interfaces ───────────────────────────────────────────────────────
+
+interface UserFilter {
+  company_id: string | Types.ObjectId;
+  _id?: string | Types.ObjectId | { $in: (string | Types.ObjectId)[] } | { $ne: string | Types.ObjectId };
+  email?: string;
+  lifecycle_state?: LifecycleState | { $in: LifecycleState[] };
+  department_id?: string | Types.ObjectId | null;
+  team_id?: string | Types.ObjectId | null;
+  manager_id?: string | Types.ObjectId | null;
+  employment_type?: EmploymentType;
+  is_active?: boolean;
+  $or?: Array<Record<string, unknown>>;
+}
 import crypto from 'crypto';
 import { InviteToken } from '../models/InviteToken.model';
 
@@ -86,15 +102,12 @@ const generateTemporaryPassword = (): string => {
 };
 
 /**
- * Enriches user list with populated department and manager info
- */
-/**
- * Enriches user list with populated department and manager info
- */
-/**
  * Enriches user list with populated department, manager info, and team memberships
  */
-async function enrichUsers(users: any[], companyId: string): Promise<any[]> {
+async function enrichUsers(
+  users: ReturnType<(typeof User.prototype.toObject)>[],
+  companyId: string
+): Promise<any[]> {
   const userIds = users.map(u => u._id);
 
   // Fetch all team memberships for these users in one query
@@ -244,32 +257,42 @@ export const getUsers = asyncHandler(async (req: Request, res: Response) => {
   const { lifecycle_state, department_id, employment_type, search } = req.query;
 
   // Build filter query
-  const filter: Record<string, unknown> = {
+  const filter: UserFilter = {
     company_id: req.user.company_id,
   };
 
+  // ── Input Sanitization ─────────────────────────────────────────────────────
+
   if (lifecycle_state) {
-    filter.lifecycle_state = lifecycle_state;
+    // Validate lifecycle_state is a valid value
+    const VALID_LIFECYCLE_STATES: LifecycleState[] = ['invited', 'onboarding', 'active', 'probation', 'on_leave', 'terminated', 'archived'];
+    if (VALID_LIFECYCLE_STATES.includes(lifecycle_state as LifecycleState)) {
+      filter.lifecycle_state = lifecycle_state as LifecycleState;
+    }
   }
 
   if (department_id) {
-    filter.department_id = department_id;
+    filter.department_id = String(department_id);
   }
 
   if (employment_type) {
-    filter.employment_type = employment_type;
+    const VALID_EMPLOYMENT_TYPES: EmploymentType[] = ['full_time', 'part_time', 'contractor', 'intern'];
+    if (VALID_EMPLOYMENT_TYPES.includes(employment_type as EmploymentType)) {
+      filter.employment_type = employment_type as EmploymentType;
+    }
   }
 
-  // Search by name or email
+  // Search by name, email, or employee_id with regex sanitization
   if (search && typeof search === 'string') {
+    const sanitizedSearch = search.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'); // escape regex specials
     filter.$or = [
-      { full_name: { $regex: search, $options: 'i' } },
-      { email: { $regex: search, $options: 'i' } },
-      { employee_id: { $regex: search, $options: 'i' } },
+      { full_name: { $regex: sanitizedSearch, $options: 'i' } },
+      { email: { $regex: sanitizedSearch, $options: 'i' } },
+      { employee_id: { $regex: sanitizedSearch, $options: 'i' } },
     ];
   }
 
-  const users = await User.find(filter as any)
+  const users = await User.find(filter)
     .select('-password_hash -refresh_token_hash')
     .populate('department_id', 'name slug')
     .populate('team_id', 'name slug')
@@ -287,10 +310,12 @@ export const getUsers = asyncHandler(async (req: Request, res: Response) => {
  * Returns a single user by ID, scoped to the company.
  */
 export const getUserById = asyncHandler(async (req: Request, res: Response) => {
-  const user = await User.findOne({
+  const filter: UserFilter = {
     _id: req.params.id,
     company_id: req.user.company_id,
-  } as any)
+  };
+
+  const user = await User.findOne(filter)
     .select('-password_hash -refresh_token_hash')
     .populate('department_id', 'name slug')
     .populate('team_id', 'name slug')
@@ -316,14 +341,56 @@ export const getUserById = asyncHandler(async (req: Request, res: Response) => {
 export const inviteUser = asyncHandler(async (req: Request, res: Response) => {
   const input = InviteUserSchema.parse(req.body);
 
-  // Check if user with this email already exists
+  // ── Validation ─────────────────────────────────────────────────────────────
+
+  // 1. Check if user with this email already exists
   const existingUser = await User.findOne({
     company_id: req.user.company_id,
     email: input.email,
-  } as any);
+  });
 
   if (existingUser) {
     throw new AppError('User with this email already exists', 400, 'DUPLICATE_EMAIL');
+  }
+
+  // 2. Validate department (if provided)
+  if (input.department_id) {
+    const dept = await Department.findOne({
+      _id: input.department_id,
+      company_id: req.user.company_id,
+      is_active: true,
+    });
+    if (!dept) throw new AppError('Department not found or inactive', 404, 'NOT_FOUND');
+  }
+
+  // 3. Validate team (if provided)
+  if (input.team_id) {
+    const team = await Team.findOne({
+      _id: input.team_id,
+      company_id: req.user.company_id,
+      is_active: true,
+    });
+    if (!team) throw new AppError('Team not found or inactive', 404, 'NOT_FOUND');
+  }
+
+  // 4. Validate manager (if provided)
+  if (input.manager_id) {
+    const manager = await User.findOne({
+      _id: input.manager_id,
+      company_id: req.user.company_id,
+      is_active: true,
+    });
+    if (!manager) throw new AppError('Manager not found or inactive', 404, 'NOT_FOUND');
+  }
+
+  // 5. Validate location (if provided)
+  if (input.location_id) {
+    const loc = await Location.findOne({
+      _id: input.location_id,
+      company_id: req.user.company_id,
+      is_active: true,
+    });
+    if (!loc) throw new AppError('Location not found or inactive', 404, 'NOT_FOUND');
   }
 
   // Get company info for email
@@ -339,7 +406,7 @@ export const inviteUser = asyncHandler(async (req: Request, res: Response) => {
   // Create user (employee_id will be auto-generated by pre-save hook)
   const user = await User.create({
     ...input,
-    company_id: req.user.company_id,
+    company_id: req.user.company_id as any, // Needed due to Mongoose Types.ObjectId vs string mismatch
     password_hash,
     role: input.role || 'Employee', // Default to 'Employee' if not provided
     lifecycle_state: 'invited',
@@ -350,7 +417,7 @@ export const inviteUser = asyncHandler(async (req: Request, res: Response) => {
     manager_id: input.manager_id || undefined,
     location_id: input.location_id || undefined,
     hire_date: input.hire_date ? new Date(input.hire_date) : undefined,
-  } as any);
+  });
 
   // Generate secure invite token
   const rawToken = crypto.randomBytes(32).toString('hex');
@@ -403,13 +470,57 @@ export const inviteUser = asyncHandler(async (req: Request, res: Response) => {
 export const updateUser = asyncHandler(async (req: Request, res: Response) => {
   const input = UpdateUserSchema.parse(req.body);
 
-  const user = await User.findOne({
+  const filter: UserFilter = {
     _id: req.params.id,
     company_id: req.user.company_id,
-  } as any);
+  };
+
+  const user = await User.findOne(filter);
 
   if (!user) {
     throw new AppError('User not found', 404, 'NOT_FOUND');
+  }
+
+  // ── Validation ─────────────────────────────────────────────────────────────
+
+  // 1. Validate department (if changed)
+  if (input.department_id) {
+    const dept = await Department.findOne({
+      _id: input.department_id,
+      company_id: req.user.company_id,
+      is_active: true,
+    });
+    if (!dept) throw new AppError('Department not found or inactive', 404, 'NOT_FOUND');
+  }
+
+  // 2. Validate team (if changed)
+  if (input.team_id) {
+    const team = await Team.findOne({
+      _id: input.team_id,
+      company_id: req.user.company_id,
+      is_active: true,
+    });
+    if (!team) throw new AppError('Team not found or inactive', 404, 'NOT_FOUND');
+  }
+
+  // 3. Validate manager (if changed)
+  if (input.manager_id) {
+    const manager = await User.findOne({
+      _id: input.manager_id,
+      company_id: req.user.company_id,
+      is_active: true,
+    });
+    if (!manager) throw new AppError('Manager not found or inactive', 404, 'NOT_FOUND');
+  }
+
+  // 4. Validate location (if changed)
+  if (input.location_id) {
+    const loc = await Location.findOne({
+      _id: input.location_id,
+      company_id: req.user.company_id,
+      is_active: true,
+    });
+    if (!loc) throw new AppError('Location not found or inactive', 404, 'NOT_FOUND');
   }
 
   const beforeState = user.toObject();
@@ -481,10 +592,12 @@ export const updateUser = asyncHandler(async (req: Request, res: Response) => {
 export const updateUserLifecycle = asyncHandler(async (req: Request, res: Response) => {
   const input = UpdateLifecycleSchema.parse(req.body);
 
-  const user = await User.findOne({
+  const filter: UserFilter = {
     _id: req.params.id,
     company_id: req.user.company_id,
-  } as any);
+  };
+
+  const user = await User.findOne(filter);
 
   if (!user) {
     throw new AppError('User not found', 404, 'NOT_FOUND');
@@ -613,7 +726,7 @@ export const bulkInviteUsers = asyncHandler(async (req: Request, res: Response) 
       const existingUser = await User.findOne({
         company_id: req.user.company_id,
         email: validatedRow.email,
-      } as any);
+      });
 
       if (existingUser) {
         results.push({
@@ -632,7 +745,7 @@ export const bulkInviteUsers = asyncHandler(async (req: Request, res: Response) 
       // Create user
       const user = await User.create({
         ...validatedRow,
-        company_id: req.user.company_id,
+        company_id: req.user.company_id as any,
         password_hash,
         role: validatedRow.role || 'Employee', // Default to 'Employee' if not provided
         lifecycle_state: 'invited',
@@ -642,7 +755,7 @@ export const bulkInviteUsers = asyncHandler(async (req: Request, res: Response) 
         manager_id: validatedRow.manager_id || undefined,
         location_id: validatedRow.location_id || undefined,
         hire_date: validatedRow.hire_date ? new Date(validatedRow.hire_date) : undefined,
-      } as any);
+      });
 
       // Track created user for email sending
       const rawToken = crypto.randomBytes(32).toString('hex');
@@ -734,13 +847,47 @@ export const bulkInviteUsers = asyncHandler(async (req: Request, res: Response) 
  * This is a convenience endpoint that validates the lifecycle transition.
  */
 export const deleteUser = asyncHandler(async (req: Request, res: Response) => {
-  const user = await User.findOne({
+  const filter: UserFilter = {
     _id: req.params.id,
     company_id: req.user.company_id,
-  } as any);
+  };
+
+  const user = await User.findOne(filter);
 
   if (!user) {
     throw new AppError('User not found', 404, 'NOT_FOUND');
+  }
+
+  // ── Cascading Validation ───────────────────────────────────────────────────
+
+  // 1. Check if user is a primary manager of any active department
+  const manageDept = await Department.findOne({
+    company_id: req.user.company_id,
+    primary_manager_id: user._id,
+    is_active: true,
+  });
+
+  if (manageDept) {
+    throw new AppError(
+      `Cannot archive user "${user.full_name}" — they are the primary manager of department "${manageDept.name}". Reassign the department manager before archiving.`,
+      409,
+      'USER_IS_DEPARTMENT_MANAGER'
+    );
+  }
+
+  // 2. Check if user is a team lead of any active team
+  const leadTeam = await Team.findOne({
+    company_id: req.user.company_id,
+    team_lead_id: user._id,
+    is_active: true,
+  });
+
+  if (leadTeam) {
+    throw new AppError(
+      `Cannot archive user "${user.full_name}" — they are the lead of team "${leadTeam.name}". Reassign the team lead before archiving.`,
+      409,
+      'USER_IS_TEAM_LEAD'
+    );
   }
 
   const currentState = user.lifecycle_state as LifecycleState;
@@ -807,7 +954,7 @@ export const bulkUpdateLifecycle = asyncHandler(async (req: Request, res: Respon
     const user = await User.findOne({
       _id: userId,
       company_id: req.user.company_id,
-    } as any);
+    });
 
     if (!user) {
       results.push({ user_id: userId, user_name: 'Unknown', success: false, error: 'User not found' });
@@ -923,7 +1070,7 @@ export const bulkAssignRole = asyncHandler(async (req: Request, res: Response) =
     const user = await User.findOne({
       _id: userId,
       company_id: req.user.company_id,
-    } as any);
+    });
 
     if (!user) {
       results.push({ user_id: userId, user_name: 'Unknown', success: false, error: 'User not found' });
@@ -1004,13 +1151,27 @@ export const bulkAssignRole = asyncHandler(async (req: Request, res: Response) =
 export const exportUsers = asyncHandler(async (req: Request, res: Response) => {
   const { lifecycle_state, department_id, employment_type } = req.query;
 
-  const filter: Record<string, unknown> = {
+  const filter: UserFilter = {
     company_id: req.user.company_id,
   };
 
-  if (lifecycle_state) filter.lifecycle_state = lifecycle_state;
-  if (department_id) filter.department_id = department_id;
-  if (employment_type) filter.employment_type = employment_type;
+  if (lifecycle_state) {
+    const VALID_LIFECYCLE_STATES: LifecycleState[] = ['invited', 'onboarding', 'active', 'probation', 'on_leave', 'terminated', 'archived'];
+    if (VALID_LIFECYCLE_STATES.includes(lifecycle_state as LifecycleState)) {
+      filter.lifecycle_state = lifecycle_state as LifecycleState;
+    }
+  }
+
+  if (department_id) {
+    filter.department_id = String(department_id);
+  }
+
+  if (employment_type) {
+    const VALID_EMPLOYMENT_TYPES: EmploymentType[] = ['full_time', 'part_time', 'contractor', 'intern'];
+    if (VALID_EMPLOYMENT_TYPES.includes(employment_type as EmploymentType)) {
+      filter.employment_type = employment_type as EmploymentType;
+    }
+  }
 
   const users = await User.find(filter)
     .populate('department_id', 'name')

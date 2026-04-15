@@ -14,6 +14,27 @@ import { runIntelligenceRules } from '../lib/intelligence';
 import { AppError } from '../utils/AppError';
 import { slugify } from '../utils/slugify';
 
+// ── Types & Interfaces ───────────────────────────────────────────────────────
+
+interface DepartmentFilter {
+  company_id: string | Types.ObjectId;
+  is_active?: boolean;
+  slug?: string;
+  _id?: string | Types.ObjectId | { $ne: string | Types.ObjectId };
+  type?: string | { $in: string[] };
+  parent_id?: string | Types.ObjectId | null;
+}
+
+interface HistoryQuery {
+  company_id: string | Types.ObjectId;
+  module: string;
+  object_type?: string;
+  created_at?: {
+    $gte?: Date;
+    $lte?: Date;
+  };
+}
+
 // ── Zod Schemas ──────────────────────────────────────────────────────────────
 
 const DepartmentBaseSchema = z.object({
@@ -95,7 +116,7 @@ async function enrichDepartments(
     
     // Map populated objects to the names expected by the frontend
     if (data.primary_manager_id && typeof data.primary_manager_id === 'object') {
-      data.primary_manager = data.primary_manager_id as any;
+      data.primary_manager = data.primary_manager_id as Record<string, unknown>;
     }
 
     return { ...data, headcount, has_intelligence_flag };
@@ -110,10 +131,12 @@ async function enrichDepartments(
  * enriched with headcount and intelligence flags.
  */
 export const getDepartments = asyncHandler(async (req: Request, res: Response) => {
-  const raw = await Department.find({
+  const filter: DepartmentFilter = {
     company_id: req.user.company_id,
     is_active: true,
-  } as any)
+  };
+
+  const raw = await Department.find(filter)
     .populate('primary_manager_id', 'full_name avatar_url')
     .sort({ created_at: 1 })
     .lean();
@@ -127,11 +150,13 @@ export const getDepartments = asyncHandler(async (req: Request, res: Response) =
  * Returns a single department by ID, scoped to the company.
  */
 export const getDepartmentById = asyncHandler(async (req: Request, res: Response) => {
-  const dept = await Department.findOne({
+  const filter: DepartmentFilter = {
     _id: req.params.id,
     company_id: req.user.company_id,
     is_active: true,
-  } as any).populate('primary_manager_id', 'full_name avatar_url');
+  };
+
+  const dept = await Department.findOne(filter).populate('primary_manager_id', 'full_name avatar_url');
 
   if (!dept) {
     throw new AppError('Department not found', 404, 'NOT_FOUND');
@@ -150,11 +175,13 @@ export const createDepartment = asyncHandler(async (req: Request, res: Response)
 
   // Check for duplicate slug within the same company
   const slug = slugify(input.name);
-  const existing = await Department.findOne({
+  const filter: DepartmentFilter = {
     company_id: req.user.company_id,
     slug,
     is_active: true,
-  } as any);
+  };
+
+  const existing = await Department.findOne(filter);
 
   if (existing) {
     throw new AppError(
@@ -172,7 +199,7 @@ export const createDepartment = asyncHandler(async (req: Request, res: Response)
     secondary_manager_id: input.secondary_manager_id || undefined,
     custom_fields: input.custom_fields || {},
     company_id: req.user.company_id,
-  } as any);
+  });
 
   await auditLogger.log({
     req,
@@ -193,23 +220,20 @@ export const createDepartment = asyncHandler(async (req: Request, res: Response)
   res.status(201).json({ success: true, data: dept });
 });
 
-/**
- * PUT /organization/:id
- * Updates an existing department, scoped to the company tenant.
- */
 export const updateDepartment = asyncHandler(async (req: Request, res: Response) => {
-  console.log("Update Department Request Body:", req.body);
   const input = UpdateDepartmentSchema.parse(req.body);
 
   // If name is being changed, check for duplicate slug
   if (input.name) {
     const slug = slugify(input.name);
-    const existing = await Department.findOne({
+    const filter: DepartmentFilter = {
       company_id: req.user.company_id,
       slug,
       _id: { $ne: req.params.id },
       is_active: true,
-    } as any);
+    };
+
+    const existing = await Department.findOne(filter);
 
     if (existing) {
       throw new AppError(
@@ -220,11 +244,13 @@ export const updateDepartment = asyncHandler(async (req: Request, res: Response)
     }
   }
 
-  const dept = await Department.findOne({
+  const updateFilter: DepartmentFilter = {
     _id: req.params.id,
     company_id: req.user.company_id,
     is_active: true,
-  } as any);
+  };
+
+  const dept = await Department.findOne(updateFilter);
 
   if (!dept) {
     throw new AppError('Department not found', 404, 'NOT_FOUND');
@@ -270,14 +296,63 @@ export const updateDepartment = asyncHandler(async (req: Request, res: Response)
  * Soft-deletes (archives) a department. Sets is_active = false.
  */
 export const deleteDepartment = asyncHandler(async (req: Request, res: Response) => {
-  const dept = await Department.findOne({
+  const filter: DepartmentFilter = {
     _id: req.params.id,
     company_id: req.user.company_id,
     is_active: true,
-  } as any);
+  };
+
+  const dept = await Department.findOne(filter);
 
   if (!dept) {
     throw new AppError('Department not found', 404, 'NOT_FOUND');
+  }
+
+  // ── Cascading Checks ───────────────────────────────────────────────────────
+  
+  // 1. Check for active users assigned to this department
+  const activeUserCount = await User.countDocuments({
+    company_id: req.user.company_id,
+    department_id: dept._id,
+    is_active: true,
+  });
+
+  if (activeUserCount > 0) {
+    throw new AppError(
+      `Cannot delete department "${dept.name}" — it has ${activeUserCount} active user${activeUserCount > 1 ? 's' : ''}. Reassign employees before deleting.`,
+      409,
+      'DEPT_HAS_ACTIVE_USERS'
+    );
+  }
+
+  // 2. Check for child departments
+  const childCount = await Department.countDocuments({
+    company_id: req.user.company_id,
+    parent_id: dept._id,
+    is_active: true,
+  });
+
+  if (childCount > 0) {
+    throw new AppError(
+      `Cannot delete department "${dept.name}" — it has ${childCount} child department${childCount > 1 ? 's' : ''}. Remove or reassign child units first.`,
+      409,
+      'DEPT_HAS_CHILD_DEPARTMENTS'
+    );
+  }
+
+  // 3. Check for associated teams
+  const teamCount = await Team.countDocuments({
+    company_id: req.user.company_id,
+    department_id: dept._id,
+    is_active: true,
+  });
+
+  if (teamCount > 0) {
+    throw new AppError(
+      `Cannot delete department "${dept.name}" — it has ${teamCount} active team${teamCount > 1 ? 's' : ''}. Delete or reassign teams first.`,
+      409,
+      'DEPT_HAS_TEAMS'
+    );
   }
 
   const beforeState = dept.toObject();
@@ -310,10 +385,12 @@ export const deleteDepartment = asyncHandler(async (req: Request, res: Response)
  * intelligence flags included.
  */
 export const getOrgTree = asyncHandler(async (req: Request, res: Response) => {
-  const raw = await Department.find({
+  const filter: DepartmentFilter = {
     company_id: req.user.company_id,
     is_active: true,
-  } as any)
+  };
+
+  const raw = await Department.find(filter)
     .populate('primary_manager_id', 'full_name avatar_url')
     .lean();
 
@@ -349,11 +426,13 @@ export const getOrgTree = asyncHandler(async (req: Request, res: Response) => {
 export const moveDepartment = asyncHandler(async (req: Request, res: Response) => {
   const input = MoveDepartmentSchema.parse(req.body);
 
-  const dept = await Department.findOne({
+  const filter: DepartmentFilter = {
     _id: req.params.id,
     company_id: req.user.company_id,
     is_active: true,
-  } as any);
+  };
+
+  const dept = await Department.findOne(filter);
 
   if (!dept) {
     throw new AppError('Department not found', 404, 'NOT_FOUND');
@@ -405,11 +484,13 @@ export const moveDepartment = asyncHandler(async (req: Request, res: Response) =
  */
 async function isDescendantOf(deptId: string, targetId: string, companyId: string): Promise<boolean> {
   // Get direct children of deptId
-  const children = await Department.find({
+  const filter: DepartmentFilter = {
     company_id: companyId,
     parent_id: deptId,
     is_active: true,
-  } as any).lean();
+  };
+
+  const children = await Department.find(filter).lean();
 
   for (const child of children) {
     if (child._id.toString() === targetId) return true;
@@ -426,11 +507,13 @@ async function isDescendantOf(deptId: string, targetId: string, companyId: strin
  */
 export const getBUTree = asyncHandler(async (req: Request, res: Response) => {
   // Get all active Business Units
-  const allBUs = await Department.find({
+  const filterBU: DepartmentFilter = {
     company_id: req.user.company_id,
     type: 'business_unit',
     is_active: true,
-  } as any)
+  };
+
+  const allBUs = await Department.find(filterBU)
     .populate('primary_manager_id', 'full_name avatar_url')
     .sort({ created_at: 1 })
     .lean();
@@ -439,20 +522,24 @@ export const getBUTree = asyncHandler(async (req: Request, res: Response) => {
   const rootBUs = allBUs.filter(bu => !bu.parent_id);
 
   // Get all active departments (excluding BUs)
-  const departments = await Department.find({
+  const filterDepts: DepartmentFilter = {
     company_id: req.user.company_id,
     type: { $in: ['division', 'department', 'cost_center'] },
     is_active: true,
-  } as any)
+  };
+
+  const departments = await Department.find(filterDepts)
     .populate('primary_manager_id', 'full_name avatar_url')
     .sort({ created_at: 1 })
     .lean();
 
   // Get all active teams
-  const teams = await Team.find({
+  const filterTeams = {
     company_id: req.user.company_id,
     is_active: true,
-  } as any)
+  };
+
+  const teams = await Team.find(filterTeams)
     .populate('team_lead_id', 'full_name avatar_url')
     .sort({ created_at: 1 })
     .lean();
@@ -519,10 +606,8 @@ export const getBUTree = asyncHandler(async (req: Request, res: Response) => {
         team_count: unitTeams.length,
         children: branchChildren,
         dept_count: branchDeptCount,
-        // We override team_count in the return to represent total branch teams for UI needs if necessary,
-        // but typically the UI shows direct count + indicator. Let's keep direct for now and add total.
         total_team_count: branchTeamCount,
-      } as any;
+      };
     });
   };
 
@@ -531,13 +616,13 @@ export const getBUTree = asyncHandler(async (req: Request, res: Response) => {
     const children = buildTree(buId);
     
     // Total counts for the root BU
-    const totalDepts = children.reduce((acc, child) => {
+    const totalDepts = children.reduce((acc, child: any) => {
        const isDept = child.type !== 'business_unit';
-       return acc + (isDept ? 1 : 0) + (child as any).dept_count;
+       return acc + (isDept ? 1 : 0) + child.dept_count;
     }, 0);
 
-    const totalTeams = children.reduce((acc, child) => {
-       return acc + child.team_count + (child as any).total_team_count;
+    const totalTeams = children.reduce((acc, child: any) => {
+       return acc + child.team_count + child.total_team_count;
     }, 0);
 
     return {
@@ -556,27 +641,30 @@ export const getBUTree = asyncHandler(async (req: Request, res: Response) => {
  * Returns all BUs with dept + team counts
  */
 export const getBusinessUnits = asyncHandler(async (req: Request, res: Response) => {
-  const bus = await Department.find({
+  const filterBU: DepartmentFilter = {
     company_id: req.user.company_id,
     type: 'business_unit',
     is_active: true,
-  } as any)
+  };
+
+  const bus = await Department.find(filterBU)
     .populate('primary_manager_id', 'full_name avatar_url')
     .sort({ created_at: 1 })
     .lean();
 
   // Get all departments under these BUs
-  const buIds = bus.map((bu) => bu._id.toString());
-  const allDepts = await Department.find({
+  const allDeptsFilter: DepartmentFilter = {
     company_id: req.user.company_id,
     is_active: true,
-  } as any).lean();
+  };
+  const allDepts = await Department.find(allDeptsFilter).lean();
 
   // Get all teams
-  const allTeams = await Team.find({
+  const teamsFilter = {
     company_id: req.user.company_id,
     is_active: true,
-  } as any).lean();
+  };
+  const allTeams = await Team.find(teamsFilter).lean();
 
   // Count descendants and teams for each BU
   const buWithCounts = bus.map((bu) => {
@@ -613,29 +701,63 @@ export const getBusinessUnits = asyncHandler(async (req: Request, res: Response)
  * Deletes a BU. Blocked if it has child departments (409).
  */
 export const deleteBusinessUnit = asyncHandler(async (req: Request, res: Response) => {
-  const bu = await Department.findOne({
+  const filterBU: DepartmentFilter = {
     _id: req.params.id,
     company_id: req.user.company_id,
     type: 'business_unit',
     is_active: true,
-  } as any);
+  };
+
+  const bu = await Department.findOne(filterBU);
 
   if (!bu) {
     throw new AppError('Business Unit not found', 404, 'NOT_FOUND');
   }
 
-  // Check for child departments
-  const childCount = await Department.countDocuments({
+  // 1. Check for active users assigned directly to this BU
+  const activeUserCount = await User.countDocuments({
+    company_id: req.user.company_id,
+    department_id: bu._id,
+    is_active: true,
+  });
+
+  if (activeUserCount > 0) {
+    throw new AppError(
+      `Cannot delete Business Unit "${bu.name}" — it has ${activeUserCount} active user${activeUserCount > 1 ? 's' : ''}. Reassign employees before deleting.`,
+      409,
+      'BU_HAS_ACTIVE_USERS'
+    );
+  }
+
+  // 2. Check for child departments
+  const childFilter: DepartmentFilter = {
     company_id: req.user.company_id,
     parent_id: bu._id,
     is_active: true,
-  } as any);
+  };
+
+  const childCount = await Department.countDocuments(childFilter);
 
   if (childCount > 0) {
     throw new AppError(
       `Cannot delete Business Unit "${bu.name}" — it has ${childCount} child department${childCount > 1 ? 's' : ''}. Remove or reassign all child departments first.`,
       409,
       'BU_HAS_CHILD_DEPARTMENTS'
+    );
+  }
+
+  // 3. Check for associated teams
+  const teamCount = await Team.countDocuments({
+    company_id: req.user.company_id,
+    department_id: bu._id,
+    is_active: true,
+  });
+
+  if (teamCount > 0) {
+    throw new AppError(
+      `Cannot delete Business Unit "${bu.name}" — it has ${teamCount} active team${teamCount > 1 ? 's' : ''}. Delete or reassign teams first.`,
+      409,
+      'BU_HAS_TEAMS'
     );
   }
 
@@ -673,7 +795,7 @@ export const assignUserOrg = asyncHandler(async (req: Request, res: Response) =>
   const user = await User.findOne({
     _id: req.params.id,
     company_id: req.user.company_id,
-  } as any);
+  });
 
   if (!user) {
     throw new AppError('User not found', 404, 'NOT_FOUND');
@@ -687,10 +809,12 @@ export const assignUserOrg = asyncHandler(async (req: Request, res: Response) =>
   const beforeState = user.toObject();
 
   // 1. Update primary department on User document
-  user.department_id = input.department_id as any;
+  user.department_id = input.department_id as unknown as Types.ObjectId;
   
   // Also clear legacy team_id if it's there, as we use TeamMember now
-  (user as any).team_id = undefined;
+  if ('team_id' in user) {
+    (user as Record<string, unknown>).team_id = undefined;
+  }
 
   await user.save();
 
@@ -707,7 +831,7 @@ export const assignUserOrg = asyncHandler(async (req: Request, res: Response) =>
         company_id: req.user.company_id,
         department_id: input.department_id,
         is_active: true,
-      } as any);
+      });
 
       if (validTeams.length !== teamIds.length) {
         throw new AppError(
@@ -722,7 +846,7 @@ export const assignUserOrg = asyncHandler(async (req: Request, res: Response) =>
     await TeamMember.deleteMany({
       company_id: req.user.company_id,
       user_id: user._id,
-    } as any);
+    });
 
     // Create new memberships
     if (teamIds.length > 0) {
@@ -798,22 +922,39 @@ export const getOrgHealth = asyncHandler(async (req: Request, res: Response) => 
 export const getOrgHistory = asyncHandler(async (req: Request, res: Response) => {
   const { object_type, date_from, date_to } = req.query;
 
-  const query: Record<string, unknown> = {
+  // ── Input Sanitization ─────────────────────────────────────────────────────
+  
+  const ALLOWED_OBJECT_TYPES = ['Department', 'Team', 'BusinessUnit'];
+  if (object_type && !ALLOWED_OBJECT_TYPES.includes(String(object_type))) {
+    throw new AppError('Invalid object_type filter', 400, 'INVALID_FILTER');
+  }
+
+  const query: HistoryQuery = {
     company_id: req.user.company_id,
     module: 'organization',
   };
 
   if (object_type) {
-    query.object_type = object_type;
+    query.object_type = String(object_type);
   }
 
   if (date_from || date_to) {
     query.created_at = {};
+    
     if (date_from) {
-      (query.created_at as Record<string, unknown>).$gte = new Date(date_from as string);
+      const fromDate = new Date(String(date_from));
+      if (isNaN(fromDate.getTime())) {
+        throw new AppError('Invalid date_from format', 400, 'INVALID_DATE');
+      }
+      query.created_at.$gte = fromDate;
     }
+    
     if (date_to) {
-      (query.created_at as Record<string, unknown>).$lte = new Date(date_to as string);
+      const toDate = new Date(String(date_to));
+      if (isNaN(toDate.getTime())) {
+        throw new AppError('Invalid date_to format', 400, 'INVALID_DATE');
+      }
+      query.created_at.$lte = toDate;
     }
   }
 

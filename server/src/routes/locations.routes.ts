@@ -15,11 +15,17 @@ const router = Router();
 
 router.use(requireAuth);
 
-router.get('/', getLocations);
+const LOCATION_MANAGERS = ['Super Admin', 'Ops Admin'];
+
+// ── Static Routes ────────────────────────────────────────────────────────────
 router.get('/tree', getLocationTree);
+router.get('/', getLocations);
+
+// ── Parameterized Routes ─────────────────────────────────────────────────────
 router.get('/:id', getLocationById);
-router.post('/', requireRole(['super_admin', 'ops_admin']), createLocation);
-router.put('/:id', requireRole(['super_admin', 'ops_admin']), updateLocation);
-router.delete('/:id', requireRole(['super_admin']), deleteLocation);
+
+router.post('/', requireRole(LOCATION_MANAGERS), createLocation);
+router.put('/:id', requireRole(LOCATION_MANAGERS), updateLocation);
+router.delete('/:id', requireRole(LOCATION_MANAGERS), deleteLocation);
 
 export default router;

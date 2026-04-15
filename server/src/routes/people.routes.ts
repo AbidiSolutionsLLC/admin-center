@@ -1,5 +1,7 @@
 // server/src/routes/people.routes.ts
 import { Router } from 'express';
+import { requireAuth } from '../middleware/auth';
+import { requireRole } from '../middleware/requireRole';
 import {
   getUsers,
   getUserById,
@@ -20,9 +22,13 @@ import reportingLinesRoutes from './reportingLines.routes';
 
 const router = Router();
 
+// All routes require authentication
+router.use(requireAuth);
+
+const PEOPLE_MANAGERS = ['Super Admin', 'HR Admin', 'Ops Admin'];
+
 /**
- * All routes require authentication (requireAuth middleware applied in index.ts)
- * All routes are scoped to req.user.company_id from JWT
+ * ── Static Routes (Registered First) ─────────────────────────────────────────
  */
 
 /**
@@ -35,77 +41,105 @@ router.get('/', getUsers);
  * GET /people/export
  * Export users as CSV
  */
-router.get('/export', exportUsers);
+router.get('/export', requireRole(PEOPLE_MANAGERS), exportUsers);
 
 /**
  * POST /people/invite
- * Invite a new user (sends welcome email)
- * Requires: Super Admin, Admin, or HR
+ * Invite a new user
  */
-router.post('/invite', requireRole([...PERMISSION_GROUPS.PEOPLE_ADMINS]), inviteUser);
+router.post('/invite', requireRole(PEOPLE_MANAGERS), inviteUser);
 
 /**
  * POST /people/bulk-invite
- * Bulk invite up to 500 users
- * Requires: Super Admin, Admin, or HR
+ * Bulk invite users
  */
-router.post('/bulk-invite', requireRole([...PERMISSION_GROUPS.PEOPLE_ADMINS]), bulkInviteUsers);
+router.post('/bulk-invite', requireRole(PEOPLE_MANAGERS), bulkInviteUsers);
 
 /**
  * PUT /people/bulk-lifecycle
- * Bulk lifecycle state change for multiple users
- * Requires: Super Admin, Admin, or HR
+ * Bulk lifecycle state change
  */
-router.put('/bulk-lifecycle', requireRole([...PERMISSION_GROUPS.PEOPLE_ADMINS]), bulkUpdateLifecycle);
+router.put('/bulk-lifecycle', requireRole(PEOPLE_MANAGERS), bulkUpdateLifecycle);
 
 /**
  * POST /people/bulk-assign-role
- * Bulk assign a role to multiple users
+ * Bulk assign roles
  */
-router.post('/bulk-assign-role', bulkAssignRole);
+router.post('/bulk-assign-role', requireRole(PEOPLE_MANAGERS), bulkAssignRole);
 
 /**
- * GET /people/:id
- * Get a single user by ID
+ * ── Parameterized Routes (Registered Last) ───────────────────────────────────
+ */
+
+/**
+ * GET /people/export
+ * Export users as CSV
+ */
+router.get('/export', requireRole(PEOPLE_MANAGERS), exportUsers);
+
+/**
+ * POST /people/invite
+ * Invite a new user
+ */
+router.post('/invite', requireRole(PEOPLE_MANAGERS), inviteUser);
+
+/**
+ * POST /people/bulk-invite
+ * Bulk invite users
+ */
+router.post('/bulk-invite', requireRole(PEOPLE_MANAGERS), bulkInviteUsers);
+
+/**
+ * PUT /people/bulk-lifecycle
+ * Bulk lifecycle state change
+ */
+router.put('/bulk-lifecycle', requireRole(PEOPLE_MANAGERS), bulkUpdateLifecycle);
+
+/**
+ * POST /people/bulk-assign-role
+ * Bulk assign roles
+ */
+router.post('/bulk-assign-role', requireRole(PEOPLE_MANAGERS), bulkAssignRole);
+
+/**
+ * ── Parameterized Routes (Registered Last) ───────────────────────────────────
+ */
+
+/**
+ * GET /people/export
+ * Export users as CSV
  */
 router.get('/:id', getUserById);
 
-/**
- * POST /people/:id/resend-invite
- * Resend invitation email to an invited user
- */
-router.post('/:id/resend-invite', resendInvite);
 
+router.post('/:id/resend-invite', requireRole(PEOPLE_MANAGERS), resendInvite);
 /**
  * PUT /people/:id
- * Update user profile information
- * Requires: Super Admin, Admin, or HR
+ * Update user profile
  */
-router.put('/:id', requireRole([...PERMISSION_GROUPS.PEOPLE_ADMINS]), updateUser);
+router.put('/:id', requireRole(PEOPLE_MANAGERS), updateUser);
 
 /**
  * PUT /people/:id/lifecycle
  * Transition user to a new lifecycle state
- * Requires: Super Admin, Admin, or HR
  */
-router.put('/:id/lifecycle', requireRole([...PERMISSION_GROUPS.PEOPLE_ADMINS]), updateUserLifecycle);
+router.put('/:id/lifecycle', requireRole(PEOPLE_MANAGERS), updateUserLifecycle);
 
 /**
  * DELETE /people/:id
  * Archive a user (soft delete)
- * Requires: Super Admin, Admin, or HR
  */
-router.delete('/:id', requireRole([...PERMISSION_GROUPS.PEOPLE_ADMINS]), deleteUser);
+router.delete('/:id', requireRole(PEOPLE_MANAGERS), deleteUser);
 
 /**
  * POST /people/:id/assign-org
  * Assign user to department and teams
  */
-router.post('/:id/assign-org', assignUserOrg);
+router.post('/:id/assign-org', requireRole(PEOPLE_MANAGERS), assignUserOrg);
 
 /**
  * Reporting lines routes
- * All routes are nested under /:id/reporting-line
+ * Nested under /:id/reporting-line
  */
 router.use('/:id/reporting-line', reportingLinesRoutes);
 
