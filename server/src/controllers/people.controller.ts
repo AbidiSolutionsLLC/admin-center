@@ -16,6 +16,9 @@ import { AppError } from '../utils/AppError';
 import { Types } from 'mongoose';
 import { Department } from '../models/Department.model';
 import { Location } from '../models/Location.model';
+import { Team } from '../models/Team.model';
+import { handleLifecycleEvent } from '../lib/workflowEngine';
+import { deliverNotification } from '../lib/notificationEngine';
 
 // ── Types & Interfaces ───────────────────────────────────────────────────────
 
@@ -157,14 +160,66 @@ async function runLifecycleAutomations(
   req: Request,
 ): Promise<void> {
   const transitionKey = `${currentState}_to_${targetState}`;
+  const company = await Company.findById(req.user.company_id);
 
+  if (!company) {
+    return;
+  }
+
+  // 1. Target-Specific Side Effects (Revocation, Anonymization, etc.)
+  if (targetState === 'terminated') {
+    user.refresh_token_hash = undefined;
+    user.is_active = false;
+    await user.save();
+
+    await RefreshToken.updateMany(
+      { user_id: user._id, is_revoked: false },
+      { $set: { is_revoked: true } }
+    );
+
+    await auditLogger.log({
+      req,
+      action: 'user.lifecycle_automation',
+      module: 'people',
+      object_type: 'User',
+      object_id: user._id.toString(),
+      object_label: user.full_name,
+      before_state: { transition: transitionKey },
+      after_state: { automation: 'sessions_revoked', refresh_tokens_invalidated: true },
+    });
+  }
+
+  if (targetState === 'archived') {
+    user.full_name = 'Archived User';
+    user.email = `archived-${user._id}@archived.local`;
+    user.phone = undefined;
+    user.avatar_url = undefined;
+    user.employee_id = `ARCHIVED-${user._id.toString().slice(-8)}`;
+    user.is_active = false;
+    (user as any).department_id = undefined;
+    (user as any).team_id = undefined;
+    (user as any).manager_id = undefined;
+    (user as any).location_id = undefined;
+    (user as any).hire_date = undefined;
+    (user as any).termination_date = undefined;
+    (user as any).custom_fields = {};
+
+    await user.save();
+
+    await auditLogger.log({
+      req,
+      action: 'user.lifecycle_automation',
+      module: 'people',
+      object_type: 'User',
+      object_id: user._id.toString(),
+      object_label: user.full_name,
+      before_state: { transition: transitionKey },
+      after_state: { automation: 'pii_anonymized' },
+    });
+  }
+
+  // 2. Transition-Specific Automations (Invite Link, etc.)
   if (transitionKey === 'invited_to_onboarding') {
-    const company = await Company.findById(req.user.company_id);
-
-    if (!company) {
-      return;
-    }
-
     const rawToken = crypto.randomBytes(32).toString('hex');
     const tokenHash = crypto.createHash('sha256').update(rawToken).digest('hex');
 
@@ -194,55 +249,42 @@ async function runLifecycleAutomations(
     });
   }
 
-  if (transitionKey === 'active_to_terminated') {
-    user.refresh_token_hash = undefined;
-    user.is_active = false;
-    await user.save();
+  // 3. Smooth Notifications: Send mail and notification to user and manager for ALL transitions
+  const notificationPayload = {
+    companyId: req.user.company_id,
+    templateKey: `lifecycle_${targetState}`, // e.g., lifecycle_active, lifecycle_probation
+    user_id: user._id.toString(),
+    user_name: user.full_name.split(' ')[0],
+    user_full_name: user.full_name,
+    user_email: user.email,
+    company_name: company.name,
+    detail: `Status changed from ${currentState} to ${targetState}.`,
+    triggered_by_event: 'user.lifecycle_changed',
+    triggered_by_object_type: 'User',
+    triggered_by_object_id: user._id.toString(),
+  };
 
-    await RefreshToken.updateMany(
-      { user_id: user._id, is_revoked: false },
-      { $set: { is_revoked: true } }
-    );
+  // Notify the user
+  await deliverNotification(notificationPayload).catch(err => {
+    console.warn(`[Lifecycle Automation] Individual notification failed for ${user._id}:`, err instanceof Error ? err.message : 'Unknown');
+  });
 
-    await auditLogger.log({
-      req,
-      action: 'user.lifecycle_automation',
-      module: 'people',
-      object_type: 'User',
-      object_id: user._id.toString(),
-      object_label: user.full_name,
-      before_state: { transition: transitionKey },
-      after_state: { automation: 'sessions_revoked', refresh_tokens_invalidated: true },
-    });
-  }
-
-  if (transitionKey === 'terminated_to_archived') {
-    user.full_name = 'Archived User';
-    user.email = `archived-${user._id}@archived.local`;
-    user.phone = undefined;
-    user.avatar_url = undefined;
-    user.employee_id = `ARCHIVED-${user._id.toString().slice(-8)}`;
-    user.is_active = false;
-    (user as any).department_id = undefined;
-    (user as any).team_id = undefined;
-    (user as any).manager_id = undefined;
-    (user as any).location_id = undefined;
-    (user as any).hire_date = undefined;
-    (user as any).termination_date = undefined;
-    (user as any).custom_fields = {};
-
-    await user.save();
-
-    await auditLogger.log({
-      req,
-      action: 'user.lifecycle_automation',
-      module: 'people',
-      object_type: 'User',
-      object_id: user._id.toString(),
-      object_label: user.full_name,
-      before_state: { transition: transitionKey },
-      after_state: { automation: 'pii_anonymized' },
-    });
+  // Notify the manager
+  if (user.manager_id) {
+    const manager = await User.findById(user.manager_id);
+    if (manager) {
+      await deliverNotification({
+        ...notificationPayload,
+        templateKey: 'manager_lifecycle_alert',
+        user_id: manager._id.toString(),
+        user_name: manager.full_name.split(' ')[0],
+        user_full_name: manager.full_name,
+        user_email: manager.email,
+        detail: `Team member ${user.full_name} transitioned from ${currentState} to ${targetState}.`,
+      }).catch(err => {
+        console.warn(`[Lifecycle Automation] Manager notification failed for ${manager._id}:`, err instanceof Error ? err.message : 'Unknown');
+      });
+    }
   }
 }
 
