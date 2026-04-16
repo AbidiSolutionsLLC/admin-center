@@ -16,7 +16,6 @@ import {
   resendInvite,
 } from '../controllers/people.controller';
 import { assignUserOrg } from '../controllers/organization.controller';
-import { requireRole } from '../middleware/requireRole';
 import { PERMISSION_GROUPS } from '../constants/roles';
 import reportingLinesRoutes from './reportingLines.routes';
 
@@ -25,7 +24,7 @@ const router = Router();
 // All routes require authentication
 router.use(requireAuth);
 
-const PEOPLE_MANAGERS = ['Super Admin', 'HR Admin', 'Ops Admin'];
+const PEOPLE_MANAGERS: string[] = [...PERMISSION_GROUPS.PEOPLE_ADMINS];
 
 /**
  * ── Static Routes (Registered First) ─────────────────────────────────────────
@@ -72,47 +71,17 @@ router.post('/bulk-assign-role', requireRole(PEOPLE_MANAGERS), bulkAssignRole);
  */
 
 /**
- * GET /people/export
- * Export users as CSV
- */
-router.get('/export', requireRole(PEOPLE_MANAGERS), exportUsers);
-
-/**
- * POST /people/invite
- * Invite a new user
- */
-router.post('/invite', requireRole(PEOPLE_MANAGERS), inviteUser);
-
-/**
- * POST /people/bulk-invite
- * Bulk invite users
- */
-router.post('/bulk-invite', requireRole(PEOPLE_MANAGERS), bulkInviteUsers);
-
-/**
- * PUT /people/bulk-lifecycle
- * Bulk lifecycle state change
- */
-router.put('/bulk-lifecycle', requireRole(PEOPLE_MANAGERS), bulkUpdateLifecycle);
-
-/**
- * POST /people/bulk-assign-role
- * Bulk assign roles
- */
-router.post('/bulk-assign-role', requireRole(PEOPLE_MANAGERS), bulkAssignRole);
-
-/**
- * ── Parameterized Routes (Registered Last) ───────────────────────────────────
- */
-
-/**
- * GET /people/export
- * Export users as CSV
+ * GET /people/:id
+ * Returns a single user by ID
  */
 router.get('/:id', getUserById);
 
-
+/**
+ * POST /people/:id/resend-invite
+ * Resend invitation email to an invited user
+ */
 router.post('/:id/resend-invite', requireRole(PEOPLE_MANAGERS), resendInvite);
+
 /**
  * PUT /people/:id
  * Update user profile

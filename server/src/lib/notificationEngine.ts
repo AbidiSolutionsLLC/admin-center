@@ -19,7 +19,7 @@
 import { NotificationTemplate, NotificationDigestMode, NotificationChannel } from '../models/NotificationTemplate.model';
 import { InAppNotification } from '../models/InAppNotification.model';
 import { NotificationEvent } from '../models/NotificationEvent.model';
-import { getTransporter } from './emailService';
+import { getTransporter, sendEmail } from './emailService';
 import { Company } from '../models/Company.model';
 import nodemailer from 'nodemailer';
 import { Types } from 'mongoose';
@@ -36,6 +36,7 @@ export interface NotificationPayload {
   triggered_by_event: string;
   triggered_by_object_type?: string;
   triggered_by_object_id?: string;
+  forceEmail?: boolean;         // Force email delivery even when template channel is in_app or digest-based
 }
 
 export interface DeliveryResult {
@@ -203,8 +204,58 @@ export async function deliverNotification(payload: NotificationPayload): Promise
   });
 
   if (!template) {
-    // Template not found — log as failed for email channel as fallback
     console.warn(`[NotificationEngine] Template not found: ${payload.templateKey} for company ${payload.companyId}`);
+
+    if (payload.forceEmail) {
+      const subject = payload.company_name
+        ? `${payload.company_name}: Lifecycle update`
+        : 'Lifecycle update';
+      const body = `Hello ${payload.user_full_name},\n\n${payload.detail ?? 'A lifecycle update occurred.'}\n\nRegards,\n${payload.company_name ?? 'Admin Center'}`;
+
+      try {
+        await sendEmail({
+          to: payload.user_email,
+          subject,
+          html: `<p>${body.replace(/\n/g, '<br/>')}</p>`,
+          text: body,
+        });
+
+        const event = await NotificationEvent.create({
+          company_id: new Types.ObjectId(payload.companyId),
+          recipient_user_id: new Types.ObjectId(payload.user_id),
+          recipient_email: payload.user_email,
+          channel: 'email',
+          status: 'sent',
+          subject_rendered: subject,
+          body_rendered: body,
+          triggered_by_event: payload.triggered_by_event,
+          triggered_by_object_type: payload.triggered_by_object_type,
+          triggered_by_object_id: payload.triggered_by_object_id,
+          delivery_timestamp: new Date(),
+        });
+
+        results.push({ channel: 'email', status: 'sent', event_id: event._id.toString() });
+      } catch (error) {
+        const errorMessage = error instanceof Error ? error.message : 'Unknown email delivery error';
+        const event = await NotificationEvent.create({
+          company_id: new Types.ObjectId(payload.companyId),
+          recipient_user_id: new Types.ObjectId(payload.user_id),
+          recipient_email: payload.user_email,
+          channel: 'email',
+          status: 'failed',
+          subject_rendered: subject,
+          body_rendered: body,
+          error_message: errorMessage,
+          triggered_by_event: payload.triggered_by_event,
+          triggered_by_object_type: payload.triggered_by_object_type,
+          triggered_by_object_id: payload.triggered_by_object_id,
+          delivery_timestamp: new Date(),
+        });
+
+        results.push({ channel: 'email', status: 'failed', event_id: event._id.toString(), error: errorMessage });
+      }
+    }
+
     return results;
   }
 
@@ -218,9 +269,13 @@ export async function deliverNotification(payload: NotificationPayload): Promise
   const isCritical = template.severity === 'critical';
   const isDigestQueued = !isCritical && template.digest_mode !== 'immediate';
 
+  const forceEmailDelivery = payload.forceEmail === true;
+  const shouldSendEmail = template.channel === 'email' || template.channel === 'both' || forceEmailDelivery;
+  const shouldQueueDigest = !isCritical && template.digest_mode !== 'immediate' && !forceEmailDelivery;
+
   // Email delivery
-  if (template.channel === 'email' || template.channel === 'both') {
-    if (isDigestQueued) {
+  if (shouldSendEmail) {
+    if (shouldQueueDigest) {
       // Queue for digest — don't send immediately
       const timestamp = new Date();
       const event = await NotificationEvent.create({

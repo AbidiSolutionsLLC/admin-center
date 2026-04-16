@@ -3,14 +3,14 @@ import { Request, Response } from 'express';
 import { z } from 'zod';
 import bcrypt from 'bcryptjs';
 import { asyncHandler } from '../utils/asyncHandler';
-import { User } from '../models/User.model';
+import { User, EmploymentType } from '../models/User.model';
 import { Company } from '../models/Company.model';
 import { RefreshToken } from '../models/RefreshToken.model';
 import { Role } from '../models/Role.model';
 import { UserRole } from '../models/UserRole.model';
 import { TeamMember } from '../models/TeamMember.model';
 import { auditLogger } from '../lib/auditLogger';
-import { sendWelcomeEmail, sendBulkWelcomeEmails } from '../lib/emailService';
+import { sendWelcomeEmail, sendBulkWelcomeEmails, sendEmail } from '../lib/emailService';
 import { isValidTransition, getTransitionErrorMessage, LifecycleState } from '../lib/lifecycle';
 import { AppError } from '../utils/AppError';
 import { Types } from 'mongoose';
@@ -19,6 +19,8 @@ import { Location } from '../models/Location.model';
 import { Team } from '../models/Team.model';
 import { handleLifecycleEvent } from '../lib/workflowEngine';
 import { deliverNotification } from '../lib/notificationEngine';
+import { PERMISSION_GROUPS } from '../constants/roles';
+import { NotificationTemplate } from '../models/NotificationTemplate.model';
 
 // ── Types & Interfaces ───────────────────────────────────────────────────────
 
@@ -34,6 +36,10 @@ interface UserFilter {
   is_active?: boolean;
   $or?: Array<Record<string, unknown>>;
 }
+
+const getRouteId = (param: string | string[]): string =>
+  Array.isArray(param) ? param[0] : param;
+
 import crypto from 'crypto';
 import { InviteToken } from '../models/InviteToken.model';
 
@@ -104,9 +110,6 @@ const generateTemporaryPassword = (): string => {
   return password;
 };
 
-/**
- * Enriches user list with populated department, manager info, and team memberships
- */
 async function enrichUsers(
   users: ReturnType<(typeof User.prototype.toObject)>[],
   companyId: string
@@ -119,6 +122,11 @@ async function enrichUsers(
     user_id: { $in: userIds }
   }).populate('team_id', 'name slug').lean();
 
+  // Fetch all role assignments for these users in one query
+  const roleAssignments = await UserRole.find({
+    user_id: { $in: userIds }
+  }).populate('role_id', 'name type').lean();
+
   // Group memberships by user_id
   const membershipMap = new Map<string, any[]>();
   memberships.forEach(m => {
@@ -129,12 +137,25 @@ async function enrichUsers(
     membershipMap.get(userId)!.push(m.team_id);
   });
 
+  // Group role assignments by user_id
+  const roleMap = new Map<string, any[]>();
+  roleAssignments.forEach(ra => {
+    const userId = ra.user_id.toString();
+    if (!roleMap.has(userId)) {
+      roleMap.set(userId, []);
+    }
+    roleMap.get(userId)!.push(ra.role_id);
+  });
+
   return users.map((user) => {
     const data = { ...user };
     const userId = user._id.toString();
 
     // Attach teams
     data.teams = membershipMap.get(userId) || [];
+
+    // Attach roles (plural, expected by frontend)
+    data.roles = roleMap.get(userId) || [];
 
     // Map populated objects to the names expected by the frontend
     if (data.department_id && typeof data.department_id === 'object') {
@@ -165,6 +186,10 @@ async function runLifecycleAutomations(
   if (!company) {
     return;
   }
+
+  const originalUserEmail = user.email;
+  const originalUserFullName = user.full_name;
+  const originalUserFirstName = originalUserFullName.split(' ')[0];
 
   // 1. Target-Specific Side Effects (Revocation, Anonymization, etc.)
   if (targetState === 'terminated') {
@@ -249,42 +274,133 @@ async function runLifecycleAutomations(
     });
   }
 
-  // 3. Smooth Notifications: Send mail and notification to user and manager for ALL transitions
+  // 3. Smooth Notifications: Send mail and notification to user, manager, and admins for ALL transitions
   const notificationPayload = {
     companyId: req.user.company_id,
     templateKey: `lifecycle_${targetState}`, // e.g., lifecycle_active, lifecycle_probation
     user_id: user._id.toString(),
-    user_name: user.full_name.split(' ')[0],
-    user_full_name: user.full_name,
-    user_email: user.email,
+    user_name: originalUserFirstName,
+    user_full_name: originalUserFullName,
+    user_email: originalUserEmail,
     company_name: company.name,
     detail: `Status changed from ${currentState} to ${targetState}.`,
     triggered_by_event: 'user.lifecycle_changed',
     triggered_by_object_type: 'User',
     triggered_by_object_id: user._id.toString(),
+    forceEmail: true,
+  };
+
+  const sendLifecycleEmailFallback = async (recipient: {
+    email: string;
+    full_name: string;
+    detail: string;
+    subject: string;
+  }) => {
+    const html = `<p>Hi ${recipient.full_name},</p><p>${recipient.detail}</p><p>Regards,<br/>${company.name}</p>`;
+    const text = `Hi ${recipient.full_name},\n\n${recipient.detail}\n\nRegards,\n${company.name}`;
+
+    try {
+      await sendEmail({
+        to: recipient.email,
+        subject: recipient.subject,
+        html,
+        text,
+      });
+    } catch (error) {
+      console.warn(`[Lifecycle Email Fallback] Failed to send email to ${recipient.email}:`, error instanceof Error ? error.message : 'Unknown');
+    }
+  };
+
+  const sendLifecycleNotification = async (payload: {
+    templateKey: string;
+    user_id: string;
+    user_name: string;
+    user_full_name: string;
+    user_email: string;
+    detail: string;
+    emailSubject: string;
+  }) => {
+    const results = await deliverNotification({
+      ...notificationPayload,
+      ...payload,
+      forceEmail: true,
+    }).catch(err => {
+      console.warn(`[Lifecycle Automation] Notification failed for ${payload.user_id}:`, err instanceof Error ? err.message : 'Unknown');
+      return [] as any[];
+    });
+
+    const emailSent = Array.isArray(results) && results.some(r => r.channel === 'email' && r.status === 'sent');
+    if (!emailSent) {
+      await sendLifecycleEmailFallback({
+        email: payload.user_email,
+        full_name: payload.user_full_name,
+        detail: payload.detail,
+        subject: payload.emailSubject,
+      });
+    }
   };
 
   // Notify the user
-  await deliverNotification(notificationPayload).catch(err => {
-    console.warn(`[Lifecycle Automation] Individual notification failed for ${user._id}:`, err instanceof Error ? err.message : 'Unknown');
+  await sendLifecycleNotification({
+    templateKey: notificationPayload.templateKey,
+    user_id: notificationPayload.user_id,
+    user_name: notificationPayload.user_name,
+    user_full_name: notificationPayload.user_full_name,
+    user_email: notificationPayload.user_email,
+    detail: notificationPayload.detail,
+    emailSubject: `${company.name}: Lifecycle update for ${originalUserFullName}`,
   });
 
   // Notify the manager
   if (user.manager_id) {
     const manager = await User.findById(user.manager_id);
     if (manager) {
-      await deliverNotification({
-        ...notificationPayload,
+      await sendLifecycleNotification({
         templateKey: 'manager_lifecycle_alert',
         user_id: manager._id.toString(),
         user_name: manager.full_name.split(' ')[0],
         user_full_name: manager.full_name,
         user_email: manager.email,
-        detail: `Team member ${user.full_name} transitioned from ${currentState} to ${targetState}.`,
-      }).catch(err => {
-        console.warn(`[Lifecycle Automation] Manager notification failed for ${manager._id}:`, err instanceof Error ? err.message : 'Unknown');
+        detail: `Team member ${originalUserFullName} transitioned from ${currentState} to ${targetState}.`,
+        emailSubject: `${company.name}: ${originalUserFullName} lifecycle changed`,
       });
     }
+  }
+
+  // Notify people admins
+  const adminTemplate = await NotificationTemplate.findOne({
+    company_id: req.user.company_id,
+    key: 'admin_lifecycle_alert',
+    is_active: true,
+  });
+  const adminTemplateKey = adminTemplate ? 'admin_lifecycle_alert' : notificationPayload.templateKey;
+
+  const adminRecipients = await User.find({
+    company_id: req.user.company_id,
+    role: { $in: PERMISSION_GROUPS.PEOPLE_ADMINS },
+    is_active: true,
+    email: { $exists: true, $ne: '' },
+  });
+
+  const excludedIds = new Set<string>([
+    user._id.toString(),
+    user.manager_id?.toString(),
+  ].filter(Boolean) as string[]);
+
+  for (const admin of adminRecipients) {
+    if (excludedIds.has(admin._id.toString())) {
+      continue;
+    }
+
+    await sendLifecycleNotification({
+      templateKey: adminTemplateKey,
+      user_id: admin._id.toString(),
+      user_name: admin.full_name.split(' ')[0],
+      user_full_name: admin.full_name,
+      user_email: admin.email,
+      detail: `User ${originalUserFullName} transitioned from ${currentState} to ${targetState}.`,
+      emailSubject: `${company.name}: ${originalUserFullName} lifecycle transitioned`,
+    });
   }
 }
 
@@ -353,7 +469,7 @@ export const getUsers = asyncHandler(async (req: Request, res: Response) => {
  */
 export const getUserById = asyncHandler(async (req: Request, res: Response) => {
   const filter: UserFilter = {
-    _id: req.params.id,
+    _id: getRouteId(req.params.id),
     company_id: req.user.company_id,
   };
 
@@ -453,6 +569,7 @@ export const inviteUser = asyncHandler(async (req: Request, res: Response) => {
     role: input.role || 'Employee', // Default to 'Employee' if not provided
     lifecycle_state: 'invited',
     is_active: false, // User is not active until they complete onboarding
+    phone: input.phone ?? undefined,
     // Normalize empty strings → undefined
     department_id: input.department_id || undefined,
     team_id: input.team_id || undefined,
@@ -497,9 +614,9 @@ export const inviteUser = asyncHandler(async (req: Request, res: Response) => {
     after_state: user.toObject(),
   });
 
-  // Return user without sensitive fields
-  const userResponse = user.toObject();
-  const { password_hash: _ph, refresh_token_hash: _rth, ...safeUser } = userResponse;
+  // Return enriched user without sensitive fields
+  const [enriched] = await enrichUsers([user.toObject()], req.user.company_id);
+  const { password_hash: _ph, refresh_token_hash: _rth, ...safeUser } = enriched;
 
   res.status(201).json({ success: true, data: safeUser });
 });
@@ -513,7 +630,7 @@ export const updateUser = asyncHandler(async (req: Request, res: Response) => {
   const input = UpdateUserSchema.parse(req.body);
 
   const filter: UserFilter = {
-    _id: req.params.id,
+    _id: getRouteId(req.params.id),
     company_id: req.user.company_id,
   };
 
@@ -616,9 +733,9 @@ export const updateUser = asyncHandler(async (req: Request, res: Response) => {
     after_state: user.toObject(),
   });
 
-  // Return user without sensitive fields
-  const userResponse = user.toObject();
-  const { password_hash: _ph, refresh_token_hash: _rth, ...safeUser } = userResponse;
+  // Return enriched user without sensitive fields
+  const [enriched] = await enrichUsers([user.toObject()], req.user.company_id);
+  const { password_hash: _ph, refresh_token_hash: _rth, ...safeUser } = enriched;
 
   res.status(200).json({ success: true, data: safeUser });
 });
@@ -635,7 +752,7 @@ export const updateUserLifecycle = asyncHandler(async (req: Request, res: Respon
   const input = UpdateLifecycleSchema.parse(req.body);
 
   const filter: UserFilter = {
-    _id: req.params.id,
+    _id: getRouteId(req.params.id),
     company_id: req.user.company_id,
   };
 
@@ -723,9 +840,9 @@ export const updateUserLifecycle = asyncHandler(async (req: Request, res: Respon
     // Don't fail the lifecycle transition if workflow execution fails
   });
 
-  // Return user without sensitive fields
-  const userResponse = user.toObject();
-  const { password_hash: _ph, refresh_token_hash: _rth, ...safeUser } = userResponse;
+  // Return enriched user without sensitive fields
+  const [enriched] = await enrichUsers([user.toObject()], req.user.company_id);
+  const { password_hash: _ph, refresh_token_hash: _rth, ...safeUser } = enriched;
 
   res.status(200).json({ success: true, data: safeUser });
 });
@@ -890,7 +1007,7 @@ export const bulkInviteUsers = asyncHandler(async (req: Request, res: Response) 
  */
 export const deleteUser = asyncHandler(async (req: Request, res: Response) => {
   const filter: UserFilter = {
-    _id: req.params.id,
+    _id: getRouteId(req.params.id),
     company_id: req.user.company_id,
   };
 
@@ -1299,10 +1416,11 @@ export const verifyInviteToken = asyncHandler(async (req: Request, res: Response
  * Resends the invitation email with a fresh secure token.
  */
 export const resendInvite = asyncHandler(async (req: Request, res: Response) => {
+  const userId = getRouteId(req.params.id);
   const user = await User.findOne({
-    _id: req.params.id,
+    _id: userId,
     company_id: req.user.company_id,
-  } as any);
+  });
 
   if (!user) {
     throw new AppError('User not found', 404, 'NOT_FOUND');
