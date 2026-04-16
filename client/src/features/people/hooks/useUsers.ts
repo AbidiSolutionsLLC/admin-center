@@ -46,9 +46,7 @@ export const useBulkLifecycleChange = () => {
       }
     },
     onError: (error: unknown) => {
-      const err = error as { response?: { data?: { error?: string } } };
-      const message = err?.response?.data?.error || 'Failed to bulk update lifecycle';
-      toast.error(message);
+      console.error('Bulk update lifecycle failed', error);
     },
   });
 };
@@ -79,9 +77,7 @@ export const useBulkAssignRole = () => {
       }
     },
     onError: (error: unknown) => {
-      const err = error as { response?: { data?: { error?: string } } };
-      const message = err?.response?.data?.error || 'Failed to bulk assign role';
-      toast.error(message);
+      console.error('Bulk assign role failed', error);
     },
   });
 };

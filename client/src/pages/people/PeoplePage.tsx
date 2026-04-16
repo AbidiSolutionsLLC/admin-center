@@ -663,11 +663,7 @@ function EditUserModal({ user, isOpen, onClose, departments, locations }: EditUs
 
       updateUser.mutate(normalized, {
         onSuccess: () => {
-          toast.success('User updated successfully');
           onClose();
-        },
-        onError: () => {
-          toast.error('Failed to update user. Please try again.');
         },
       });
     },
@@ -735,11 +731,7 @@ function LifecycleChangeModal({ user, isOpen, onClose }: LifecycleChangeModalPro
         { lifecycle_state: nextState },
         {
           onSuccess: () => {
-            toast.success(`User transitioned to ${nextState}`);
             onClose();
-          },
-          onError: () => {
-            toast.error('Failed to change lifecycle state. Please try again.');
           },
         }
       );

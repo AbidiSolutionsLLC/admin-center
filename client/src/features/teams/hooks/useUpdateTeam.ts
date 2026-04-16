@@ -30,7 +30,6 @@ export const useUpdateTeam = () => {
     },
     onError: (error) => {
       console.error('Team update failed', error);
-      toast.error('Failed to update team. Please try again.');
     },
   });
 };

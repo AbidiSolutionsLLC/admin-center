@@ -28,7 +28,6 @@ export const useAddTeamMember = () => {
     },
     onError: (error) => {
       console.error('Add team member failed', error);
-      toast.error('Failed to add member to team. Please try again.');
     },
   });
 };

@@ -21,7 +21,6 @@ export const useDeleteDepartment = () => {
     },
     onError: (error) => {
       console.error('Department deletion failed', error);
-      toast.error('Failed to delete department. Please try again.');
     },
   });
 };

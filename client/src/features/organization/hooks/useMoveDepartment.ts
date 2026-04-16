@@ -51,13 +51,7 @@ export const useMoveDepartment = () => {
       if ((context as any)?.previousTree) {
         queryClient.setQueryData(QUERY_KEYS.ORG_TREE, (context as any).previousTree);
       }
-
-      // Show user-friendly error message
-      if (axios.isAxiosError(error) && error.response?.data?.code === 'CIRCULAR_HIERARCHY') {
-        toast.error(error.response.data.error || 'Cannot move department to its own descendant');
-      } else {
-        toast.error('Failed to move department. The change has been reverted.');
-      }
+      console.error('Move department failed', error);
     },
     // Always refetch after error or success
     onSettled: () => {

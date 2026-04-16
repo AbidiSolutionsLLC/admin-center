@@ -69,9 +69,7 @@ export const useCreateWorkflow = () => {
       toast.success('Workflow created');
     },
     onError: (error: unknown) => {
-      const err = error as { response?: { data?: { error?: string } } };
-      const message = err?.response?.data?.error || 'Failed to create workflow';
-      toast.error(message);
+      console.error('Workflow creation failed', error);
     },
   });
 };
@@ -95,9 +93,7 @@ export const useUpdateWorkflow = (workflowId: string) => {
       toast.success('Workflow updated');
     },
     onError: (error: unknown) => {
-      const err = error as { response?: { data?: { error?: string } } };
-      const message = err?.response?.data?.error || 'Failed to update workflow';
-      toast.error(message);
+      console.error('Workflow update failed', error);
     },
   });
 };
@@ -121,9 +117,7 @@ export const useEnableWorkflow = (workflowId: string) => {
       toast.success('Workflow enabled');
     },
     onError: (error: unknown) => {
-      const err = error as { response?: { data?: { error?: string } } };
-      const message = err?.response?.data?.error || 'Failed to enable workflow';
-      toast.error(message);
+      console.error('Enable workflow failed', error);
     },
   });
 };
@@ -147,9 +141,7 @@ export const useDisableWorkflow = (workflowId: string) => {
       toast.success('Workflow disabled');
     },
     onError: (error: unknown) => {
-      const err = error as { response?: { data?: { error?: string } } };
-      const message = err?.response?.data?.error || 'Failed to disable workflow';
-      toast.error(message);
+      console.error('Disable workflow failed', error);
     },
   });
 };
@@ -171,9 +163,7 @@ export const useDeleteWorkflow = () => {
       toast.success('Workflow deleted');
     },
     onError: (error: unknown) => {
-      const err = error as { response?: { data?: { error?: string } } };
-      const message = err?.response?.data?.error || 'Failed to delete workflow';
-      toast.error(message);
+      console.error('Delete workflow failed', error);
     },
   });
 };
@@ -196,9 +186,7 @@ export const useAddWorkflowStep = (workflowId: string) => {
       toast.success('Step added');
     },
     onError: (error: unknown) => {
-      const err = error as { response?: { data?: { error?: string } } };
-      const message = err?.response?.data?.error || 'Failed to add step';
-      toast.error(message);
+      console.error('Add workflow step failed', error);
     },
   });
 };
@@ -224,9 +212,7 @@ export const useUpdateWorkflowStep = (workflowId: string, stepId: string) => {
       toast.success('Step updated');
     },
     onError: (error: unknown) => {
-      const err = error as { response?: { data?: { error?: string } } };
-      const message = err?.response?.data?.error || 'Failed to update step';
-      toast.error(message);
+      console.error('Update workflow step failed', error);
     },
   });
 };
@@ -248,9 +234,7 @@ export const useDeleteWorkflowStep = (workflowId: string) => {
       toast.success('Step deleted');
     },
     onError: (error: unknown) => {
-      const err = error as { response?: { data?: { error?: string } } };
-      const message = err?.response?.data?.error || 'Failed to delete step';
-      toast.error(message);
+      console.error('Delete workflow step failed', error);
     },
   });
 };
@@ -276,9 +260,7 @@ export const useReorderWorkflowSteps = (workflowId: string) => {
       toast.success('Steps reordered');
     },
     onError: (error: unknown) => {
-      const err = error as { response?: { data?: { error?: string } } };
-      const message = err?.response?.data?.error || 'Failed to reorder steps';
-      toast.error(message);
+      console.error('Reorder workflow steps failed', error);
     },
   });
 };
@@ -322,9 +304,7 @@ export const useTestWorkflow = (workflowId: string) => {
       }
     },
     onError: (error: unknown) => {
-      const err = error as { response?: { data?: { error?: string } } };
-      const message = err?.response?.data?.error || 'Failed to test workflow';
-      toast.error(message);
+      console.error('Workflow test failed', error);
     },
   });
 };

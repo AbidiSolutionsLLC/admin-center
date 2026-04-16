@@ -35,7 +35,6 @@ export const useAssignUserOrg = () => {
     },
     onError: (error) => {
       console.error('User org assignment failed', error);
-      toast.error('Failed to update user organization assignment. Please try again.');
     },
   });
 };

@@ -22,8 +22,6 @@ export const useBulkInvite = () => {
     },
     onError: (err: any) => {
       console.error('Bulk invite failed', err);
-      const message = err.response?.data?.error || 'Failed to process bulk invite. Please try again.';
-      toast.error(message);
     },
   });
 };
