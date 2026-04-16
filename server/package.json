@@ -12,7 +12,8 @@
     "test-roles": "ts-node -T src/scripts/test-roles.ts",
     "test-apps": "ts-node -T src/scripts/test-apps.ts",
     "test-overview": "ts-node -T src/scripts/test-overview.ts",
-    "test-integration": "ts-node -T src/scripts/test-integration.ts"
+    "test-integration": "ts-node -T src/scripts/test-integration.ts",
+    "test-employee-id": "ts-node -T src/scripts/test-employee-id.ts"
   },
   "dependencies": {
     "@azure/communication-email": "^1.1.0",

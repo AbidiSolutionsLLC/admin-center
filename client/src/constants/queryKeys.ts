@@ -40,6 +40,7 @@ export const QUERY_KEYS = {
   SECURITY_POLICY: ['security', 'policy'] as const,
   SECURITY_EVENTS: (filters?: Record<string, unknown>) =>
     filters ? ['security', 'events', filters] as const : ['security', 'events'] as const,
+  COMPANY_EMPLOYEE_ID_FORMAT: ['company', 'employee-id-format'] as const,
   // Audit Logs
   AUDIT_EVENTS: (filters?: Record<string, unknown>) =>
     filters ? ['audit', 'events', filters] as const : ['audit', 'events'] as const,

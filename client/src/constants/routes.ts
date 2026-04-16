@@ -10,6 +10,7 @@ export const ROUTES = {
   ROLES: '/roles',
   ROLE_DETAIL: (id: string) => `/roles/${id}`,
   APPS: '/apps',
+  COMPANY_SETTINGS: '/company/settings',
   POLICIES: '/policies',
   POLICY_DETAIL: (id: string) => `/policies/${id}`,
   WORKFLOWS: '/workflows',

@@ -34,6 +34,12 @@ export interface OrgTreeNode extends Department {
   children?: OrgTreeNode[];
 }
 
+export interface CompanySettings {
+  name: string;
+  employee_id_format: string;
+  employee_id_counter: number;
+}
+
 // ─────────────────────────────────────────────────────────────────────────────
 // Locations
 // ─────────────────────────────────────────────────────────────────────────────
@@ -283,6 +289,7 @@ export interface UpdateTeamMemberInput {
 
 export type LifecycleState = 'invited' | 'onboarding' | 'active' | 'probation' | 'on_leave' | 'terminated' | 'archived';
 export type EmploymentType = 'full_time' | 'part_time' | 'contractor' | 'intern';
+export type UserRole = 'Super Admin' | 'Admin' | 'HR' | 'Manager' | 'Employee' | 'Technician';
 
 export interface User {
   _id: string;
@@ -300,6 +307,7 @@ export interface User {
   manager?: { _id: string; full_name: string; email: string; avatar_url?: string };
   secondary_manager_ids?: string[];
   secondary_managers?: Array<{ _id: string; full_name: string; email: string; avatar_url?: string }>;
+  role: UserRole;
   lifecycle_state: LifecycleState;
   lifecycle_changed_at: string;
   hire_date?: string;
@@ -324,6 +332,7 @@ export interface InviteUserInput {
   department_id?: string | null;
   team_id?: string | null;
   manager_id?: string | null;
+  role?: UserRole;
   employment_type?: EmploymentType;
   hire_date?: string | null;
   location_id?: string | null;
@@ -337,6 +346,7 @@ export interface UpdateUserInput {
   department_id?: string | null;
   team_id?: string | null;
   manager_id?: string | null;
+  role?: UserRole;
   employment_type?: EmploymentType;
   hire_date?: string | null;
   termination_date?: string | null;
@@ -355,6 +365,7 @@ export interface BulkInviteRow {
   department_id?: string;
   team_id?: string;
   manager_id?: string;
+  role?: UserRole;
   employment_type?: EmploymentType;
   hire_date?: string;
   location_id?: string;

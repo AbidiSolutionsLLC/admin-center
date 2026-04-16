@@ -1,9 +1,11 @@
 import jwt from 'jsonwebtoken';
 
+export type UserRole = 'Super Admin' | 'Admin' | 'HR' | 'Manager' | 'Employee' | 'Technician';
+
 export interface AdminClaim {
   userId: string;
   email: string;
-  user_role: 'Super Admin' | 'HR Admin' | 'IT Admin' | 'Ops Admin' | 'Manager' | 'Compliance' | 'Employee';
+  user_role: UserRole;
   company_id: string;
 }
 

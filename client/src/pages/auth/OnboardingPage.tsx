@@ -39,6 +39,8 @@ export default function OnboardingPage() {
     defaultValues: {
       email: emailParam,
       token: tokenParam,
+      newPassword: '',
+      confirmPassword: '',
     },
   });
 
@@ -106,9 +108,9 @@ export default function OnboardingPage() {
               <Input
                 id="email"
                 type="email"
-                disabled
+                placeholder="Enter your email address"
                 {...register('email')}
-                className="bg-surface-alt font-medium"
+                className={errors.email ? 'border-error focus:ring-error/30' : ''}
               />
               {errors.email && (
                 <p className="text-xs text-error mt-1 flex items-center gap-1">

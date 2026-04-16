@@ -6,6 +6,7 @@ import { ROUTES } from '@/constants/routes';
 import {
   Building2,
   Users,
+  Settings,
   LogOut,
   MoreVertical
 } from 'lucide-react';
@@ -27,6 +28,12 @@ const navGroups = [
     label: 'People',
     items: [
       { label: 'People', href: ROUTES.PEOPLE, icon: Users },
+    ],
+  },
+  {
+    label: 'Settings',
+    items: [
+      { label: 'Company settings', href: ROUTES.COMPANY_SETTINGS, icon: Settings },
     ],
   },
 ];

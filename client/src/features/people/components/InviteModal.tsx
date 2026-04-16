@@ -5,7 +5,7 @@ import { Upload, Download, CheckCircle, XCircle } from 'lucide-react';
 import { Modal } from '@/components/ui/Modal';
 import { useInviteUser } from '../hooks/useInviteUser';
 import { useBulkInvite } from '../hooks/useBulkInvite';
-import type { InviteUserInput, Department, BulkInviteRow, EmploymentType } from '@/types';
+import type { InviteUserInput, Department, BulkInviteRow, EmploymentType, UserRole } from '@/types';
 import { cn } from '@/utils/cn';
 
 interface InviteModalProps {
@@ -19,6 +19,15 @@ const EMPLOYMENT_TYPE_OPTIONS: { value: EmploymentType; label: string }[] = [
   { value: 'part_time', label: 'Part Time' },
   { value: 'contractor', label: 'Contractor' },
   { value: 'intern', label: 'Intern' },
+];
+
+const ROLE_OPTIONS: { value: UserRole; label: string }[] = [
+  { value: 'Super Admin', label: 'Super Admin' },
+  { value: 'Admin', label: 'Admin' },
+  { value: 'HR', label: 'HR' },
+  { value: 'Manager', label: 'Manager' },
+  { value: 'Employee', label: 'Employee' },
+  { value: 'Technician', label: 'Technician' },
 ];
 
 const inputClass = (hasError?: boolean) =>
@@ -46,6 +55,7 @@ export const InviteModal: React.FC<InviteModalProps> = ({ isOpen, onClose, depar
     full_name: '',
     email: '',
     department_id: null,
+    role: 'Employee',
     employment_type: 'full_time',
   });
   const [singleError, setSingleError] = useState<Record<string, string>>({});
@@ -66,7 +76,7 @@ export const InviteModal: React.FC<InviteModalProps> = ({ isOpen, onClose, depar
 
     inviteUser.mutate(singleForm as InviteUserInput, {
       onSuccess: () => {
-        setSingleForm({ full_name: '', email: '', department_id: null, employment_type: 'full_time' });
+        setSingleForm({ full_name: '', email: '', department_id: null, role: 'Employee', employment_type: 'full_time' });
         setSingleError({});
         onClose();
       },
@@ -107,6 +117,7 @@ export const InviteModal: React.FC<InviteModalProps> = ({ isOpen, onClose, depar
           department_id: row.department_id || undefined,
           team_id: row.team_id || undefined,
           manager_id: row.manager_id || undefined,
+          role: (row.role as UserRole) || 'Employee',
           employment_type: (row.employment_type as EmploymentType) || 'full_time',
           hire_date: row.hire_date || undefined,
           location_id: row.location_id || undefined,
@@ -153,8 +164,8 @@ export const InviteModal: React.FC<InviteModalProps> = ({ isOpen, onClose, depar
   }, [csvData, bulkInvite, onClose]);
 
   const downloadTemplate = useCallback(() => {
-    const headers = 'full_name,email,phone,department_id,team_id,manager_id,employment_type,hire_date,location_id';
-    const example = 'John Doe,john@example.com,+1234567890,,dept123,full_time,2024-01-01,';
+    const headers = 'full_name,email,phone,role,department_id,team_id,manager_id,employment_type,hire_date,location_id';
+    const example = 'John Doe,john@example.com,+1234567890,Employee,,dept123,full_time,2024-01-01,';
     const csv = `${headers}\n${example}`;
     const blob = new Blob([csv], { type: 'text/csv' });
     const url = URL.createObjectURL(blob);
@@ -281,6 +292,26 @@ export const InviteModal: React.FC<InviteModalProps> = ({ isOpen, onClose, depar
           </div>
 
           <div className="space-y-1.5">
+            <label htmlFor="invite-role" className="text-sm font-medium text-ink">
+              Role <span className="text-red-500">*</span>
+            </label>
+            <select
+              id="invite-role"
+              value={singleForm.role || 'Employee'}
+              onChange={(e) =>
+                setSingleForm({ ...singleForm, role: e.target.value as UserRole })
+              }
+              className={inputClass()}
+            >
+              {ROLE_OPTIONS.map((opt) => (
+                <option key={opt.value} value={opt.value}>
+                  {opt.label}
+                </option>
+              ))}
+            </select>
+          </div>
+
+          <div className="space-y-1.5">
             <label htmlFor="invite-emp-type" className="text-sm font-medium text-ink">
               Employment Type
             </label>
@@ -355,6 +386,7 @@ export const InviteModal: React.FC<InviteModalProps> = ({ isOpen, onClose, depar
                       <th className="h-8 px-3 text-left font-semibold text-ink-secondary">#</th>
                       <th className="h-8 px-3 text-left font-semibold text-ink-secondary">Name</th>
                       <th className="h-8 px-3 text-left font-semibold text-ink-secondary">Email</th>
+                      <th className="h-8 px-3 text-left font-semibold text-ink-secondary">Role</th>
                       <th className="h-8 px-3 text-left font-semibold text-ink-secondary">Department</th>
                     </tr>
                   </thead>
@@ -364,6 +396,7 @@ export const InviteModal: React.FC<InviteModalProps> = ({ isOpen, onClose, depar
                         <td className="h-7 px-3 text-ink-muted">{idx + 1}</td>
                         <td className="h-7 px-3 text-ink">{row.full_name}</td>
                         <td className="h-7 px-3 text-ink-muted">{row.email}</td>
+                        <td className="h-7 px-3 text-ink-muted">{row.role || 'Employee'}</td>
                         <td className="h-7 px-3 text-ink-muted">
                           {departments.find((d) => d._id === row.department_id)?.name || '—'}
                         </td>

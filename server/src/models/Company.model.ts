@@ -1,6 +1,7 @@
 // server/src/models/Company.model.ts
 import { Schema, model, Document } from 'mongoose';
 import { slugify } from '../utils/slugify';
+import { validateEmployeeIdFormat } from '../services/employeeId';
 
 export interface ICompany extends Document {
   name: string;
@@ -27,8 +28,16 @@ const CompanySchema = new Schema<ICompany>({
   slug: { type: String, required: true, unique: true },
   logo_url: String,
   domain: String,
-  employee_id_format: { type: String, default: 'EMP-{counter:5}' },
-  employee_id_counter: { type: Number, default: 1 },
+  employee_id_format: {
+    type: String,
+    default: 'EMP-{counter:5}',
+    maxlength: [50, 'employee_id_format must be 50 characters or fewer'], // FIX-12: Max length guard
+    validate: {
+      validator: (v: string) => validateEmployeeIdFormat(v).valid,
+      message: 'employee_id_format must contain a valid format with {counter:N} and allowed tokens.',
+    },
+  },
+  employee_id_counter: { type: Number, default: 0 },
   setup_progress: {
     org: { type: Boolean, default: false },
     users: { type: Boolean, default: false },

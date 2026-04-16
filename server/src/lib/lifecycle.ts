@@ -11,13 +11,13 @@ export type LifecycleState = 'invited' | 'onboarding' | 'active' | 'probation' |
  * Maps from current state to allowed next states
  */
 export const VALID_TRANSITIONS: Record<LifecycleState, LifecycleState[]> = {
-  invited:     ['onboarding', 'archived'],
-  onboarding:  ['active'],
-  active:      ['probation', 'on_leave', 'terminated'],
-  probation:   ['active', 'terminated'],
-  on_leave:    ['active', 'terminated'],
-  terminated:  ['archived'],
-  archived:    [],
+  invited: ['onboarding', 'archived'],
+  onboarding: ['active'],
+  active: ['probation', 'on_leave', 'terminated'],
+  probation: ['active', 'terminated'],
+  on_leave: ['active', 'terminated'],
+  terminated: ['archived'],
+  archived: ['invited'],
 };
 
 /**
