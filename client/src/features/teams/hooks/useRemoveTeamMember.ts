@@ -26,7 +26,6 @@ export const useRemoveTeamMember = () => {
     },
     onError: (error) => {
       console.error('Remove team member failed', error);
-      toast.error('Failed to remove member from team. Please try again.');
     },
   });
 };

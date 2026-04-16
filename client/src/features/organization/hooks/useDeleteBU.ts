@@ -24,11 +24,6 @@ export const useDeleteBU = () => {
     },
     onError: (error) => {
       console.error('BU archive failed', error);
-      if (axios.isAxiosError(error) && error.response?.data?.code === 'BU_HAS_CHILD_DEPARTMENTS') {
-        toast.error(error.response.data.error || 'Cannot archive Business Unit with child departments');
-      } else {
-        toast.error('Failed to archive Business Unit. Please try again.');
-      }
     },
   });
 };

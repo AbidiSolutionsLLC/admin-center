@@ -18,6 +18,7 @@ export const useUpdateLifecycle = (userId: string) => {
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: QUERY_KEYS.USERS });
       queryClient.invalidateQueries({ queryKey: QUERY_KEYS.USER_DETAIL(userId) });
+      toast.success('Lifecycle state updated successfully');
     },
   });
 };

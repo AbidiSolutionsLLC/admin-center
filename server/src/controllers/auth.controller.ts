@@ -3,11 +3,7 @@ import { Request, Response } from 'express';
 import bcrypt from 'bcryptjs';
 import crypto from 'crypto';
 import { asyncHandler } from '../utils/asyncHandler';
-import { User, LifecycleState } from '../models/User.model';
-import { RefreshToken } from '../models/RefreshToken.model';
-import { SecurityEvent } from '../models/SecurityEvent.model';
-import { SecurityPolicy } from '../models/SecurityPolicy.model';
-import { InviteToken } from '../models/InviteToken.model';
+import { User, LifecycleState, UserRole, Role, RefreshToken, SecurityEvent, SecurityPolicy, InviteToken } from '../models';
 import { signAccessToken, signRefreshToken, AdminClaim } from '../lib/tokenService';
 import { AppError } from '../utils/AppError';
 import { z } from 'zod';
@@ -127,8 +123,9 @@ export const login = asyncHandler(async (req: Request, res: Response) => {
     throw new AppError('Account is terminated or archived', 403, 'FORBIDDEN');
   }
 
-  // Get user role from the User model
-  const userRole = user.role;
+  // Fetch actual user role from RBAC models
+  const userRoleAssignment = await UserRole.findOne({ user_id: user._id }).populate('role_id');
+  const userRole = (userRoleAssignment?.role_id as any)?.name as AdminClaim['user_role'] || 'Employee';
 
   // Sign tokens
   const accessToken = signAccessToken({
@@ -224,11 +221,14 @@ export const refresh = asyncHandler(async (req: Request, res: Response) => {
     throw new AppError('Account is terminated or archived', 403, 'FORBIDDEN');
   }
 
-  // Issue new access token with user's role from the model
+  // Issue new access token with actual role
+  const userRoleAssignment = await UserRole.findOne({ user_id: user._id }).populate('role_id');
+  const userRole = (userRoleAssignment?.role_id as any)?.name as AdminClaim['user_role'] || 'Employee';
+
   const accessToken = signAccessToken({
     userId: user._id.toString(),
     email: user.email,
-    user_role: user.role,
+    user_role: userRole,
     company_id: user.company_id.toString()
   });
 
