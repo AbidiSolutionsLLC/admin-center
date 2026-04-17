@@ -84,6 +84,7 @@ export const LocationForm: React.FC<LocationFormProps> = ({
   const {
     register,
     control,
+    reset,
     watch,
     formState: { errors },
   } = useForm<LocationFormData>({
@@ -100,6 +101,23 @@ export const LocationForm: React.FC<LocationFormProps> = ({
       working_hours: initialData?.working_hours ?? null,
     },
   });
+
+  // Reset form when initialData changes
+  React.useEffect(() => {
+    if (initialData) {
+      reset({
+        name: initialData.name ?? '',
+        type: initialData.type ?? 'office',
+        parent_id: typeof initialData.parent_id === 'object'
+          ? (initialData.parent_id as any)?._id
+          : initialData.parent_id ?? '',
+        timezone: initialData.timezone ?? 'UTC',
+        is_headquarters: initialData.is_headquarters ?? false,
+        address: initialData.address ?? '',
+        working_hours: initialData.working_hours ?? null,
+      });
+    }
+  }, [initialData, reset]);
 
   const selectedType = watch('type');
   const isHQ = watch('is_headquarters');

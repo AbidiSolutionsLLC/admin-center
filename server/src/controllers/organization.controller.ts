@@ -38,8 +38,11 @@ interface HistoryQuery {
 // ── Zod Schemas ──────────────────────────────────────────────────────────────
 
 const DepartmentBaseSchema = z.object({
-  name: z.string().min(1, 'Name is required').max(100),
-  type: z.enum(['business_unit', 'division', 'department', 'team', 'cost_center']),
+  name: z.string()
+    .min(1, 'Name is required')
+    .max(100)
+    .regex(/^[a-zA-Z0-9\s\-\.\(\)]+$/, 'Name contains invalid characters'),
+  type: z.enum(['business_unit', 'division', 'department', 'cost_center']),
   parent_id: z.string().optional().nullable(),
   primary_manager_id: z.string().optional().nullable(),
   secondary_manager_id: z.string().optional().nullable(),
@@ -76,7 +79,10 @@ const MoveDepartmentSchema = z.object({
 
 // BU-specific schema (type is locked to 'business_unit')
 const CreateBUSchema = z.object({
-  name: z.string().min(1, 'Name is required').max(100),
+  name: z.string()
+    .min(1, 'Name is required')
+    .max(100)
+    .regex(/^[a-zA-Z0-9\s\-\.\(\)]+$/, 'Name contains invalid characters'),
   primary_manager_id: z.string().optional().nullable(),
   secondary_manager_id: z.string().optional().nullable(),
 });
@@ -118,6 +124,9 @@ async function enrichDepartments(
     if (data.primary_manager_id && typeof data.primary_manager_id === 'object') {
       data.primary_manager = data.primary_manager_id as Record<string, unknown>;
     }
+    if (data.secondary_manager_id && typeof data.secondary_manager_id === 'object') {
+      data.secondary_manager = data.secondary_manager_id as Record<string, unknown>;
+    }
 
     return { ...data, headcount, has_intelligence_flag };
   });
@@ -138,6 +147,7 @@ export const getDepartments = asyncHandler(async (req: Request, res: Response) =
 
   const raw = await Department.find(filter)
     .populate('primary_manager_id', 'full_name avatar_url')
+    .populate('secondary_manager_id', 'full_name avatar_url')
     .sort({ created_at: 1 })
     .lean();
 
@@ -156,7 +166,9 @@ export const getDepartmentById = asyncHandler(async (req: Request, res: Response
     is_active: true,
   };
 
-  const dept = await Department.findOne(filter).populate('primary_manager_id', 'full_name avatar_url');
+  const dept = await Department.findOne(filter)
+    .populate('primary_manager_id', 'full_name avatar_url')
+    .populate('secondary_manager_id', 'full_name avatar_url');
 
   if (!dept) {
     throw new AppError('Department not found', 404, 'NOT_FOUND');
@@ -414,6 +426,7 @@ export const getOrgTree = asyncHandler(async (req: Request, res: Response) => {
 
   const raw = await Department.find(filter)
     .populate('primary_manager_id', 'full_name avatar_url')
+    .populate('secondary_manager_id', 'full_name avatar_url')
     .lean();
 
   const enriched = await enrichDepartments(raw, req.user.company_id);
@@ -542,6 +555,7 @@ export const getBUTree = asyncHandler(async (req: Request, res: Response) => {
 
   const allBUs = await Department.find(filterBU)
     .populate('primary_manager_id', 'full_name avatar_url')
+    .populate('secondary_manager_id', 'full_name avatar_url')
     .sort({ created_at: 1 })
     .lean();
 
@@ -557,6 +571,7 @@ export const getBUTree = asyncHandler(async (req: Request, res: Response) => {
 
   const departments = await Department.find(filterDepts)
     .populate('primary_manager_id', 'full_name avatar_url')
+    .populate('secondary_manager_id', 'full_name avatar_url')
     .sort({ created_at: 1 })
     .lean();
 
@@ -676,6 +691,7 @@ export const getBusinessUnits = asyncHandler(async (req: Request, res: Response)
 
   const bus = await Department.find(filterBU)
     .populate('primary_manager_id', 'full_name avatar_url')
+    .populate('secondary_manager_id', 'full_name avatar_url')
     .sort({ created_at: 1 })
     .lean();
 
@@ -715,6 +731,8 @@ export const getBusinessUnits = asyncHandler(async (req: Request, res: Response)
 
     return {
       ...bu,
+      primary_manager: bu.primary_manager_id,
+      secondary_manager: bu.secondary_manager_id,
       dept_count: deptCount,
       team_count: teamCount,
     };

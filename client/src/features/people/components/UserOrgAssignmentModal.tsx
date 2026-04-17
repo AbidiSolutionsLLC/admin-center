@@ -36,10 +36,19 @@ export const UserOrgAssignmentModal: React.FC<UserOrgAssignmentModalProps> = ({
   const { data: teams } = useTeams();
   const assignMutation = useAssignUserOrg();
 
-  const [selectedDeptId, setSelectedDeptId] = useState<string>(user?.department_id ?? '');
-  const [selectedTeamIds, setSelectedTeamIds] = useState<string[]>(
-    user?.teams?.map((t: any) => t._id) ?? []
-  );
+  const [selectedDeptId, setSelectedDeptId] = useState<string>('');
+  const [selectedTeamIds, setSelectedTeamIds] = useState<string[]>([]);
+
+  // Sync state when user prop changes
+  React.useEffect(() => {
+    if (isOpen && user) {
+      const deptId = typeof user.department_id === 'object'
+        ? (user.department_id as any)?._id
+        : user.department_id;
+      setSelectedDeptId(deptId ?? '');
+      setSelectedTeamIds(user.teams?.map((t: any) => t._id) ?? []);
+    }
+  }, [user, isOpen]);
 
   // Filter teams by selected department
   const availableTeams = useMemo(() => {

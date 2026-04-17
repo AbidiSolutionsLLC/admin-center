@@ -54,16 +54,29 @@ export const TeamForm: React.FC<TeamFormProps> = ({
     register,
     handleSubmit,
     control,
+    reset,
     formState: { errors },
   } = useForm<TeamFormData>({
     resolver: zodResolver(schema),
     defaultValues: {
       name: initialData?.name ?? '',
       description: initialData?.description ?? '',
-      department_id: initialData?.department_id ?? null,
-      team_lead_id: initialData?.team_lead_id ?? '',
+      department_id: typeof initialData?.department_id === 'object' ? (initialData.department_id as any)?._id : initialData?.department_id ?? '',
+      team_lead_id: typeof initialData?.team_lead_id === 'object' ? (initialData.team_lead_id as any)?._id : initialData?.team_lead_id ?? '',
     },
   });
+
+  // Sync internal form state when initialData changes
+  React.useEffect(() => {
+    if (initialData) {
+      reset({
+        name: initialData.name ?? '',
+        description: initialData.description ?? '',
+        department_id: typeof initialData.department_id === 'object' ? (initialData.department_id as any)?._id : initialData.department_id ?? '',
+        team_lead_id: typeof initialData.team_lead_id === 'object' ? (initialData.team_lead_id as any)?._id : initialData.team_lead_id ?? '',
+      });
+    }
+  }, [initialData, reset]);
 
   return (
     <form id="team-form" onSubmit={handleSubmit(onSubmit)} className="space-y-5" noValidate>

@@ -67,6 +67,7 @@ export const CustomFieldForm: React.FC<CustomFieldFormProps> = ({
   const {
     register,
     control,
+    reset,
     watch,
     setValue,
     formState: { errors },
@@ -84,6 +85,23 @@ export const CustomFieldForm: React.FC<CustomFieldFormProps> = ({
       visibility: initialData?.visibility ?? 'all',
     },
   });
+
+  // Sync internal form state when initialData changes
+  React.useEffect(() => {
+    if (initialData) {
+      reset({
+        name: initialData.name ?? '',
+        field_type: initialData.field_type ?? 'text',
+        target_object: initialData.target_object ?? fixedTargetObject ?? 'user',
+        label: initialData.label ?? '',
+        placeholder: initialData.placeholder ?? '',
+        description: initialData.description ?? '',
+        required: initialData.required ?? false,
+        select_options: initialData.select_options ?? [],
+        visibility: initialData.visibility ?? 'all',
+      });
+    }
+  }, [initialData, reset, fixedTargetObject]);
 
   const fieldType = watch('field_type');
   const selectOptions = watch('select_options') || [];

@@ -76,19 +76,20 @@ export const UserForm: React.FC<UserFormProps> = ({
     register,
     handleSubmit,
     control,
+    reset,
     formState: { errors },
   } = useForm<UserFormData>({
     resolver: zodResolver(schema),
     defaultValues: {
       full_name: initialData?.full_name ?? '',
       phone: initialData?.phone ?? '',
-      department_id: initialData?.department_id ?? '',
-      team_id: initialData?.team_id ?? '',
-      manager_id: initialData?.manager_id ?? '',
+      department_id: typeof initialData?.department_id === 'object' ? (initialData.department_id as any)?._id : initialData?.department_id ?? '',
+      team_id: typeof initialData?.team_id === 'object' ? (initialData.team_id as any)?._id : initialData?.team_id ?? '',
+      manager_id: typeof initialData?.manager_id === 'object' ? (initialData.manager_id as any)?._id : initialData?.manager_id ?? '',
       role: initialData?.role ?? 'Employee',
       employment_type: initialData?.employment_type ?? 'full_time',
       hire_date: initialData?.hire_date ?? '',
-      location_id: initialData?.location_id ?? '',
+      location_id: typeof initialData?.location_id === 'object' ? (initialData.location_id as any)?._id : initialData?.location_id ?? '',
     },
   });
 
@@ -99,12 +100,23 @@ export const UserForm: React.FC<UserFormProps> = ({
   );
   const [customFieldErrors, setCustomFieldErrors] = useState<Record<string, string>>({});
 
-  // Sync initial data when customFields or initialData change
+  // Reset form when initialData changes
   useEffect(() => {
-    if (initialData?.custom_fields && Object.keys(initialData.custom_fields).length > 0) {
-      setCustomFieldValues(initialData.custom_fields);
+    if (initialData) {
+      reset({
+        full_name: initialData.full_name ?? '',
+        phone: initialData.phone ?? '',
+        department_id: typeof initialData.department_id === 'object' ? (initialData.department_id as any)?._id : initialData.department_id ?? '',
+        team_id: typeof initialData.team_id === 'object' ? (initialData.team_id as any)?._id : initialData.team_id ?? '',
+        manager_id: typeof initialData.manager_id === 'object' ? (initialData.manager_id as any)?._id : initialData.manager_id ?? '',
+        role: initialData.role ?? 'Employee',
+        employment_type: initialData.employment_type ?? 'full_time',
+        hire_date: initialData.hire_date ?? '',
+        location_id: typeof initialData.location_id === 'object' ? (initialData.location_id as any)?._id : initialData.location_id ?? '',
+      });
+      setCustomFieldValues(initialData.custom_fields ?? {});
     }
-  }, [initialData]);
+  }, [initialData, reset]);
 
   const handleCustomFieldChange = useCallback((slug: string, value: unknown) => {
     setCustomFieldValues((prev) => ({ ...prev, [slug]: value }));

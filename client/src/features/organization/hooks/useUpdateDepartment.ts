@@ -21,6 +21,8 @@ export const useUpdateDepartment = () => {
       queryClient.invalidateQueries({ queryKey: QUERY_KEYS.DEPARTMENTS });
       queryClient.invalidateQueries({ queryKey: QUERY_KEYS.DEPARTMENT_DETAIL(variables.id) });
       queryClient.invalidateQueries({ queryKey: QUERY_KEYS.ORG_TREE });
+      queryClient.invalidateQueries({ queryKey: QUERY_KEYS.BUSINESS_UNITS });
+      queryClient.invalidateQueries({ queryKey: QUERY_KEYS.BU_TREE });
       toast.success('Department updated successfully');
     },
     onError: (error) => {

@@ -31,6 +31,8 @@ export const useAssignUserOrg = () => {
     onSuccess: (_, variables) => {
       queryClient.invalidateQueries({ queryKey: QUERY_KEYS.USERS });
       queryClient.invalidateQueries({ queryKey: QUERY_KEYS.USER_DETAIL(variables.userId) });
+      queryClient.invalidateQueries({ queryKey: QUERY_KEYS.DEPARTMENTS });
+      queryClient.invalidateQueries({ queryKey: QUERY_KEYS.ORG_TREE });
       toast.success('User organization assignment updated successfully');
     },
     onError: (error) => {

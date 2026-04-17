@@ -8,7 +8,10 @@ import type { Department } from '@/types';
 import { cn } from '@/utils/cn';
 
 const schema = z.object({
-  name: z.string().min(1, 'Business Unit name is required').max(100, 'Name too long'),
+  name: z.string()
+    .min(1, 'Business Unit name is required')
+    .max(100, 'Name too long')
+    .regex(/^[a-zA-Z0-9\s\-\.\(\)]+$/, 'Name contains invalid characters'),
   parent_id: z.string().optional().nullable(),
   primary_manager_id: z
     .string()
@@ -56,6 +59,7 @@ export const BUForm: React.FC<BUFormProps> = ({
     register,
     handleSubmit,
     control,
+    reset,
     formState: { errors },
   } = useForm<BUFormData>({
     resolver: zodResolver(schema),
@@ -66,6 +70,18 @@ export const BUForm: React.FC<BUFormProps> = ({
       secondary_manager_id: typeof initialData?.secondary_manager_id === 'object' ? (initialData.secondary_manager_id as any)?._id : (initialData?.secondary_manager_id as any) ?? '',
     },
   });
+
+  // Reset form when initialData changes
+  React.useEffect(() => {
+    if (initialData) {
+      reset({
+        name: initialData.name ?? '',
+        parent_id: typeof initialData.parent_id === 'object' ? (initialData.parent_id as any)?._id : initialData.parent_id ?? '',
+        primary_manager_id: typeof initialData.primary_manager_id === 'object' ? (initialData.primary_manager_id as any)?._id : (initialData.primary_manager_id as any) ?? '',
+        secondary_manager_id: typeof initialData.secondary_manager_id === 'object' ? (initialData.secondary_manager_id as any)?._id : (initialData.secondary_manager_id as any) ?? '',
+      });
+    }
+  }, [initialData, reset]);
 
   // Business Units can only have other Business Units as parents
   const availableBUs = departments.filter(
