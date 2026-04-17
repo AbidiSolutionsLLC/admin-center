@@ -1,6 +1,6 @@
 // src/features/organization/components/BusinessUnitsTab.tsx
 import React, { useState, useMemo } from 'react';
-import { Building2, Plus, Search, X, AlertTriangle, Users, Layers } from 'lucide-react';
+import { Building2, Plus, Search, X, AlertTriangle, Users, Layers, Pencil } from 'lucide-react';
 import { useBusinessUnits } from '../hooks/useBusinessUnits';
 import { useBUTree } from '../hooks/useBUTree';
 import { useCreateBU } from '../hooks/useCreateBU';
@@ -225,7 +225,10 @@ export const BusinessUnitsTab: React.FC<BusinessUnitsTabProps> = ({ allDepartmen
                   Business Unit
                 </th>
                 <th className="text-[11px] font-semibold text-ink-secondary uppercase tracking-wider h-10 px-4 text-left">
-                  Manager
+                  Primary Manager
+                </th>
+                <th className="text-[11px] font-semibold text-ink-secondary uppercase tracking-wider h-10 px-4 text-left">
+                  Secondary Manager
                 </th>
                 <th className="text-[11px] font-semibold text-ink-secondary uppercase tracking-wider h-10 px-4 text-center">
                   Departments
@@ -265,19 +268,46 @@ export const BusinessUnitsTab: React.FC<BusinessUnitsTabProps> = ({ allDepartmen
                             />
                           ) : (
                             <span className="text-[10px] font-bold text-primary">
-                              {bu.primary_manager.full_name
-                                .split(' ')
-                                .map((n) => n[0])
-                                .join('')}
+                              {typeof bu.primary_manager.full_name === 'string' 
+                                ? bu.primary_manager.full_name.split(' ').map((n) => n[0]).join('')
+                                : '?'}
                             </span>
                           )}
                         </div>
-                        <span className="text-sm text-ink">{bu.primary_manager.full_name}</span>
+                        <span className="text-sm text-ink line-clamp-1">{bu.primary_manager.full_name}</span>
                       </div>
                     ) : (
-                      <span className="inline-flex items-center gap-1 text-xs text-amber-600">
+                      <span className="inline-flex items-center gap-1 text-[11px] text-amber-600">
                         <AlertTriangle className="w-3 h-3" />
-                        No manager
+                        None
+                      </span>
+                    )}
+                  </td>
+                  <td className="h-14 px-4">
+                    {bu.secondary_manager ? (
+                      <div className="flex items-center gap-2">
+                        <div className="w-7 h-7 rounded-full bg-slate-100 flex items-center justify-center flex-shrink-0 overflow-hidden">
+                          {bu.secondary_manager.avatar_url ? (
+                            <img
+                              src={bu.secondary_manager.avatar_url}
+                              className="w-full h-full rounded-full object-cover"
+                              alt=""
+                              width={28}
+                              height={28}
+                            />
+                          ) : (
+                            <span className="text-[10px] font-bold text-slate-500">
+                              {typeof bu.secondary_manager.full_name === 'string'
+                                ? bu.secondary_manager.full_name.split(' ').map((n) => n[0]).join('')
+                                : '?'}
+                            </span>
+                          )}
+                        </div>
+                        <span className="text-sm text-ink-secondary line-clamp-1">{bu.secondary_manager.full_name}</span>
+                      </div>
+                    ) : (
+                      <span className="text-[11px] text-ink-muted italic">
+                        Not assigned
                       </span>
                     )}
                   </td>
@@ -294,17 +324,30 @@ export const BusinessUnitsTab: React.FC<BusinessUnitsTabProps> = ({ allDepartmen
                     </span>
                   </td>
                   <td className="h-14 px-4 text-right">
-                    <button
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        handleRequestDelete(bu);
-                      }}
-                      className="h-8 w-8 inline-flex items-center justify-center rounded-md text-ink-secondary hover:text-red-600 hover:bg-red-50 transition-colors"
-                      aria-label={`Archive ${bu.name}`}
-                      title="Archive Business Unit"
-                    >
-                      <X className="w-4 h-4" />
-                    </button>
+                    <div className="flex items-center justify-end gap-1">
+                      <button
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          handleOpenEdit(bu);
+                        }}
+                        className="h-8 w-8 inline-flex items-center justify-center rounded-md text-ink-secondary hover:text-primary hover:bg-primary-light/50 transition-colors"
+                        aria-label={`Edit ${bu.name}`}
+                        title="Edit Business Unit"
+                      >
+                        <Pencil className="w-3.5 h-3.5" />
+                      </button>
+                      <button
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          handleRequestDelete(bu);
+                        }}
+                        className="h-8 w-8 inline-flex items-center justify-center rounded-md text-ink-secondary hover:text-red-600 hover:bg-red-50 transition-colors"
+                        aria-label={`Archive ${bu.name}`}
+                        title="Archive Business Unit"
+                      >
+                        <X className="w-4 h-4" />
+                      </button>
+                    </div>
                   </td>
                 </tr>
               ))}

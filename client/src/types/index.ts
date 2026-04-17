@@ -5,7 +5,7 @@ export interface Department {
   company_id: string;
   name: string;
   slug: string;
-  type: 'business_unit' | 'division' | 'department' | 'team' | 'cost_center';
+  type: 'business_unit' | 'division' | 'department' | 'cost_center';
   parent_id: string | null;
   primary_manager_id: string | null;
   secondary_manager_id?: string | null;
@@ -22,7 +22,7 @@ export interface Department {
 
 export interface CreateDepartmentInput {
   name: string;
-  type: 'business_unit' | 'division' | 'department' | 'team' | 'cost_center';
+  type: 'business_unit' | 'division' | 'department' | 'cost_center';
   parent_id?: string | null;
   primary_manager_id?: string | null;
   secondary_manager_id?: string | null;

@@ -29,21 +29,29 @@ export function DataTable<TData, TValue>({
   });
 
   return (
-    <div className="bg-white rounded-lg border border-line shadow-card overflow-hidden">
+    <div className="bg-white rounded-lg border border-line shadow-card overflow-x-auto">
       <table className="w-full">
         <thead>
           {table.getHeaderGroups().map((headerGroup) => (
             <tr key={headerGroup.id} className="bg-surface-base border-b border-line">
-              {headerGroup.headers.map((header) => (
-                <th
-                  key={header.id}
-                  className="h-10 px-4 text-left text-[11px] font-semibold text-ink-secondary uppercase tracking-wider"
-                >
-                  {header.isPlaceholder
-                    ? null
-                    : flexRender(header.column.columnDef.header, header.getContext())}
-                </th>
-              ))}
+                {headerGroup.headers.map((header) => {
+                  const meta = header.column.columnDef.meta as { align?: 'left' | 'center' | 'right' } | undefined;
+                  const alignmentClass = meta?.align === 'right' ? 'text-right' : meta?.align === 'center' ? 'text-center' : 'text-left';
+                  
+                  return (
+                    <th
+                      key={header.id}
+                      className={cn(
+                        'h-10 px-4 text-[11px] font-semibold text-ink-secondary uppercase tracking-wider',
+                        alignmentClass
+                      )}
+                    >
+                      {header.isPlaceholder
+                        ? null
+                        : flexRender(header.column.columnDef.header, header.getContext())}
+                    </th>
+                  );
+                })}
             </tr>
           ))}
         </thead>
@@ -58,11 +66,16 @@ export function DataTable<TData, TValue>({
                 )}
                 onClick={() => onRowClick?.(row.original)}
               >
-                {row.getVisibleCells().map((cell) => (
-                  <td key={cell.id} className="h-14 px-4 text-sm text-ink">
-                    {flexRender(cell.column.columnDef.cell, cell.getContext())}
-                  </td>
-                ))}
+                {row.getVisibleCells().map((cell) => {
+                  const meta = cell.column.columnDef.meta as { align?: 'left' | 'center' | 'right' } | undefined;
+                  const alignmentClass = meta?.align === 'right' ? 'text-right' : meta?.align === 'center' ? 'text-center' : 'text-left';
+                  
+                  return (
+                    <td key={cell.id} className={cn('h-14 px-4 text-sm text-ink', alignmentClass)}>
+                      {flexRender(cell.column.columnDef.cell, cell.getContext())}
+                    </td>
+                  );
+                })}
               </tr>
             ))
           ) : (

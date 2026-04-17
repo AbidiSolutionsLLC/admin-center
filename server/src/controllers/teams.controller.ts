@@ -5,9 +5,11 @@ import { asyncHandler } from '../utils/asyncHandler';
 import { Team } from '../models/Team.model';
 import { TeamMember } from '../models/TeamMember.model';
 import { User } from '../models/User.model';
+import { Department } from '../models/Department.model';
 import { auditLogger } from '../lib/auditLogger';
 import { AppError } from '../utils/AppError';
 import { slugify } from '../utils/slugify';
+import { Types } from 'mongoose';
 
 // ── Types & Interfaces ───────────────────────────────────────────────────────
 

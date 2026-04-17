@@ -69,6 +69,7 @@ export const IntegrationForm: React.FC<IntegrationFormProps> = ({
   const {
     register,
     handleSubmit,
+    reset,
     formState: { errors },
   } = useForm<IntegrationFormData>({
     resolver: zodResolver(schema),
@@ -79,6 +80,18 @@ export const IntegrationForm: React.FC<IntegrationFormProps> = ({
       field_mapping: initialData?.field_mapping ?? {},
     },
   });
+
+  // Sync internal form state when initialData changes
+  React.useEffect(() => {
+    if (initialData) {
+      reset({
+        credentials: {}, // Credentials are not exposed, keep empty
+        sync_enabled: initialData.sync_enabled ?? false,
+        sync_frequency: initialData.sync_frequency ?? 'manual',
+        field_mapping: initialData.field_mapping ?? {},
+      });
+    }
+  }, [initialData, reset]);
 
   const fields = CREDENTIAL_FIELDS[integrationType];
 

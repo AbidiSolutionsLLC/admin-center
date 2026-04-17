@@ -30,7 +30,6 @@ const DEPT_TYPE_OPTIONS: { value: Department['type'] | ''; label: string }[] = [
   { value: 'business_unit', label: 'Business Unit' },
   { value: 'division', label: 'Division' },
   { value: 'department', label: 'Department' },
-  { value: 'team', label: 'Team' },
   { value: 'cost_center', label: 'Cost Center' },
 ];
 
@@ -446,6 +445,7 @@ export default function OrganizationPage() {
           onSubmit={handleSubmit}
           departments={departments ?? []}
           isSubmitting={createMutation.isPending || updateMutation.isPending}
+          allowedTypes={['division', 'department', 'cost_center']}
         />
       </Modal>
 

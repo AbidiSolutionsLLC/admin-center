@@ -11,7 +11,7 @@ import { cn } from '@/utils/cn';
 
 const schema = z.object({
   name: z.string().min(1, 'Department name is required').max(100, 'Name too long'),
-  type: z.enum(['business_unit', 'division', 'department', 'team', 'cost_center']),
+  type: z.enum(['business_unit', 'division', 'department', 'cost_center']),
   parent_id: z.string().optional().nullable(),
   primary_manager_id: z
     .string()
@@ -35,13 +35,13 @@ interface DepartmentFormProps {
   onSubmit: (data: DepartmentFormData & { custom_fields?: Record<string, unknown> }) => void;
   departments: Department[];
   isSubmitting?: boolean;
+  allowedTypes?: Array<'business_unit' | 'division' | 'department' | 'cost_center'>;
 }
 
-const DEPT_TYPE_OPTIONS: { value: Department['type']; label: string }[] = [
+const DEPT_TYPE_OPTIONS: { value: 'business_unit' | 'division' | 'department' | 'cost_center'; label: string }[] = [
   { value: 'business_unit', label: 'Business Unit' },
   { value: 'division', label: 'Division' },
   { value: 'department', label: 'Department' },
-  { value: 'team', label: 'Team' },
   { value: 'cost_center', label: 'Cost Center' },
 ];
 
@@ -68,11 +68,13 @@ export const DepartmentForm: React.FC<DepartmentFormProps> = ({
   onSubmit,
   departments,
   isSubmitting = false,
+  allowedTypes,
 }) => {
   const {
     register,
     handleSubmit,
     control,
+    reset,
     watch,
     formState: { errors },
   } = useForm<DepartmentFormData>({
@@ -84,6 +86,19 @@ export const DepartmentForm: React.FC<DepartmentFormProps> = ({
       primary_manager_id: typeof initialData?.primary_manager_id === 'object' ? (initialData.primary_manager_id as any)?._id : (initialData?.primary_manager_id as any) ?? '',
     },
   });
+
+  // Sync internal form state when initialData changes
+  useEffect(() => {
+    if (initialData) {
+      reset({
+        name: initialData.name ?? '',
+        type: initialData.type ?? 'department',
+        parent_id: typeof initialData.parent_id === 'object' ? (initialData.parent_id as any)?._id : initialData.parent_id ?? '',
+        primary_manager_id: typeof initialData.primary_manager_id === 'object' ? (initialData.primary_manager_id as any)?._id : (initialData.primary_manager_id as any) ?? '',
+      });
+      setCustomFieldValues(initialData.custom_fields ?? {});
+    }
+  }, [initialData, reset]);
 
   const selectedType = watch('type');
   const availableParents = departments.filter((d) => d._id !== initialData?._id);
@@ -162,7 +177,7 @@ export const DepartmentForm: React.FC<DepartmentFormProps> = ({
           disabled={isSubmitting}
           className={inputClass(!!errors.type)}
         >
-          {DEPT_TYPE_OPTIONS.map((opt) => (
+          {DEPT_TYPE_OPTIONS.filter(opt => !allowedTypes || allowedTypes.includes(opt.value)).map((opt) => (
             <option key={opt.value} value={opt.value}>
               {opt.label}
             </option>

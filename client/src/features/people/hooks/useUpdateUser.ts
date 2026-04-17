@@ -20,6 +20,9 @@ export const useUpdateUser = (userId: string) => {
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: QUERY_KEYS.USERS });
       queryClient.invalidateQueries({ queryKey: QUERY_KEYS.USER_DETAIL(userId) });
+      queryClient.invalidateQueries({ queryKey: QUERY_KEYS.DEPARTMENTS });
+      queryClient.invalidateQueries({ queryKey: QUERY_KEYS.ORG_TREE });
+      queryClient.invalidateQueries({ queryKey: QUERY_KEYS.DASHBOARD_STATS });
       toast.success('User updated successfully');
     },
     onError: (error) => {

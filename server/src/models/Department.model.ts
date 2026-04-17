@@ -6,7 +6,7 @@ export interface IDepartment extends Document {
   company_id: Types.ObjectId | string;
   name: string;
   slug: string;
-  type: 'business_unit' | 'division' | 'department' | 'team' | 'cost_center';
+  type: 'business_unit' | 'division' | 'department' | 'cost_center';
   parent_id?: Types.ObjectId | string | null;
   primary_manager_id?: Types.ObjectId | string | null;
   secondary_manager_id?: Types.ObjectId | string | null;
@@ -20,7 +20,7 @@ const DepartmentSchema = new Schema<IDepartment>({
   company_id: { type: Schema.Types.ObjectId, ref: 'Company', required: true, index: true },
   name: { type: String, required: true },
   slug: { type: String, required: true },
-  type: { type: String, enum: ['business_unit', 'division', 'department', 'team', 'cost_center'], required: true },
+  type: { type: String, enum: ['business_unit', 'division', 'department', 'cost_center'], required: true },
   parent_id: { type: Schema.Types.ObjectId, ref: 'Department' },
   primary_manager_id: { type: Schema.Types.ObjectId, ref: 'User' },
   secondary_manager_id: { type: Schema.Types.ObjectId, ref: 'User' },
@@ -28,7 +28,7 @@ const DepartmentSchema = new Schema<IDepartment>({
   is_active: { type: Boolean, default: true },
 }, { timestamps: { createdAt: 'created_at', updatedAt: 'updated_at' } });
 
-DepartmentSchema.index({ company_id: 1, slug: 1 }, { unique: true });
+DepartmentSchema.index({ company_id: 1, slug: 1 }, { unique: true, partialFilterExpression: { is_active: true } });
 
 // Auto-generate slug from name if modified
 DepartmentSchema.pre('validate', function() {

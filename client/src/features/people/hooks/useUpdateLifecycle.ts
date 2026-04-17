@@ -1,6 +1,7 @@
 import { useMutation, useQueryClient } from '@tanstack/react-query';
 import { apiClient } from '@/lib/apiClient';
 import { QUERY_KEYS } from '@/constants/queryKeys';
+import { toast } from 'sonner';
 import type { UpdateLifecycleInput, User } from '@/types';
 
 /**
@@ -18,6 +19,9 @@ export const useUpdateLifecycle = (userId: string) => {
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: QUERY_KEYS.USERS });
       queryClient.invalidateQueries({ queryKey: QUERY_KEYS.USER_DETAIL(userId) });
+      queryClient.invalidateQueries({ queryKey: QUERY_KEYS.DEPARTMENTS });
+      queryClient.invalidateQueries({ queryKey: QUERY_KEYS.ORG_TREE });
+      queryClient.invalidateQueries({ queryKey: QUERY_KEYS.DASHBOARD_STATS });
       toast.success('Lifecycle state updated successfully');
     },
   });

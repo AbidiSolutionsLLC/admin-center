@@ -20,6 +20,8 @@ export const useCreateDepartment = () => {
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: QUERY_KEYS.DEPARTMENTS });
       queryClient.invalidateQueries({ queryKey: QUERY_KEYS.ORG_TREE });
+      queryClient.invalidateQueries({ queryKey: QUERY_KEYS.BUSINESS_UNITS });
+      queryClient.invalidateQueries({ queryKey: QUERY_KEYS.BU_TREE });
       toast.success('Department created successfully');
     },
     onError: (error) => {

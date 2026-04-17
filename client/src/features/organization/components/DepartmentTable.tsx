@@ -173,8 +173,9 @@ export const DepartmentTable: React.FC<DepartmentTableProps> = ({
       {
         id: 'actions',
         header: 'Actions',
+        meta: { align: 'right' },
         cell: ({ row }) => (
-          <div className="flex items-center gap-1">
+          <div className="flex items-center justify-end gap-1">
             <button
               onClick={(e) => {
                 e.stopPropagation();

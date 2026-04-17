@@ -38,8 +38,11 @@ interface HistoryQuery {
 // ── Zod Schemas ──────────────────────────────────────────────────────────────
 
 const DepartmentBaseSchema = z.object({
-  name: z.string().min(1, 'Name is required').max(100),
-  type: z.enum(['business_unit', 'division', 'department', 'team', 'cost_center']),
+  name: z.string()
+    .min(1, 'Name is required')
+    .max(100)
+    .regex(/^[a-zA-Z0-9\s\-\.\(\)]+$/, 'Name contains invalid characters'),
+  type: z.enum(['business_unit', 'division', 'department', 'cost_center']),
   parent_id: z.string().optional().nullable(),
   primary_manager_id: z.string().optional().nullable(),
   secondary_manager_id: z.string().optional().nullable(),
@@ -76,7 +79,10 @@ const MoveDepartmentSchema = z.object({
 
 // BU-specific schema (type is locked to 'business_unit')
 const CreateBUSchema = z.object({
-  name: z.string().min(1, 'Name is required').max(100),
+  name: z.string()
+    .min(1, 'Name is required')
+    .max(100)
+    .regex(/^[a-zA-Z0-9\s\-\.\(\)]+$/, 'Name contains invalid characters'),
   primary_manager_id: z.string().optional().nullable(),
   secondary_manager_id: z.string().optional().nullable(),
 });
@@ -118,6 +124,9 @@ async function enrichDepartments(
     if (data.primary_manager_id && typeof data.primary_manager_id === 'object') {
       data.primary_manager = data.primary_manager_id as Record<string, unknown>;
     }
+    if (data.secondary_manager_id && typeof data.secondary_manager_id === 'object') {
+      data.secondary_manager = data.secondary_manager_id as Record<string, unknown>;
+    }
 
     return { ...data, headcount, has_intelligence_flag };
   });
@@ -138,6 +147,7 @@ export const getDepartments = asyncHandler(async (req: Request, res: Response) =
 
   const raw = await Department.find(filter)
     .populate('primary_manager_id', 'full_name avatar_url')
+    .populate('secondary_manager_id', 'full_name avatar_url')
     .sort({ created_at: 1 })
     .lean();
 
@@ -156,7 +166,9 @@ export const getDepartmentById = asyncHandler(async (req: Request, res: Response
     is_active: true,
   };
 
-  const dept = await Department.findOne(filter).populate('primary_manager_id', 'full_name avatar_url');
+  const dept = await Department.findOne(filter)
+    .populate('primary_manager_id', 'full_name avatar_url')
+    .populate('secondary_manager_id', 'full_name avatar_url');
 
   if (!dept) {
     throw new AppError('Department not found', 404, 'NOT_FOUND');
@@ -258,11 +270,33 @@ export const updateDepartment = asyncHandler(async (req: Request, res: Response)
 
   const beforeState = dept.toObject();
 
-  // Normalize empty strings → undefined (to allow clearing optional refs)
+  // Normalize empty strings → null (to allow clearing optional refs)
   const updates: Record<string, unknown> = { ...input };
   if (updates.parent_id === '') updates.parent_id = null;
   if (updates.primary_manager_id === '') updates.primary_manager_id = null;
   if (updates.secondary_manager_id === '') updates.secondary_manager_id = null;
+
+  // If parent_id is changing, validate no circular reference
+  if (input.parent_id !== undefined && updates.parent_id !== dept.parent_id?.toString()) {
+    const parentIdToCheck = updates.parent_id as string | null;
+    
+    if (parentIdToCheck) {
+      // Check if trying to set self as parent
+      if (parentIdToCheck === dept._id.toString()) {
+        throw new AppError('A department cannot be its own parent.', 400, 'CIRCULAR_HIERARCHY');
+      }
+
+      // Check for circular reference: new parent cannot be a descendant of this department
+      const isDescendant = await isDescendantOf(dept._id.toString(), parentIdToCheck, req.user.company_id as string);
+      if (isDescendant) {
+        throw new AppError(
+          'Cannot move department to one of its own descendants. This would create a circular hierarchy.',
+          400,
+          'CIRCULAR_HIERARCHY'
+        );
+      }
+    }
+  }
 
   // Merge custom_fields if provided
   if (input.custom_fields !== undefined) {
@@ -392,6 +426,7 @@ export const getOrgTree = asyncHandler(async (req: Request, res: Response) => {
 
   const raw = await Department.find(filter)
     .populate('primary_manager_id', 'full_name avatar_url')
+    .populate('secondary_manager_id', 'full_name avatar_url')
     .lean();
 
   const enriched = await enrichDepartments(raw, req.user.company_id);
@@ -443,6 +478,11 @@ export const moveDepartment = asyncHandler(async (req: Request, res: Response) =
 
   // If parent_id is changing, validate no circular reference
   if (input.parent_id !== undefined && input.parent_id !== oldParentId?.toString()) {
+    // Check if trying to set self as parent
+    if (input.parent_id === dept._id.toString()) {
+      throw new AppError('A department cannot be its own parent.', 400, 'CIRCULAR_HIERARCHY');
+    }
+
     // Check for circular reference: new parent cannot be a descendant of this department
     if (input.parent_id) {
       const isDescendant = await isDescendantOf(dept._id.toString(), input.parent_id, req.user.company_id as string);
@@ -515,6 +555,7 @@ export const getBUTree = asyncHandler(async (req: Request, res: Response) => {
 
   const allBUs = await Department.find(filterBU)
     .populate('primary_manager_id', 'full_name avatar_url')
+    .populate('secondary_manager_id', 'full_name avatar_url')
     .sort({ created_at: 1 })
     .lean();
 
@@ -530,6 +571,7 @@ export const getBUTree = asyncHandler(async (req: Request, res: Response) => {
 
   const departments = await Department.find(filterDepts)
     .populate('primary_manager_id', 'full_name avatar_url')
+    .populate('secondary_manager_id', 'full_name avatar_url')
     .sort({ created_at: 1 })
     .lean();
 
@@ -649,6 +691,7 @@ export const getBusinessUnits = asyncHandler(async (req: Request, res: Response)
 
   const bus = await Department.find(filterBU)
     .populate('primary_manager_id', 'full_name avatar_url')
+    .populate('secondary_manager_id', 'full_name avatar_url')
     .sort({ created_at: 1 })
     .lean();
 
@@ -688,6 +731,8 @@ export const getBusinessUnits = asyncHandler(async (req: Request, res: Response)
 
     return {
       ...bu,
+      primary_manager: bu.primary_manager_id,
+      secondary_manager: bu.secondary_manager_id,
       dept_count: deptCount,
       team_count: teamCount,
     };
