@@ -258,11 +258,33 @@ export const updateDepartment = asyncHandler(async (req: Request, res: Response)
 
   const beforeState = dept.toObject();
 
-  // Normalize empty strings → undefined (to allow clearing optional refs)
+  // Normalize empty strings → null (to allow clearing optional refs)
   const updates: Record<string, unknown> = { ...input };
   if (updates.parent_id === '') updates.parent_id = null;
   if (updates.primary_manager_id === '') updates.primary_manager_id = null;
   if (updates.secondary_manager_id === '') updates.secondary_manager_id = null;
+
+  // If parent_id is changing, validate no circular reference
+  if (input.parent_id !== undefined && updates.parent_id !== dept.parent_id?.toString()) {
+    const parentIdToCheck = updates.parent_id as string | null;
+    
+    if (parentIdToCheck) {
+      // Check if trying to set self as parent
+      if (parentIdToCheck === dept._id.toString()) {
+        throw new AppError('A department cannot be its own parent.', 400, 'CIRCULAR_HIERARCHY');
+      }
+
+      // Check for circular reference: new parent cannot be a descendant of this department
+      const isDescendant = await isDescendantOf(dept._id.toString(), parentIdToCheck, req.user.company_id as string);
+      if (isDescendant) {
+        throw new AppError(
+          'Cannot move department to one of its own descendants. This would create a circular hierarchy.',
+          400,
+          'CIRCULAR_HIERARCHY'
+        );
+      }
+    }
+  }
 
   // Merge custom_fields if provided
   if (input.custom_fields !== undefined) {
@@ -443,6 +465,11 @@ export const moveDepartment = asyncHandler(async (req: Request, res: Response) =
 
   // If parent_id is changing, validate no circular reference
   if (input.parent_id !== undefined && input.parent_id !== oldParentId?.toString()) {
+    // Check if trying to set self as parent
+    if (input.parent_id === dept._id.toString()) {
+      throw new AppError('A department cannot be its own parent.', 400, 'CIRCULAR_HIERARCHY');
+    }
+
     // Check for circular reference: new parent cannot be a descendant of this department
     if (input.parent_id) {
       const isDescendant = await isDescendantOf(dept._id.toString(), input.parent_id, req.user.company_id as string);
