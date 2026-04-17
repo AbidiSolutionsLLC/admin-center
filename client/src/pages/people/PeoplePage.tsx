@@ -8,6 +8,7 @@ import { useUsers, useBulkLifecycleChange, useBulkAssignRole, useExportUsers } f
 import { useUpdateUser } from '@/features/people/hooks/useUpdateUser';
 import { useUpdateLifecycle } from '@/features/people/hooks/useUpdateLifecycle';
 import { useUserStats } from '@/features/people/hooks/useUserStats';
+import { useResendInvite } from '@/features/people/hooks/useResendInvite';
 import { useDepartments } from '@/features/organization/hooks/useDepartments';
 import { useLocations } from '@/features/locations/hooks/useLocations';
 import { useRoles } from '@/features/roles/useRoles';
@@ -26,7 +27,7 @@ import { toast } from 'sonner';
 
 const LIFECYCLE_STATE_OPTIONS: { value: LifecycleState | ''; label: string }[] = [
   { value: '', label: 'All States' },
-  { value: 'invited', label: 'Invited' },
+  { value: 'invited', label: 'Pending' },
   { value: 'onboarding', label: 'Onboarding' },
   { value: 'active', label: 'Active' },
   { value: 'probation', label: 'Probation' },
@@ -129,6 +130,11 @@ export default function PeoplePage() {
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
   const bulkLifecycle = useBulkLifecycleChange();
   const bulkRole = useBulkAssignRole();
+  const resendInvite = useResendInvite();
+
+  const handleResendInvite = useCallback((user: User) => {
+    resendInvite.mutate(user._id);
+  }, [resendInvite]);
 
   const isAllSelected = useMemo(() => {
     if (!users || users.length === 0) return false;
@@ -334,6 +340,7 @@ export default function PeoplePage() {
                 onEdit={handleOpenEdit}
                 onAssignOrg={handleOpenAssignOrg}
                 onChangeState={handleOpenLifecycleChange}
+                onResendInvite={handleResendInvite}
                 selectedIds={selectedIds}
                 onToggleRow={toggleRow}
                 onToggleAll={toggleAll}
@@ -460,7 +467,7 @@ function StatsRow({ stats, isLoading }: StatsRowProps) {
   const statItems = [
     { label: 'Total', value: stats.total, icon: Users, color: 'text-ink' },
     { label: 'Active', value: stats.active, icon: Users, color: 'text-emerald-600' },
-    { label: 'Invited', value: stats.invited, icon: Users, color: 'text-sky-600' },
+    { label: 'Pending', value: stats.invited, icon: Users, color: 'text-sky-600' },
     { label: 'On Leave', value: stats.on_leave, icon: Users, color: 'text-amber-600' },
     { label: 'Terminated', value: stats.terminated, icon: Users, color: 'text-red-600' },
   ];

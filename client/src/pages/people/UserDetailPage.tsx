@@ -1,7 +1,9 @@
 // src/pages/people/UserDetailPage.tsx
 import { useParams, useNavigate } from 'react-router-dom';
-import { ArrowLeft, Users, Edit2 } from 'lucide-react';
+import { ArrowLeft, Users, Edit2, Mail } from 'lucide-react';
 import { useUserDetail } from '@/features/people/hooks/useUserDetail';
+import { useResendInvite } from '@/features/people/hooks/useResendInvite';
+import { useCallback } from 'react';
 import { ReportingLinesPanel } from '@/features/people/components/ReportingLinesPanel';
 import { TableSkeleton } from '@/components/ui/TableSkeleton';
 import { ErrorState } from '@/components/ui/ErrorState';
@@ -20,6 +22,13 @@ export default function UserDetailPage() {
   const { id } = useParams<{ id: string }>();
   const navigate = useNavigate();
   const { data: user, isLoading, isError, refetch } = useUserDetail(id!);
+  const resendInvite = useResendInvite();
+
+  const handleResendInvite = useCallback(() => {
+    if (user) {
+      resendInvite.mutate(user._id);
+    }
+  }, [resendInvite, user]);
 
   if (!id) {
     return (
@@ -111,6 +120,16 @@ export default function UserDetailPage() {
           </div>
         </div>
         <div className="flex items-center gap-2">
+          {user.lifecycle_state === 'invited' && (
+            <button
+              onClick={handleResendInvite}
+              disabled={resendInvite.isPending}
+              className="h-9 px-4 text-sm font-medium rounded-md border border-line bg-white text-ink hover:bg-surface-alt transition-colors flex items-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed"
+            >
+              <Mail className="w-4 h-4" />
+              Resend Invite
+            </button>
+          )}
           <button
             onClick={() => navigate(ROUTES.PEOPLE)}
             className="h-9 px-4 text-sm font-medium rounded-md border border-line bg-white text-ink hover:bg-surface-alt transition-colors flex items-center gap-2"
@@ -155,7 +174,7 @@ function InfoCard({ label, value }: { label: string; value: string }) {
 
 function LifecycleStateBadge({ state }: { state: string }) {
   const config: Record<string, { bg: string; text: string; label: string }> = {
-    invited: { bg: 'bg-primary-light', text: 'text-primary', label: 'Invited' },
+    invited: { bg: 'bg-primary-light', text: 'text-primary', label: 'Pending' },
     onboarding: { bg: 'bg-sky-50', text: 'text-sky-600', label: 'Onboarding' },
     active: { bg: 'bg-emerald-50', text: 'text-emerald-600', label: 'Active' },
     probation: { bg: 'bg-violet-50', text: 'text-violet-600', label: 'Probation' },

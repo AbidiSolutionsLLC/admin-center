@@ -26,9 +26,9 @@ const lifecycleStateConfig: Record<
   { label: string; variant: 'success' | 'warning' | 'error' | 'info' | 'neutral' | 'primary' | 'accent'; description: string }
 > = {
   invited: {
-    label: 'Invited',
+    label: 'Pending',
     variant: 'info',
-    description: 'User has been invited but hasn\'t started onboarding',
+    description: 'User has been invited and is pending onboarding',
   },
   onboarding: {
     label: 'Onboarding',

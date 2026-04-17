@@ -86,7 +86,7 @@ export default function OverviewPage() {
         <StatCard
           title="Total Users"
           value={stats?.users.total ?? 0}
-          subtitle={`${stats?.users.active ?? 0} active, ${stats?.users.invited ?? 0} invited`}
+          subtitle={`${stats?.users.active ?? 0} active, ${stats?.users.invited ?? 0} pending`}
           icon={Users}
         />
         <StatCard

@@ -39,7 +39,21 @@ apiClient.interceptors.response.use(
       }
     }
 
-    // 2. Global Error Notification
+    // 2. Force logout on terminated/archived account
+    if (err.response?.status === 403 && !originalRequest._retry) {
+      const errorData = err.response.data;
+      const errorCode = errorData?.code;
+      const errorMessage = errorData?.error || errorData?.message || '';
+
+      if (errorCode === 'FORBIDDEN' && /terminated|archived/i.test(errorMessage)) {
+        useAuthStore.getState().clearAuth();
+        toast.error('Your account is no longer active. You have been logged out.');
+        window.location.href = '/login';
+        return Promise.reject(err);
+      }
+    }
+
+    // 3. Global Error Notification
     // Skip notification if _skipErrorNotify is set or if it's a 401 (handled above)
     if (err.response && err.response.status !== 401 && !originalRequest._skipErrorNotify) {
       const errorData = err.response.data;
