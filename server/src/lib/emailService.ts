@@ -133,6 +133,13 @@ const sendEmailInternal = async (params: SendEmailParams): Promise<void> => {
 // ── Public API ─────────────────────────────────────────────────────────────
 
 /**
+ * Sends a raw email message.
+ */
+export const sendEmail = async (params: SendEmailParams): Promise<void> => {
+  await sendEmailInternal(params);
+};
+
+/**
  * Sends a welcome email to a newly invited user
  * @param params - Email parameters including recipient info and invite link
  * @returns Promise that resolves when email is sent
