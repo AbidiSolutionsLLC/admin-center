@@ -2,13 +2,14 @@
 import { Router } from 'express';
 import { login, refresh, logout, getMe, setupPassword } from '../controllers/auth.controller';
 import { requireAuth } from '../middleware/auth';
+import { authLimiter } from '../middleware/rateLimiter';
 
 const router = Router();
 
-router.post('/login', login);
+router.post('/login', authLimiter, login);
 router.post('/refresh', refresh);
 router.post('/logout', logout);
-router.post('/setup-password', setupPassword);
+router.post('/setup-password', authLimiter, setupPassword);
 router.get('/me', requireAuth, getMe);
 
 export default router;
