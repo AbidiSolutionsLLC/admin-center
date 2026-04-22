@@ -16,6 +16,7 @@ interface OrgChartViewProps {
  */
 export const OrgChartView: React.FC<OrgChartViewProps> = ({
   treeData,
+  onNodeClick,
 }) => {
   if (!treeData || treeData.length === 0) {
     return (
@@ -27,7 +28,7 @@ export const OrgChartView: React.FC<OrgChartViewProps> = ({
 
   return (
     <div className="w-full h-full min-h-[500px]">
-      <DraggableOrgChart treeData={treeData} />
+      <DraggableOrgChart treeData={treeData} onNodeClick={onNodeClick} />
     </div>
   );
 };

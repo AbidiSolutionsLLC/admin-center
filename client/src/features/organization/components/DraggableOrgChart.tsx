@@ -18,6 +18,7 @@ import type { OrgTreeNode } from '@/types';
 
 interface DraggableOrgChartProps {
   treeData: OrgTreeNode[];
+  onNodeClick?: (node: OrgTreeNode) => void;
 }
 
 /**
@@ -88,7 +89,7 @@ const DroppableNode: React.FC<{ id: string; children: React.ReactNode; disabled?
  * DraggableOrgChart Component
  * Interactive org chart with drag-and-drop reparenting, expand/collapse, and node click panel.
  */
-export const DraggableOrgChart: React.FC<DraggableOrgChartProps> = ({ treeData }) => {
+export const DraggableOrgChart: React.FC<DraggableOrgChartProps> = ({ treeData, onNodeClick }) => {
   const moveMutation = useMoveDepartment();
   const [expandedNodes, setExpandedNodes] = useState<Set<string>>(new Set());
   const [selectedNode, setSelectedNode] = useState<OrgTreeNode | null>(null);
@@ -338,6 +339,7 @@ export const DraggableOrgChart: React.FC<DraggableOrgChartProps> = ({ treeData }
             onClose={() => setSelectedNode(null)}
             onNavigateToChildren={navigateToNode}
             breadcrumbPath={breadcrumb}
+            onEdit={onNodeClick}
           />
         )}
       </div>

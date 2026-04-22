@@ -8,6 +8,7 @@ interface DepartmentPanelProps {
   onClose: () => void;
   onNavigateToChildren?: (dept: OrgTreeNode) => void;
   breadcrumbPath?: OrgTreeNode[];
+  onEdit?: (dept: OrgTreeNode) => void;
 }
 
 /**
@@ -22,6 +23,7 @@ export const DepartmentPanel: React.FC<DepartmentPanelProps> = ({
   onClose,
   onNavigateToChildren,
   breadcrumbPath = [],
+  onEdit,
 }) => {
   const childCount = department.children?.length ?? 0;
   const hasIntelligence = department.has_intelligence_flag;
@@ -34,13 +36,23 @@ export const DepartmentPanel: React.FC<DepartmentPanelProps> = ({
           <Building2 className="w-4 h-4 text-primary" />
           <h3 className="text-sm font-semibold text-ink truncate">{department.name}</h3>
         </div>
-        <button
-          onClick={onClose}
-          className="h-7 w-7 flex items-center justify-center rounded-md text-ink-secondary hover:text-ink hover:bg-surface-alt transition-colors"
-          aria-label="Close panel"
-        >
-          <X className="w-4 h-4" />
-        </button>
+        <div className="flex items-center gap-1">
+          {onEdit && (
+            <button
+              onClick={() => onEdit(department)}
+              className="px-2 py-1 text-[11px] font-medium text-primary hover:bg-primaryLight rounded-md transition-colors"
+            >
+              Edit
+            </button>
+          )}
+          <button
+            onClick={onClose}
+            className="h-7 w-7 flex items-center justify-center rounded-md text-ink-secondary hover:text-ink hover:bg-surface-alt transition-colors"
+            aria-label="Close panel"
+          >
+            <X className="w-4 h-4" />
+          </button>
+        </div>
       </div>
 
       {/* Content */}
