@@ -28,7 +28,7 @@ const ChangePrimaryManagerSchema = z.object({
  * A circular chain occurs if the target user (who would report to the manager)
  * is already in the manager's reporting chain (directly or indirectly).
  */
-async function wouldCreateCircularChain(
+export async function wouldCreateCircularChain(
   userId: string,
   managerId: string,
   companyId: string
@@ -118,8 +118,9 @@ function isSelfAssignment(userId: string, managerId: string): boolean {
 /**
  * Enriches a user object with populated manager fields
  */
-async function enrichUserWithManagers(user: any) {
-  const enriched = { ...user.toObject() };
+export async function enrichUserWithManagers(user: any) {
+  // If user is a Mongoose document, convert to object
+  const enriched = typeof user.toObject === 'function' ? user.toObject() : { ...user };
   
   if (enriched.manager_id && typeof enriched.manager_id === 'object') {
     enriched.manager = enriched.manager_id;
@@ -127,13 +128,18 @@ async function enrichUserWithManagers(user: any) {
   
   if (enriched.secondary_manager_ids && Array.isArray(enriched.secondary_manager_ids)) {
     enriched.secondary_managers = enriched.secondary_manager_ids
-      .filter((m: any) => typeof m === 'object')
-      .map((m: any) => ({
-        _id: m._id,
-        full_name: m.full_name,
-        email: m.email,
-        avatar_url: m.avatar_url,
-      }));
+      .map((m: any) => {
+        if (typeof m === 'object' && m !== null) {
+          return {
+            _id: m._id,
+            full_name: m.full_name,
+            email: m.email,
+            avatar_url: m.avatar_url,
+          };
+        }
+        return m;
+      })
+      .filter((m: any) => typeof m === 'object' && m !== null && m._id);
   } else {
     enriched.secondary_managers = [];
   }
@@ -236,9 +242,9 @@ export const addSecondaryManager = asyncHandler(async (req: Request, res: Respon
     throw new AppError('Cannot assign yourself as your own manager', 400, 'SELF_ASSIGNMENT_NOT_ALLOWED');
   }
 
-  // Enforce maximum 2 secondary managers (US-07)
-  if (user.secondary_manager_ids && user.secondary_manager_ids.length >= 2) {
-    throw new AppError('A user can have at most 2 secondary managers', 400, 'MAX_SECONDARY_MANAGERS_EXCEEDED');
+  // Enforce maximum 10 secondary managers (Matrix Org support)
+  if (user.secondary_manager_ids && user.secondary_manager_ids.length >= 10) {
+    throw new AppError('A user can have at most 10 secondary managers', 400, 'MAX_SECONDARY_MANAGERS_EXCEEDED');
   }
 
   // Check for circular reporting chain

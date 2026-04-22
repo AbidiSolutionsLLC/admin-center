@@ -33,10 +33,12 @@ const CreateTeamSchema = z.object({
   name: z.string().min(1, 'Name is required').max(100),
   description: z.string().max(500).optional(),
   department_id: z.string().min(1, 'Department is required'),
-  team_lead_id: z.string().optional().nullable(),
+  team_lead_id: z.string().min(1, 'Team manager (lead) is required'),
 });
 
-const UpdateTeamSchema = CreateTeamSchema.partial();
+const UpdateTeamSchema = CreateTeamSchema.partial().extend({
+  team_lead_id: z.string().min(1, 'Team manager (lead) is required').optional(),
+});
 
 const AddMemberSchema = z.object({
   user_id: z.string().min(1, 'User ID is required'),

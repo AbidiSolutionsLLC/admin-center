@@ -52,6 +52,7 @@ const InviteUserSchema = z.object({
   department_id: z.string().optional().nullable(),
   team_id: z.string().optional().nullable(),
   manager_id: z.string().optional().nullable(),
+  secondary_manager_ids: z.array(z.string()).optional(),
   role: z.enum(['Super Admin', 'Admin', 'HR', 'Manager', 'Employee', 'Technician']).optional(),
   employment_type: z.enum(['full_time', 'part_time', 'contractor', 'intern']).optional(),
   hire_date: z.string().optional().nullable(),
@@ -66,6 +67,7 @@ const UpdateUserSchema = z.object({
   department_id: z.string().optional().nullable(),
   team_id: z.string().optional().nullable(),
   manager_id: z.string().optional().nullable(),
+  secondary_manager_ids: z.array(z.string()).optional(),
   role: z.enum(['Super Admin', 'Admin', 'HR', 'Manager', 'Employee', 'Technician']).optional(),
   employment_type: z.enum(['full_time', 'part_time', 'contractor', 'intern']).optional(),
   hire_date: z.string().optional().nullable(),
@@ -85,6 +87,7 @@ const BulkInviteRowSchema = z.object({
   department_id: z.string().optional(),
   team_id: z.string().optional(),
   manager_id: z.string().optional(),
+  secondary_manager_ids: z.array(z.string()).optional(),
   role: z.enum(['Super Admin', 'Admin', 'HR', 'Manager', 'Employee', 'Technician']).optional(),
   employment_type: z.enum(['full_time', 'part_time', 'contractor', 'intern']).optional(),
   hire_date: z.string().optional(),
@@ -169,6 +172,16 @@ async function enrichUsers(
     }
     if (data.manager_id && typeof data.manager_id === 'object') {
       data.manager = data.manager_id;
+    }
+    if (data.secondary_manager_ids && Array.isArray(data.secondary_manager_ids)) {
+      data.secondary_managers = data.secondary_manager_ids
+        .filter((m: any) => typeof m === 'object' && m !== null)
+        .map((m: any) => ({
+          _id: m._id,
+          full_name: m.full_name,
+          email: m.email,
+          avatar_url: m.avatar_url,
+        }));
     }
     return data;
   });
@@ -455,6 +468,7 @@ export const getUsers = asyncHandler(async (req: Request, res: Response) => {
     .populate('department_id', 'name slug')
     .populate('team_id', 'name slug')
     .populate('manager_id', 'full_name email avatar_url')
+    .populate('secondary_manager_ids', 'full_name email avatar_url')
     .populate('location_id', 'name timezone')
     .sort({ created_at: -1 })
     .lean();
@@ -478,6 +492,7 @@ export const getUserById = asyncHandler(async (req: Request, res: Response) => {
     .populate('department_id', 'name slug')
     .populate('team_id', 'name slug')
     .populate('manager_id', 'full_name email avatar_url')
+    .populate('secondary_manager_ids', 'full_name email avatar_url')
     .populate('location_id', 'name timezone');
 
   if (!user) {
@@ -541,6 +556,18 @@ export const inviteUser = asyncHandler(async (req: Request, res: Response) => {
     if (!manager) throw new AppError('Manager not found or inactive', 404, 'NOT_FOUND');
   }
 
+  // 4.5 Validate secondary managers (if provided)
+  if (input.secondary_manager_ids && input.secondary_manager_ids.length > 0) {
+    const managers = await User.find({
+      _id: { $in: input.secondary_manager_ids },
+      company_id: req.user.company_id,
+      is_active: true,
+    });
+    if (managers.length !== input.secondary_manager_ids.length) {
+      throw new AppError('One or more secondary managers not found or inactive', 404, 'NOT_FOUND');
+    }
+  }
+
   // 5. Validate location (if provided)
   if (input.location_id) {
     const loc = await Location.findOne({
@@ -574,6 +601,7 @@ export const inviteUser = asyncHandler(async (req: Request, res: Response) => {
     department_id: input.department_id || undefined,
     team_id: input.team_id || undefined,
     manager_id: input.manager_id || undefined,
+    secondary_manager_ids: input.secondary_manager_ids || [],
     location_id: input.location_id || undefined,
     hire_date: input.hire_date ? new Date(input.hire_date) : undefined,
   });
@@ -670,6 +698,18 @@ export const updateUser = asyncHandler(async (req: Request, res: Response) => {
       is_active: true,
     });
     if (!manager) throw new AppError('Manager not found or inactive', 404, 'NOT_FOUND');
+  }
+
+  // 3.5 Validate secondary managers (if changed)
+  if (input.secondary_manager_ids) {
+    const managers = await User.find({
+      _id: { $in: input.secondary_manager_ids },
+      company_id: req.user.company_id,
+      is_active: true,
+    });
+    if (managers.length !== input.secondary_manager_ids.length) {
+      throw new AppError('One or more secondary managers not found or inactive', 404, 'NOT_FOUND');
+    }
   }
 
   // 4. Validate location (if changed)
@@ -912,6 +952,7 @@ export const bulkInviteUsers = asyncHandler(async (req: Request, res: Response) 
         department_id: validatedRow.department_id || undefined,
         team_id: validatedRow.team_id || undefined,
         manager_id: validatedRow.manager_id || undefined,
+        secondary_manager_ids: validatedRow.secondary_manager_ids || [],
         location_id: validatedRow.location_id || undefined,
         hire_date: validatedRow.hire_date ? new Date(validatedRow.hire_date) : undefined,
       });

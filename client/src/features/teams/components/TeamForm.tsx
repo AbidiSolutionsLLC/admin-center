@@ -11,10 +11,7 @@ const schema = z.object({
   name: z.string().min(1, 'Team name is required').max(100, 'Name too long'),
   description: z.string().max(500, 'Description too long').optional(),
   department_id: z.string().min(1, 'Department is required'),
-  team_lead_id: z
-    .string()
-    .optional()
-    .nullable(),
+  team_lead_id: z.string().min(1, 'Team manager is required'),
 });
 
 export type TeamFormData = z.infer<typeof schema>;
@@ -147,7 +144,7 @@ export const TeamForm: React.FC<TeamFormProps> = ({
       {/* Team Lead */}
       <div className="space-y-1.5">
         <label htmlFor="team-lead" className="text-sm font-medium text-ink">
-          Team Lead
+          Team Lead <span className="text-red-500">*</span>
         </label>
         <Controller
           name="team_lead_id"

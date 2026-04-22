@@ -536,7 +536,7 @@ interface Insight {
 ```
 
 #### MVP Rule Set
-
+ADMIN-M3-025 — Venue Form — Section F (Pricing & Contact)
 | Rule ID | Category | Severity | Condition |
 |---|---|---|---|
 | RULE-01 | health | critical | User has no role assigned AND lifecycle_state = 'active' |

@@ -8,9 +8,11 @@ import {
   changePrimaryManager,
 } from '../controllers/reportingLines.controller';
 
+import { PERMISSION_GROUPS } from '../constants/roles';
+
 const router = Router({ mergeParams: true }); // Important to access :id from parent router
 
-const PEOPLE_MANAGERS = ['Super Admin', 'HR Admin', 'Ops Admin'];
+const PEOPLE_MANAGERS = [...PERMISSION_GROUPS.PEOPLE_ADMINS];
 
 /**
  * All routes require authentication (requireAuth middleware applied in parent route)
