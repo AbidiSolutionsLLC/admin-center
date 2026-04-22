@@ -194,6 +194,45 @@ async function validateEmailDomain(req: Request, email: string): Promise<void> {
 // ── Helper Functions ─────────────────────────────────────────────────────────
 
 /**
+ * Checks if a user is missing any required fields based on company settings.
+ * Updates the user's is_flagged field accordingly.
+ */
+async function checkAndFlagUserDataIntegrity(user: any, companyId: string): Promise<void> {
+  try {
+    const company = await Company.findById(companyId).select('settings.required_user_fields');
+
+    if (!company || !company.settings?.required_user_fields) {
+      // If no required fields are set, unflag the user
+      if (user.is_flagged) {
+        await User.findByIdAndUpdate(user._id, { is_flagged: false });
+        user.is_flagged = false;
+      }
+      return;
+    }
+
+    const requiredFields = company.settings.required_user_fields;
+    let isMissingRequiredField = false;
+
+    for (const field of requiredFields) {
+      const value = user[field];
+      if (value === undefined || value === null || value === '') {
+        isMissingRequiredField = true;
+        break;
+      }
+    }
+
+    // Update the flag if it has changed
+    if (user.is_flagged !== isMissingRequiredField) {
+      await User.findByIdAndUpdate(user._id, { is_flagged: isMissingRequiredField });
+      user.is_flagged = isMissingRequiredField;
+    }
+  } catch (error) {
+    console.error('Error checking user data integrity:', error);
+    // Don't throw error, just log it to avoid breaking the user list
+  }
+}
+
+/**
  * Generates a temporary password for new users
  */
 const generateTemporaryPassword = (): string => {
@@ -576,6 +615,9 @@ export const getUsers = asyncHandler(async (req: Request, res: Response) => {
     .populate('location_id', 'name timezone')
     .sort({ created_at: -1 })
     .lean();
+
+  // Check data integrity for each user (async, but don't await to avoid blocking)
+  users.forEach(user => checkAndFlagUserDataIntegrity(user, req.user.company_id));
 
   const enriched = await enrichUsers(users, req.user.company_id);
   res.status(200).json({ success: true, data: enriched });

@@ -25,6 +25,7 @@ import { Modal } from '@/components/ui/Modal';
 import type { User, LifecycleState, EmploymentType, Department, Location } from '@/types';
 import { cn } from '@/utils/cn';
 import { toast } from 'sonner';
+import { Checkbox } from '@/components/ui/checkbox';
 
 const LIFECYCLE_STATE_OPTIONS: { value: LifecycleState | ''; label: string }[] = [
   { value: '', label: 'All States' },
@@ -51,6 +52,7 @@ interface UserFilters {
   department_id: string;
   employment_type: EmploymentType | '';
   location_id: string;
+  incomplete_data: boolean;
 }
 
 /**
@@ -73,6 +75,7 @@ export default function PeoplePage() {
     department_id: '',
     employment_type: '',
     location_id: '',
+    incomplete_data: false,
   });
 
   // ── Server data ──────────────────────────────────────────────────────
@@ -104,12 +107,16 @@ export default function PeoplePage() {
       const matchesLocation =
         !filters.location_id || user.location_id === filters.location_id;
 
+      const matchesIncompleteData =
+        !filters.incomplete_data || user.is_flagged === true;
+
       return (
         matchesSearch &&
         matchesLifecycleState &&
         matchesDepartment &&
         matchesEmploymentType &&
-        matchesLocation
+        matchesLocation &&
+        matchesIncompleteData
       );
     });
   }, [users, filters]);
@@ -120,6 +127,7 @@ export default function PeoplePage() {
     filters.department_id,
     filters.employment_type,
     filters.location_id,
+    filters.incomplete_data,
   ].filter(Boolean).length;
 
   const exportMutation = useExportUsers({
@@ -245,6 +253,7 @@ export default function PeoplePage() {
       department_id: '',
       employment_type: '',
       location_id: '',
+      incomplete_data: false,
     });
   }, []);
 
@@ -634,6 +643,17 @@ function FilterBar({
         </select>
         <ChevronDown className="absolute right-2 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-ink-muted pointer-events-none" />
       </div>
+
+      {/* Incomplete data filter */}
+      <label className="flex items-center gap-2 cursor-pointer">
+        <Checkbox
+          checked={filters.incomplete_data}
+          onCheckedChange={(checked) =>
+            onFilterChange({ ...filters, incomplete_data: checked === true })
+          }
+        />
+        <span className="text-sm text-ink">Incomplete data</span>
+      </label>
 
       {/* Clear filters */}
       {activeFilterCount > 0 && (

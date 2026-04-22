@@ -10,6 +10,7 @@ interface DataTableProps<TData, TValue> {
   columns: ColumnDef<TData, TValue>[];
   data: TData[];
   onRowClick?: (row: TData) => void;
+  getRowClassName?: (row: TData) => string;
 }
 
 /**
@@ -21,6 +22,7 @@ export function DataTable<TData, TValue>({
   columns,
   data,
   onRowClick,
+  getRowClassName,
 }: DataTableProps<TData, TValue>) {
   const table = useReactTable({
     data,
@@ -62,7 +64,8 @@ export function DataTable<TData, TValue>({
                 key={row.id}
                 className={cn(
                   'border-b border-line last:border-0 hover:bg-surface-base transition-colors duration-100',
-                  onRowClick && 'cursor-pointer'
+                  onRowClick && 'cursor-pointer',
+                  getRowClassName?.(row.original)
                 )}
                 onClick={() => onRowClick?.(row.original)}
               >

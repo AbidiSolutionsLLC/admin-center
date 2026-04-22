@@ -340,6 +340,7 @@ export interface User {
   custom_fields: Record<string, unknown>;
   last_login?: string;
   mfa_enabled: boolean;
+  is_flagged: boolean;
   is_active: boolean;
   created_at: string;
   updated_at: string;

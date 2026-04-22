@@ -248,5 +248,9 @@ export const UserTable: React.FC<UserTableProps> = ({ users, onEdit, onAssignOrg
     [onEdit, onAssignOrg, onChangeState, onResendInvite, hasSelection, selectedIds, onToggleRow, onToggleAll, isAllSelected]
   );
 
-  return <DataTable columns={columns} data={users} onRowClick={onEdit} />;
+  const getRowClassName = (user: User) => {
+    return user.is_flagged ? 'bg-red-50/50 hover:bg-red-50/70' : '';
+  };
+
+  return <DataTable columns={columns} data={users} onRowClick={onEdit} getRowClassName={getRowClassName} />;
 };
