@@ -9,6 +9,7 @@ import { useUpdateUser } from '@/features/people/hooks/useUpdateUser';
 import { useUpdateLifecycle } from '@/features/people/hooks/useUpdateLifecycle';
 import { useUserStats } from '@/features/people/hooks/useUserStats';
 import { useResendInvite } from '@/features/people/hooks/useResendInvite';
+import { useFormMetadata } from '@/features/people/hooks/useFormMetadata';
 import { useDepartments } from '@/features/organization/hooks/useDepartments';
 import { useLocations } from '@/features/locations/hooks/useLocations';
 import { useRoles } from '@/features/roles/useRoles';
@@ -80,6 +81,7 @@ export default function PeoplePage() {
   const { data: locations = [] } = useLocations();
   const { data: roles = [] } = useRoles();
   const { data: stats, isLoading: statsLoading } = useUserStats();
+  const { data: formMetadata } = useFormMetadata();
 
   const filteredUsers = useMemo(() => {
     if (!users) return [];
@@ -356,6 +358,7 @@ export default function PeoplePage() {
         isOpen={isInviteModalOpen}
         onClose={handleCloseInvite}
         departments={departments}
+        requiredFields={formMetadata?.required_fields || ['email', 'full_name']}
       />
 
       {/* ── Edit User Modal ── */}
@@ -366,6 +369,7 @@ export default function PeoplePage() {
           onClose={handleCloseEdit}
           departments={departments}
           locations={locations}
+          requiredFields={formMetadata?.required_fields || ['email', 'full_name']}
         />
       )}
 
@@ -650,9 +654,10 @@ interface EditUserModalProps {
   onClose: () => void;
   departments: Department[];
   locations: Location[];
+  requiredFields?: string[];
 }
 
-function EditUserModal({ user, isOpen, onClose, departments, locations }: EditUserModalProps) {
+function EditUserModal({ user, isOpen, onClose, departments, locations, requiredFields = [] }: EditUserModalProps) {
   const updateUser = useUpdateUser(user._id);
 
   const handleSubmit = useCallback(
@@ -718,6 +723,7 @@ function EditUserModal({ user, isOpen, onClose, departments, locations }: EditUs
         departments={departments}
         locations={locations}
         isSubmitting={updateUser.isPending}
+        requiredFields={requiredFields}
       />
     </Modal>
   );

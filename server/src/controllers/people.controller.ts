@@ -96,6 +96,101 @@ const BulkInviteSchema = z.object({
   users: z.array(BulkInviteRowSchema).min(1, 'At least one user is required').max(500, 'Maximum 500 users per bulk invite'),
 });
 
+// ── Required Fields Validation ────────────────────────────────────────────────────
+
+/**
+ * Validates that all required user fields are present in the request body.
+ * Fetches the required fields list from the company's settings.
+ * Throws an AppError with 400 status if any required field is missing.
+ * 
+ * @param req - Express request object
+ * @param body - Request body to validate
+ * @param checkAll - If true, check all required fields; if false, only check fields present in body
+ */
+async function validateRequiredFields(
+  req: Request, 
+  body: Record<string, unknown>, 
+  checkAll: boolean = true
+): Promise<void> {
+  const company = await Company.findById(req.user.company_id).select('settings.required_user_fields');
+  
+  if (!company) {
+    throw new AppError('Company not found', 404, 'COMPANY_NOT_FOUND');
+  }
+
+  const requiredFields = company.settings?.required_user_fields || ['email', 'full_name'];
+  const missingFields: string[] = [];
+
+  for (const field of requiredFields) {
+    const value = body[field];
+    const isMissing = value === undefined || value === null || value === '';
+    
+    if (isMissing) {
+      // If checkAll is true, all required fields must be present
+      // If checkAll is false, only fail if the field is present in body but empty
+      if (checkAll) {
+        missingFields.push(field);
+      } else if (field in body) {
+        missingFields.push(field);
+      }
+    }
+  }
+
+  if (missingFields.length > 0) {
+    throw new AppError(
+      `Missing required fields: ${missingFields.join(', ')}`,
+      400,
+      'MISSING_REQUIRED_FIELDS'
+    );
+  }
+}
+
+/**
+ * Validates email format and domain authorization.
+ * Always validates basic email format, and if domain enforcement is active,
+ * checks if the email domain exists in the allowed_domains list.
+ * Throws an AppError with 400 status if validation fails.
+ */
+async function validateEmailDomain(req: Request, email: string): Promise<void> {
+  // Regex check: Validate basic email format
+  const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+  if (!emailRegex.test(email)) {
+    throw new AppError(
+      'Invalid email format.',
+      400,
+      'INVALID_EMAIL_FORMAT'
+    );
+  }
+
+  const company = await Company.findById(req.user.company_id).select('settings.allowed_domains settings.is_domain_enforcement_active');
+
+  if (!company) {
+    throw new AppError('Company not found', 404, 'COMPANY_NOT_FOUND');
+  }
+
+  const { allowed_domains = [], is_domain_enforcement_active = false } = company.settings || {};
+
+  // Domain match: If domain enforcement is active, check if domain is authorized
+  if (is_domain_enforcement_active && allowed_domains.length > 0) {
+    // Extract domain from email
+    const emailDomain = email.toLowerCase().substring(email.indexOf('@'));
+
+    // Check if email domain is in allowed_domains
+    const isDomainAllowed = allowed_domains.some(domain => {
+      const normalizedDomain = domain.toLowerCase();
+      return emailDomain === normalizedDomain || emailDomain.endsWith(normalizedDomain);
+    });
+
+    if (!isDomainAllowed) {
+      throw new AppError(
+        'Domain not authorized by administrator.',
+        400,
+        'DOMAIN_NOT_AUTHORIZED'
+      );
+    }
+  }
+}
+
 // ── Helper Functions ─────────────────────────────────────────────────────────
 
 /**
@@ -407,6 +502,29 @@ async function runLifecycleAutomations(
 // ── Controllers ──────────────────────────────────────────────────────────────
 
 /**
+ * GET /people/form-metadata
+ * Returns the form metadata for the company, including required user fields.
+ * This endpoint is called by the frontend before rendering the Add/Update User form.
+ * Acts as the "source of truth" for form validation.
+ */
+export const getFormMetadata = asyncHandler(async (req: Request, res: Response) => {
+  const company = await Company.findById(req.user.company_id).select('settings.required_user_fields');
+
+  if (!company) {
+    throw new AppError('Company not found', 404, 'COMPANY_NOT_FOUND');
+  }
+
+  const requiredFields = company.settings?.required_user_fields || ['email', 'full_name'];
+
+  res.status(200).json({
+    success: true,
+    data: {
+      required_fields: requiredFields,
+    },
+  });
+});
+
+/**
  * GET /people
  * Returns all users for the requesting company with optional filters.
  * Supports filtering by lifecycle_state, department_id, employment_type.
@@ -498,6 +616,12 @@ export const getUserById = asyncHandler(async (req: Request, res: Response) => {
  */
 export const inviteUser = asyncHandler(async (req: Request, res: Response) => {
   const input = InviteUserSchema.parse(req.body);
+
+  // Validate company-required fields
+  await validateRequiredFields(req, input as unknown as Record<string, unknown>);
+
+  // Validate email domain enforcement
+  await validateEmailDomain(req, input.email);
 
   // ── Validation ─────────────────────────────────────────────────────────────
 
@@ -628,6 +752,9 @@ export const inviteUser = asyncHandler(async (req: Request, res: Response) => {
  */
 export const updateUser = asyncHandler(async (req: Request, res: Response) => {
   const input = UpdateUserSchema.parse(req.body);
+
+  // Validate company-required fields (only check fields present in body)
+  await validateRequiredFields(req, input as unknown as Record<string, unknown>, false);
 
   const filter: UserFilter = {
     _id: getRouteId(req.params.id),
@@ -893,6 +1020,19 @@ export const bulkInviteUsers = asyncHandler(async (req: Request, res: Response) 
           email: validatedRow.email,
           success: false,
           error: 'User with this email already exists',
+        });
+        continue;
+      }
+
+      // Validate email format and domain enforcement
+      try {
+        await validateEmailDomain(req, validatedRow.email);
+      } catch (validationError: any) {
+        results.push({
+          row: rowNumber,
+          email: validatedRow.email,
+          success: false,
+          error: validationError.message || 'Email validation failed',
         });
         continue;
       }

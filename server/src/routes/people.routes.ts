@@ -5,6 +5,7 @@ import { requireRole } from '../middleware/requireRole';
 import {
   getUsers,
   getUserById,
+  getFormMetadata,
   inviteUser,
   updateUser,
   updateUserLifecycle,
@@ -35,6 +36,14 @@ const PEOPLE_MANAGERS: string[] = [...PERMISSION_GROUPS.PEOPLE_ADMINS];
  * List all users with optional filters
  */
 router.get('/', getUsers);
+
+/**
+ * GET /people/form-metadata
+ * Returns the form metadata for the company, including required user fields.
+ * This endpoint is called by the frontend before rendering the Add/Update User form.
+ * Acts as the "source of truth" for form validation.
+ */
+router.get('/form-metadata', requireRole(PEOPLE_MANAGERS), getFormMetadata);
 
 /**
  * GET /people/export

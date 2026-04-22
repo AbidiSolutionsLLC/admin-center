@@ -38,6 +38,7 @@ interface UserFormProps {
   departments: Department[];
   locations?: Location[];
   isSubmitting?: boolean;
+  requiredFields?: string[];
 }
 
 const EMPLOYMENT_TYPE_OPTIONS: { value: EmploymentType; label: string }[] = [
@@ -71,6 +72,7 @@ export const UserForm: React.FC<UserFormProps> = ({
   departments,
   locations = [],
   isSubmitting = false,
+  requiredFields = [],
 }) => {
   const {
     register,
@@ -157,7 +159,7 @@ export const UserForm: React.FC<UserFormProps> = ({
       {/* Full Name */}
       <div className="space-y-1.5">
         <label htmlFor="user-name" className="text-sm font-medium text-ink">
-          Full Name <span className="text-red-500">*</span>
+          Full Name {requiredFields.includes('full_name') && <span className="text-red-500">*</span>}
         </label>
         <input
           id="user-name"
@@ -191,7 +193,7 @@ export const UserForm: React.FC<UserFormProps> = ({
       {/* Department */}
       <div className="space-y-1.5">
         <label htmlFor="user-dept" className="text-sm font-medium text-ink">
-          Department
+          Department {requiredFields.includes('department_id') && <span className="text-red-500">*</span>}
         </label>
         <select
           id="user-dept"
@@ -214,7 +216,7 @@ export const UserForm: React.FC<UserFormProps> = ({
       {/* Role */}
       <div className="space-y-1.5">
         <label htmlFor="user-role" className="text-sm font-medium text-ink">
-          Role <span className="text-red-500">*</span>
+          Role {requiredFields.includes('role') && <span className="text-red-500">*</span>}
         </label>
         <select
           id="user-role"
@@ -236,7 +238,7 @@ export const UserForm: React.FC<UserFormProps> = ({
       {/* Location */}
       <div className="space-y-1.5">
         <label htmlFor="user-location" className="text-sm font-medium text-ink">
-          Location
+          Location {requiredFields.includes('location_id') && <span className="text-red-500">*</span>}
         </label>
         <select
           id="user-location"
@@ -259,7 +261,7 @@ export const UserForm: React.FC<UserFormProps> = ({
       {/* Manager */}
       <div className="space-y-1.5">
         <label htmlFor="user-manager" className="text-sm font-medium text-ink">
-          Manager ID
+          Manager {requiredFields.includes('manager_id') && <span className="text-red-500">*</span>}
         </label>
         <Controller
           name="manager_id"
@@ -285,7 +287,7 @@ export const UserForm: React.FC<UserFormProps> = ({
       {/* Employment Type */}
       <div className="space-y-1.5">
         <label htmlFor="user-emp-type" className="text-sm font-medium text-ink">
-          Employment Type <span className="text-red-500">*</span>
+          Employment Type {requiredFields.includes('employment_type') && <span className="text-red-500">*</span>}
         </label>
         <select
           id="user-emp-type"
@@ -307,7 +309,7 @@ export const UserForm: React.FC<UserFormProps> = ({
       {/* Hire Date */}
       <div className="space-y-1.5">
         <label htmlFor="user-hire-date" className="text-sm font-medium text-ink">
-          Hire Date
+          Hire Date {requiredFields.includes('hire_date') && <span className="text-red-500">*</span>}
         </label>
         <input
           id="user-hire-date"

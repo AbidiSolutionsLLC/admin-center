@@ -38,7 +38,29 @@ export interface CompanySettings {
   name: string;
   employee_id_format: string;
   employee_id_counter: number;
+  settings?: {
+    required_user_fields?: string[];
+    employee_id_format?: string;
+    allowed_domains?: string[];
+    is_domain_enforcement_active?: boolean;
+  };
 }
+
+/** All available fields that can be configured as required for user invites */
+export const AVAILABLE_USER_FIELDS = [
+  { key: 'full_name', label: 'Full Name', description: 'The employee\'s full legal name' },
+  { key: 'email', label: 'Email Address', description: 'Corporate email address' },
+  { key: 'phone', label: 'Phone Number', description: 'Contact phone number' },
+  { key: 'department_id', label: 'Department', description: 'Primary department assignment' },
+  { key: 'team_id', label: 'Team', description: 'Primary team assignment' },
+  { key: 'manager_id', label: 'Manager', description: 'Direct manager assignment' },
+  { key: 'role', label: 'System Role', description: 'Access level in the system' },
+  { key: 'employment_type', label: 'Employment Type', description: 'Full-time, part-time, contractor, etc.' },
+  { key: 'hire_date', label: 'Hire Date', description: 'Date of employment start' },
+  { key: 'location_id', label: 'Location', description: 'Office or work location' },
+] as const;
+
+export type AvailableUserFieldKey = typeof AVAILABLE_USER_FIELDS[number]['key'];
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Locations

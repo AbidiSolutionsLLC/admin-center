@@ -12,6 +12,7 @@ interface InviteModalProps {
   isOpen: boolean;
   onClose: () => void;
   departments: Department[];
+  requiredFields?: string[];
 }
 
 const EMPLOYMENT_TYPE_OPTIONS: { value: EmploymentType; label: string }[] = [
@@ -45,7 +46,7 @@ const inputClass = (hasError?: boolean) =>
  * 2. Bulk invite — CSV upload with preview table before sending
  * Used on: PeoplePage.
  */
-export const InviteModal: React.FC<InviteModalProps> = ({ isOpen, onClose, departments }) => {
+export const InviteModal: React.FC<InviteModalProps> = ({ isOpen, onClose, departments, requiredFields = [] }) => {
   const [activeTab, setActiveTab] = useState('single');
   const [csvData, setCsvData] = useState<BulkInviteRow[]>([]);
   const [csvError, setCsvError] = useState<string | null>(null);
@@ -243,7 +244,7 @@ export const InviteModal: React.FC<InviteModalProps> = ({ isOpen, onClose, depar
         <Tabs.Content value="single" className="space-y-5 focus:outline-none">
           <div className="space-y-1.5">
             <label htmlFor="invite-name" className="text-sm font-medium text-ink">
-              Full Name <span className="text-red-500">*</span>
+              Full Name {requiredFields.includes('full_name') && <span className="text-red-500">*</span>}
             </label>
             <input
               id="invite-name"
@@ -259,7 +260,7 @@ export const InviteModal: React.FC<InviteModalProps> = ({ isOpen, onClose, depar
 
           <div className="space-y-1.5">
             <label htmlFor="invite-email" className="text-sm font-medium text-ink">
-              Email <span className="text-red-500">*</span>
+              Email {requiredFields.includes('email') && <span className="text-red-500">*</span>}
             </label>
             <input
               id="invite-email"
@@ -274,7 +275,7 @@ export const InviteModal: React.FC<InviteModalProps> = ({ isOpen, onClose, depar
 
           <div className="space-y-1.5">
             <label htmlFor="invite-dept" className="text-sm font-medium text-ink">
-              Department
+              Department {requiredFields.includes('department_id') && <span className="text-red-500">*</span>}
             </label>
             <select
               id="invite-dept"
@@ -293,7 +294,7 @@ export const InviteModal: React.FC<InviteModalProps> = ({ isOpen, onClose, depar
 
           <div className="space-y-1.5">
             <label htmlFor="invite-role" className="text-sm font-medium text-ink">
-              Role <span className="text-red-500">*</span>
+              Role {requiredFields.includes('role') && <span className="text-red-500">*</span>}
             </label>
             <select
               id="invite-role"
@@ -313,7 +314,7 @@ export const InviteModal: React.FC<InviteModalProps> = ({ isOpen, onClose, depar
 
           <div className="space-y-1.5">
             <label htmlFor="invite-emp-type" className="text-sm font-medium text-ink">
-              Employment Type
+              Employment Type {requiredFields.includes('employment_type') && <span className="text-red-500">*</span>}
             </label>
             <select
               id="invite-emp-type"
