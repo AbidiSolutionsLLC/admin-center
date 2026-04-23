@@ -5,14 +5,16 @@ import { QUERY_KEYS } from '@/constants/queryKeys';
 import type { Team } from '@/types';
 
 /**
- * Fetches all active teams for the current company.
+ * Fetches teams for the current company with optional status filtering.
  * Used on: TeamsPage, TeamTable.
  */
-export const useTeams = () => {
+export const useTeams = (status: 'active' | 'inactive' | 'all' = 'active') => {
   return useQuery<Team[]>({
-    queryKey: QUERY_KEYS.TEAMS,
+    queryKey: [...QUERY_KEYS.TEAMS, status],
     queryFn: async () => {
-      const { data } = await apiClient.get('/teams');
+      const { data } = await apiClient.get('/teams', {
+        params: { status }
+      });
       return data.data;
     },
     staleTime: 1000 * 60 * 5,

@@ -6,6 +6,7 @@ import { useAuthStore } from '@/store/useAuthStore';
 export const apiClient = axios.create({
   baseURL: import.meta.env.VITE_API_URL ?? 'http://localhost:5000/api/v1',
   withCredentials: true, // for httpOnly cookie (refresh token)
+  timeout: 15000, // 15s timeout for hanging requests
 });
 
 // Attach access token to every request

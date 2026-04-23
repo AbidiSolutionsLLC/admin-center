@@ -5,6 +5,8 @@ import { Upload, Download, CheckCircle, XCircle } from 'lucide-react';
 import { Modal } from '@/components/ui/Modal';
 import { useInviteUser } from '../hooks/useInviteUser';
 import { useBulkInvite } from '../hooks/useBulkInvite';
+import { UserSelect } from '@/components/ui/UserSelect';
+import { MultiUserSelect } from '@/components/ui/MultiUserSelect';
 import type { InviteUserInput, Department, BulkInviteRow, EmploymentType, UserRole } from '@/types';
 import { cn } from '@/utils/cn';
 
@@ -55,6 +57,8 @@ export const InviteModal: React.FC<InviteModalProps> = ({ isOpen, onClose, depar
     full_name: '',
     email: '',
     department_id: null,
+    manager_id: null,
+    secondary_manager_ids: [],
     role: 'Employee',
     employment_type: 'full_time',
   });
@@ -76,7 +80,15 @@ export const InviteModal: React.FC<InviteModalProps> = ({ isOpen, onClose, depar
 
     inviteUser.mutate(singleForm as InviteUserInput, {
       onSuccess: () => {
-        setSingleForm({ full_name: '', email: '', department_id: null, role: 'Employee', employment_type: 'full_time' });
+        setSingleForm({ 
+          full_name: '', 
+          email: '', 
+          department_id: null, 
+          manager_id: null,
+          secondary_manager_ids: [],
+          role: 'Employee', 
+          employment_type: 'full_time' 
+        });
         setSingleError({});
         onClose();
       },
@@ -289,6 +301,28 @@ export const InviteModal: React.FC<InviteModalProps> = ({ isOpen, onClose, depar
                 </option>
               ))}
             </select>
+          </div>
+
+          <div className="space-y-1.5">
+            <label htmlFor="invite-manager" className="text-sm font-medium text-ink">
+              Primary Manager
+            </label>
+            <UserSelect
+              value={singleForm.manager_id}
+              onChange={(val) => setSingleForm({ ...singleForm, manager_id: val })}
+              placeholder="Select manager..."
+            />
+          </div>
+
+          <div className="space-y-1.5">
+            <label htmlFor="invite-secondary-managers" className="text-sm font-medium text-ink">
+              Secondary Managers
+            </label>
+            <MultiUserSelect
+              value={singleForm.secondary_manager_ids}
+              onChange={(val) => setSingleForm({ ...singleForm, secondary_manager_ids: val })}
+              placeholder="Select secondary managers..."
+            />
           </div>
 
           <div className="space-y-1.5">

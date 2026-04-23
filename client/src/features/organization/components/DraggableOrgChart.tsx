@@ -1,12 +1,15 @@
 // src/features/organization/components/DraggableOrgChart.tsx
 import React, { useState, useEffect } from 'react';
+import { toast } from 'sonner';
 import { 
   DndContext, 
   useSensor, 
   useSensors, 
   PointerSensor, 
+  KeyboardSensor,
   DragOverlay,
-  defaultDropAnimationSideEffects
+  defaultDropAnimationSideEffects,
+  closestCenter
 } from '@dnd-kit/core';
 import type { DragEndEvent, DragStartEvent } from '@dnd-kit/core';
 import { useDraggable, useDroppable } from '@dnd-kit/core';
@@ -122,8 +125,25 @@ export const DraggableOrgChart: React.FC<DraggableOrgChartProps> = ({ treeData, 
   const sensors = useSensors(
     useSensor(PointerSensor, {
       activationConstraint: { distance: 8 },
-    })
+      // Prevent dragging when clicking on interactive elements
+      onActivation: (event) => {
+        const target = event.nativeEvent.target as HTMLElement;
+        if (['INPUT', 'TEXTAREA', 'SELECT', 'BUTTON'].includes(target.tagName)) {
+          return false;
+        }
+        return true;
+      }
+    }),
+    useSensor(KeyboardSensor)
   );
+
+  // TC-018: Add window resize listener to force DND recalculation
+  const [windowSize, setWindowSize] = useState({ width: window.innerWidth, height: window.innerHeight });
+  useEffect(() => {
+    const handleResize = () => setWindowSize({ width: window.innerWidth, height: window.innerHeight });
+    window.addEventListener('resize', handleResize);
+    return () => window.removeEventListener('resize', handleResize);
+  }, []);
 
   const getDescendantIds = (node: OrgTreeNode): Set<string> => {
     const ids = new Set<string>();
@@ -161,11 +181,31 @@ export const DraggableOrgChart: React.FC<DraggableOrgChartProps> = ({ treeData, 
     };
 
     const draggedNode = findNodeInTree(treeData, draggedId);
-    if (!draggedNode) return;
+    if (!draggedNode) {
+      toast.error('Could not find the department being moved. It may have been deleted.');
+      return;
+    }
 
     // Circular hierarchy prevention
     const descendantIds = getDescendantIds(draggedNode);
-    if (descendantIds.has(newParentId)) return;
+    if (descendantIds.has(newParentId)) {
+      toast.error('Circular hierarchy is not allowed.');
+      return;
+    }
+
+    // Verify target parent exists in latest data
+    const parentNode = findNodeInTree(treeData, newParentId);
+    if (!parentNode) {
+      toast.error('The target parent department no longer exists.');
+      return;
+    }
+
+    // TC-023: Auto-expand parent on successful drop
+    setExpandedNodes((prev) => {
+      const next = new Set(prev);
+      next.add(newParentId);
+      return next;
+    });
 
     moveMutation.mutate({
       id: draggedId,
@@ -289,9 +329,11 @@ export const DraggableOrgChart: React.FC<DraggableOrgChartProps> = ({ treeData, 
 
   return (
     <DndContext 
+      key={`dnd-context-${windowSize.width}-${windowSize.height}`}
       sensors={sensors} 
       onDragStart={handleDragStart} 
       onDragEnd={handleDragEnd}
+      collisionDetection={closestCenter}
     >
       <div className="flex h-full bg-white">
         <div className="flex-1 flex flex-col overflow-hidden">

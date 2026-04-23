@@ -22,7 +22,7 @@ export const useMoveDepartment = () => {
 
   return useMutation<void, Error, MoveDepartmentVariables>({
     mutationFn: async ({ id, parent_id }) => {
-      await apiClient.put(`/organization/${id}/move`, { parent_id });
+      await apiClient.put(`/organization/${id}/move`, { parent_id }, { timeout: 10000 });
     },
     // Optimistic update: update cache before API call
     onMutate: async ({ id, parent_id }) => {

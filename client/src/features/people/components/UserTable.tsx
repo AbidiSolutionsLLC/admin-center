@@ -132,6 +132,32 @@ export const UserTable: React.FC<UserTableProps> = ({ users, onEdit, onAssignOrg
           },
         },
         {
+          id: 'manager',
+          header: 'Manager',
+          cell: ({ row }) => {
+            const user = row.original;
+            const primary = user.manager;
+            const secondaryCount = user.secondary_manager_ids?.length || 0;
+
+            if (!primary && secondaryCount === 0) {
+              return <span className="text-xs text-ink-muted">—</span>;
+            }
+
+            return (
+              <div className="flex flex-col">
+                <span className="text-sm text-ink truncate max-w-[120px]">
+                  {primary?.full_name || 'No primary'}
+                </span>
+                {secondaryCount > 0 && (
+                  <span className="text-[10px] text-primary font-medium">
+                    +{secondaryCount} secondary
+                  </span>
+                )}
+              </div>
+            );
+          },
+        },
+        {
           id: 'roles',
           header: 'Role(s)',
           cell: ({ row }) => {
@@ -163,9 +189,9 @@ export const UserTable: React.FC<UserTableProps> = ({ users, onEdit, onAssignOrg
           header: 'State',
           cell: ({ row }) => {
             const state = row.original.lifecycle_state;
-            const config = lifecycleStateConfig[state];
+            const config = lifecycleStateConfig[state] || { label: state || 'Unknown', variant: 'neutral' };
             return (
-              <StatusBadge variant={config.variant}>{config.label}</StatusBadge>
+              <StatusBadge variant={config.variant as any}>{config.label}</StatusBadge>
             );
           },
         },

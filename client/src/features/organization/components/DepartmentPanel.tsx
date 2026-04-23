@@ -125,6 +125,41 @@ export const DepartmentPanel: React.FC<DepartmentPanelProps> = ({
               No manager assigned
             </p>
           )}
+
+          {/* Secondary Managers (Department) */}
+          {department.secondary_managers && department.secondary_managers.length > 0 && (
+            <div className="mt-4 space-y-3">
+              <p className="text-[11px] font-semibold uppercase tracking-wider text-ink-secondary">
+                Secondary Managers
+              </p>
+              {department.secondary_managers.map((m) => (
+                <div key={m._id} className="flex items-center gap-2">
+                  <div className="w-8 h-8 rounded-full bg-primary-light flex items-center justify-center flex-shrink-0 overflow-hidden">
+                    {m.avatar_url ? (
+                      <img
+                        src={m.avatar_url}
+                        className="w-full h-full object-cover"
+                        alt=""
+                        width={32}
+                        height={32}
+                      />
+                    ) : (
+                      <span className="text-[10px] font-bold text-primary">
+                        {m.full_name
+                          .split(' ')
+                          .map((n) => n[0])
+                          .join('')}
+                      </span>
+                    )}
+                  </div>
+                  <div>
+                    <p className="text-sm font-medium text-ink">{m.full_name}</p>
+                    <p className="text-[11px] text-ink-muted">Secondary Manager</p>
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
         </div>
 
         {/* Headcount */}

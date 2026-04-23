@@ -88,7 +88,11 @@ export const LifecycleStateSelector: React.FC<LifecycleStateSelectorProps> = ({
     return VALID_TRANSITIONS[currentState] ?? [];
   }, [currentState]);
 
-  const currentConfig = lifecycleStateConfig[currentState];
+  const currentConfig = lifecycleStateConfig[currentState] || { 
+    label: currentState || 'Unknown', 
+    variant: 'neutral', 
+    description: 'The current lifecycle state of the user' 
+  };
 
   if (validNextStates.length === 0) {
     return (

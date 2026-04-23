@@ -47,7 +47,15 @@ const DEPARTMENT_FILTER_OPTIONS: { value: string; label: string }[] = [
  */
 export default function TeamsPage() {
   // -- Server data --
-  const { data: teams, isLoading, isError, refetch } = useTeams();
+  const [filters, setFilters] = useState<TeamsFilters>({
+    search: '',
+    department_id: '',
+    status: 'active',
+    without_lead: false,
+  });
+
+  // -- Server data --
+  const { data: teams = [], isLoading, isError, refetch } = useTeams(filters.status || 'active');
   const { data: departments } = useDepartments();
 
   const createMutation = useCreateTeam();
@@ -63,14 +71,6 @@ export default function TeamsPage() {
 
   // -- Members panel state --
   const [teamWithMembersOpen, setTeamWithMembersOpen] = useState<Team | null>(null);
-
-  // -- Filters --
-  const [filters, setFilters] = useState<TeamsFilters>({
-    search: '',
-    department_id: '',
-    status: 'active',
-    without_lead: false,
-  });
 
   // -- Derived: update department filter options --
   const departmentOptions = useMemo(() => {

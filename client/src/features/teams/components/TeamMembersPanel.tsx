@@ -6,6 +6,7 @@ import { ConfirmDialog } from '@/components/ui/ConfirmDialog';
 import { useTeamMembers } from '../hooks/useTeamMembers';
 import { useAddTeamMember } from '../hooks/useAddTeamMember';
 import { useRemoveTeamMember } from '../hooks/useRemoveTeamMember';
+import { useRemoveBulkTeamMembers } from '../hooks/useRemoveBulkTeamMembers';
 import { useUsers } from '@/features/people/hooks/useUsers';
 import { TableSkeleton } from '@/components/ui/TableSkeleton';
 import { EmptyState } from '@/components/ui/EmptyState';
@@ -46,10 +47,13 @@ export const TeamMembersPanel: React.FC<TeamMembersPanelProps> = ({
 
   const addMemberMutation = useAddTeamMember();
   const removeMemberMutation = useRemoveTeamMember();
+  const bulkRemoveMutation = useRemoveBulkTeamMembers();
 
   const [searchQuery, setSearchQuery] = useState('');
   const [selectedUserId, setSelectedUserId] = useState<string>('');
   const [memberToRemove, setMemberToRemove] = useState<TeamMember | null>(null);
+  const [selectedMemberIds, setSelectedMemberIds] = useState<Set<string>>(new Set());
+  const [isBulkConfirmOpen, setIsBulkConfirmOpen] = useState(false);
 
   // Filter out users who are already members of this team
   const availableUsers = useMemo(() => {
@@ -94,6 +98,39 @@ export const TeamMembersPanel: React.FC<TeamMembersPanelProps> = ({
       {
         onSuccess: () => setMemberToRemove(null),
         onError: () => setMemberToRemove(null),
+      }
+    );
+  };
+
+  const toggleSelectMember = (id: string) => {
+    const next = new Set(selectedMemberIds);
+    if (next.has(id)) next.delete(id);
+    else next.add(id);
+    setSelectedMemberIds(next);
+  };
+
+  const toggleSelectAll = () => {
+    if (!members) return;
+    if (selectedMemberIds.size === members.length) {
+      setSelectedMemberIds(new Set());
+    } else {
+      setSelectedMemberIds(new Set(members.map((m) => m._id)));
+    }
+  };
+
+  const handleBulkRemove = () => {
+    if (selectedMemberIds.size === 0) return;
+    setIsBulkConfirmOpen(true);
+  };
+
+  const handleConfirmBulkRemove = () => {
+    bulkRemoveMutation.mutate(
+      { teamId: team._id, memberIds: Array.from(selectedMemberIds) },
+      {
+        onSuccess: () => {
+          setSelectedMemberIds(new Set());
+          setIsBulkConfirmOpen(false);
+        },
       }
     );
   };
@@ -166,9 +203,30 @@ export const TeamMembersPanel: React.FC<TeamMembersPanelProps> = ({
 
           {/* Members List */}
           <div className="space-y-3">
-            <h3 className="text-sm font-semibold text-ink">
-              Team Members ({members?.length ?? 0})
-            </h3>
+            <div className="flex items-center justify-between">
+              <h3 className="text-sm font-semibold text-ink">
+                Team Members ({members?.length ?? 0})
+              </h3>
+              {members && members.length > 0 && (
+                <div className="flex items-center gap-3">
+                  {selectedMemberIds.size > 0 && (
+                    <button
+                      onClick={handleBulkRemove}
+                      className="text-xs font-medium text-red-600 hover:text-red-700 flex items-center gap-1"
+                    >
+                      <Trash2 className="w-3 h-3" />
+                      Remove Selected ({selectedMemberIds.size})
+                    </button>
+                  )}
+                  <button
+                    onClick={toggleSelectAll}
+                    className="text-xs font-medium text-primary hover:underline"
+                  >
+                    {selectedMemberIds.size === members.length ? 'Deselect All' : 'Select All'}
+                  </button>
+                </div>
+              )}
+            </div>
 
             {isLoadingMembers ? (
               <TableSkeleton rows={4} columns={4} />
@@ -193,9 +251,20 @@ export const TeamMembersPanel: React.FC<TeamMembersPanelProps> = ({
                   return (
                     <div
                       key={member._id}
-                      className="flex items-center justify-between p-3 bg-white border border-line rounded-lg hover:bg-surface-alt transition-colors"
+                      className={cn(
+                        "flex items-center justify-between p-3 bg-white border rounded-lg transition-colors group",
+                        selectedMemberIds.has(member._id) ? "border-primary bg-primary-light/10" : "border-line hover:bg-surface-alt"
+                      )}
+                      onClick={() => toggleSelectMember(member._id)}
                     >
                       <div className="flex items-center gap-3 flex-1 min-w-0">
+                        <input
+                          type="checkbox"
+                          checked={selectedMemberIds.has(member._id)}
+                          onChange={() => {}} // Handled by parent div
+                          className="w-4 h-4 rounded border-line text-primary focus:ring-primary"
+                          onClick={(e) => e.stopPropagation()}
+                        />
                         <div className="w-9 h-9 rounded-full bg-primary-light flex items-center justify-center flex-shrink-0 overflow-hidden">
                           {user.avatar_url ? (
                             <img
@@ -228,7 +297,10 @@ export const TeamMembersPanel: React.FC<TeamMembersPanelProps> = ({
                           {member.role}
                         </span>
                         <button
-                          onClick={() => handleRemoveMember(member)}
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            handleRemoveMember(member);
+                          }}
                           className="h-7 w-7 flex items-center justify-center rounded-md text-ink-secondary hover:text-red-600 hover:bg-red-50 transition-colors"
                           aria-label={`Remove ${user.full_name}`}
                           title="Remove Member"
@@ -256,6 +328,18 @@ export const TeamMembersPanel: React.FC<TeamMembersPanelProps> = ({
         cancelLabel="Cancel"
         variant="danger"
         isLoading={removeMemberMutation.isPending}
+      />
+      {/* Bulk Remove Confirm Dialog */}
+      <ConfirmDialog
+        isOpen={isBulkConfirmOpen}
+        onClose={() => setIsBulkConfirmOpen(false)}
+        onConfirm={handleConfirmBulkRemove}
+        title="Remove multiple members?"
+        description={`Are you sure you want to remove ${selectedMemberIds.size} members from this team?`}
+        confirmLabel="Remove Members"
+        cancelLabel="Cancel"
+        variant="danger"
+        isLoading={bulkRemoveMutation.isPending}
       />
     </>
   );

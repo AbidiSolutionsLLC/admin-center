@@ -4,6 +4,7 @@ import { useForm, Controller } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { z } from 'zod';
 import { UserSelect } from '@/components/ui/UserSelect';
+import { MultiUserSelect } from '@/components/ui/MultiUserSelect';
 import { DynamicCustomFields } from '@/features/data-fields/components/DynamicCustomFields';
 import { useCustomFields } from '@/features/data-fields/hooks/useCustomFields';
 import type { User, EmploymentType, Department, CustomField, Location, UserRole } from '@/types';
@@ -24,6 +25,7 @@ const schema = z.object({
   department_id: z.string().optional().nullable(),
   team_id: z.string().optional().nullable(),
   manager_id: z.string().optional().nullable(),
+  secondary_manager_ids: z.array(z.string()).optional().default([]),
   role: z.enum(['Super Admin', 'Admin', 'HR', 'Manager', 'Employee', 'Technician']),
   employment_type: z.enum(['full_time', 'part_time', 'contractor', 'intern']),
   hire_date: z.string().optional().nullable(),
@@ -86,6 +88,7 @@ export const UserForm: React.FC<UserFormProps> = ({
       department_id: typeof initialData?.department_id === 'object' ? (initialData.department_id as any)?._id : initialData?.department_id ?? '',
       team_id: typeof initialData?.team_id === 'object' ? (initialData.team_id as any)?._id : initialData?.team_id ?? '',
       manager_id: typeof initialData?.manager_id === 'object' ? (initialData.manager_id as any)?._id : initialData?.manager_id ?? '',
+      secondary_manager_ids: initialData?.secondary_manager_ids ?? [],
       role: initialData?.role ?? 'Employee',
       employment_type: initialData?.employment_type ?? 'full_time',
       hire_date: initialData?.hire_date ?? '',
@@ -109,6 +112,7 @@ export const UserForm: React.FC<UserFormProps> = ({
         department_id: typeof initialData.department_id === 'object' ? (initialData.department_id as any)?._id : initialData.department_id ?? '',
         team_id: typeof initialData.team_id === 'object' ? (initialData.team_id as any)?._id : initialData.team_id ?? '',
         manager_id: typeof initialData.manager_id === 'object' ? (initialData.manager_id as any)?._id : initialData.manager_id ?? '',
+        secondary_manager_ids: initialData.secondary_manager_ids ?? [],
         role: initialData.role ?? 'Employee',
         employment_type: initialData.employment_type ?? 'full_time',
         hire_date: initialData.hire_date ?? '',
@@ -279,6 +283,32 @@ export const UserForm: React.FC<UserFormProps> = ({
         </p>
         {errors.manager_id && (
           <p className="text-xs text-red-500">{errors.manager_id.message}</p>
+        )}
+      </div>
+
+      {/* Secondary Managers */}
+      <div className="space-y-1.5">
+        <label htmlFor="user-secondary-managers" className="text-sm font-medium text-ink">
+          Secondary Managers
+        </label>
+        <Controller
+          name="secondary_manager_ids"
+          control={control}
+          render={({ field }) => (
+            <MultiUserSelect
+              value={field.value}
+              onChange={field.onChange}
+              disabled={isSubmitting}
+              hasError={!!errors.secondary_manager_ids}
+              placeholder="Select secondary managers..."
+            />
+          )}
+        />
+        <p className="text-[11px] text-ink-muted">
+          Assign one or more secondary managers for matrix reporting.
+        </p>
+        {errors.secondary_manager_ids && (
+          <p className="text-xs text-red-500">{errors.secondary_manager_ids.message}</p>
         )}
       </div>
 

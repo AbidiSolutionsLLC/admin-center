@@ -71,13 +71,24 @@ async function enrichTeams(
 
 /**
  * GET /teams
- * Returns all active teams for the requesting company.
+ * Returns teams for the requesting company.
+ * Query: ?status=active|inactive|all
  */
 export const getTeams = asyncHandler(async (req: Request, res: Response) => {
+  const { status } = req.query;
+  
   const filter: TeamFilter = {
     company_id: req.user.company_id,
-    is_active: true,
   };
+
+  if (status === 'inactive') {
+    filter.is_active = false;
+  } else if (status === 'all') {
+    // No is_active filter
+  } else {
+    // Default to active
+    filter.is_active = true;
+  }
 
   const teams = await Team.find(filter)
     .populate('team_lead_id', 'full_name avatar_url email')
@@ -479,7 +490,7 @@ export const updateTeamMember = asyncHandler(async (req: Request, res: Response)
 
 /**
  * DELETE /teams/:id/members/:memberId
- * Removes a user from a team.
+ * Removes a user from a team and clears their primary team association.
  */
 export const removeTeamMember = asyncHandler(async (req: Request, res: Response) => {
   const teamFilter: TeamFilter = {
@@ -507,9 +518,18 @@ export const removeTeamMember = asyncHandler(async (req: Request, res: Response)
   }
 
   const beforeState = member.toObject();
-  const user = await User.findById(member.user_id);
+  const userId = member.user_id;
 
+  // 1. Remove membership record
   await member.deleteOne();
+
+  // 2. Synchronize User.team_id (clear if it matches this team)
+  await User.findOneAndUpdate(
+    { _id: userId, team_id: team._id },
+    { $set: { team_id: null } }
+  );
+
+  const user = await User.findById(userId);
 
   await auditLogger.log({
     req,
@@ -519,6 +539,62 @@ export const removeTeamMember = asyncHandler(async (req: Request, res: Response)
     object_id: member._id.toString(),
     object_label: `${user?.full_name ?? 'Unknown'} removed from ${team.name}`,
     before_state: beforeState,
+    after_state: null,
+  });
+
+  res.status(200).json({ success: true, data: {} });
+});
+
+/**
+ * POST /teams/:id/members/bulk-remove
+ * Removes multiple users from a team at once.
+ */
+export const removeBulkTeamMembers = asyncHandler(async (req: Request, res: Response) => {
+  const { memberIds } = z.object({
+    memberIds: z.array(z.string()).min(1),
+  }).parse(req.body);
+
+  const teamFilter: TeamFilter = {
+    _id: req.params.id,
+    company_id: req.user.company_id,
+    is_active: true,
+  };
+
+  const team = await Team.findOne(teamFilter);
+  if (!team) {
+    throw new AppError('Team not found', 404, 'NOT_FOUND');
+  }
+
+  // Get members to fetch user_ids for sync
+  const members = await TeamMember.find({
+    _id: { $in: memberIds },
+    team_id: team._id,
+    company_id: req.user.company_id,
+  });
+
+  const userIds = members.map(m => m.user_id);
+
+  // 1. Remove membership records
+  await TeamMember.deleteMany({
+    _id: { $in: memberIds },
+    team_id: team._id,
+    company_id: req.user.company_id,
+  });
+
+  // 2. Synchronize User.team_id for all removed members
+  await User.updateMany(
+    { _id: { $in: userIds }, team_id: team._id },
+    { $set: { team_id: null } }
+  );
+
+  await auditLogger.log({
+    req,
+    action: 'team.bulk_members_removed',
+    module: 'organization',
+    object_type: 'Team',
+    object_id: team._id.toString(),
+    object_label: `Removed ${memberIds.length} members from ${team.name}`,
+    before_state: { member_ids: memberIds },
     after_state: null,
   });
 

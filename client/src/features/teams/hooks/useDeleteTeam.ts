@@ -22,6 +22,11 @@ export const useDeleteTeam = () => {
     },
     onError: (error) => {
       console.error('Team archive failed', error);
+      if (axios.isAxiosError(error) && error.response?.data?.message) {
+        toast.error(error.response.data.message);
+      } else {
+        toast.error('Failed to archive team. Please try again.');
+      }
     },
   });
 };

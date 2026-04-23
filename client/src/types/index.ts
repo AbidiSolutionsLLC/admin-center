@@ -8,8 +8,9 @@ export interface Department {
   type: 'business_unit' | 'division' | 'department' | 'cost_center';
   parent_id: string | null;
   primary_manager_id: string | null;
-  secondary_manager_id?: string | null;
+  secondary_manager_ids?: string[];
   primary_manager?: { _id: string; full_name: string; avatar_url?: string };
+  secondary_managers?: Array<{ _id: string; full_name: string; avatar_url?: string }>;
   custom_fields: Record<string, unknown>;
   is_active: boolean;
   created_at: string;
@@ -25,7 +26,7 @@ export interface CreateDepartmentInput {
   type: 'business_unit' | 'division' | 'department' | 'cost_center';
   parent_id?: string | null;
   primary_manager_id?: string | null;
-  secondary_manager_id?: string | null;
+  secondary_manager_ids?: string[];
 }
 
 export interface UpdateDepartmentInput extends Partial<CreateDepartmentInput> {}
@@ -332,6 +333,7 @@ export interface InviteUserInput {
   department_id?: string | null;
   team_id?: string | null;
   manager_id?: string | null;
+  secondary_manager_ids?: string[];
   role?: UserRole;
   employment_type?: EmploymentType;
   hire_date?: string | null;
@@ -346,6 +348,7 @@ export interface UpdateUserInput {
   department_id?: string | null;
   team_id?: string | null;
   manager_id?: string | null;
+  secondary_manager_ids?: string[];
   role?: UserRole;
   employment_type?: EmploymentType;
   hire_date?: string | null;
@@ -365,6 +368,7 @@ export interface BulkInviteRow {
   department_id?: string;
   team_id?: string;
   manager_id?: string;
+  secondary_manager_ids?: string[];
   role?: UserRole;
   employment_type?: EmploymentType;
   hire_date?: string;

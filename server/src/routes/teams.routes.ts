@@ -11,6 +11,7 @@ import {
   addTeamMember,
   updateTeamMember,
   removeTeamMember,
+  removeBulkTeamMembers,
 } from '../controllers/teams.controller';
 
 const router = Router();
@@ -32,5 +33,6 @@ router.get('/:id/members', getTeamMembers);
 router.post('/:id/members', requireRole(TEAM_MANAGERS), addTeamMember);
 router.put('/:id/members/:memberId', requireRole(TEAM_MANAGERS), updateTeamMember);
 router.delete('/:id/members/:memberId', requireRole(TEAM_MANAGERS), removeTeamMember);
+router.post('/:id/members/bulk-remove', requireRole(TEAM_MANAGERS), removeBulkTeamMembers);
 
 export default router;
