@@ -119,8 +119,8 @@ export const login = asyncHandler(async (req: Request, res: Response) => {
     throw new AppError('Invalid credentials', 401, 'UNAUTHORIZED');
   }
 
-  if (user.lifecycle_state === 'terminated' || user.lifecycle_state === 'archived') {
-    throw new AppError('Account is terminated or archived', 403, 'FORBIDDEN');
+  if (user.lifecycle_state === 'deactivated' || user.lifecycle_state === 'archived') {
+    throw new AppError('Account is deactivated or archived', 403, 'FORBIDDEN');
   }
 
   // Fetch actual user role from RBAC models
@@ -217,8 +217,8 @@ export const refresh = asyncHandler(async (req: Request, res: Response) => {
     throw new AppError('Token was invalidated globally', 401, 'INVALID_TOKEN');
   }
 
-  if (user.lifecycle_state === 'terminated' || user.lifecycle_state === 'archived') {
-    throw new AppError('Account is terminated or archived', 403, 'FORBIDDEN');
+  if (user.lifecycle_state === 'deactivated' || user.lifecycle_state === 'archived') {
+    throw new AppError('Account is deactivated or archived', 403, 'FORBIDDEN');
   }
 
   // Issue new access token with actual role

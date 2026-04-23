@@ -423,7 +423,7 @@ export default function CompanySettingsPage() {
 
       <RequiredUserFieldsSection />
 
-      {/* <DomainEnforcementSection /> */}
+      <DomainEnforcementSection />
     </div>
   );
 }

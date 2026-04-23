@@ -309,7 +309,7 @@ export interface UpdateTeamMemberInput {
 // People / Users
 // ─────────────────────────────────────────────────────────────────────────────
 
-export type LifecycleState = 'invited' | 'onboarding' | 'active' | 'probation' | 'on_leave' | 'terminated' | 'archived';
+export type LifecycleState = 'pending' | 'active' | 'deactivated' | 'archived';
 export type EmploymentType = 'full_time' | 'part_time' | 'contractor' | 'intern';
 export type UserRole = 'Super Admin' | 'Admin' | 'HR' | 'Manager' | 'Employee' | 'Technician';
 
@@ -379,6 +379,7 @@ export interface UpdateUserInput {
 
 export interface UpdateLifecycleInput {
   lifecycle_state: LifecycleState;
+  reason?: string;
 }
 
 export interface BulkInviteRow {

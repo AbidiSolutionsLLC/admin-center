@@ -75,7 +75,17 @@ const UpdateUserSchema = z.object({
 });
 
 const UpdateLifecycleSchema = z.object({
-  lifecycle_state: z.enum(['invited', 'onboarding', 'active', 'probation', 'on_leave', 'terminated', 'archived']),
+  lifecycle_state: z.enum(['pending', 'active', 'deactivated', 'archived']),
+  reason: z.string().optional(),
+}).refine((data) => {
+  // Require reason for deactivation and archiving
+  if (data.lifecycle_state === 'deactivated' || data.lifecycle_state === 'archived') {
+    return data.reason && data.reason.trim().length > 0;
+  }
+  return true;
+}, {
+  message: "Reason is required when deactivating or archiving a user",
+  path: ["reason"],
 });
 
 const BulkInviteRowSchema = z.object({
@@ -326,7 +336,7 @@ async function runLifecycleAutomations(
   const originalUserFirstName = originalUserFullName.split(' ')[0];
 
   // 1. Target-Specific Side Effects (Revocation, Anonymization, etc.)
-  if (targetState === 'terminated') {
+  if (targetState === 'archived') {
     user.refresh_token_hash = undefined;
     user.is_active = false;
     await user.save();
@@ -580,7 +590,7 @@ export const getUsers = asyncHandler(async (req: Request, res: Response) => {
 
   if (lifecycle_state) {
     // Validate lifecycle_state is a valid value
-    const VALID_LIFECYCLE_STATES: LifecycleState[] = ['invited', 'onboarding', 'active', 'probation', 'on_leave', 'terminated', 'archived'];
+    const VALID_LIFECYCLE_STATES: LifecycleState[] = ['pending', 'active', 'deactivated', 'archived'];
     if (VALID_LIFECYCLE_STATES.includes(lifecycle_state as LifecycleState)) {
       filter.lifecycle_state = lifecycle_state as LifecycleState;
     }
@@ -652,7 +662,7 @@ export const getUserById = asyncHandler(async (req: Request, res: Response) => {
  * POST /people/invite
  * Invites a new user to the company.
  * - Generates employee_id automatically via User model hook
- * - Creates user with 'invited' lifecycle state
+ * - Creates user with 'pending' lifecycle state
  * - Sends welcome email via emailService
  * - Produces audit event
  */
@@ -733,7 +743,7 @@ export const inviteUser = asyncHandler(async (req: Request, res: Response) => {
     company_id: req.user.company_id as any, // Needed due to Mongoose Types.ObjectId vs string mismatch
     password_hash,
     role: input.role || 'Employee', // Default to 'Employee' if not provided
-    lifecycle_state: 'invited',
+        lifecycle_state: 'pending',
     is_active: false, // User is not active until they complete onboarding
     phone: input.phone ?? undefined,
     // Normalize empty strings → undefined
@@ -953,8 +963,12 @@ export const updateUserLifecycle = asyncHandler(async (req: Request, res: Respon
     user.is_active = true;
   }
 
-  if (targetState === 'terminated' && !user.termination_date) {
-    user.termination_date = new Date();
+  if (targetState === 'deactivated') {
+    user.is_active = false; // Deactivate user account
+  }
+
+  if (targetState === 'archived') {
+    user.is_active = false; // Archived users cannot access
   }
 
   if (targetState === 'archived') {
@@ -994,6 +1008,63 @@ export const updateUserLifecycle = asyncHandler(async (req: Request, res: Respon
     before_state: beforeState,
     after_state: user.toObject(),
   });
+
+  // ── Send deactivation notifications ──────────────────────────────────────
+  if (targetState === 'deactivated') {
+    try {
+      const company = await Company.findById(req.user.company_id);
+
+      // Send email to the user
+      await sendEmail({
+        to: user.email,
+        subject: `${company?.name || 'Your Company'} - Account Deactivated`,
+        html: `
+          <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;">
+            <h2>Account Deactivated</h2>
+            <p>Dear ${user.full_name},</p>
+            <p>Your account has been deactivated by an administrator.</p>
+            <p><strong>Reason:</strong> ${input.reason}</p>
+            <p>If you believe this was done in error, please contact support.</p>
+            <p>Best regards,<br>${company?.name || 'Your Company'} Team</p>
+          </div>
+        `,
+      });
+
+      // Send email to the user's manager (if they have one)
+      if (user.manager_id) {
+        const manager = await User.findById(user.manager_id);
+        if (manager) {
+          await sendEmail({
+            to: manager.email,
+            subject: `${company?.name || 'Your Company'} - Employee Account Deactivated`,
+            html: `
+              <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;">
+                <h2>Employee Account Deactivated</h2>
+                <p>Dear ${manager.full_name},</p>
+                <p>This is to inform you that ${user.full_name}'s (${user.email}) account has been deactivated.</p>
+                <p><strong>Reason:</strong> ${input.reason}</p>
+                <p>Please contact HR or support if you need additional information.</p>
+                <p>Best regards,<br>${company?.name || 'Your Company'} Team</p>
+              </div>
+            `,
+          });
+        }
+      }
+    } catch (emailError) {
+      console.error('[Deactivation Email Error]', emailError);
+      // Log but don't fail the deactivation
+      await auditLogger.log({
+        req,
+        action: 'user.lifecycle_email_error',
+        module: 'people',
+        object_type: 'User',
+        object_id: user._id.toString(),
+        object_label: user.full_name,
+        before_state: { transition: `${currentState}_to_${targetState}` },
+        after_state: { error: emailError instanceof Error ? emailError.message : 'Email send failed' },
+      });
+    }
+  }
 
   // ── Workflow Engine: Fire lifecycle event to matching workflows ─────────
   // Fire-and-forget: workflows execute asynchronously, don't block the response
@@ -1089,7 +1160,7 @@ export const bulkInviteUsers = asyncHandler(async (req: Request, res: Response) 
         company_id: req.user.company_id as any,
         password_hash,
         role: validatedRow.role || 'Employee', // Default to 'Employee' if not provided
-        lifecycle_state: 'invited',
+    lifecycle_state: 'pending',
         is_active: false,
         department_id: validatedRow.department_id || undefined,
         team_id: validatedRow.team_id || undefined,
@@ -1235,7 +1306,7 @@ export const deleteUser = asyncHandler(async (req: Request, res: Response) => {
   const targetState: LifecycleState = 'archived';
 
   // Check if user can be archived from current state
-  // Users can only be archived from 'invited' or 'terminated' states
+  // Users can be archived from any state according to the lifecycle rules
   if (!isValidTransition(currentState, targetState)) {
     throw new AppError(
       `Cannot archive user in '${currentState}' state. Valid transitions: ${getTransitionErrorMessage(currentState, targetState)}`,
@@ -1269,7 +1340,17 @@ export const deleteUser = asyncHandler(async (req: Request, res: Response) => {
 
 const BulkLifecycleSchema = z.object({
   user_ids: z.array(z.string()).min(1, 'At least one user ID is required').max(500),
-  lifecycle_state: z.enum(['invited', 'onboarding', 'active', 'probation', 'on_leave', 'terminated', 'archived']),
+  lifecycle_state: z.enum(['pending', 'active', 'deactivated', 'archived']),
+  reason: z.string().optional(),
+}).refine((data) => {
+  // Require reason for deactivation and archiving
+  if (data.lifecycle_state === 'deactivated' || data.lifecycle_state === 'archived') {
+    return data.reason && data.reason.trim().length > 0;
+  }
+  return true;
+}, {
+  message: "Reason is required when deactivating or archiving users",
+  path: ["reason"],
 });
 
 const BulkAssignRoleSchema = z.object({
@@ -1319,7 +1400,74 @@ export const bulkUpdateLifecycle = asyncHandler(async (req: Request, res: Respon
 
     const beforeState = user.toObject();
     user.lifecycle_state = targetState;
+
+    // Handle specific transitions
+    if (targetState === 'deactivated') {
+      user.is_active = false;
+    }
+
+    if (targetState === 'archived') {
+      user.is_active = false;
+    }
+
     await user.save();
+
+    // Send deactivation notifications if applicable
+    if (targetState === 'deactivated' && input.reason) {
+      try {
+        const company = await Company.findById(req.user.company_id);
+
+        // Send email to the user
+        await sendEmail({
+          to: user.email,
+          subject: `${company?.name || 'Your Company'} - Account Deactivated`,
+          html: `
+            <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;">
+              <h2>Account Deactivated</h2>
+              <p>Dear ${user.full_name},</p>
+              <p>Your account has been deactivated by an administrator.</p>
+              <p><strong>Reason:</strong> ${input.reason}</p>
+              <p>If you believe this was done in error, please contact support.</p>
+              <p>Best regards,<br>${company?.name || 'Your Company'} Team</p>
+            </div>
+          `,
+        });
+
+        // Send email to the user's manager (if they have one)
+        if (user.manager_id) {
+          const manager = await User.findById(user.manager_id);
+          if (manager) {
+            await sendEmail({
+              to: manager.email,
+              subject: `${company?.name || 'Your Company'} - Employee Account Deactivated`,
+              html: `
+                <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;">
+                  <h2>Employee Account Deactivated</h2>
+                  <p>Dear ${manager.full_name},</p>
+                  <p>This is to inform you that ${user.full_name}'s (${user.email}) account has been deactivated.</p>
+                  <p><strong>Reason:</strong> ${input.reason}</p>
+                  <p>Please contact HR or support if you need additional information.</p>
+                  <p>Best regards,<br>${company?.name || 'Your Company'} Team</p>
+                </div>
+              `,
+            });
+          }
+        }
+      } catch (emailError) {
+        console.error('[Bulk Deactivation Email Error]', emailError);
+        // Log but don't fail the bulk operation
+        await auditLogger.log({
+          req,
+          action: 'user.lifecycle_email_error',
+          module: 'people',
+          object_type: 'User',
+          object_id: user._id.toString(),
+          object_label: user.full_name,
+          before_state: { bulk_operation: true },
+          after_state: { error: emailError instanceof Error ? emailError.message : 'Email send failed' },
+        });
+      }
+    }
 
     try {
       await runLifecycleAutomations(user, currentState, targetState, req);
@@ -1497,7 +1645,7 @@ export const exportUsers = asyncHandler(async (req: Request, res: Response) => {
   };
 
   if (lifecycle_state) {
-    const VALID_LIFECYCLE_STATES: LifecycleState[] = ['invited', 'onboarding', 'active', 'probation', 'on_leave', 'terminated', 'archived'];
+    const VALID_LIFECYCLE_STATES: LifecycleState[] = ['pending', 'active', 'deactivated', 'archived'];
     if (VALID_LIFECYCLE_STATES.includes(lifecycle_state as LifecycleState)) {
       filter.lifecycle_state = lifecycle_state as LifecycleState;
     }
@@ -1608,7 +1756,7 @@ export const resendInvite = asyncHandler(async (req: Request, res: Response) => 
     throw new AppError('User not found', 404, 'NOT_FOUND');
   }
 
-  if (user.lifecycle_state !== 'invited') {
+  if (user.lifecycle_state !== 'pending') {
     throw new AppError('Only users in "invited" state can have their invitation resent', 400, 'BAD_REQUEST');
   }
 

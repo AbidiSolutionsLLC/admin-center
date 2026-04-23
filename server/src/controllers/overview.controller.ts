@@ -31,7 +31,7 @@ export const getDashboardStats = asyncHandler(async (req: Request, res: Response
   ] = await Promise.all([
     User.countDocuments({ company_id: companyId }),
     User.countDocuments({ company_id: companyId, lifecycle_state: 'active', is_active: true }),
-    User.countDocuments({ company_id: companyId, lifecycle_state: 'invited' }),
+    User.countDocuments({ company_id: companyId, lifecycle_state: 'pending' }),
     Department.countDocuments({ company_id: companyId, is_active: true }),
     App.countDocuments({ company_id: companyId }),
     App.countDocuments({ company_id: companyId, is_active: true, status: 'active' }),

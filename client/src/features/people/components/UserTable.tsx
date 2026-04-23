@@ -23,12 +23,9 @@ const lifecycleStateConfig: Record<
   LifecycleState,
   { label: string; variant: 'success' | 'warning' | 'error' | 'info' | 'neutral' | 'primary' | 'accent' }
 > = {
-  invited: { label: 'Pending', variant: 'info' },
-  onboarding: { label: 'Onboarding', variant: 'primary' },
+  pending: { label: 'Pending', variant: 'info' },
   active: { label: 'Active', variant: 'success' },
-  probation: { label: 'Probation', variant: 'warning' },
-  on_leave: { label: 'On Leave', variant: 'warning' },
-  terminated: { label: 'Terminated', variant: 'error' },
+  deactivated: { label: 'Deactivated', variant: 'error' },
   archived: { label: 'Archived', variant: 'neutral' },
 };
 
@@ -166,7 +163,7 @@ export const UserTable: React.FC<UserTableProps> = ({ users, onEdit, onAssignOrg
             const state = row.original.lifecycle_state;
             const config = lifecycleStateConfig[state];
             return (
-              <StatusBadge variant={config.variant}>{config.label}</StatusBadge>
+              <StatusBadge variant={config?.variant}>{config?.label}</StatusBadge>
             );
           },
         },

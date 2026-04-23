@@ -29,12 +29,9 @@ import { Checkbox } from '@/components/ui/checkbox';
 
 const LIFECYCLE_STATE_OPTIONS: { value: LifecycleState | ''; label: string }[] = [
   { value: '', label: 'All States' },
-  { value: 'invited', label: 'Pending' },
-  { value: 'onboarding', label: 'Onboarding' },
+  { value: 'pending', label: 'Pending' },
   { value: 'active', label: 'Active' },
-  { value: 'probation', label: 'Probation' },
-  { value: 'on_leave', label: 'On Leave' },
-  { value: 'terminated', label: 'Terminated' },
+  { value: 'deactivated', label: 'Deactivated' },
   { value: 'archived', label: 'Archived' },
 ];
 
@@ -160,6 +157,7 @@ export default function PeoplePage() {
   // ── Bulk action modal targets ──────────────────────────────────────
   const [bulkAction, setBulkAction] = useState<'lifecycle' | 'role' | null>(null);
   const [bulkLifecycleTarget, setBulkLifecycleTarget] = useState<LifecycleState | ''>('');
+  const [bulkLifecycleReason, setBulkLifecycleReason] = useState('');
   const [bulkRoleTarget, setBulkRoleTarget] = useState('');
 
   // ── Handlers ─────────────────────────────────────────────────────────
@@ -185,16 +183,21 @@ export default function PeoplePage() {
   const handleBulkLifecycle = useCallback(() => {
     if (!bulkLifecycleTarget || selectedIds.size === 0) return;
     bulkLifecycle.mutate(
-      { user_ids: Array.from(selectedIds), lifecycle_state: bulkLifecycleTarget },
+      {
+        user_ids: Array.from(selectedIds),
+        lifecycle_state: bulkLifecycleTarget,
+        reason: (bulkLifecycleTarget === 'deactivated' || bulkLifecycleTarget === 'archived') ? bulkLifecycleReason : undefined
+      },
       {
         onSuccess: () => {
           setBulkAction(null);
           setBulkLifecycleTarget('');
+          setBulkLifecycleReason('');
           clearSelection();
         },
       }
     );
-  }, [bulkLifecycleTarget, selectedIds, bulkLifecycle, clearSelection]);
+  }, [bulkLifecycleTarget, bulkLifecycleReason, selectedIds, bulkLifecycle, clearSelection]);
 
   const handleBulkRole = useCallback(() => {
     if (!bulkRoleTarget || selectedIds.size === 0) return;
@@ -405,11 +408,13 @@ export default function PeoplePage() {
       {bulkAction === 'lifecycle' && (
         <BulkLifecycleModal
           isOpen={bulkAction === 'lifecycle'}
-          onClose={() => { setBulkAction(null); setBulkLifecycleTarget(''); }}
+          onClose={() => { setBulkAction(null); setBulkLifecycleTarget(''); setBulkLifecycleReason(''); }}
           selectedCount={selectedIds.size}
           onSubmit={handleBulkLifecycle}
           targetState={bulkLifecycleTarget}
           onTargetChange={setBulkLifecycleTarget}
+          reason={bulkLifecycleReason}
+          onReasonChange={setBulkLifecycleReason}
           isPending={bulkLifecycle.isPending}
         />
       )}
@@ -759,9 +764,9 @@ function LifecycleChangeModal({ user, isOpen, onClose }: LifecycleChangeModalPro
   const updateLifecycle = useUpdateLifecycle(user._id);
 
   const handleTransition = useCallback(
-    (nextState: LifecycleState) => {
+    (nextState: LifecycleState, reason?: string) => {
       updateLifecycle.mutate(
-        { lifecycle_state: nextState },
+        { lifecycle_state: nextState, reason },
         {
           onSuccess: () => {
             onClose();
@@ -854,10 +859,12 @@ interface BulkLifecycleModalProps {
   onSubmit: () => void;
   targetState: LifecycleState | '';
   onTargetChange: (state: LifecycleState | '') => void;
+  reason: string;
+  onReasonChange: (reason: string) => void;
   isPending: boolean;
 }
 
-function BulkLifecycleModal({ isOpen, onClose, selectedCount, onSubmit, targetState, onTargetChange, isPending }: BulkLifecycleModalProps) {
+function BulkLifecycleModal({ isOpen, onClose, selectedCount, onSubmit, targetState, onTargetChange, reason, onReasonChange, isPending }: BulkLifecycleModalProps) {
   return (
     <Modal
       isOpen={isOpen}
@@ -872,7 +879,7 @@ function BulkLifecycleModal({ isOpen, onClose, selectedCount, onSubmit, targetSt
           </button>
           <button
             onClick={onSubmit}
-            disabled={isPending || !targetState}
+            disabled={isPending || !targetState || ((targetState === 'deactivated' || targetState === 'archived') && !reason.trim())}
             className="h-9 px-4 text-sm font-medium rounded-md bg-primary hover:bg-primary-hover text-white transition-colors disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2"
           >
             <ArrowRightCircle className="w-4 h-4" />
@@ -899,6 +906,25 @@ function BulkLifecycleModal({ isOpen, onClose, selectedCount, onSubmit, targetSt
             ))}
           </select>
         </div>
+
+        {(targetState === 'deactivated' || targetState === 'archived') && (
+          <div>
+            <label className="text-sm font-medium text-ink block mb-1.5">
+              Reason <span className="text-error">*</span>
+            </label>
+            <textarea
+              value={reason}
+              onChange={(e) => onReasonChange(e.target.value)}
+              placeholder="Please provide a reason for this action..."
+              rows={3}
+              className="w-full px-3 py-2 text-sm rounded-md border border-line bg-white text-ink placeholder:text-ink-muted focus:outline-none focus:ring-2 focus:ring-primary/30 focus:border-primary transition-all duration-150 resize-none"
+            />
+            <p className="text-xs text-ink-secondary mt-1">
+              This reason will be included in notification emails and audit logs.
+            </p>
+          </div>
+        )}
+
         <div className="p-3 bg-warning-light border border-warning-border rounded-md">
           <p className="text-xs text-warning">
             <strong>Note:</strong> Each user is validated individually. Invalid transitions (e.g., archived → active) will be skipped with an error count shown in the result toast.
