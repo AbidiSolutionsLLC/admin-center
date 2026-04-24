@@ -4,7 +4,7 @@ import { Company } from './Company.model';
 import { generateEmployeeId } from '../services/employeeId';
 
 export type UserRoleType = 'Super Admin' | 'Admin' | 'HR' | 'Manager' | 'Employee' | 'Technician';
-export type LifecycleState = 'invited' | 'onboarding' | 'active' | 'probation' | 'on_leave' | 'terminated' | 'archived';
+export type LifecycleState = 'pending' | 'active' | 'deactivated' | 'archived';
 export type EmploymentType = 'full_time' | 'part_time' | 'contractor' | 'intern';
 
 export interface IUser extends Document {
@@ -30,6 +30,7 @@ export interface IUser extends Document {
   last_login?: Date;
   mfa_enabled: boolean;
   refresh_token_hash?: string;
+  is_flagged: boolean; // Flag for data integrity issues
   is_active: boolean;
   created_at: Date;
   updated_at: Date;
@@ -55,8 +56,8 @@ const UserSchema = new Schema<IUser>({
   },
   lifecycle_state: {
     type: String,
-    enum: ['invited', 'onboarding', 'active', 'probation', 'on_leave', 'terminated', 'archived'],
-    default: 'invited',
+    enum: ['pending', 'active', 'deactivated', 'archived'],
+    default: 'pending',
   },
   lifecycle_changed_at: { type: Date, default: Date.now },
   hire_date: Date,
@@ -67,6 +68,7 @@ const UserSchema = new Schema<IUser>({
   last_login: Date,
   mfa_enabled: { type: Boolean, default: false },
   refresh_token_hash: String,
+  is_flagged: { type: Boolean, default: false },
   is_active: { type: Boolean, default: false },
 }, { timestamps: { createdAt: 'created_at', updatedAt: 'updated_at' } });
 

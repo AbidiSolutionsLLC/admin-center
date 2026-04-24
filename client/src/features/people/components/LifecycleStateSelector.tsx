@@ -1,5 +1,5 @@
 // src/features/people/components/LifecycleStateSelector.tsx
-import React, { useMemo } from 'react';
+import React, { useMemo, useState } from 'react';
 import { ArrowRight, AlertCircle } from 'lucide-react';
 import type { LifecycleState, User } from '@/types';
 import { StatusBadge } from '@/components/ui/StatusBadge';
@@ -7,58 +7,40 @@ import { cn } from '@/utils/cn';
 
 interface LifecycleStateSelectorProps {
   user: User;
-  onTransition: (nextState: LifecycleState) => void;
+  onTransition: (nextState: LifecycleState, reason?: string) => void;
   isPending?: boolean;
 }
 
 const VALID_TRANSITIONS: Record<LifecycleState, LifecycleState[]> = {
-  invited: ['onboarding', 'archived'],
-  onboarding: ['active'],
-  active: ['probation', 'on_leave', 'terminated'],
-  probation: ['active', 'terminated'],
-  on_leave: ['active', 'terminated'],
-  terminated: ['archived'],
-  archived: [],
+  pending: ['active', 'archived'],
+  active: ['deactivated', 'archived'],
+  deactivated: ['active', 'archived'],
+  archived: ['pending'],
 };
 
 const lifecycleStateConfig: Record<
   LifecycleState,
   { label: string; variant: 'success' | 'warning' | 'error' | 'info' | 'neutral' | 'primary' | 'accent'; description: string }
 > = {
-  invited: {
-    label: 'Invited',
+  pending: {
+    label: 'Pending',
     variant: 'info',
-    description: 'User has been invited but hasn\'t started onboarding',
-  },
-  onboarding: {
-    label: 'Onboarding',
-    variant: 'primary',
-    description: 'User is currently in the onboarding process',
+    description: 'User has been invited and is pending activation',
   },
   active: {
     label: 'Active',
     variant: 'success',
     description: 'User is actively working',
   },
-  probation: {
-    label: 'Probation',
-    variant: 'warning',
-    description: 'User is on probation period',
-  },
-  on_leave: {
-    label: 'On Leave',
-    variant: 'warning',
-    description: 'User is currently on leave',
-  },
-  terminated: {
-    label: 'Terminated',
+  deactivated: {
+    label: 'Deactivated',
     variant: 'error',
-    description: 'User has been terminated',
+    description: 'User account has been temporarily deactivated',
   },
   archived: {
     label: 'Archived',
     variant: 'neutral',
-    description: 'User has been archived (terminal state)',
+    description: 'User data is archived (soft deleted)',
   },
 };
 
@@ -83,6 +65,8 @@ export const LifecycleStateSelector: React.FC<LifecycleStateSelectorProps> = ({
   onTransition,
   isPending = false,
 }) => {
+  const [reason, setReason] = useState('');
+  const [selectedState, setSelectedState] = useState<LifecycleState | null>(null);
   const currentState = user.lifecycle_state;
   const validNextStates = useMemo(() => {
     return VALID_TRANSITIONS[currentState] ?? [];
@@ -125,32 +109,83 @@ export const LifecycleStateSelector: React.FC<LifecycleStateSelectorProps> = ({
         <div className="space-y-2">
           {validNextStates.map((nextState) => {
             const nextConfig = lifecycleStateConfig[nextState];
+            const requiresReason = nextState === 'deactivated' || nextState === 'archived';
+            const isSelected = selectedState === nextState;
+
             return (
-              <button
-                key={nextState}
-                onClick={() => onTransition(nextState)}
-                disabled={isPending}
-                className={cn(
-                  'w-full flex items-center gap-3 p-3 rounded-lg border border-line',
-                  'hover:bg-surface-alt transition-all duration-150',
-                  'disabled:opacity-50 disabled:cursor-not-allowed',
-                  isPending && 'cursor-wait'
-                )}
-              >
-                <div className="flex items-center gap-2 flex-1">
-                  <ArrowRight className="w-4 h-4 text-ink-muted" />
-                  <StatusBadge variant={nextConfig.variant}>{nextConfig.label}</StatusBadge>
-                  <span className="text-xs text-ink-muted">{nextConfig.description}</span>
-                </div>
-                <span
+              <div key={nextState} className="space-y-2">
+                <button
+                  onClick={() => {
+                    if (requiresReason) {
+                      setSelectedState(isSelected ? null : nextState);
+                      setReason('');
+                    } else {
+                      onTransition(nextState);
+                    }
+                  }}
+                  disabled={isPending}
                   className={cn(
-                    'px-3 py-1.5 text-xs font-medium rounded-md transition-colors',
-                    buttonVariantMap[nextState]
+                    'w-full flex items-center gap-3 p-3 rounded-lg border border-line',
+                    'hover:bg-surface-alt transition-all duration-150',
+                    'disabled:opacity-50 disabled:cursor-not-allowed',
+                    isPending && 'cursor-wait',
+                    isSelected && 'ring-2 ring-primary/20 border-primary'
                   )}
                 >
-                  {isPending ? 'Processing...' : 'Transition'}
-                </span>
-              </button>
+                  <div className="flex items-center gap-2 flex-1">
+                    <ArrowRight className="w-4 h-4 text-ink-muted" />
+                    <StatusBadge variant={nextConfig.variant}>{nextConfig.label}</StatusBadge>
+                    <span className="text-xs text-ink-muted">{nextConfig.description}</span>
+                  </div>
+                  <span
+                    className={cn(
+                      'px-3 py-1.5 text-xs font-medium rounded-md transition-colors',
+                      requiresReason ? 'bg-amber-100 text-amber-700' : buttonVariantMap[nextState]
+                    )}
+                  >
+                    {requiresReason ? (isSelected ? 'Cancel' : 'Select & Continue') : (isPending ? 'Processing...' : 'Transition')}
+                  </span>
+                </button>
+
+                {isSelected && requiresReason && (
+                  <div className="ml-6 p-3 bg-surface-alt border border-line rounded-lg space-y-3">
+                    <div>
+                      <label className="block text-sm font-medium text-ink mb-1">
+                        Reason <span className="text-red-500">*</span>
+                      </label>
+                      <textarea
+                        value={reason}
+                        onChange={(e) => setReason(e.target.value)}
+                        placeholder="Please provide a reason for this action..."
+                        rows={3}
+                        className="w-full px-3 py-2 text-sm rounded-md border border-line bg-white text-ink placeholder:text-ink-muted focus:outline-none focus:ring-2 focus:ring-primary/30 focus:border-primary transition-all duration-150 resize-none"
+                      />
+                      <p className="text-xs text-ink-secondary mt-1">
+                        This reason will be included in notification emails and audit logs.
+                      </p>
+                    </div>
+                    <div className="flex gap-2">
+                      <button
+                        onClick={() => onTransition(nextState, reason)}
+                        disabled={isPending || !reason.trim()}
+                        className="h-8 px-3 text-xs font-medium rounded-md bg-primary hover:bg-primary-hover text-white transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                      >
+                        {isPending ? 'Processing...' : 'Confirm Transition'}
+                      </button>
+                      <button
+                        onClick={() => {
+                          setSelectedState(null);
+                          setReason('');
+                        }}
+                        disabled={isPending}
+                        className="h-8 px-3 text-xs font-medium rounded-md border border-line bg-white text-ink hover:bg-surface-alt transition-colors disabled:opacity-50"
+                      >
+                        Cancel
+                      </button>
+                    </div>
+                  </div>
+                )}
+              </div>
             );
           })}
         </div>

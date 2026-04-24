@@ -1,7 +1,7 @@
 // src/features/people/components/UserTable.tsx
 import React, { useMemo } from 'react';
 import type { ColumnDef } from '@tanstack/react-table';
-import { Edit2, MoreVertical, AlertTriangle, Building2 } from 'lucide-react';
+import { Edit2, MoreVertical, AlertTriangle, Building2, Mail } from 'lucide-react';
 import type { User, LifecycleState } from '@/types';
 import { DataTable } from '@/components/ui/DataTable';
 import { StatusBadge } from '@/components/ui/StatusBadge';
@@ -12,6 +12,7 @@ interface UserTableProps {
   onEdit: (user: User) => void;
   onAssignOrg: (user: User) => void;
   onChangeState?: (user: User) => void;
+  onResendInvite?: (user: User) => void;
   selectedIds?: Set<string>;
   onToggleRow?: (userId: string) => void;
   onToggleAll?: () => void;
@@ -22,12 +23,9 @@ const lifecycleStateConfig: Record<
   LifecycleState,
   { label: string; variant: 'success' | 'warning' | 'error' | 'info' | 'neutral' | 'primary' | 'accent' }
 > = {
-  invited: { label: 'Invited', variant: 'info' },
-  onboarding: { label: 'Onboarding', variant: 'primary' },
+  pending: { label: 'Pending', variant: 'info' },
   active: { label: 'Active', variant: 'success' },
-  probation: { label: 'Probation', variant: 'warning' },
-  on_leave: { label: 'On Leave', variant: 'warning' },
-  terminated: { label: 'Terminated', variant: 'error' },
+  deactivated: { label: 'Deactivated', variant: 'error' },
   archived: { label: 'Archived', variant: 'neutral' },
 };
 
@@ -37,7 +35,7 @@ const lifecycleStateConfig: Record<
  * Lifecycle State, Last Login, Actions.
  * Used on: PeoplePage.
  */
-export const UserTable: React.FC<UserTableProps> = ({ users, onEdit, onAssignOrg, onChangeState, selectedIds, onToggleRow, onToggleAll, isAllSelected }) => {
+export const UserTable: React.FC<UserTableProps> = ({ users, onEdit, onAssignOrg, onChangeState, onResendInvite, selectedIds, onToggleRow, onToggleAll, isAllSelected }) => {
   const hasSelection = !!selectedIds && !!onToggleRow && !!onToggleAll;
 
   const columns = useMemo<ColumnDef<User>[]>(
@@ -223,7 +221,7 @@ export const UserTable: React.FC<UserTableProps> = ({ users, onEdit, onAssignOrg
             const state = row.original.lifecycle_state;
             const config = lifecycleStateConfig[state] || { label: state || 'Unknown', variant: 'neutral' };
             return (
-              <StatusBadge variant={config.variant as any}>{config.label}</StatusBadge>
+              <StatusBadge variant={config?.variant}>{config?.label}</StatusBadge>
             );
           },
         },
@@ -269,6 +267,19 @@ export const UserTable: React.FC<UserTableProps> = ({ users, onEdit, onAssignOrg
               >
                 <Building2 className="w-4 h-4" />
               </button>
+              {row.original.lifecycle_state === 'invited' && onResendInvite && (
+                <button
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    onResendInvite(row.original);
+                  }}
+                  className="h-8 w-8 flex items-center justify-center rounded-md text-ink-secondary hover:text-ink hover:bg-surface-alt transition-colors"
+                  aria-label={`Resend invite to ${row.original.full_name}`}
+                  title="Resend Invite"
+                >
+                  <Mail className="w-4 h-4" />
+                </button>
+              )}
               {onChangeState && (
                 <button
                   onClick={(e) => {
@@ -289,8 +300,12 @@ export const UserTable: React.FC<UserTableProps> = ({ users, onEdit, onAssignOrg
 
       return cols;
     },
-    [onEdit, onAssignOrg, onChangeState, hasSelection, selectedIds, onToggleRow, onToggleAll, isAllSelected]
+    [onEdit, onAssignOrg, onChangeState, onResendInvite, hasSelection, selectedIds, onToggleRow, onToggleAll, isAllSelected]
   );
 
-  return <DataTable columns={columns} data={users} onRowClick={onEdit} />;
+  const getRowClassName = (user: User) => {
+    return user.is_flagged ? 'bg-red-50/50 hover:bg-red-50/70' : '';
+  };
+
+  return <DataTable columns={columns} data={users} onRowClick={onEdit} getRowClassName={getRowClassName} />;
 };

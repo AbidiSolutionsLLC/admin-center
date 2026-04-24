@@ -1,12 +1,19 @@
-import { useEffect, useMemo } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import * as z from 'zod';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
+import { Checkbox } from '@/components/ui/checkbox';
+import { ConfirmDialog } from '@/components/ui/ConfirmDialog';
 import { useEmployeeIdFormat, useUpdateEmployeeIdFormat } from '@/hooks/useEmployeeIdFormat';
+import { useRequiredUserFields, useUpdateRequiredUserFields } from '@/hooks/useRequiredUserFields';
+import { useDomainEnforcement, useUpdateDomainEnforcement } from '@/hooks/useDomainEnforcement';
 import { ROUTES } from '@/constants/routes';
+import { AVAILABLE_USER_FIELDS } from '@/types';
+import { cn } from '@/utils/cn';
+import { toast } from 'sonner';
 
 type FormValues = {
   employee_id_format: string;
@@ -27,6 +34,277 @@ function generateFormatPreview(format: string, counter: number) {
   const width = parseInt(match[1], 10);
   const nextCounter = counter + 1;
   return format.replace(/\{counter:\d+\}/, nextCounter.toString().padStart(width, '0'));
+}
+
+function RequiredUserFieldsSection() {
+  const { data: requiredFields, isLoading: isLoadingRequired } = useRequiredUserFields();
+  const updateRequiredFields = useUpdateRequiredUserFields();
+  const [selectedFields, setSelectedFields] = useState<string[]>([]);
+
+  useEffect(() => {
+    if (requiredFields) {
+      setSelectedFields(requiredFields);
+    }
+  }, [requiredFields]);
+
+  const handleToggle = (fieldKey: string) => {
+    setSelectedFields(prev =>
+      prev.includes(fieldKey)
+        ? prev.filter(f => f !== fieldKey)
+        : [...prev, fieldKey]
+    );
+  };
+
+  const handleSave = () => {
+    if (selectedFields.length === 0) {
+      toast.error('At least one field must be required');
+      return;
+    }
+    updateRequiredFields.mutate({ required_user_fields: selectedFields });
+  };
+
+  if (isLoadingRequired) {
+    return (
+      <Card className="shadow-card">
+        <CardHeader>
+          <CardTitle>Required User Fields</CardTitle>
+          <CardDescription>Loading...</CardDescription>
+        </CardHeader>
+      </Card>
+    );
+  }
+
+  return (
+    <Card className="shadow-card">
+      <CardHeader>
+        <CardTitle>Required User Fields</CardTitle>
+        <CardDescription>
+          Configure which fields are required when inviting new users. Check the fields that must be filled out.
+        </CardDescription>
+      </CardHeader>
+      <CardContent>
+        <div className="space-y-4">
+          <div className="grid gap-3 sm:grid-cols-2">
+            {AVAILABLE_USER_FIELDS.map((field) => (
+              <div
+                key={field.key}
+                className="flex items-start gap-3 rounded-lg border border-line p-3 transition-colors hover:bg-surface-alt"
+              >
+                <Checkbox
+                  id={field.key}
+                  checked={selectedFields.includes(field.key)}
+                  onCheckedChange={() => handleToggle(field.key)}
+                  className="mt-0.5"
+                />
+                <div className="flex-1 space-y-1">
+                  <label
+                    htmlFor={field.key}
+                    className="text-sm font-medium text-ink cursor-pointer"
+                  >
+                    {field.label}
+                  </label>
+                  <p className="text-xs text-ink-secondary">{field.description}</p>
+                </div>
+              </div>
+            ))}
+          </div>
+
+          <div className="flex items-center justify-between pt-4 border-t border-line">
+            <p className="text-sm text-ink-secondary">
+              {selectedFields.length} field{selectedFields.length !== 1 ? 's' : ''} marked as required
+            </p>
+            <Button
+              onClick={handleSave}
+              disabled={updateRequiredFields.isPending || JSON.stringify(selectedFields) === JSON.stringify(requiredFields)}
+            >
+              {updateRequiredFields.isPending ? 'Saving...' : 'Save Changes'}
+            </Button>
+          </div>
+        </div>
+      </CardContent>
+    </Card>
+  );
+}
+
+function DomainEnforcementSection() {
+  const { data: domainSettings, isLoading: isLoadingDomain } = useDomainEnforcement();
+  const updateDomainEnforcement = useUpdateDomainEnforcement();
+  const [isEnabled, setIsEnabled] = useState(false);
+  const [domains, setDomains] = useState<string[]>([]);
+  const [newDomain, setNewDomain] = useState('');
+  const [confirmRemoveDialog, setConfirmRemoveDialog] = useState<{
+    isOpen: boolean;
+    domain: string;
+  }>({ isOpen: false, domain: '' });
+
+  useEffect(() => {
+    if (domainSettings) {
+      setIsEnabled(domainSettings.is_domain_enforcement_active);
+      setDomains(domainSettings.allowed_domains);
+    }
+  }, [domainSettings]);
+
+  const handleToggle = () => {
+    const newValue = !isEnabled;
+    setIsEnabled(newValue);
+    updateDomainEnforcement.mutate({
+      allowed_domains: domains,
+      is_domain_enforcement_active: newValue,
+    });
+  };
+
+  const handleAddDomain = () => {
+    if (!newDomain.trim()) return;
+
+    let domain = newDomain.trim().toLowerCase();
+    if (!domain.startsWith('@')) {
+      domain = '@' + domain;
+    }
+
+    if (domains.includes(domain)) {
+      toast.error('Domain already exists');
+      return;
+    }
+
+    setDomains([...domains, domain]);
+    setNewDomain('');
+  };
+
+  const handleRemoveDomain = (domain: string) => {
+    setConfirmRemoveDialog({ isOpen: true, domain });
+  };
+
+  const handleConfirmRemoveDomain = () => {
+    setDomains(domains.filter(d => d !== confirmRemoveDialog.domain));
+    setConfirmRemoveDialog({ isOpen: false, domain: '' });
+  };
+
+  const handleSaveDomains = () => {
+    updateDomainEnforcement.mutate({
+      allowed_domains: domains,
+      is_domain_enforcement_active: isEnabled,
+    });
+  };
+
+  if (isLoadingDomain) {
+    return (
+      <Card className="shadow-card">
+        <CardHeader>
+          <CardTitle>Email Domain Enforcement</CardTitle>
+          <CardDescription>Loading...</CardDescription>
+        </CardHeader>
+      </Card>
+    );
+  }
+
+  return (
+    <Card className="shadow-card">
+      <CardHeader>
+        <CardTitle>Email Domain Enforcement</CardTitle>
+        <CardDescription>
+          Restrict user invitations to specific email domains. When enabled, only emails from allowed domains can be invited.
+        </CardDescription>
+      </CardHeader>
+      <CardContent>
+        <div className="space-y-6">
+          {/* Toggle */}
+          <div className="flex items-center justify-between">
+            <div className="space-y-1">
+              <p className="text-sm font-medium text-ink">Enable Domain Enforcement</p>
+              <p className="text-xs text-ink-secondary">
+                When enabled, only emails from allowed domains can be invited
+              </p>
+            </div>
+            <button
+              onClick={handleToggle}
+              disabled={updateDomainEnforcement.isPending}
+              className={cn(
+                'relative inline-flex h-6 w-11 items-center rounded-full transition-colors',
+                isEnabled ? 'bg-primary' : 'bg-gray-300'
+              )}
+            >
+              <span
+                className={cn(
+                  'inline-block h-4 w-4 transform rounded-full bg-white transition-transform',
+                  isEnabled ? 'translate-x-6' : 'translate-x-1'
+                )}
+              />
+            </button>
+          </div>
+
+          {/* Domain List */}
+          <div className="space-y-3">
+            <p className="text-sm font-medium text-ink">Allowed Domains</p>
+
+            <div className="flex gap-2">
+              <Input
+                value={newDomain}
+                onChange={(e) => setNewDomain(e.target.value)}
+                placeholder="e.g. @company.com"
+                className="flex-1"
+                onKeyDown={(e) => {
+                  if (e.key === 'Enter') {
+                    e.preventDefault();
+                    handleAddDomain();
+                  }
+                }}
+              />
+              <Button
+                type="button"
+                onClick={handleAddDomain}
+                variant="outline"
+                disabled={!newDomain.trim()}
+              >
+                Add
+              </Button>
+            </div>
+
+            {domains.length > 0 ? (
+              <div className="flex flex-wrap gap-2">
+                {domains.map((domain) => (
+                  <span
+                    key={domain}
+                    className="inline-flex items-center gap-1 px-2 py-1 bg-primary-light text-primary text-sm rounded-md"
+                  >
+                    {domain}
+                    <button
+                      onClick={() => handleRemoveDomain(domain)}
+                      className="hover:text-primary-hover"
+                    >
+                      ×
+                    </button>
+                  </span>
+                ))}
+              </div>
+            ) : (
+              <p className="text-xs text-ink-secondary">No domains added yet</p>
+            )}
+          </div>
+
+          {/* Save Button */}
+          <div className="flex justify-end pt-2 border-t border-line">
+            <Button
+              onClick={handleSaveDomains}
+              disabled={updateDomainEnforcement.isPending || JSON.stringify(domains) === JSON.stringify(domainSettings?.allowed_domains)}
+            >
+              {updateDomainEnforcement.isPending ? 'Saving...' : 'Save Domains'}
+            </Button>
+          </div>
+        </div>
+      </CardContent>
+
+      {/* Confirmation Dialog for Domain Removal */}
+      <ConfirmDialog
+        isOpen={confirmRemoveDialog.isOpen}
+        onClose={() => setConfirmRemoveDialog({ isOpen: false, domain: '' })}
+        onConfirm={handleConfirmRemoveDomain}
+        title="Remove Domain"
+        description={`Are you sure you want to remove ${confirmRemoveDialog.domain} from the allowed domains list? Users with emails from this domain will no longer be able to be invited.`}
+        confirmLabel="Remove Domain"
+        variant="danger"
+      />
+    </Card>
+  );
 }
 
 export default function CompanySettingsPage() {
@@ -87,7 +365,7 @@ export default function CompanySettingsPage() {
         <div>
           <h1 className="text-[22px] font-semibold tracking-tight text-ink">Company Settings</h1>
           <p className="mt-1 text-sm text-ink-secondary">
-            Configure the employee ID format used for new users. Changes apply to future employee records.
+            Configure company-level settings including employee ID format and required fields for user invitations.
           </p>
         </div>
       </div>
@@ -135,13 +413,17 @@ export default function CompanySettingsPage() {
               <div className="text-sm text-ink-secondary">
                 Current counter: <span className="font-semibold">{data?.employee_id_counter ?? 0}</span>
               </div>
-              <Button type="submit" disabled={updateEmployeeIdFormat.isLoading}>
-                {updateEmployeeIdFormat.isLoading ? 'Saving...' : 'Save Format'}
+              <Button type="submit" disabled={updateEmployeeIdFormat.isPending}>
+                {updateEmployeeIdFormat.isPending ? 'Saving...' : 'Save Format'}
               </Button>
             </div>
           </form>
         </CardContent>
       </Card>
+
+      <RequiredUserFieldsSection />
+
+      <DomainEnforcementSection />
     </div>
   );
 }

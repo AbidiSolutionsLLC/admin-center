@@ -8,6 +8,8 @@ import { useUsers, useBulkLifecycleChange, useBulkAssignRole, useExportUsers } f
 import { useUpdateUser } from '@/features/people/hooks/useUpdateUser';
 import { useUpdateLifecycle } from '@/features/people/hooks/useUpdateLifecycle';
 import { useUserStats } from '@/features/people/hooks/useUserStats';
+import { useResendInvite } from '@/features/people/hooks/useResendInvite';
+import { useFormMetadata } from '@/features/people/hooks/useFormMetadata';
 import { useDepartments } from '@/features/organization/hooks/useDepartments';
 import { useLocations } from '@/features/locations/hooks/useLocations';
 import { useRoles } from '@/features/roles/useRoles';
@@ -23,15 +25,13 @@ import { Modal } from '@/components/ui/Modal';
 import type { User, LifecycleState, EmploymentType, Department, Location } from '@/types';
 import { cn } from '@/utils/cn';
 import { toast } from 'sonner';
+import { Checkbox } from '@/components/ui/checkbox';
 
 const LIFECYCLE_STATE_OPTIONS: { value: LifecycleState | ''; label: string }[] = [
   { value: '', label: 'All States' },
-  { value: 'invited', label: 'Invited' },
-  { value: 'onboarding', label: 'Onboarding' },
+  { value: 'pending', label: 'Pending' },
   { value: 'active', label: 'Active' },
-  { value: 'probation', label: 'Probation' },
-  { value: 'on_leave', label: 'On Leave' },
-  { value: 'terminated', label: 'Terminated' },
+  { value: 'deactivated', label: 'Deactivated' },
   { value: 'archived', label: 'Archived' },
 ];
 
@@ -49,6 +49,7 @@ interface UserFilters {
   department_id: string;
   employment_type: EmploymentType | '';
   location_id: string;
+  incomplete_data: boolean;
 }
 
 /**
@@ -71,6 +72,7 @@ export default function PeoplePage() {
     department_id: '',
     employment_type: '',
     location_id: '',
+    incomplete_data: false,
   });
 
   // ── Server data ──────────────────────────────────────────────────────
@@ -79,6 +81,7 @@ export default function PeoplePage() {
   const { data: locations = [] } = useLocations();
   const { data: roles = [] } = useRoles();
   const { data: stats, isLoading: statsLoading } = useUserStats();
+  const { data: formMetadata } = useFormMetadata();
 
   const filteredUsers = useMemo(() => {
     if (!users) return [];
@@ -101,12 +104,16 @@ export default function PeoplePage() {
       const matchesLocation =
         !filters.location_id || user.location_id === filters.location_id;
 
+      const matchesIncompleteData =
+        !filters.incomplete_data || user.is_flagged === true;
+
       return (
         matchesSearch &&
         matchesLifecycleState &&
         matchesDepartment &&
         matchesEmploymentType &&
-        matchesLocation
+        matchesLocation &&
+        matchesIncompleteData
       );
     });
   }, [users, filters]);
@@ -117,6 +124,7 @@ export default function PeoplePage() {
     filters.department_id,
     filters.employment_type,
     filters.location_id,
+    filters.incomplete_data,
   ].filter(Boolean).length;
 
   const exportMutation = useExportUsers({
@@ -129,6 +137,11 @@ export default function PeoplePage() {
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
   const bulkLifecycle = useBulkLifecycleChange();
   const bulkRole = useBulkAssignRole();
+  const resendInvite = useResendInvite();
+
+  const handleResendInvite = useCallback((user: User) => {
+    resendInvite.mutate(user._id);
+  }, [resendInvite]);
 
   const isAllSelected = useMemo(() => {
     if (!users || users.length === 0) return false;
@@ -144,6 +157,7 @@ export default function PeoplePage() {
   // ── Bulk action modal targets ──────────────────────────────────────
   const [bulkAction, setBulkAction] = useState<'lifecycle' | 'role' | null>(null);
   const [bulkLifecycleTarget, setBulkLifecycleTarget] = useState<LifecycleState | ''>('');
+  const [bulkLifecycleReason, setBulkLifecycleReason] = useState('');
   const [bulkRoleTarget, setBulkRoleTarget] = useState('');
 
   // ── Handlers ─────────────────────────────────────────────────────────
@@ -169,16 +183,21 @@ export default function PeoplePage() {
   const handleBulkLifecycle = useCallback(() => {
     if (!bulkLifecycleTarget || selectedIds.size === 0) return;
     bulkLifecycle.mutate(
-      { user_ids: Array.from(selectedIds), lifecycle_state: bulkLifecycleTarget },
+      {
+        user_ids: Array.from(selectedIds),
+        lifecycle_state: bulkLifecycleTarget,
+        reason: (bulkLifecycleTarget === 'deactivated' || bulkLifecycleTarget === 'archived') ? bulkLifecycleReason : undefined
+      },
       {
         onSuccess: () => {
           setBulkAction(null);
           setBulkLifecycleTarget('');
+          setBulkLifecycleReason('');
           clearSelection();
         },
       }
     );
-  }, [bulkLifecycleTarget, selectedIds, bulkLifecycle, clearSelection]);
+  }, [bulkLifecycleTarget, bulkLifecycleReason, selectedIds, bulkLifecycle, clearSelection]);
 
   const handleBulkRole = useCallback(() => {
     if (!bulkRoleTarget || selectedIds.size === 0) return;
@@ -237,6 +256,7 @@ export default function PeoplePage() {
       department_id: '',
       employment_type: '',
       location_id: '',
+      incomplete_data: false,
     });
   }, []);
 
@@ -334,6 +354,7 @@ export default function PeoplePage() {
                 onEdit={handleOpenEdit}
                 onAssignOrg={handleOpenAssignOrg}
                 onChangeState={handleOpenLifecycleChange}
+                onResendInvite={handleResendInvite}
                 selectedIds={selectedIds}
                 onToggleRow={toggleRow}
                 onToggleAll={toggleAll}
@@ -349,6 +370,7 @@ export default function PeoplePage() {
         isOpen={isInviteModalOpen}
         onClose={handleCloseInvite}
         departments={departments}
+        requiredFields={formMetadata?.required_fields || ['email', 'full_name']}
       />
 
       {/* ── Edit User Modal ── */}
@@ -359,6 +381,7 @@ export default function PeoplePage() {
           onClose={handleCloseEdit}
           departments={departments}
           locations={locations}
+          requiredFields={formMetadata?.required_fields || ['email', 'full_name']}
         />
       )}
 
@@ -385,11 +408,13 @@ export default function PeoplePage() {
       {bulkAction === 'lifecycle' && (
         <BulkLifecycleModal
           isOpen={bulkAction === 'lifecycle'}
-          onClose={() => { setBulkAction(null); setBulkLifecycleTarget(''); }}
+          onClose={() => { setBulkAction(null); setBulkLifecycleTarget(''); setBulkLifecycleReason(''); }}
           selectedCount={selectedIds.size}
           onSubmit={handleBulkLifecycle}
           targetState={bulkLifecycleTarget}
           onTargetChange={setBulkLifecycleTarget}
+          reason={bulkLifecycleReason}
+          onReasonChange={setBulkLifecycleReason}
           isPending={bulkLifecycle.isPending}
         />
       )}
@@ -460,7 +485,7 @@ function StatsRow({ stats, isLoading }: StatsRowProps) {
   const statItems = [
     { label: 'Total', value: stats.total, icon: Users, color: 'text-ink' },
     { label: 'Active', value: stats.active, icon: Users, color: 'text-emerald-600' },
-    { label: 'Invited', value: stats.invited, icon: Users, color: 'text-sky-600' },
+    { label: 'Pending', value: stats.invited, icon: Users, color: 'text-sky-600' },
     { label: 'On Leave', value: stats.on_leave, icon: Users, color: 'text-amber-600' },
     { label: 'Terminated', value: stats.terminated, icon: Users, color: 'text-red-600' },
   ];
@@ -624,6 +649,17 @@ function FilterBar({
         <ChevronDown className="absolute right-2 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-ink-muted pointer-events-none" />
       </div>
 
+      {/* Incomplete data filter */}
+      <label className="flex items-center gap-2 cursor-pointer">
+        <Checkbox
+          checked={filters.incomplete_data}
+          onCheckedChange={(checked) =>
+            onFilterChange({ ...filters, incomplete_data: checked === true })
+          }
+        />
+        <span className="text-sm text-ink">Incomplete data</span>
+      </label>
+
       {/* Clear filters */}
       {activeFilterCount > 0 && (
         <button
@@ -643,9 +679,10 @@ interface EditUserModalProps {
   onClose: () => void;
   departments: Department[];
   locations: Location[];
+  requiredFields?: string[];
 }
 
-function EditUserModal({ user, isOpen, onClose, departments, locations }: EditUserModalProps) {
+function EditUserModal({ user, isOpen, onClose, departments, locations, requiredFields = [] }: EditUserModalProps) {
   const updateUser = useUpdateUser(user._id);
 
   const handleSubmit = useCallback(
@@ -711,6 +748,7 @@ function EditUserModal({ user, isOpen, onClose, departments, locations }: EditUs
         departments={departments}
         locations={locations}
         isSubmitting={updateUser.isPending}
+        requiredFields={requiredFields}
       />
     </Modal>
   );
@@ -726,9 +764,9 @@ function LifecycleChangeModal({ user, isOpen, onClose }: LifecycleChangeModalPro
   const updateLifecycle = useUpdateLifecycle(user._id);
 
   const handleTransition = useCallback(
-    (nextState: LifecycleState) => {
+    (nextState: LifecycleState, reason?: string) => {
       updateLifecycle.mutate(
-        { lifecycle_state: nextState },
+        { lifecycle_state: nextState, reason },
         {
           onSuccess: () => {
             onClose();
@@ -821,10 +859,12 @@ interface BulkLifecycleModalProps {
   onSubmit: () => void;
   targetState: LifecycleState | '';
   onTargetChange: (state: LifecycleState | '') => void;
+  reason: string;
+  onReasonChange: (reason: string) => void;
   isPending: boolean;
 }
 
-function BulkLifecycleModal({ isOpen, onClose, selectedCount, onSubmit, targetState, onTargetChange, isPending }: BulkLifecycleModalProps) {
+function BulkLifecycleModal({ isOpen, onClose, selectedCount, onSubmit, targetState, onTargetChange, reason, onReasonChange, isPending }: BulkLifecycleModalProps) {
   return (
     <Modal
       isOpen={isOpen}
@@ -839,7 +879,7 @@ function BulkLifecycleModal({ isOpen, onClose, selectedCount, onSubmit, targetSt
           </button>
           <button
             onClick={onSubmit}
-            disabled={isPending || !targetState}
+            disabled={isPending || !targetState || ((targetState === 'deactivated' || targetState === 'archived') && !reason.trim())}
             className="h-9 px-4 text-sm font-medium rounded-md bg-primary hover:bg-primary-hover text-white transition-colors disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2"
           >
             <ArrowRightCircle className="w-4 h-4" />
@@ -866,6 +906,25 @@ function BulkLifecycleModal({ isOpen, onClose, selectedCount, onSubmit, targetSt
             ))}
           </select>
         </div>
+
+        {(targetState === 'deactivated' || targetState === 'archived') && (
+          <div>
+            <label className="text-sm font-medium text-ink block mb-1.5">
+              Reason <span className="text-error">*</span>
+            </label>
+            <textarea
+              value={reason}
+              onChange={(e) => onReasonChange(e.target.value)}
+              placeholder="Please provide a reason for this action..."
+              rows={3}
+              className="w-full px-3 py-2 text-sm rounded-md border border-line bg-white text-ink placeholder:text-ink-muted focus:outline-none focus:ring-2 focus:ring-primary/30 focus:border-primary transition-all duration-150 resize-none"
+            />
+            <p className="text-xs text-ink-secondary mt-1">
+              This reason will be included in notification emails and audit logs.
+            </p>
+          </div>
+        )}
+
         <div className="p-3 bg-warning-light border border-warning-border rounded-md">
           <p className="text-xs text-warning">
             <strong>Note:</strong> Each user is validated individually. Invalid transitions (e.g., archived → active) will be skipped with an error count shown in the result toast.
