@@ -182,6 +182,14 @@ async function enrichUsers(
           email: m.email,
           avatar_url: m.avatar_url,
         }));
+      
+      // Normalize back to IDs for form population
+      data.secondary_manager_ids = data.secondary_manager_ids.map((m: any) => 
+        (typeof m === 'object' && m !== null) ? m._id.toString() : m.toString()
+      );
+    } else {
+      data.secondary_managers = [];
+      data.secondary_manager_ids = [];
     }
     return data;
   });

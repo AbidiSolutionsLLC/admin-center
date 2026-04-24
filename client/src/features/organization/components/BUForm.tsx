@@ -4,6 +4,7 @@ import { useForm, Controller } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { z } from 'zod';
 import { UserSelect } from '@/components/ui/UserSelect';
+import { MultiUserSelect } from '@/components/ui/MultiUserSelect';
 import type { Department } from '@/types';
 import { cn } from '@/utils/cn';
 
@@ -13,14 +14,8 @@ const schema = z.object({
     .max(100, 'Name too long')
     .regex(/^[a-zA-Z0-9\s\-\.\(\)]+$/, 'Name contains invalid characters'),
   parent_id: z.string().optional().nullable(),
-  primary_manager_id: z
-    .string()
-    .optional()
-    .nullable(),
-  secondary_manager_id: z
-    .string()
-    .optional()
-    .nullable(),
+  primary_manager_id: z.string().optional().nullable(),
+  secondary_manager_ids: z.array(z.string()).optional().default([]),
 });
 
 export type BUFormData = z.infer<typeof schema>;
@@ -65,9 +60,9 @@ export const BUForm: React.FC<BUFormProps> = ({
     resolver: zodResolver(schema),
     defaultValues: {
       name: initialData?.name ?? '',
-      parent_id: typeof initialData?.parent_id === 'object' ? (initialData.parent_id as any)?._id : initialData?.parent_id ?? '',
-      primary_manager_id: typeof initialData?.primary_manager_id === 'object' ? (initialData.primary_manager_id as any)?._id : (initialData?.primary_manager_id as any) ?? '',
-      secondary_manager_id: typeof initialData?.secondary_manager_id === 'object' ? (initialData.secondary_manager_id as any)?._id : (initialData?.secondary_manager_id as any) ?? '',
+      parent_id: (typeof initialData?.parent_id === 'object' && initialData?.parent_id !== null) ? initialData.parent_id._id : (initialData?.parent_id as string ?? ''),
+      primary_manager_id: (typeof initialData?.primary_manager_id === 'object' && initialData?.primary_manager_id !== null) ? initialData.primary_manager_id._id : (initialData?.primary_manager_id as string ?? ''),
+      secondary_manager_ids: initialData?.secondary_manager_ids ?? [],
     },
   });
 
@@ -76,9 +71,9 @@ export const BUForm: React.FC<BUFormProps> = ({
     if (initialData) {
       reset({
         name: initialData.name ?? '',
-        parent_id: typeof initialData.parent_id === 'object' ? (initialData.parent_id as any)?._id : initialData.parent_id ?? '',
-        primary_manager_id: typeof initialData.primary_manager_id === 'object' ? (initialData.primary_manager_id as any)?._id : (initialData.primary_manager_id as any) ?? '',
-        secondary_manager_id: typeof initialData.secondary_manager_id === 'object' ? (initialData.secondary_manager_id as any)?._id : (initialData.secondary_manager_id as any) ?? '',
+        parent_id: (typeof initialData.parent_id === 'object' && initialData.parent_id !== null) ? initialData.parent_id._id : (initialData.parent_id as string ?? ''),
+        primary_manager_id: (typeof initialData.primary_manager_id === 'object' && initialData.primary_manager_id !== null) ? initialData.primary_manager_id._id : (initialData.primary_manager_id as string ?? ''),
+        secondary_manager_ids: initialData.secondary_manager_ids ?? [],
       });
     }
   }, [initialData, reset]);
@@ -159,29 +154,29 @@ export const BUForm: React.FC<BUFormProps> = ({
         )}
       </div>
 
-      {/* Secondary Manager */}
+      {/* Secondary Managers */}
       <div className="space-y-1.5">
-        <label htmlFor="bu-secondary-manager" className="text-sm font-medium text-ink">
-          Secondary Manager
+        <label htmlFor="bu-secondary-managers" className="text-sm font-medium text-ink">
+          Secondary Managers
         </label>
         <Controller
-          name="secondary_manager_id"
+          name="secondary_manager_ids"
           control={control}
           render={({ field }) => (
-            <UserSelect
+            <MultiUserSelect
               value={field.value}
               onChange={field.onChange}
               disabled={isSubmitting}
-              hasError={!!errors.secondary_manager_id}
-              placeholder="Select secondary manager"
+              hasError={!!errors.secondary_manager_ids}
+              placeholder="Select secondary managers"
             />
           )}
         />
         <p className="text-[11px] text-ink-muted">
-          Optional secondary manager for backup coverage.
+          Optional secondary managers for matrix leadership and coverage.
         </p>
-        {errors.secondary_manager_id && (
-          <p className="text-xs text-red-500">{errors.secondary_manager_id.message}</p>
+        {errors.secondary_manager_ids && (
+          <p className="text-xs text-red-500">{errors.secondary_manager_ids.message}</p>
         )}
       </div>
 

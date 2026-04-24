@@ -125,6 +125,7 @@ export default function OrganizationPage() {
       ...formData,
       parent_id: formData.parent_id || null,
       primary_manager_id: formData.primary_manager_id || null,
+      secondary_manager_ids: formData.secondary_manager_ids || [],
       custom_fields: formData.custom_fields || {},
     };
 

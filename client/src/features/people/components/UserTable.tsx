@@ -132,26 +132,58 @@ export const UserTable: React.FC<UserTableProps> = ({ users, onEdit, onAssignOrg
           },
         },
         {
-          id: 'manager',
-          header: 'Manager',
+          id: 'primary_manager',
+          header: 'Primary Manager',
           cell: ({ row }) => {
-            const user = row.original;
-            const primary = user.manager;
-            const secondaryCount = user.secondary_manager_ids?.length || 0;
-
-            if (!primary && secondaryCount === 0) {
-              return <span className="text-xs text-ink-muted">—</span>;
+            const manager = row.original.manager;
+            if (!manager) {
+              return <span className="text-xs text-amber-600">No manager</span>;
             }
-
             return (
-              <div className="flex flex-col">
-                <span className="text-sm text-ink truncate max-w-[120px]">
-                  {primary?.full_name || 'No primary'}
-                </span>
-                {secondaryCount > 0 && (
-                  <span className="text-[10px] text-primary font-medium">
-                    +{secondaryCount} secondary
-                  </span>
+              <div className="flex items-center gap-2">
+                <div className="w-7 h-7 rounded-full bg-primary-light flex items-center justify-center flex-shrink-0 overflow-hidden">
+                  {manager.avatar_url ? (
+                    <img src={manager.avatar_url} className="w-full h-full object-cover" alt="" />
+                  ) : (
+                    <span className="text-[10px] font-bold text-primary">
+                      {manager.full_name.split(' ').map((n) => n[0]).join('')}
+                    </span>
+                  )}
+                </div>
+                <span className="text-sm text-ink truncate max-w-[100px]">{manager.full_name}</span>
+              </div>
+            );
+          },
+        },
+        {
+          id: 'secondary_managers',
+          header: 'Secondary Managers',
+          cell: ({ row }) => {
+            const secondary = row.original.secondary_managers;
+            if (!secondary || secondary.length === 0) {
+              return <span className="text-ink-muted text-xs">None</span>;
+            }
+            return (
+              <div className="flex items-center -space-x-1.5">
+                {secondary.slice(0, 3).map((m) => (
+                  <div 
+                    key={m._id} 
+                    className="w-6 h-6 rounded-full border border-white bg-slate-100 flex items-center justify-center flex-shrink-0 overflow-hidden"
+                    title={m.full_name}
+                  >
+                    {m.avatar_url ? (
+                      <img src={m.avatar_url} className="w-full h-full object-cover" alt="" />
+                    ) : (
+                      <span className="text-[8px] font-bold text-slate-500">
+                        {m.full_name.split(' ').map((n) => n[0]).join('')}
+                      </span>
+                    )}
+                  </div>
+                ))}
+                {secondary.length > 3 && (
+                  <div className="w-6 h-6 rounded-full border border-white bg-slate-200 flex items-center justify-center flex-shrink-0 z-10">
+                    <span className="text-[8px] font-bold text-slate-600">+{secondary.length - 3}</span>
+                  </div>
                 )}
               </div>
             );

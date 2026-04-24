@@ -4,6 +4,7 @@ import { useForm, Controller } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { z } from 'zod';
 import { UserSelect } from '@/components/ui/UserSelect';
+import { MultiUserSelect } from '@/components/ui/MultiUserSelect';
 import { DynamicCustomFields } from '@/features/data-fields/components/DynamicCustomFields';
 import { useCustomFields } from '@/features/data-fields/hooks/useCustomFields';
 import type { Department, CustomField } from '@/types';
@@ -13,10 +14,8 @@ const schema = z.object({
   name: z.string().min(1, 'Department name is required').max(100, 'Name too long'),
   type: z.enum(['business_unit', 'division', 'department', 'cost_center']),
   parent_id: z.string().optional().nullable(),
-  primary_manager_id: z
-    .string()
-    .optional()
-    .nullable(),
+  primary_manager_id: z.string().optional().nullable(),
+  secondary_manager_ids: z.array(z.string()).optional().default([]),
 }).refine(data => {
   // Only Business Units are allowed to be top-level (no parent_id)
   if (data.type !== 'business_unit' && !data.parent_id) {
@@ -82,8 +81,9 @@ export const DepartmentForm: React.FC<DepartmentFormProps> = ({
     defaultValues: {
       name: initialData?.name ?? '',
       type: initialData?.type ?? 'department',
-      parent_id: typeof initialData?.parent_id === 'object' ? (initialData.parent_id as any)?._id : initialData?.parent_id ?? '',
-      primary_manager_id: typeof initialData?.primary_manager_id === 'object' ? (initialData.primary_manager_id as any)?._id : (initialData?.primary_manager_id as any) ?? '',
+      parent_id: (typeof initialData?.parent_id === 'object' && initialData?.parent_id !== null) ? initialData.parent_id._id : (initialData?.parent_id as string ?? ''),
+      primary_manager_id: (typeof initialData?.primary_manager_id === 'object' && initialData?.primary_manager_id !== null) ? initialData.primary_manager_id._id : (initialData?.primary_manager_id as string ?? ''),
+      secondary_manager_ids: initialData?.secondary_manager_ids ?? [],
     },
   });
 
@@ -93,8 +93,9 @@ export const DepartmentForm: React.FC<DepartmentFormProps> = ({
       reset({
         name: initialData.name ?? '',
         type: initialData.type ?? 'department',
-        parent_id: typeof initialData.parent_id === 'object' ? (initialData.parent_id as any)?._id : initialData.parent_id ?? '',
-        primary_manager_id: typeof initialData.primary_manager_id === 'object' ? (initialData.primary_manager_id as any)?._id : (initialData.primary_manager_id as any) ?? '',
+        parent_id: (typeof initialData.parent_id === 'object' && initialData.parent_id !== null) ? initialData.parent_id._id : (initialData.parent_id as string ?? ''),
+        primary_manager_id: (typeof initialData.primary_manager_id === 'object' && initialData.primary_manager_id !== null) ? initialData.primary_manager_id._id : (initialData.primary_manager_id as string ?? ''),
+        secondary_manager_ids: initialData.secondary_manager_ids ?? [],
       });
       setCustomFieldValues(initialData.custom_fields ?? {});
     }
@@ -243,6 +244,32 @@ export const DepartmentForm: React.FC<DepartmentFormProps> = ({
         </p>
         {errors.primary_manager_id && (
           <p className="text-xs text-red-500">{errors.primary_manager_id.message}</p>
+        )}
+      </div>
+
+      {/* Secondary Managers */}
+      <div className="space-y-1.5">
+        <label htmlFor="dept-secondary-managers" className="text-sm font-medium text-ink">
+          Secondary Managers
+        </label>
+        <Controller
+          name="secondary_manager_ids"
+          control={control}
+          render={({ field }) => (
+            <MultiUserSelect
+              value={field.value}
+              onChange={field.onChange}
+              disabled={isSubmitting}
+              hasError={!!errors.secondary_manager_ids}
+              placeholder="Select secondary managers..."
+            />
+          )}
+        />
+        <p className="text-[11px] text-ink-muted">
+          Assign one or more secondary managers for matrix leadership.
+        </p>
+        {errors.secondary_manager_ids && (
+          <p className="text-xs text-red-500">{errors.secondary_manager_ids.message}</p>
         )}
       </div>
 

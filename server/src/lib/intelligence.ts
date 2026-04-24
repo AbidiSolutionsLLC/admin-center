@@ -304,6 +304,61 @@ export const runIntelligenceRules = async (companyId: string | Types.ObjectId): 
   }
 
   // ────────────────────────────────────────────────────────────────────────────
+  // RULE-11: Orphan Departments (not BU, no parent)
+  // ────────────────────────────────────────────────────────────────────────────
+
+  const orphanDepts = allDepts.filter((d) => d.type !== 'business_unit' && (!d.parent_id || !deptIdSet.has(d.parent_id.toString())));
+
+  for (const dept of orphanDepts) {
+    insightsToUpsert.push({
+      company_id: companyObjectId,
+      category: 'health',
+      severity: 'warning',
+      title: `${dept.name} is an orphan department`,
+      description: 'Departments (other than Business Units) should be nested under a parent for proper organizational structure.',
+      reasoning: `Department "${dept.name}" of type ${dept.type.replace(/_/g, ' ')} has no valid parent department.`,
+      affected_object_type: 'Department',
+      affected_object_id: dept._id.toString(),
+      affected_object_label: dept.name,
+      remediation_url: `/organization/${dept._id}`,
+      remediation_action: 'Assign this department to a parent',
+      is_resolved: false,
+      detected_at: new Date(),
+    });
+  }
+
+  // ────────────────────────────────────────────────────────────────────────────
+  // RULE-12: Imbalanced Structure (High headcount without secondary managers)
+  // ────────────────────────────────────────────────────────────────────────────
+  
+  const deptHeadcountsAgg = await User.aggregate([
+    { $match: { company_id: companyObjectId, is_active: true, department_id: { $exists: true, $ne: null } } },
+    { $group: { _id: '$department_id', count: { $sum: 1 } } }
+  ]);
+  const deptHeadcountMap = new Map<string, number>(deptHeadcountsAgg.map(h => [h._id.toString(), h.count]));
+
+  for (const dept of allDepts) {
+    const headcount = deptHeadcountMap.get(dept._id.toString()) || 0;
+    if (headcount > 15 && (!dept.secondary_manager_ids || dept.secondary_manager_ids.length === 0)) {
+      insightsToUpsert.push({
+        company_id: companyObjectId,
+        category: 'recommendation',
+        severity: 'info',
+        title: `${dept.name} has a high span of control`,
+        description: 'Departments with more than 15 active members should ideally have secondary managers to distribute management responsibilities.',
+        reasoning: `Department "${dept.name}" has ${headcount} members but no secondary managers assigned.`,
+        affected_object_type: 'Department',
+        affected_object_id: dept._id.toString(),
+        affected_object_label: dept.name,
+        remediation_url: `/organization/${dept._id}`,
+        remediation_action: 'Assign secondary managers to this department',
+        is_resolved: false,
+        detected_at: new Date(),
+      });
+    }
+  }
+
+  // ────────────────────────────────────────────────────────────────────────────
   // RULE-10: Duplicate users (same full_name in the same company)
   // ────────────────────────────────────────────────────────────────────────────
 
@@ -737,6 +792,59 @@ export const runIntelligenceRules = async (companyId: string | Types.ObjectId): 
           company_id: companyObjectId,
           affected_object_id: bu._id.toString(),
           title: `${bu.name} has no child departments`,
+          is_resolved: false,
+        },
+        {
+          $set: {
+            is_resolved: true,
+            resolved_at: new Date(),
+          }
+        }
+      );
+    }
+  }
+
+  // ────────────────────────────────────────────────────────────────────────────
+  // Auto-resolve RULE-11 insights where department is no longer orphan
+  // ────────────────────────────────────────────────────────────────────────────
+
+  for (const dept of allDeptsForResolve) {
+    if (dept.type === 'business_unit' || (dept.parent_id && validDeptIdSet.has(dept.parent_id.toString()))) {
+      await Insight.updateMany(
+        {
+          company_id: companyObjectId,
+          affected_object_id: dept._id.toString(),
+          title: `${dept.name} is an orphan department`,
+          is_resolved: false,
+        },
+        {
+          $set: {
+            is_resolved: true,
+            resolved_at: new Date(),
+          }
+        }
+      );
+    }
+  }
+
+  // ────────────────────────────────────────────────────────────────────────────
+  // Auto-resolve RULE-12 insights where department structure is balanced
+  // ────────────────────────────────────────────────────────────────────────────
+
+  const headcountsResolve = await User.aggregate([
+    { $match: { company_id: companyObjectId, is_active: true, department_id: { $exists: true, $ne: null } } },
+    { $group: { _id: '$department_id', count: { $sum: 1 } } }
+  ]);
+  const headcountResolveMap = new Map<string, number>(headcountsResolve.map(h => [h._id.toString(), h.count]));
+
+  for (const dept of allDeptsForResolve) {
+    const headcount = headcountResolveMap.get(dept._id.toString()) || 0;
+    if (headcount <= 15 || (dept.secondary_manager_ids && dept.secondary_manager_ids.length > 0)) {
+      await Insight.updateMany(
+        {
+          company_id: companyObjectId,
+          affected_object_id: dept._id.toString(),
+          title: `${dept.name} has a high span of control`,
           is_resolved: false,
         },
         {

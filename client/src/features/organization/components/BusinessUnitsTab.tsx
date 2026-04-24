@@ -83,7 +83,7 @@ export const BusinessUnitsTab: React.FC<BusinessUnitsTabProps> = ({ allDepartmen
       name: formData.name,
       parent_id: formData.parent_id || null,
       primary_manager_id: formData.primary_manager_id || null,
-      secondary_manager_id: formData.secondary_manager_id || null,
+      secondary_manager_ids: formData.secondary_manager_ids || [],
     };
 
     if (editingBU) {
@@ -284,26 +284,39 @@ export const BusinessUnitsTab: React.FC<BusinessUnitsTabProps> = ({ allDepartmen
                     )}
                   </td>
                   <td className="h-14 px-4">
-                    {bu.secondary_manager ? (
-                      <div className="flex items-center gap-2">
-                        <div className="w-7 h-7 rounded-full bg-slate-100 flex items-center justify-center flex-shrink-0 overflow-hidden">
-                          {bu.secondary_manager.avatar_url ? (
-                            <img
-                              src={bu.secondary_manager.avatar_url}
-                              className="w-full h-full rounded-full object-cover"
-                              alt=""
-                              width={28}
-                              height={28}
-                            />
-                          ) : (
-                            <span className="text-[10px] font-bold text-slate-500">
-                              {typeof bu.secondary_manager.full_name === 'string'
-                                ? bu.secondary_manager.full_name.split(' ').map((n) => n[0]).join('')
-                                : '?'}
-                            </span>
-                          )}
-                        </div>
-                        <span className="text-sm text-ink-secondary line-clamp-1">{bu.secondary_manager.full_name}</span>
+                    {bu.secondary_managers && bu.secondary_managers.length > 0 ? (
+                      <div className="flex items-center -space-x-2">
+                        {bu.secondary_managers.slice(0, 3).map((sm, i) => (
+                          <div 
+                            key={sm._id} 
+                            className="w-7 h-7 rounded-full border-2 border-white bg-slate-100 flex items-center justify-center flex-shrink-0 overflow-hidden"
+                            title={sm.full_name}
+                          >
+                            {sm.avatar_url ? (
+                              <img
+                                src={sm.avatar_url}
+                                className="w-full h-full rounded-full object-cover"
+                                alt=""
+                                width={28}
+                                height={28}
+                              />
+                            ) : (
+                              <span className="text-[10px] font-bold text-slate-500">
+                                {sm.full_name.split(' ').map((n) => n[0]).join('')}
+                              </span>
+                            )}
+                          </div>
+                        ))}
+                        {bu.secondary_managers.length > 3 && (
+                          <div className="w-7 h-7 rounded-full border-2 border-white bg-slate-200 flex items-center justify-center flex-shrink-0 z-10">
+                            <span className="text-[9px] font-bold text-slate-600">+{bu.secondary_managers.length - 3}</span>
+                          </div>
+                        )}
+                        <span className="ml-4 text-xs text-ink-secondary line-clamp-1">
+                          {bu.secondary_managers.length === 1 
+                            ? bu.secondary_managers[0].full_name 
+                            : `${bu.secondary_managers.length} managers`}
+                        </span>
                       </div>
                     ) : (
                       <span className="text-[11px] text-ink-muted italic">

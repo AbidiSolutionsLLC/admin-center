@@ -85,14 +85,14 @@ export const UserForm: React.FC<UserFormProps> = ({
     defaultValues: {
       full_name: initialData?.full_name ?? '',
       phone: initialData?.phone ?? '',
-      department_id: typeof initialData?.department_id === 'object' ? (initialData.department_id as any)?._id : initialData?.department_id ?? '',
-      team_id: typeof initialData?.team_id === 'object' ? (initialData.team_id as any)?._id : initialData?.team_id ?? '',
-      manager_id: typeof initialData?.manager_id === 'object' ? (initialData.manager_id as any)?._id : initialData?.manager_id ?? '',
+      department_id: (typeof initialData?.department_id === 'object' && initialData?.department_id !== null) ? initialData.department_id._id : (initialData?.department_id as string ?? ''),
+      team_id: (typeof initialData?.team_id === 'object' && initialData?.team_id !== null) ? initialData.team_id._id : (initialData?.team_id as string ?? ''),
+      manager_id: (typeof initialData?.manager_id === 'object' && initialData?.manager_id !== null) ? initialData.manager_id._id : (initialData?.manager_id as string ?? ''),
       secondary_manager_ids: initialData?.secondary_manager_ids ?? [],
       role: initialData?.role ?? 'Employee',
       employment_type: initialData?.employment_type ?? 'full_time',
       hire_date: initialData?.hire_date ?? '',
-      location_id: typeof initialData?.location_id === 'object' ? (initialData.location_id as any)?._id : initialData?.location_id ?? '',
+      location_id: (typeof initialData?.location_id === 'object' && initialData?.location_id !== null) ? (initialData.location_id as any)._id : (initialData?.location_id as string ?? ''),
     },
   });
 
@@ -109,14 +109,14 @@ export const UserForm: React.FC<UserFormProps> = ({
       reset({
         full_name: initialData.full_name ?? '',
         phone: initialData.phone ?? '',
-        department_id: typeof initialData.department_id === 'object' ? (initialData.department_id as any)?._id : initialData.department_id ?? '',
-        team_id: typeof initialData.team_id === 'object' ? (initialData.team_id as any)?._id : initialData.team_id ?? '',
-        manager_id: typeof initialData.manager_id === 'object' ? (initialData.manager_id as any)?._id : initialData.manager_id ?? '',
+        department_id: (typeof initialData.department_id === 'object' && initialData.department_id !== null) ? initialData.department_id._id : (initialData.department_id as string ?? ''),
+        team_id: (typeof initialData.team_id === 'object' && initialData.team_id !== null) ? initialData.team_id._id : (initialData.team_id as string ?? ''),
+        manager_id: (typeof initialData.manager_id === 'object' && initialData.manager_id !== null) ? initialData.manager_id._id : (initialData.manager_id as string ?? ''),
         secondary_manager_ids: initialData.secondary_manager_ids ?? [],
         role: initialData.role ?? 'Employee',
         employment_type: initialData.employment_type ?? 'full_time',
         hire_date: initialData.hire_date ?? '',
-        location_id: typeof initialData.location_id === 'object' ? (initialData.location_id as any)?._id : initialData.location_id ?? '',
+        location_id: (typeof initialData.location_id === 'object' && initialData.location_id !== null) ? (initialData.location_id as any)._id : (initialData.location_id as string ?? ''),
       });
       setCustomFieldValues(initialData.custom_fields ?? {});
     }

@@ -45,7 +45,7 @@ const DepartmentBaseSchema = z.object({
   type: z.enum(['business_unit', 'division', 'department', 'cost_center']),
   parent_id: z.string().optional().nullable(),
   primary_manager_id: z.string().optional().nullable(),
-  secondary_manager_id: z.string().optional().nullable(),
+  secondary_manager_ids: z.array(z.string()).optional().default([]),
   custom_fields: z.record(z.string(), z.unknown()).optional().default({}),
 });
 
@@ -84,7 +84,7 @@ const CreateBUSchema = z.object({
     .max(100)
     .regex(/^[a-zA-Z0-9\s\-\.\(\)]+$/, 'Name contains invalid characters'),
   primary_manager_id: z.string().optional().nullable(),
-  secondary_manager_id: z.string().optional().nullable(),
+  secondary_manager_ids: z.array(z.string()).optional().default([]),
 });
 
 // User org assignment schema
@@ -118,21 +118,70 @@ async function enrichDepartments(
   return departments.map((dept) => {
     const data = { ...dept };
     const headcount = headcountMap.get(dept._id.toString()) ?? 0;
-    const has_intelligence_flag = headcount > 0 && !dept.primary_manager_id;
+    
+    const isOrphan = dept.type !== 'business_unit' && !dept.parent_id;
+    const isImbalanced = headcount > 15 && (!dept.secondary_manager_ids || dept.secondary_manager_ids.length === 0);
+    const has_intelligence_flag = (headcount > 0 && !dept.primary_manager_id) || isOrphan || isImbalanced;
     
     // Map populated objects to the names expected by the frontend
     if (data.primary_manager_id && typeof data.primary_manager_id === 'object') {
       data.primary_manager = data.primary_manager_id as Record<string, unknown>;
     }
-    if (data.secondary_manager_id && typeof data.secondary_manager_id === 'object') {
-      data.secondary_manager = data.secondary_manager_id as Record<string, unknown>;
+    if (data.secondary_manager_ids && Array.isArray(data.secondary_manager_ids)) {
+      data.secondary_managers = data.secondary_manager_ids
+        .filter((m): m is Record<string, any> => typeof m === 'object' && m !== null)
+        .map((m: Record<string, any>) => ({
+          _id: m._id,
+          full_name: m.full_name,
+          avatar_url: m.avatar_url,
+          email: m.email
+        }));
+      
+      // Extract IDs for form population
+      data.secondary_manager_ids = data.secondary_manager_ids.map((m: unknown) => 
+        (typeof m === 'object' && m !== null) ? m._id.toString() : String(m)
+      );
+    } else {
+      data.secondary_managers = [];
+      data.secondary_manager_ids = [];
     }
 
     return { ...data, headcount, has_intelligence_flag };
   });
 }
 
-// ── Controllers ──────────────────────────────────────────────────────────────
+/**
+ * Validates that all provided manager IDs correspond to active users in the same company.
+ */
+async function validateManagers(
+  company_id: string,
+  primary_id?: string | null,
+  secondary_ids?: string[]
+) {
+  if (primary_id) {
+    const manager = await User.findOne({
+      _id: primary_id,
+      company_id,
+      is_active: true,
+    });
+    if (!manager) {
+      throw new AppError('The selected primary manager is inactive or does not exist.', 400, 'INVALID_MANAGER');
+    }
+  }
+
+  if (secondary_ids && secondary_ids.length > 0) {
+    const managers = await User.find({
+      _id: { $in: secondary_ids },
+      company_id,
+      is_active: true,
+    });
+    if (managers.length !== secondary_ids.length) {
+      throw new AppError('One or more selected secondary managers are inactive or do not exist.', 400, 'INVALID_MANAGER');
+    }
+  }
+}
+
+// ── Helpers ──────────────────────────────────────────────────────────────────
 
 /**
  * GET /organization
@@ -146,8 +195,8 @@ export const getDepartments = asyncHandler(async (req: Request, res: Response) =
   };
 
   const raw = await Department.find(filter)
-    .populate('primary_manager_id', 'full_name avatar_url')
-    .populate('secondary_manager_id', 'full_name avatar_url')
+    .populate('primary_manager_id', 'full_name avatar_url email')
+    .populate('secondary_manager_ids', 'full_name avatar_url email')
     .sort({ created_at: 1 })
     .lean();
 
@@ -167,8 +216,8 @@ export const getDepartmentById = asyncHandler(async (req: Request, res: Response
   };
 
   const dept = await Department.findOne(filter)
-    .populate('primary_manager_id', 'full_name avatar_url')
-    .populate('secondary_manager_id', 'full_name avatar_url');
+    .populate('primary_manager_id', 'full_name avatar_url email')
+    .populate('secondary_manager_ids', 'full_name avatar_url email');
 
   if (!dept) {
     throw new AppError('Department not found', 404, 'NOT_FOUND');
@@ -184,6 +233,13 @@ export const getDepartmentById = asyncHandler(async (req: Request, res: Response
  */
 export const createDepartment = asyncHandler(async (req: Request, res: Response) => {
   const input = CreateDepartmentSchema.parse(req.body);
+  
+  // Validate managers are active
+  await validateManagers(
+    req.user.company_id as string,
+    input.primary_manager_id,
+    input.secondary_manager_ids
+  );
 
   // Check for duplicate slug within the same company
   const slug = slugify(input.name);
@@ -208,7 +264,7 @@ export const createDepartment = asyncHandler(async (req: Request, res: Response)
     // Normalize empty strings → undefined so Mongoose doesn't store ''
     parent_id: input.parent_id || undefined,
     primary_manager_id: input.primary_manager_id || undefined,
-    secondary_manager_id: input.secondary_manager_id || undefined,
+    secondary_manager_ids: input.secondary_manager_ids || [],
     custom_fields: input.custom_fields || {},
     company_id: req.user.company_id,
   });
@@ -274,7 +330,6 @@ export const updateDepartment = asyncHandler(async (req: Request, res: Response)
   const updates: Record<string, unknown> = { ...input };
   if (updates.parent_id === '') updates.parent_id = null;
   if (updates.primary_manager_id === '') updates.primary_manager_id = null;
-  if (updates.secondary_manager_id === '') updates.secondary_manager_id = null;
 
   // If parent_id is changing, validate no circular reference
   if (input.parent_id !== undefined && updates.parent_id !== dept.parent_id?.toString()) {
@@ -296,6 +351,15 @@ export const updateDepartment = asyncHandler(async (req: Request, res: Response)
         );
       }
     }
+  }
+
+  // Validate managers are active if they are being updated
+  if (input.primary_manager_id !== undefined || input.secondary_manager_ids !== undefined) {
+    await validateManagers(
+      req.user.company_id as string,
+      input.primary_manager_id === undefined ? (dept.primary_manager_id as any)?.toString() : input.primary_manager_id,
+      input.secondary_manager_ids === undefined ? dept.secondary_manager_ids?.map(id => id.toString()) : input.secondary_manager_ids
+    );
   }
 
   // Merge custom_fields if provided
@@ -425,8 +489,8 @@ export const getOrgTree = asyncHandler(async (req: Request, res: Response) => {
   };
 
   const raw = await Department.find(filter)
-    .populate('primary_manager_id', 'full_name avatar_url')
-    .populate('secondary_manager_id', 'full_name avatar_url')
+    .populate('primary_manager_id', 'full_name avatar_url email')
+    .populate('secondary_manager_ids', 'full_name avatar_url email')
     .lean();
 
   const enriched = await enrichDepartments(raw, req.user.company_id);
@@ -554,8 +618,8 @@ export const getBUTree = asyncHandler(async (req: Request, res: Response) => {
   };
 
   const allBUs = await Department.find(filterBU)
-    .populate('primary_manager_id', 'full_name avatar_url')
-    .populate('secondary_manager_id', 'full_name avatar_url')
+    .populate('primary_manager_id', 'full_name avatar_url email')
+    .populate('secondary_manager_ids', 'full_name avatar_url email')
     .sort({ created_at: 1 })
     .lean();
 
@@ -570,8 +634,8 @@ export const getBUTree = asyncHandler(async (req: Request, res: Response) => {
   };
 
   const departments = await Department.find(filterDepts)
-    .populate('primary_manager_id', 'full_name avatar_url')
-    .populate('secondary_manager_id', 'full_name avatar_url')
+    .populate('primary_manager_id', 'full_name avatar_url email')
+    .populate('secondary_manager_ids', 'full_name avatar_url email')
     .sort({ created_at: 1 })
     .lean();
 
@@ -620,7 +684,10 @@ export const getBUTree = asyncHandler(async (req: Request, res: Response) => {
       // Teams directly under this unit
       const unitTeams = teams.filter(
         (t) => t.department_id?.toString() === childId
-      );
+      ).map(t => {
+        const has_intelligence_flag = !t.team_lead_id;
+        return { ...t, has_intelligence_flag };
+      });
 
       // Recursive children
       const nestedChildren = buildTree(childId);
@@ -690,8 +757,8 @@ export const getBusinessUnits = asyncHandler(async (req: Request, res: Response)
   };
 
   const bus = await Department.find(filterBU)
-    .populate('primary_manager_id', 'full_name avatar_url')
-    .populate('secondary_manager_id', 'full_name avatar_url')
+    .populate('primary_manager_id', 'full_name avatar_url email')
+    .populate('secondary_manager_ids', 'full_name avatar_url email')
     .sort({ created_at: 1 })
     .lean();
 
@@ -729,10 +796,23 @@ export const getBusinessUnits = asyncHandler(async (req: Request, res: Response)
       return teamDeptId && descendantIds.includes(teamDeptId);
     }).length;
 
+    const secondary_managers = (bu.secondary_manager_ids || [])
+      .filter((m: unknown): m is Record<string, any> => typeof m === 'object' && m !== null)
+      .map((m: Record<string, any>) => ({
+        _id: m._id,
+        full_name: m.full_name,
+        avatar_url: m.avatar_url,
+        email: m.email
+      }));
+
+    const secondary_manager_ids = (bu.secondary_manager_ids || [])
+      .map((m: unknown) => (typeof m === 'object' && m !== null) ? m._id.toString() : String(m));
+
     return {
       ...bu,
       primary_manager: bu.primary_manager_id,
-      secondary_manager: bu.secondary_manager_id,
+      secondary_managers,
+      secondary_manager_ids,
       dept_count: deptCount,
       team_count: teamCount,
     };
@@ -936,6 +1016,7 @@ export const getOrgHealth = asyncHandler(async (req: Request, res: Response) => 
   const insights = await Insight.find({
     company_id: req.user.company_id,
     is_resolved: false,
+    affected_object_type: { $in: ['Department', 'Team', 'BusinessUnit'] },
   }).sort({ severity: 1, detected_at: -1 }).lean();
 
   // Group by severity

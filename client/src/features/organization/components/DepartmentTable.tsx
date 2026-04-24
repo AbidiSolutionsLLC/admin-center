@@ -152,11 +152,47 @@ export const DepartmentTable: React.FC<DepartmentTableProps> = ({
         },
       },
       {
+        accessorKey: 'secondary_managers',
+        header: 'Secondary Managers',
+        cell: ({ row }) => {
+          const secondary = row.original.secondary_managers;
+          if (!secondary || secondary.length === 0) {
+            return <span className="text-ink-muted text-xs">None</span>;
+          }
+          return (
+            <div className="flex items-center -space-x-1.5">
+              {secondary.slice(0, 3).map((m) => (
+                <div 
+                  key={m._id} 
+                  className="w-6 h-6 rounded-full border border-white bg-slate-100 flex items-center justify-center flex-shrink-0 overflow-hidden"
+                  title={m.full_name}
+                >
+                  {m.avatar_url ? (
+                    <img src={m.avatar_url} className="w-full h-full object-cover" alt="" />
+                  ) : (
+                    <span className="text-[8px] font-bold text-slate-500">
+                      {m.full_name.split(' ').map((n) => n[0]).join('')}
+                    </span>
+                  )}
+                </div>
+              ))}
+              {secondary.length > 3 && (
+                <div className="w-6 h-6 rounded-full border border-white bg-slate-200 flex items-center justify-center flex-shrink-0 z-10">
+                  <span className="text-[8px] font-bold text-slate-600">+{secondary.length - 3}</span>
+                </div>
+              )}
+            </div>
+          );
+        },
+      },
+      {
         accessorKey: 'parent_id',
         header: 'Parent',
         cell: ({ row }) => {
-          const parentId = row.original.parent_id;
-          if (!parentId) return <span className="text-ink-muted text-xs">—</span>;
+          const rawParent = row.original.parent_id;
+          if (!rawParent) return <span className="text-ink-muted text-xs">—</span>;
+          
+          const parentId = typeof rawParent === 'object' ? rawParent._id : rawParent;
           const parentName = deptMap.get(parentId);
           return <span className="text-sm text-ink">{parentName || 'Unknown'}</span>;
         },

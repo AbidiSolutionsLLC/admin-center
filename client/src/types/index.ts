@@ -6,8 +6,8 @@ export interface Department {
   name: string;
   slug: string;
   type: 'business_unit' | 'division' | 'department' | 'cost_center';
-  parent_id: string | null;
-  primary_manager_id: string | null;
+  parent_id: string | null | { _id: string; name: string; slug: string; type: string };
+  primary_manager_id: string | null | { _id: string; full_name: string; avatar_url?: string };
   secondary_manager_ids?: string[];
   primary_manager?: { _id: string; full_name: string; avatar_url?: string };
   secondary_managers?: Array<{ _id: string; full_name: string; avatar_url?: string }>;
@@ -300,11 +300,11 @@ export interface User {
   email: string;
   phone?: string;
   avatar_url?: string;
-  department_id?: string;
+  department_id?: string | { _id: string; name: string; slug: string };
   department?: { _id: string; name: string; slug: string };
-  team_id?: string;
+  team_id?: string | { _id: string; name: string; slug: string };
   team?: { _id: string; name: string; slug: string };
-  manager_id?: string;
+  manager_id?: string | { _id: string; full_name: string; email: string; avatar_url?: string };
   manager?: { _id: string; full_name: string; email: string; avatar_url?: string };
   secondary_manager_ids?: string[];
   secondary_managers?: Array<{ _id: string; full_name: string; email: string; avatar_url?: string }>;

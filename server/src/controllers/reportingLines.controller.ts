@@ -118,7 +118,7 @@ function isSelfAssignment(userId: string, managerId: string): boolean {
 /**
  * Enriches a user object with populated manager fields
  */
-export async function enrichUserWithManagers(user: any) {
+export async function enrichUserWithManagers(user: Record<string, any>) {
   // If user is a Mongoose document, convert to object
   const enriched = typeof user.toObject === 'function' ? user.toObject() : { ...user };
   
@@ -127,8 +127,9 @@ export async function enrichUserWithManagers(user: any) {
   }
   
   if (enriched.secondary_manager_ids && Array.isArray(enriched.secondary_manager_ids)) {
+    // 1. Create populated objects for the UI
     enriched.secondary_managers = enriched.secondary_manager_ids
-      .map((m: any) => {
+      .map((m: unknown) => {
         if (typeof m === 'object' && m !== null) {
           return {
             _id: m._id,
@@ -137,11 +138,17 @@ export async function enrichUserWithManagers(user: any) {
             avatar_url: m.avatar_url,
           };
         }
-        return m;
+        return null;
       })
-      .filter((m: any) => typeof m === 'object' && m !== null && m._id);
+      .filter((m): m is Record<string, any> => m !== null);
+
+    // 2. Ensure secondary_manager_ids only contains IDs (for form population)
+    enriched.secondary_manager_ids = enriched.secondary_manager_ids.map((m: unknown) => 
+      (typeof m === 'object' && m !== null) ? m._id.toString() : m.toString()
+    );
   } else {
     enriched.secondary_managers = [];
+    enriched.secondary_manager_ids = [];
   }
 
   return enriched;

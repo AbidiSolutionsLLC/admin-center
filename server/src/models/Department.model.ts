@@ -9,7 +9,7 @@ export interface IDepartment extends Document {
   type: 'business_unit' | 'division' | 'department' | 'cost_center';
   parent_id?: Types.ObjectId | string | null;
   primary_manager_id?: Types.ObjectId | string | null;
-  secondary_manager_id?: Types.ObjectId | string | null;
+  secondary_manager_ids?: Array<Types.ObjectId | string>;
   custom_fields: Record<string, unknown>;
   is_active: boolean;
   created_at: Date;
@@ -23,12 +23,13 @@ const DepartmentSchema = new Schema<IDepartment>({
   type: { type: String, enum: ['business_unit', 'division', 'department', 'cost_center'], required: true },
   parent_id: { type: Schema.Types.ObjectId, ref: 'Department' },
   primary_manager_id: { type: Schema.Types.ObjectId, ref: 'User' },
-  secondary_manager_id: { type: Schema.Types.ObjectId, ref: 'User' },
+  secondary_manager_ids: [{ type: Schema.Types.ObjectId, ref: 'User' }],
   custom_fields: { type: Schema.Types.Mixed, default: {} },
   is_active: { type: Boolean, default: true },
 }, { timestamps: { createdAt: 'created_at', updatedAt: 'updated_at' } });
 
 DepartmentSchema.index({ company_id: 1, slug: 1 }, { unique: true, partialFilterExpression: { is_active: true } });
+DepartmentSchema.index({ company_id: 1, secondary_manager_ids: 1 });
 
 // Auto-generate slug from name if modified
 DepartmentSchema.pre('validate', function() {

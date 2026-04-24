@@ -83,7 +83,16 @@ export const DepartmentPanel: React.FC<DepartmentPanelProps> = ({
             <div>
               <p className="text-xs font-semibold text-ink">Attention needed</p>
               <p className="text-[11px] text-ink-secondary mt-0.5">
-                This department has active members but no primary manager assigned.
+                {(() => {
+                  const isOrphan = department.type !== 'business_unit' && !department.parent_id;
+                  const isImbalanced = (department.headcount ?? 0) > 15 && (!department.secondary_managers || department.secondary_managers.length === 0);
+                  const noManager = (department.headcount ?? 0) > 0 && !department.primary_manager;
+
+                  if (noManager) return "This department has active members but no primary manager assigned.";
+                  if (isOrphan) return "This department is not nested under a parent, which breaks organizational structure.";
+                  if (isImbalanced) return "This department has a high span of control. Consider assigning secondary managers.";
+                  return "This department requires attention.";
+                })()}
               </p>
             </div>
           </div>
