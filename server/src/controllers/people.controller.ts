@@ -47,7 +47,7 @@ import { InviteToken } from '../models/InviteToken.model';
 
 const InviteUserSchema = z.object({
   full_name: z.string().min(1, 'Full name is required').max(100),
-  email: z.string().email('Invalid email address'),
+  email: z.string().email('Invalid email address').transform(v => v.toLowerCase()),
   phone: z.string().optional().nullable(),
   department_id: z.string().optional().nullable(),
   team_id: z.string().optional().nullable(),
@@ -92,7 +92,7 @@ const UpdateLifecycleSchema = z.object({
 
 const BulkInviteRowSchema = z.object({
   full_name: z.string().min(1, 'Full name is required').max(100),
-  email: z.string().email('Invalid email address'),
+  email: z.string().email('Invalid email address').transform(v => v.toLowerCase()),
   phone: z.string().optional(),
   department_id: z.string().optional(),
   team_id: z.string().optional(),
@@ -409,6 +409,26 @@ async function runLifecycleAutomations(
   }
 
   // 2. Transition-Specific Automations (Invite Link, etc.)
+  if (transitionKey === 'onboarding_to_active') {
+    // RBAC: Grant 'Employee' role by default if not set
+    if (!user.role) {
+      user.role = 'Employee';
+    }
+    user.is_active = true;
+    await user.save();
+
+    await auditLogger.log({
+      req,
+      action: 'user.lifecycle_automation',
+      module: 'people',
+      object_type: 'User',
+      object_id: user._id.toString(),
+      object_label: user.full_name,
+      before_state: { transition: transitionKey },
+      after_state: { automation: 'account_activated', role: user.role },
+    });
+  }
+
   if (transitionKey === 'invited_to_onboarding') {
     const rawToken = crypto.randomBytes(32).toString('hex');
     const tokenHash = crypto.createHash('sha256').update(rawToken).digest('hex');
@@ -815,6 +835,10 @@ export const inviteUser = asyncHandler(async (req: Request, res: Response) => {
   }
 
   // Audit log
+  const afterState = user.toObject();
+  delete afterState.password_hash;
+  delete afterState.refresh_token_hash;
+
   await auditLogger.log({
     req,
     action: 'user.invited',
@@ -823,7 +847,7 @@ export const inviteUser = asyncHandler(async (req: Request, res: Response) => {
     object_id: user._id.toString(),
     object_label: user.full_name,
     before_state: null,
-    after_state: user.toObject(),
+    after_state: afterState,
   });
 
   // Return enriched user without sensitive fields
@@ -949,6 +973,14 @@ export const updateUser = asyncHandler(async (req: Request, res: Response) => {
   }
 
   // Audit log
+  const afterState = user.toObject();
+  delete afterState.password_hash;
+  delete afterState.refresh_token_hash;
+  
+  const sanitizedBefore = beforeState;
+  delete sanitizedBefore.password_hash;
+  delete sanitizedBefore.refresh_token_hash;
+
   await auditLogger.log({
     req,
     action: 'user.updated',
@@ -956,8 +988,8 @@ export const updateUser = asyncHandler(async (req: Request, res: Response) => {
     object_type: 'User',
     object_id: user._id.toString(),
     object_label: user.full_name,
-    before_state: beforeState,
-    after_state: user.toObject(),
+    before_state: sanitizedBefore,
+    after_state: afterState,
   });
 
   // Return enriched user without sensitive fields
@@ -1046,6 +1078,10 @@ export const updateUserLifecycle = asyncHandler(async (req: Request, res: Respon
   }
 
   // MANDATORY: Main audit log for lifecycle change
+  const afterState = user.toObject();
+  delete afterState.password_hash;
+  delete afterState.refresh_token_hash;
+
   await auditLogger.log({
     req,
     action: 'user.lifecycle_changed',
@@ -1053,8 +1089,8 @@ export const updateUserLifecycle = asyncHandler(async (req: Request, res: Respon
     object_type: 'User',
     object_id: user._id.toString(),
     object_label: user.full_name,
-    before_state: beforeState,
-    after_state: user.toObject(),
+    before_state: beforeState, // beforeState should already be sanitized if it comes from user.toObject() in this file
+    after_state: afterState,
   });
 
   // ── Send deactivation notifications ──────────────────────────────────────
@@ -1144,12 +1180,18 @@ export const updateUserLifecycle = asyncHandler(async (req: Request, res: Respon
 export const bulkInviteUsers = asyncHandler(async (req: Request, res: Response) => {
   const input = BulkInviteSchema.parse(req.body);
 
-  // Get company info for emails
   const company = await Company.findById(req.user.company_id);
   if (!company) {
     throw new AppError('Company not found', 404, 'COMPANY_NOT_FOUND');
   }
 
+  const emails = input.users.map(u => u.email.toLowerCase());
+  const existingUsers = await User.find({
+    company_id: req.user.company_id,
+    email: { $in: emails }
+  }).select('email');
+
+  const existingEmails = new Set(existingUsers.map(u => u.email));
   const results: Array<{
     row: number;
     email: string;
@@ -1158,85 +1200,102 @@ export const bulkInviteUsers = asyncHandler(async (req: Request, res: Response) 
     error?: string;
   }> = [];
 
-  const createdUsers: Array<{ email: string; full_name: string; employee_id: string; token: string }> = [];
+  const usersToCreate: any[] = [];
+  const createdUserInfos: Array<{ email: string; full_name: string; employee_id: string; token: string; userId?: string }> = [];
 
-  // Process each user
   for (let i = 0; i < input.users.length; i++) {
     const row = input.users[i];
     const rowNumber = i + 1;
+    const email = row.email.toLowerCase();
+
+    if (existingEmails.has(email)) {
+      results.push({
+        row: rowNumber,
+        email,
+        success: false,
+        error: 'User with this email already exists',
+      });
+      continue;
+    }
 
     try {
-      // Validate row
-      const validatedRow = BulkInviteRowSchema.parse(row);
-
-      // Check for duplicate email in this company
-      const existingUser = await User.findOne({
-        company_id: req.user.company_id,
-        email: validatedRow.email,
-      });
-
-      if (existingUser) {
-        results.push({
-          row: rowNumber,
-          email: validatedRow.email,
-          success: false,
-          error: 'User with this email already exists',
-        });
-        continue;
-      }
-
-      // Validate email format and domain enforcement
-      try {
-        await validateEmailDomain(req, validatedRow.email);
-      } catch (validationError: any) {
-        results.push({
-          row: rowNumber,
-          email: validatedRow.email,
-          success: false,
-          error: validationError.message || 'Email validation failed',
-        });
-        continue;
-      }
-
-      // Generate temporary password
+      await validateEmailDomain(req, email);
+      
       const tempPassword = generateTemporaryPassword();
       const password_hash = await bcrypt.hash(tempPassword, 10);
-
-      // Create user
-      const user = await User.create({
-        ...validatedRow,
-        company_id: req.user.company_id as any,
-        password_hash,
-        role: validatedRow.role || 'Employee', // Default to 'Employee' if not provided
-    lifecycle_state: 'pending',
-        is_active: false,
-        department_id: validatedRow.department_id || undefined,
-        team_id: validatedRow.team_id || undefined,
-        manager_id: validatedRow.manager_id || undefined,
-        secondary_manager_ids: validatedRow.secondary_manager_ids || [],
-        location_id: validatedRow.location_id || undefined,
-        hire_date: validatedRow.hire_date ? new Date(validatedRow.hire_date) : undefined,
-      });
-
-      // Track created user for email sending
       const rawToken = crypto.randomBytes(32).toString('hex');
       const tokenHash = crypto.createHash('sha256').update(rawToken).digest('hex');
 
-      await InviteToken.create({
-        user_id: user._id,
-        token_hash: tokenHash,
-        expires_at: new Date(Date.now() + 72 * 60 * 60 * 1000), // 72 hours
+      usersToCreate.push({
+        ...row,
+        email,
+        company_id: req.user.company_id,
+        password_hash,
+        role: row.role || 'Employee',
+        lifecycle_state: 'pending',
+        is_active: false,
+        hire_date: row.hire_date ? new Date(row.hire_date) : undefined,
+        _tokenHash: tokenHash, // Temporary storage for token creation
+        _rawToken: rawToken     // Temporary storage for email sending
       });
 
-      createdUsers.push({
+      // Placeholder result, will be updated after bulk create
+      results.push({
+        row: rowNumber,
+        email,
+        success: true
+      });
+    } catch (error: any) {
+      results.push({
+        row: rowNumber,
+        email,
+        success: false,
+        error: error.message || 'Validation failed',
+      });
+    }
+  }
+
+  if (usersToCreate.length > 0) {
+    // 1. Bulk Create Users
+    // Note: We use create() instead of insertMany() to trigger pre-save hooks (like employee_id generation)
+    // but we can still optimize by doing them in parallel if needed. 
+    // However, User.create([docs]) is actually quite efficient in Mongoose as it runs hooks.
+    const createdUsers = await User.create(usersToCreate.map(({ _tokenHash, _rawToken, ...u }) => u));
+
+    // 2. Bulk Create Tokens and Audit Logs
+    const tokensToCreate = [];
+    const auditLogs = [];
+
+    for (let i = 0; i < createdUsers.length; i++) {
+      const user = createdUsers[i];
+      const sourceData = usersToCreate[i];
+
+      tokensToCreate.push({
+        user_id: user._id,
+        token_hash: sourceData._tokenHash,
+        expires_at: new Date(Date.now() + 72 * 60 * 60 * 1000),
+      });
+
+      createdUserInfos.push({
         email: user.email,
         full_name: user.full_name,
         employee_id: user.employee_id,
-        token: rawToken,
+        token: sourceData._rawToken,
+        userId: user._id.toString()
       });
 
-      // Audit log
-      await auditLogger.log({
+      // Update results with generated employee_id
+      const resultIndex = results.findIndex(r => r.email === user.email && r.success);
+      if (resultIndex !== -1) {
+        results[resultIndex].employee_id = user.employee_id;
+      }
+
+      // Prepare audit log
+      const afterState = user.toObject();
+      delete afterState.password_hash;
+      delete afterState.refresh_token_hash;
+
+      auditLogs.push(auditLogger.log({
         req,
         action: 'user.bulk_invited',
         module: 'people',
@@ -1244,39 +1303,27 @@ export const bulkInviteUsers = asyncHandler(async (req: Request, res: Response) 
         object_id: user._id.toString(),
         object_label: user.full_name,
         before_state: null,
-        after_state: user.toObject(),
-      });
-
-      results.push({
-        row: rowNumber,
-        email: validatedRow.email,
-        success: true,
-        employee_id: user.employee_id,
-      });
-    } catch (error) {
-      results.push({
-        row: rowNumber,
-        email: row.email,
-        success: false,
-        error: error instanceof Error ? error.message : 'Unknown error',
-      });
+        after_state: afterState,
+      }));
     }
-  }
 
-  // Send welcome emails in bulk
-  if (createdUsers.length > 0) {
+    await Promise.all([
+      InviteToken.insertMany(tokensToCreate),
+      ...auditLogs
+    ]);
+
+    // 3. Send Emails
     try {
       const emailResults = await sendBulkWelcomeEmails(
-        createdUsers.map(u => ({
+        createdUserInfos.map(u => ({
           email: u.email,
           full_name: u.full_name,
           employee_id: u.employee_id,
           company_name: company.name,
-          invite_link: `${process.env.CLIENT_URL}/onboarding?token=${(u as any).token}&email=${encodeURIComponent(u.email)}`,
+          invite_link: `${process.env.CLIENT_URL}/onboarding?token=${u.token}&email=${encodeURIComponent(u.email)}`,
         }))
       );
 
-      // Log email failures
       emailResults.forEach(result => {
         if (!result.success) {
           console.error(`Failed to send welcome email to ${result.email}:`, result.error);
@@ -1284,19 +1331,15 @@ export const bulkInviteUsers = asyncHandler(async (req: Request, res: Response) 
       });
     } catch (error) {
       console.error('Bulk email sending failed:', error);
-      // Don't fail the entire operation if emails fail
     }
   }
-
-  const successCount = results.filter(r => r.success).length;
-  const failureCount = results.filter(r => !r.success).length;
 
   res.status(200).json({
     success: true,
     data: {
       total: input.users.length,
-      successful: successCount,
-      failed: failureCount,
+      successful: usersToCreate.length,
+      failed: input.users.length - usersToCreate.length,
       results,
     },
   });
@@ -1525,6 +1568,10 @@ export const bulkUpdateLifecycle = asyncHandler(async (req: Request, res: Respon
     }
 
     // Individual audit event for each user
+    const afterState = user.toObject();
+    delete afterState.password_hash;
+    delete afterState.refresh_token_hash;
+
     await auditLogger.log({
       req,
       action: 'user.lifecycle_changed',
@@ -1533,7 +1580,7 @@ export const bulkUpdateLifecycle = asyncHandler(async (req: Request, res: Respon
       object_id: user._id.toString(),
       object_label: user.full_name,
       before_state: beforeState,
-      after_state: user.toObject(),
+      after_state: afterState,
     });
 
     successCount++;

@@ -124,13 +124,13 @@ async function enrichDepartments(
     const has_intelligence_flag = (headcount > 0 && !dept.primary_manager_id) || isOrphan || isImbalanced;
     
     // Map populated objects to the names expected by the frontend
-    if (data.primary_manager_id && typeof data.primary_manager_id === 'object') {
-      data.primary_manager = data.primary_manager_id as Record<string, unknown>;
+    if (data.primary_manager_id && typeof data.primary_manager_id === 'object' && data.primary_manager_id !== null) {
+      data.primary_manager = data.primary_manager_id as unknown as Record<string, unknown>;
     }
     if (data.secondary_manager_ids && Array.isArray(data.secondary_manager_ids)) {
       data.secondary_managers = data.secondary_manager_ids
         .filter((m): m is Record<string, any> => typeof m === 'object' && m !== null)
-        .map((m: Record<string, any>) => ({
+        .map((m) => ({
           _id: m._id,
           full_name: m.full_name,
           avatar_url: m.avatar_url,
@@ -138,7 +138,7 @@ async function enrichDepartments(
         }));
       
       // Extract IDs for form population
-      data.secondary_manager_ids = data.secondary_manager_ids.map((m: unknown) => 
+      data.secondary_manager_ids = data.secondary_manager_ids.map((m: any) => 
         (typeof m === 'object' && m !== null) ? m._id.toString() : String(m)
       );
     } else {
@@ -985,6 +985,10 @@ export const assignUserOrg = asyncHandler(async (req: Request, res: Response) =>
     }
   }
 
+  const sanitizedBefore = beforeState;
+  delete (sanitizedBefore as any).password_hash;
+  delete (sanitizedBefore as any).refresh_token_hash;
+
   await auditLogger.log({
     req,
     action: 'user.org_assigned',
@@ -992,7 +996,7 @@ export const assignUserOrg = asyncHandler(async (req: Request, res: Response) =>
     object_type: 'User',
     object_id: user._id.toString(),
     object_label: user.full_name,
-    before_state: beforeState,
+    before_state: sanitizedBefore,
     after_state: {
       department_id: user.department_id,
       team_ids: input.team_ids || [],

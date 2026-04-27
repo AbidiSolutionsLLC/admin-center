@@ -14,7 +14,6 @@ export const useCreateTeam = () => {
 
   return useMutation<Team, Error, CreateTeamInput>({
     mutationFn: async (input) => {
-      console.log("Payload:", input);
       const { data } = await apiClient.post('/teams', input);
       return data.data;
     },

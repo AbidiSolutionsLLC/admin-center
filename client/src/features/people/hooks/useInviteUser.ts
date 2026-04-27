@@ -13,7 +13,6 @@ export const useInviteUser = () => {
 
   return useMutation<User, Error, InviteUserInput>({
     mutationFn: async (input: InviteUserInput) => {
-      console.log("Payload:", input);
       const { data } = await apiClient.post('/people/invite', input);
       return data.data;
     },

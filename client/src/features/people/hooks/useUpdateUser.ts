@@ -13,7 +13,6 @@ export const useUpdateUser = (userId: string) => {
 
   return useMutation<User, Error, UpdateUserInput>({
     mutationFn: async (input: UpdateUserInput) => {
-      console.log("Payload:", input);
       const { data } = await apiClient.put(`/people/${userId}`, input);
       return data.data;
     },
