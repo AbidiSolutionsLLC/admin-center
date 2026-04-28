@@ -12,7 +12,7 @@ export const useLogin = () => {
 
   return useMutation({
     mutationFn: async (credentials: Record<string, string>) => {
-      const { data } = await apiClient.post('/auth/login', credentials);
+      const { data } = await apiClient.post('/auth/login', credentials, { _skipErrorNotify: true } as any);
       return data.data;
     },
     onSuccess: (data) => {
@@ -29,6 +29,8 @@ export const useLogin = () => {
     },
     onError: (error: any) => {
       console.error('Login failed', error);
+      const message = error.response?.data?.error || error.response?.data?.message || 'Login failed. Please check your credentials.';
+      toast.error(message);
     },
   });
 };

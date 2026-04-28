@@ -19,8 +19,8 @@ export const requireAuth = asyncHandler(async (req: Request, res: Response, next
     return res.status(401).json({ error: 'Unauthorized', code: 'NO_TOKEN' });
   }
 
-  if (user.lifecycle_state === 'deactivated' || user.lifecycle_state === 'archived' || user.is_active === false) {
-    return res.status(403).json({ error: 'Account is deactivated or archived', code: 'FORBIDDEN' });
+  if (user.lifecycle_state === 'deactivated' || user.lifecycle_state === 'archived' || user.lifecycle_state === 'terminated' || user.is_active === false) {
+    return res.status(403).json({ error: 'Your account is currently inactive. Please contact support if you believe this is an error.', code: 'FORBIDDEN' });
   }
 
   req.user = decoded; // company_id, userId, user_role always available downstream

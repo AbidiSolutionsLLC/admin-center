@@ -273,7 +273,7 @@ export const createDepartment = asyncHandler(async (req: Request, res: Response)
     req,
     action: 'department.created',
     module: 'organization',
-    object_type: 'Department',
+    object_type: input.type === 'business_unit' ? 'BusinessUnit' : 'Department',
     object_id: dept._id.toString(),
     object_label: dept.name,
     before_state: null,
@@ -374,7 +374,7 @@ export const updateDepartment = asyncHandler(async (req: Request, res: Response)
     req,
     action: 'department.updated',
     module: 'organization',
-    object_type: 'Department',
+    object_type: dept.type === 'business_unit' ? 'BusinessUnit' : 'Department',
     object_id: dept._id.toString(),
     object_label: dept.name,
     before_state: beforeState,
@@ -895,7 +895,7 @@ export const deleteBusinessUnit = asyncHandler(async (req: Request, res: Respons
     req,
     action: 'business_unit.archived',
     module: 'organization',
-    object_type: 'Department',
+    object_type: 'BusinessUnit',
     object_id: bu._id.toString(),
     object_label: bu.name,
     before_state: beforeState,
@@ -992,7 +992,7 @@ export const assignUserOrg = asyncHandler(async (req: Request, res: Response) =>
   await auditLogger.log({
     req,
     action: 'user.org_assigned',
-    module: 'people',
+    module: 'organization',
     object_type: 'User',
     object_id: user._id.toString(),
     object_label: user.full_name,
@@ -1054,7 +1054,7 @@ export const getOrgHistory = asyncHandler(async (req: Request, res: Response) =>
 
   // ── Input Sanitization ─────────────────────────────────────────────────────
   
-  const ALLOWED_OBJECT_TYPES = ['Department', 'Team', 'BusinessUnit'];
+  const ALLOWED_OBJECT_TYPES = ['Department', 'Team', 'BusinessUnit', 'TeamMember', 'User'];
   if (object_type && !ALLOWED_OBJECT_TYPES.includes(String(object_type))) {
     throw new AppError('Invalid object_type filter', 400, 'INVALID_FILTER');
   }
@@ -1089,9 +1089,19 @@ export const getOrgHistory = asyncHandler(async (req: Request, res: Response) =>
   }
 
   const events = await AuditEvent.find(query)
+    .populate('actor_id', 'full_name email')
     .sort({ created_at: -1 })
     .limit(100)
     .lean();
 
-  res.status(200).json({ success: true, data: events });
+  // Enrich events with actor name for consistent display
+  const enrichedEvents = events.map((event) => {
+    const actor = event.actor_id as unknown as { full_name?: string; email?: string } | null;
+    return {
+      ...event,
+      actor_name: actor?.full_name || event.actor_email,
+    };
+  });
+
+  res.status(200).json({ success: true, data: enrichedEvents });
 });

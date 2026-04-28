@@ -128,8 +128,23 @@ export const IdentityHealthBadge: React.FC<IdentityHealthBadgeProps> = ({ user, 
       });
     }
 
+    // Check data integrity (is_flagged from intelligence layer)
+    if (user.is_flagged) {
+      signals.push({
+        status: 'warning',
+        label: 'Integrity',
+        tooltip: 'User data has integrity issues (duplicates or missing fields). Check Insights.',
+      });
+    } else {
+      signals.push({
+        status: 'ok',
+        label: 'Integrity',
+        tooltip: 'User data integrity verified',
+      });
+    }
+
     return signals;
-  }, [user, user.location_id, user.location]);
+  }, [user, user.location_id, user.location, user.is_flagged]);
 
   const hasCritical = healthSignals.some((s) => s.status === 'critical');
   const hasWarning = healthSignals.some((s) => s.status === 'warning');

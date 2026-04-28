@@ -58,7 +58,7 @@ const ACTION_TYPE_LABELS: Record<WorkflowActionType, string> = {
 };
 
 const LIFECYCLE_STATES = [
-  'invited', 'onboarding', 'active', 'probation', 'on_leave', 'terminated', 'archived',
+  'pending', 'invited', 'onboarding', 'active', 'probation', 'on_leave', 'deactivated', 'terminated', 'archived',
 ];
 
 const RUN_STATUS_ICONS: Record<string, { icon: React.ReactNode; color: string; label: string }> = {

@@ -15,7 +15,9 @@ import {
   exportUsers,
   deleteUser,
   resendInvite,
+  getUserHistory,
 } from '../controllers/people.controller';
+
 import { assignUserOrg } from '../controllers/organization.controller';
 import { PERMISSION_GROUPS } from '../constants/roles';
 import reportingLinesRoutes from './reportingLines.routes';
@@ -84,6 +86,12 @@ router.post('/bulk-assign-role', requireRole(PEOPLE_MANAGERS), bulkAssignRole);
  * Returns a single user by ID
  */
 router.get('/:id', getUserById);
+
+/**
+ * GET /people/:id/history
+ * Returns audit history for a single user
+ */
+router.get('/:id/history', requireRole(PEOPLE_MANAGERS), getUserHistory);
 
 /**
  * POST /people/:id/resend-invite

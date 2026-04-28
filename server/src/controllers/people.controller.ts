@@ -21,6 +21,8 @@ import { handleLifecycleEvent } from '../lib/workflowEngine';
 import { deliverNotification } from '../lib/notificationEngine';
 import { PERMISSION_GROUPS } from '../constants/roles';
 import { NotificationTemplate } from '../models/NotificationTemplate.model';
+import { AuditEvent } from '../models/AuditEvent.model';
+
 
 // ── Types & Interfaces ───────────────────────────────────────────────────────
 
@@ -77,7 +79,7 @@ const UpdateUserSchema = z.object({
 });
 
 const UpdateLifecycleSchema = z.object({
-  lifecycle_state: z.enum(['pending', 'active', 'deactivated', 'archived']),
+  lifecycle_state: z.enum(['pending', 'invited', 'onboarding', 'active', 'probation', 'on_leave', 'deactivated', 'terminated', 'archived']),
   reason: z.string().optional(),
 }).refine((data) => {
   // Require reason for deactivation and archiving
@@ -357,9 +359,14 @@ async function runLifecycleAutomations(
   const originalUserFirstName = originalUserFullName.split(' ')[0];
 
   // 1. Target-Specific Side Effects (Revocation, Anonymization, etc.)
-  if (targetState === 'archived') {
+  if (targetState === 'archived' || targetState === 'deactivated' || targetState === 'terminated') {
     user.refresh_token_hash = undefined;
-    user.is_active = false;
+    
+    // termination_date only for terminated
+    if (targetState === 'terminated' && !user.termination_date) {
+      user.termination_date = new Date();
+    }
+
     await user.save();
 
     await RefreshToken.updateMany(
@@ -375,7 +382,11 @@ async function runLifecycleAutomations(
       object_id: user._id.toString(),
       object_label: user.full_name,
       before_state: { transition: transitionKey },
-      after_state: { automation: 'sessions_revoked', refresh_tokens_invalidated: true },
+      after_state: { 
+        automation: 'sessions_revoked', 
+        refresh_tokens_invalidated: true,
+        termination_date_set: targetState === 'terminated'
+      },
     });
   }
 
@@ -631,7 +642,7 @@ export const getUsers = asyncHandler(async (req: Request, res: Response) => {
 
   if (lifecycle_state) {
     // Validate lifecycle_state is a valid value
-    const VALID_LIFECYCLE_STATES: LifecycleState[] = ['pending', 'active', 'deactivated', 'archived'];
+    const VALID_LIFECYCLE_STATES: LifecycleState[] = ['pending', 'invited', 'onboarding', 'active', 'probation', 'on_leave', 'deactivated', 'terminated', 'archived'];
     if (VALID_LIFECYCLE_STATES.includes(lifecycle_state as LifecycleState)) {
       filter.lifecycle_state = lifecycle_state as LifecycleState;
     }
@@ -700,6 +711,26 @@ export const getUserById = asyncHandler(async (req: Request, res: Response) => {
   const [enriched] = await enrichUsers([user.toObject()], req.user.company_id);
   res.status(200).json({ success: true, data: enriched });
 });
+
+/**
+ * GET /people/:id/history
+ * Returns the audit history for a specific user.
+ * Filters for user-related actions.
+ */
+export const getUserHistory = asyncHandler(async (req: Request, res: Response) => {
+  const userId = getRouteId(req.params.id);
+
+  const history = await AuditEvent.find({
+    company_id: req.user.company_id,
+    object_id: userId,
+    object_type: 'User',
+  })
+    .populate('actor_id', 'full_name email avatar_url')
+    .sort({ created_at: -1 });
+
+  res.status(200).json({ success: true, data: history });
+});
+
 
 /**
  * POST /people/invite
@@ -1039,20 +1070,12 @@ export const updateUserLifecycle = asyncHandler(async (req: Request, res: Respon
   user.lifecycle_state = targetState;
 
   // Handle specific transitions
-  if (targetState === 'active') {
+  if (targetState === 'active' || targetState === 'on_leave' || targetState === 'probation') {
     user.is_active = true;
   }
 
-  if (targetState === 'deactivated') {
-    user.is_active = false; // Deactivate user account
-  }
-
-  if (targetState === 'archived') {
-    user.is_active = false; // Archived users cannot access
-  }
-
-  if (targetState === 'archived') {
-    user.is_active = false;
+  if (targetState === 'deactivated' || targetState === 'terminated' || targetState === 'archived') {
+    user.is_active = false; // Deactivate user account access
   }
 
   await user.save();
@@ -1093,21 +1116,22 @@ export const updateUserLifecycle = asyncHandler(async (req: Request, res: Respon
     after_state: afterState,
   });
 
-  // ── Send deactivation notifications ──────────────────────────────────────
-  if (targetState === 'deactivated') {
+  // ── Send deactivation/termination notifications ──────────────────────────────────────
+  if (targetState === 'deactivated' || targetState === 'terminated') {
     try {
       const company = await Company.findById(req.user.company_id);
+      const stateLabel = targetState === 'deactivated' ? 'Deactivated' : 'Terminated';
 
       // Send email to the user
       await sendEmail({
         to: user.email,
-        subject: `${company?.name || 'Your Company'} - Account Deactivated`,
+        subject: `${company?.name || 'Your Company'} - Account ${stateLabel}`,
         html: `
           <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;">
-            <h2>Account Deactivated</h2>
+            <h2>Account ${stateLabel}</h2>
             <p>Dear ${user.full_name},</p>
-            <p>Your account has been deactivated by an administrator.</p>
-            <p><strong>Reason:</strong> ${input.reason}</p>
+            <p>Your account has been marked as <strong>${targetState}</strong> by an administrator.</p>
+            <p><strong>Reason:</strong> ${input.reason || 'No reason provided'}</p>
             <p>If you believe this was done in error, please contact support.</p>
             <p>Best regards,<br>${company?.name || 'Your Company'} Team</p>
           </div>
@@ -1120,13 +1144,13 @@ export const updateUserLifecycle = asyncHandler(async (req: Request, res: Respon
         if (manager) {
           await sendEmail({
             to: manager.email,
-            subject: `${company?.name || 'Your Company'} - Employee Account Deactivated`,
+            subject: `${company?.name || 'Your Company'} - Employee Account ${stateLabel}`,
             html: `
               <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;">
-                <h2>Employee Account Deactivated</h2>
+                <h2>Employee Account ${stateLabel}</h2>
                 <p>Dear ${manager.full_name},</p>
-                <p>This is to inform you that ${user.full_name}'s (${user.email}) account has been deactivated.</p>
-                <p><strong>Reason:</strong> ${input.reason}</p>
+                <p>This is to inform you that ${user.full_name}'s (${user.email}) account has been marked as <strong>${targetState}</strong>.</p>
+                <p><strong>Reason:</strong> ${input.reason || 'No reason provided'}</p>
                 <p>Please contact HR or support if you need additional information.</p>
                 <p>Best regards,<br>${company?.name || 'Your Company'} Team</p>
               </div>
@@ -1432,7 +1456,7 @@ export const deleteUser = asyncHandler(async (req: Request, res: Response) => {
 
 const BulkLifecycleSchema = z.object({
   user_ids: z.array(z.string()).min(1, 'At least one user ID is required').max(500),
-  lifecycle_state: z.enum(['pending', 'active', 'deactivated', 'archived']),
+  lifecycle_state: z.enum(['pending', 'invited', 'onboarding', 'active', 'probation', 'on_leave', 'deactivated', 'terminated', 'archived']),
   reason: z.string().optional(),
 }).refine((data) => {
   // Require reason for deactivation and archiving
@@ -1494,11 +1518,11 @@ export const bulkUpdateLifecycle = asyncHandler(async (req: Request, res: Respon
     user.lifecycle_state = targetState;
 
     // Handle specific transitions
-    if (targetState === 'deactivated') {
-      user.is_active = false;
+    if (targetState === 'active' || targetState === 'on_leave' || targetState === 'probation') {
+      user.is_active = true;
     }
 
-    if (targetState === 'archived') {
+    if (targetState === 'deactivated' || targetState === 'terminated' || targetState === 'archived') {
       user.is_active = false;
     }
 

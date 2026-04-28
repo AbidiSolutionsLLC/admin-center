@@ -9,9 +9,11 @@ import { cn } from '@/utils/cn';
 
 const OBJECT_TYPE_OPTIONS = [
   { value: '', label: 'All Types' },
+  { value: 'BusinessUnit', label: 'Business Units' },
   { value: 'Department', label: 'Departments' },
   { value: 'Team', label: 'Teams' },
   { value: 'TeamMember', label: 'Team Members' },
+  { value: 'User', label: 'User Reassignments' },
 ];
 
 /**
@@ -157,7 +159,7 @@ export const OrgHistoryTab: React.FC = () => {
                       )}
                     </td>
                     <td className="h-14 px-4 text-sm text-ink">{formatDate(event.created_at)}</td>
-                    <td className="h-14 px-4 text-sm text-ink">{event.actor_email}</td>
+                    <td className="h-14 px-4 text-sm text-ink">{event.actor_name || event.actor_email}</td>
                     <td className="h-14 px-4">
                       <span className="text-xs font-mono text-ink-secondary">{event.action}</span>
                     </td>

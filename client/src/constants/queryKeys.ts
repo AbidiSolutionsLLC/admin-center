@@ -18,7 +18,9 @@ export const QUERY_KEYS = {
   USER_DETAIL: (id: string) => ['user', id] as const,
   USER_STATS: ['users', 'stats'] as const,
   USER_REPORTING_LINE: (userId: string) => ['user', userId, 'reporting-line'] as const,
+  USER_HISTORY: (userId: string) => ['user', userId, 'history'] as const,
   FORM_METADATA: ['form-metadata'] as const,
+
   // Roles
   ROLES: ['roles'] as const,
   ROLE_DETAIL: (id: string) => ['role', id] as const,

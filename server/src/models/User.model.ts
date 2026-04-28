@@ -4,7 +4,7 @@ import { Company } from './Company.model';
 import { generateEmployeeId } from '../services/employeeId';
 
 export type UserRoleType = 'Super Admin' | 'Admin' | 'HR' | 'Manager' | 'Employee' | 'Technician';
-export type LifecycleState = 'pending' | 'active' | 'deactivated' | 'archived';
+export type LifecycleState = 'pending' | 'invited' | 'onboarding' | 'active' | 'probation' | 'on_leave' | 'deactivated' | 'terminated' | 'archived';
 export type EmploymentType = 'full_time' | 'part_time' | 'contractor' | 'intern';
 
 export interface IUser extends Document {
@@ -56,7 +56,7 @@ const UserSchema = new Schema<IUser>({
   },
   lifecycle_state: {
     type: String,
-    enum: ['pending', 'active', 'deactivated', 'archived'],
+    enum: ['pending', 'invited', 'onboarding', 'active', 'probation', 'on_leave', 'deactivated', 'terminated', 'archived'],
     default: 'pending',
   },
   lifecycle_changed_at: { type: Date, default: Date.now },

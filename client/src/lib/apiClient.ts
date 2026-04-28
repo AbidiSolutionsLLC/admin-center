@@ -40,17 +40,21 @@ apiClient.interceptors.response.use(
       }
     }
 
-    // 2. Force logout on terminated/archived account
+    // 2. Force logout on deactivated/terminated/archived account
     if (err.response?.status === 403 && !originalRequest._retry) {
       const errorData = err.response.data;
       const errorCode = errorData?.code;
       const errorMessage = errorData?.error || errorData?.message || '';
 
-      if (errorCode === 'FORBIDDEN' && /terminated|archived/i.test(errorMessage)) {
+      if (errorCode === 'FORBIDDEN' && /deactivated|terminated|archived/i.test(errorMessage)) {
         useAuthStore.getState().clearAuth();
-        toast.error('Your account is no longer active. You have been logged out.');
-        window.location.href = '/login';
-        return Promise.reject(err);
+        
+        // Only redirect and toast if not already on login page or if it was a background request
+        if (originalRequest.url !== '/auth/login') {
+          toast.error('Your account is no longer active. You have been logged out.');
+          window.location.href = '/login';
+          return Promise.reject(err);
+        }
       }
     }
 

@@ -4,17 +4,22 @@
  * Used by: people.controller.ts (lifecycle endpoint)
  */
 
-export type LifecycleState = 'pending' | 'active' | 'deactivated' | 'archived';
+export type LifecycleState = 'pending' | 'invited' | 'onboarding' | 'active' | 'probation' | 'on_leave' | 'deactivated' | 'terminated' | 'archived';
 
 /**
  * Valid lifecycle state transitions
  * Maps from current state to allowed next states
  */
 export const VALID_TRANSITIONS: Record<LifecycleState, LifecycleState[]> = {
-  pending: ['active', 'archived'],
-  active: ['deactivated', 'archived'],
-  deactivated: ['active', 'archived'],
-  archived: ['pending'], // Allow un-archiving if needed
+  pending: ['invited', 'active', 'archived'],
+  invited: ['onboarding', 'active', 'archived'],
+  onboarding: ['active', 'archived'],
+  active: ['probation', 'on_leave', 'deactivated', 'terminated', 'archived'],
+  probation: ['active', 'on_leave', 'deactivated', 'terminated', 'archived'],
+  on_leave: ['active', 'probation', 'deactivated', 'terminated', 'archived'],
+  deactivated: ['active', 'terminated', 'archived'],
+  terminated: ['active', 'archived'],
+  archived: ['pending', 'invited', 'active'],
 };
 
 /**

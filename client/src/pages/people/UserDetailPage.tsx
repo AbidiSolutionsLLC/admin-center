@@ -1,11 +1,13 @@
 // src/pages/people/UserDetailPage.tsx
 import { useParams, useNavigate } from 'react-router-dom';
-import { ArrowLeft, Users, Edit2, Mail } from 'lucide-react';
+import { UserHistoryPanel } from '@/features/people/components/UserHistoryPanel';
+import { TableSkeleton } from '@/components/ui/TableSkeleton';
+import { History, ArrowLeft, Users, Edit2, Mail } from 'lucide-react';
 import { useUserDetail } from '@/features/people/hooks/useUserDetail';
 import { useResendInvite } from '@/features/people/hooks/useResendInvite';
 import { useCallback } from 'react';
 import { ReportingLinesPanel } from '@/features/people/components/ReportingLinesPanel';
-import { TableSkeleton } from '@/components/ui/TableSkeleton';
+
 import { ErrorState } from '@/components/ui/ErrorState';
 import { EmptyState } from '@/components/ui/EmptyState';
 import { ROUTES } from '@/constants/routes';
@@ -157,9 +159,17 @@ export default function UserDetailPage() {
         <h2 className="text-base font-semibold text-ink">Reporting Structure</h2>
       </div>
       <ReportingLinesPanel userId={user._id} />
+
+      {/* ── History Panel ── */}
+      <div className="flex items-center gap-2 mb-2 pt-4">
+        <History className="w-5 h-5 text-ink-secondary" />
+        <h2 className="text-base font-semibold text-ink">User History</h2>
+      </div>
+      <UserHistoryPanel userId={user._id} />
     </div>
   );
 }
+
 
 // ── Sub-components ─────────────────────────────────────────────────────────
 

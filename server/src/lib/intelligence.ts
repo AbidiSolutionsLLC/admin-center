@@ -367,27 +367,40 @@ export const runIntelligenceRules = async (companyId: string | Types.ObjectId): 
     is_active: true,
   }).lean();
 
-  // Group users by full_name
+  // Group users by full_name and phone
   const nameUserMap = new Map<string, typeof allUsers>();
+  const phoneUserMap = new Map<string, typeof allUsers>();
+
   for (const user of allUsers) {
+    // Name check
     const normalizedName = user.full_name.toLowerCase().trim();
     if (!nameUserMap.has(normalizedName)) {
       nameUserMap.set(normalizedName, []);
     }
     nameUserMap.get(normalizedName)!.push(user);
+
+    // Phone check
+    if (user.phone) {
+      const normalizedPhone = user.phone.replace(/\D/g, '');
+      if (normalizedPhone.length >= 10) { // Only check if it looks like a valid phone
+        if (!phoneUserMap.has(normalizedPhone)) {
+          phoneUserMap.set(normalizedPhone, []);
+        }
+        phoneUserMap.get(normalizedPhone)!.push(user);
+      }
+    }
   }
 
   // Flag users with duplicate names
   for (const [name, users] of nameUserMap.entries()) {
     if (users.length > 1) {
-      // Create an insight for each duplicate user
       for (const user of users) {
         const duplicateEmails = users.map(u => u.email).join(', ');
         insightsToUpsert.push({
           company_id: companyObjectId,
           category: 'data_consistency',
           severity: 'warning',
-          title: `Potential duplicate user: "${user.full_name}"`,
+          title: `Potential duplicate user (Name): "${user.full_name}"`,
           description: `Multiple user accounts exist with the same full name "${user.full_name}". This may indicate duplicate accounts that should be merged or reviewed.`,
           reasoning: `Found ${users.length} user(s) with name "${user.full_name}". Emails: ${duplicateEmails}. Verify if these are separate individuals or duplicate accounts.`,
           affected_object_type: 'User',
@@ -399,6 +412,59 @@ export const runIntelligenceRules = async (companyId: string | Types.ObjectId): 
           detected_at: new Date(),
         });
       }
+    }
+  }
+
+  // Flag users with duplicate phone numbers
+  for (const [phone, users] of phoneUserMap.entries()) {
+    if (users.length > 1) {
+      for (const user of users) {
+        const duplicateEmails = users.map(u => u.email).join(', ');
+        insightsToUpsert.push({
+          company_id: companyObjectId,
+          category: 'data_consistency',
+          severity: 'warning',
+          title: `Potential duplicate user (Phone): ${user.phone}`,
+          description: `Multiple user accounts share the same phone number "${user.phone}". This often indicates duplicate identity records or shared accounts.`,
+          reasoning: `Found ${users.length} user(s) with phone number "${user.phone}". Emails: ${duplicateEmails}. Ensure each user has a unique primary contact number.`,
+          affected_object_type: 'User',
+          affected_object_id: user._id.toString(),
+          affected_object_label: user.full_name,
+          remediation_url: `/people/${user._id}`,
+          remediation_action: 'Review and resolve phone number conflict',
+          is_resolved: false,
+          detected_at: new Date(),
+        });
+      }
+    }
+  }
+
+  // ────────────────────────────────────────────────────────────────────────────
+  // RULE-13: Incomplete Profile (missing critical fields)
+  // ────────────────────────────────────────────────────────────────────────────
+
+  for (const user of activeUsers) {
+    const missingFields: string[] = [];
+    if (!user.phone) missingFields.push('Phone Number');
+    if (!user.hire_date) missingFields.push('Hire Date');
+    if (!user.employment_type) missingFields.push('Employment Type');
+
+    if (missingFields.length > 0) {
+      insightsToUpsert.push({
+        company_id: companyObjectId,
+        category: 'data_consistency',
+        severity: 'warning',
+        title: `Incomplete profile: ${user.full_name}`,
+        description: `This user profile is missing critical information: ${missingFields.join(', ')}. Maintaining complete user data is essential for payroll, compliance, and communication.`,
+        reasoning: `User "${user.full_name}" is in 'active' state but has empty values for: ${missingFields.join(', ')}.`,
+        affected_object_type: 'User',
+        affected_object_id: user._id.toString(),
+        affected_object_label: user.full_name,
+        remediation_url: `/people/${user._id}`,
+        remediation_action: 'Complete the user profile',
+        is_resolved: false,
+        detected_at: new Date(),
+      });
     }
   }
 
@@ -877,15 +943,70 @@ export const runIntelligenceRules = async (companyId: string | Types.ObjectId): 
     nameUserMapForResolve.get(normalizedName)!.push(user);
   }
 
-  // Resolve insights for users that no longer have duplicates
+  // Resolve insights for users that no longer have duplicates (Name)
   for (const [name, users] of nameUserMapForResolve.entries()) {
     if (users.length === 1) {
-      // Only one user with this name - resolve any duplicate insights
       await Insight.updateMany(
         {
           company_id: companyObjectId,
           affected_object_id: users[0]._id.toString(),
-          title: { $regex: /^Potential duplicate user:/ },
+          title: { $regex: /^Potential duplicate user \(Name\):/ },
+          is_resolved: false,
+        },
+        {
+          $set: {
+            is_resolved: true,
+            resolved_at: new Date(),
+          }
+        }
+      );
+    }
+  }
+
+  // Resolve insights for users that no longer have duplicates (Phone)
+  const phoneUserMapForResolve = new Map<string, typeof allUsersForResolve>();
+  for (const user of allUsersForResolve) {
+    if (user.phone) {
+      const normalizedPhone = user.phone.replace(/\D/g, '');
+      if (normalizedPhone.length >= 10) {
+        if (!phoneUserMapForResolve.has(normalizedPhone)) {
+          phoneUserMapForResolve.set(normalizedPhone, []);
+        }
+        phoneUserMapForResolve.get(normalizedPhone)!.push(user);
+      }
+    }
+  }
+
+  for (const [phone, users] of phoneUserMapForResolve.entries()) {
+    if (users.length === 1) {
+      await Insight.updateMany(
+        {
+          company_id: companyObjectId,
+          affected_object_id: users[0]._id.toString(),
+          title: { $regex: /^Potential duplicate user \(Phone\):/ },
+          is_resolved: false,
+        },
+        {
+          $set: {
+            is_resolved: true,
+            resolved_at: new Date(),
+          }
+        }
+      );
+    }
+  }
+
+  // ────────────────────────────────────────────────────────────────────────────
+  // Auto-resolve RULE-13 insights where profile is now complete
+  // ────────────────────────────────────────────────────────────────────────────
+
+  for (const user of allUsersForResolve) {
+    if (user.phone && user.hire_date && user.employment_type) {
+      await Insight.updateMany(
+        {
+          company_id: companyObjectId,
+          affected_object_id: user._id.toString(),
+          title: { $regex: /^Incomplete profile:/ },
           is_resolved: false,
         },
         {
@@ -931,6 +1052,29 @@ export const runIntelligenceRules = async (companyId: string | Types.ObjectId): 
       );
     }
   }
+
+  // ────────────────────────────────────────────────────────────────────────────
+  // Final Sync: Update is_flagged status on User model
+  // ────────────────────────────────────────────────────────────────────────────
+  
+  // Find all unresolved insights affecting users in this company
+  const usersWithActiveInsights = await Insight.distinct('affected_object_id', {
+    company_id: companyObjectId,
+    affected_object_type: 'User',
+    is_resolved: false,
+  });
+
+  // Bulk update users: flag those with insights, unflag those without
+  // We only target users in the current company
+  await User.updateMany(
+    { company_id: companyObjectId, _id: { $in: usersWithActiveInsights } },
+    { $set: { is_flagged: true } }
+  );
+
+  await User.updateMany(
+    { company_id: companyObjectId, _id: { $nin: usersWithActiveInsights } },
+    { $set: { is_flagged: false } }
+  );
 };
 
 // Type alias for external imports

@@ -2,8 +2,10 @@
 import { useState, useMemo, useCallback } from 'react';
 import {
   Users, UserPlus, Search, ChevronDown, X, RefreshCw,
-  Download, UserCheck, ArrowRightCircle,
+  Download, UserCheck, ArrowRightCircle, User as UserIcon, History
 } from 'lucide-react';
+
+
 import { useUsers, useBulkLifecycleChange, useBulkAssignRole, useExportUsers } from '@/features/people/hooks/useUsers';
 import { useUpdateUser } from '@/features/people/hooks/useUpdateUser';
 import { useUpdateLifecycle } from '@/features/people/hooks/useUpdateLifecycle';
@@ -17,7 +19,9 @@ import { UserTable } from '@/features/people/components/UserTable';
 import { InviteModal } from '@/features/people/components/InviteModal';
 import { UserOrgAssignmentModal } from '@/features/people/components/UserOrgAssignmentModal';
 import { UserForm, type UserFormData } from '@/features/people/components/UserForm';
+import { UserHistoryPanel } from '@/features/people/components/UserHistoryPanel';
 import { LifecycleStateSelector } from '@/features/people/components/LifecycleStateSelector';
+
 import { TableSkeleton } from '@/components/ui/TableSkeleton';
 import { ErrorState } from '@/components/ui/ErrorState';
 import { EmptyState } from '@/components/ui/EmptyState';
@@ -28,10 +32,12 @@ import { toast } from 'sonner';
 import { Checkbox } from '@/components/ui/checkbox';
 
 const LIFECYCLE_STATE_OPTIONS: { value: LifecycleState | ''; label: string }[] = [
-  { value: '', label: 'All States' },
-  { value: 'pending', label: 'Pending' },
+  { value: '', label: 'All Statuses' },
   { value: 'active', label: 'Active' },
+  { value: 'pending', label: 'Pending' },
+  { value: 'on_leave', label: 'On Leave' },
   { value: 'deactivated', label: 'Deactivated' },
+  { value: 'terminated', label: 'Terminated' },
   { value: 'archived', label: 'Archived' },
 ];
 
@@ -683,6 +689,7 @@ interface EditUserModalProps {
 }
 
 function EditUserModal({ user, isOpen, onClose, departments, locations, requiredFields = [] }: EditUserModalProps) {
+  const [activeTab, setActiveTab] = useState<'profile' | 'history'>('profile');
   const updateUser = useUpdateUser(user._id);
 
   const handleSubmit = useCallback(
@@ -715,44 +722,89 @@ function EditUserModal({ user, isOpen, onClose, departments, locations, required
       description={`Update profile for ${user.full_name}`}
       size="md"
       footer={
-        <>
+        activeTab === 'profile' ? (
+          <>
+            <button
+              onClick={onClose}
+              disabled={updateUser.isPending}
+              className="h-9 px-4 text-sm font-medium rounded-md border border-line bg-white text-ink hover:bg-surface-alt transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+            >
+              Cancel
+            </button>
+            <button
+              form="user-form"
+              type="submit"
+              disabled={updateUser.isPending}
+              className="h-9 px-4 text-sm font-medium rounded-md bg-primary hover:bg-primary-hover text-white transition-colors disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2"
+            >
+              {updateUser.isPending ? (
+                <>
+                  <RefreshCw className="w-4 h-4 animate-spin" />
+                  Saving...
+                </>
+              ) : (
+                'Save Changes'
+              )}
+            </button>
+          </>
+        ) : (
           <button
             onClick={onClose}
-            disabled={updateUser.isPending}
-            className="h-9 px-4 text-sm font-medium rounded-md border border-line bg-white text-ink hover:bg-surface-alt transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+            className="h-9 px-4 text-sm font-medium rounded-md border border-line bg-white text-ink hover:bg-surface-alt transition-colors"
           >
-            Cancel
+            Close
           </button>
-          <button
-            form="user-form"
-            type="submit"
-            disabled={updateUser.isPending}
-            className="h-9 px-4 text-sm font-medium rounded-md bg-primary hover:bg-primary-hover text-white transition-colors disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2"
-          >
-            {updateUser.isPending ? (
-              <>
-                <RefreshCw className="w-4 h-4 animate-spin" />
-                Saving...
-              </>
-            ) : (
-              'Save Changes'
-            )}
-          </button>
-        </>
+        )
       }
     >
-      <UserForm
-        key={user._id}
-        initialData={user}
-        onSubmit={handleSubmit}
-        departments={departments}
-        locations={locations}
-        isSubmitting={updateUser.isPending}
-        requiredFields={requiredFields}
-      />
+      <div className="space-y-5">
+        {/* Tab Header */}
+        <div className="flex items-center gap-1 border-b border-line -mx-6 px-6 pb-0 mb-4">
+          <button
+            onClick={() => setActiveTab('profile')}
+            className={cn(
+              'flex items-center gap-2 px-4 py-2 text-sm font-medium border-b-2 transition-colors relative top-[1px]',
+              activeTab === 'profile'
+                ? 'border-primary text-primary'
+                : 'border-transparent text-ink-secondary hover:text-ink hover:bg-surface-alt'
+            )}
+          >
+            <UserIcon className="w-4 h-4" />
+            Profile
+          </button>
+
+          <button
+            onClick={() => setActiveTab('history')}
+            className={cn(
+              'flex items-center gap-2 px-4 py-2 text-sm font-medium border-b-2 transition-colors relative top-[1px]',
+              activeTab === 'history'
+                ? 'border-primary text-primary'
+                : 'border-transparent text-ink-secondary hover:text-ink hover:bg-surface-alt'
+            )}
+          >
+            <History className="w-4 h-4" />
+            History
+          </button>
+        </div>
+
+        {activeTab === 'profile' ? (
+          <UserForm
+            key={user._id}
+            initialData={user}
+            onSubmit={handleSubmit}
+            departments={departments}
+            locations={locations}
+            isSubmitting={updateUser.isPending}
+            requiredFields={requiredFields}
+          />
+        ) : (
+          <UserHistoryPanel userId={user._id} />
+        )}
+      </div>
     </Modal>
   );
 }
+
 
 interface LifecycleChangeModalProps {
   user: User;
