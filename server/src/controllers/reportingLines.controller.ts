@@ -90,14 +90,15 @@ export async function wouldCreateCircularChain(
     }).lean();
 
     const reportIds = directReports.map(u => u._id.toString());
+    const allReports = [...reportIds];
     
     // Recursively get indirect reports
     for (const reportId of reportIds) {
       const indirectReports = await getAllDirectReports(reportId);
-      reportIds.push(...indirectReports);
+      allReports.push(...indirectReports);
     }
 
-    return reportIds;
+    return allReports;
   }
 
   const managerReports = await getAllDirectReports(managerId);
@@ -247,6 +248,11 @@ export const addSecondaryManager = asyncHandler(async (req: Request, res: Respon
   // Check for self-assignment
   if (isSelfAssignment(user._id.toString(), input.manager_id)) {
     throw new AppError('Cannot assign yourself as your own manager', 400, 'SELF_ASSIGNMENT_NOT_ALLOWED');
+  }
+
+  // Check if manager is already the primary manager
+  if (user.manager_id?.toString() === input.manager_id) {
+    throw new AppError('Cannot assign the primary manager as a secondary manager', 400, 'MANAGER_ALREADY_PRIMARY');
   }
 
   // Enforce maximum 10 secondary managers (Matrix Org support)
@@ -451,6 +457,11 @@ export const changePrimaryManager = asyncHandler(async (req: Request, res: Respo
   // Check for self-assignment
   if (isSelfAssignment(user._id.toString(), input.manager_id)) {
     throw new AppError('Cannot assign yourself as your own manager', 400, 'SELF_ASSIGNMENT_NOT_ALLOWED');
+  }
+
+  // Check if manager is already a secondary manager
+  if (user.secondary_manager_ids?.some(id => id.toString() === input.manager_id)) {
+    throw new AppError('Cannot assign a secondary manager as primary manager without removing them from secondary managers first', 400, 'MANAGER_ALREADY_SECONDARY');
   }
 
   // Check for circular reporting chain

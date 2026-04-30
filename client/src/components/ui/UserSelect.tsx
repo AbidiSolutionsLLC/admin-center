@@ -9,6 +9,7 @@ export interface UserSelectProps {
   hasError?: boolean;
   className?: string;
   placeholder?: string;
+  onlyActive?: boolean;
 }
 
 /**
@@ -23,6 +24,7 @@ export const UserSelect: React.FC<UserSelectProps> = ({
   hasError = false,
   className,
   placeholder = 'None',
+  onlyActive = false,
 }) => {
   const { data: users, isLoading } = useUsers();
 
@@ -45,7 +47,7 @@ export const UserSelect: React.FC<UserSelectProps> = ({
       className={inputClass}
     >
       <option value="">{isLoading ? 'Loading...' : placeholder}</option>
-      {users?.map((user) => (
+      {users?.filter(u => !onlyActive || u.lifecycle_state === 'active').map((user) => (
         <option key={user._id} value={user._id}>
           {user.full_name}
         </option>

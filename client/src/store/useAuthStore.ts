@@ -1,7 +1,7 @@
 // src/store/useAuthStore.ts
 import { create } from 'zustand';
 
-export type AdminRole = 'super_admin' | 'hr_admin' | 'it_admin' | 'ops_admin' | 'manager' | 'compliance';
+export type AdminRole = 'super_admin' | 'hr_admin' | 'it_admin' | 'ops_admin' | 'manager' | 'compliance' | 'Super Admin' | 'Admin' | 'HR' | 'Manager' | 'Employee' | 'Technician';
 
 interface AuthState {
   accessToken: string | null;

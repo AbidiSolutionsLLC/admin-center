@@ -39,9 +39,10 @@ interface HistoryQuery {
 
 const DepartmentBaseSchema = z.object({
   name: z.string()
+    .trim()
     .min(1, 'Name is required')
     .max(100)
-    .regex(/^[a-zA-Z0-9\s\-\.\(\)]+$/, 'Name contains invalid characters'),
+    .regex(/^[^<>]+$/, 'Name contains invalid characters (HTML tags not allowed)'),
   type: z.enum(['business_unit', 'division', 'department', 'cost_center']),
   parent_id: z.string().optional().nullable(),
   primary_manager_id: z.string().optional().nullable(),
@@ -80,9 +81,10 @@ const MoveDepartmentSchema = z.object({
 // BU-specific schema (type is locked to 'business_unit')
 const CreateBUSchema = z.object({
   name: z.string()
+    .trim()
     .min(1, 'Name is required')
     .max(100)
-    .regex(/^[a-zA-Z0-9\s\-\.\(\)]+$/, 'Name contains invalid characters'),
+    .regex(/^[^<>]+$/, 'Name contains invalid characters (HTML tags not allowed)'),
   primary_manager_id: z.string().optional().nullable(),
   secondary_manager_ids: z.array(z.string()).optional().default([]),
 });
@@ -234,6 +236,10 @@ export const getDepartmentById = asyncHandler(async (req: Request, res: Response
 export const createDepartment = asyncHandler(async (req: Request, res: Response) => {
   const input = CreateDepartmentSchema.parse(req.body);
   
+  if (input.primary_manager_id && input.secondary_manager_ids?.includes(input.primary_manager_id)) {
+    throw new AppError('A user cannot be both the primary and a secondary manager', 400, 'DUPLICATE_MANAGER_ROLES');
+  }
+
   // Validate managers are active
   await validateManagers(
     req.user.company_id as string,
@@ -241,11 +247,14 @@ export const createDepartment = asyncHandler(async (req: Request, res: Response)
     input.secondary_manager_ids
   );
 
-  // Check for duplicate slug within the same company
+  // Check for duplicate name (case-insensitive) within the same company
   const slug = slugify(input.name);
-  const filter: DepartmentFilter = {
+  const filter: any = {
     company_id: req.user.company_id,
-    slug,
+    $or: [
+      { slug },
+      { name: { $regex: new RegExp(`^${input.name}$`, 'i') } }
+    ],
     is_active: true,
   };
 
@@ -257,6 +266,14 @@ export const createDepartment = asyncHandler(async (req: Request, res: Response)
       400,
       'DUPLICATE_DEPARTMENT_NAME'
     );
+  }
+
+  // Check if parent is active
+  if (input.parent_id) {
+    const parent = await Department.findOne({ _id: input.parent_id, company_id: req.user.company_id, is_active: true });
+    if (!parent) {
+      throw new AppError('The selected parent department is invalid or inactive.', 400, 'INVALID_PARENT');
+    }
   }
 
   const dept = await Department.create({
@@ -291,12 +308,15 @@ export const createDepartment = asyncHandler(async (req: Request, res: Response)
 export const updateDepartment = asyncHandler(async (req: Request, res: Response) => {
   const input = UpdateDepartmentSchema.parse(req.body);
 
-  // If name is being changed, check for duplicate slug
+    // If name is being changed, check for duplicate slug
   if (input.name) {
     const slug = slugify(input.name);
-    const filter: DepartmentFilter = {
+    const filter: any = {
       company_id: req.user.company_id,
-      slug,
+      $or: [
+        { slug },
+        { name: { $regex: new RegExp(`^${input.name}$`, 'i') } }
+      ],
       _id: { $ne: req.params.id },
       is_active: true,
     };
@@ -309,6 +329,14 @@ export const updateDepartment = asyncHandler(async (req: Request, res: Response)
         400,
         'DUPLICATE_DEPARTMENT_NAME'
       );
+    }
+  }
+
+  // Check if parent is active
+  if (input.parent_id) {
+    const parent = await Department.findOne({ _id: input.parent_id, company_id: req.user.company_id, is_active: true });
+    if (!parent) {
+      throw new AppError('The selected parent department is invalid or inactive.', 400, 'INVALID_PARENT');
     }
   }
 
@@ -355,10 +383,17 @@ export const updateDepartment = asyncHandler(async (req: Request, res: Response)
 
   // Validate managers are active if they are being updated
   if (input.primary_manager_id !== undefined || input.secondary_manager_ids !== undefined) {
+    const finalPrimary = input.primary_manager_id !== undefined ? input.primary_manager_id : dept.primary_manager_id?.toString();
+    const finalSecondary = input.secondary_manager_ids !== undefined ? input.secondary_manager_ids : dept.secondary_manager_ids?.map(id => id.toString());
+    
+    if (finalPrimary && finalSecondary?.includes(finalPrimary)) {
+      throw new AppError('A user cannot be both the primary and a secondary manager', 400, 'DUPLICATE_MANAGER_ROLES');
+    }
+
     await validateManagers(
       req.user.company_id as string,
-      input.primary_manager_id === undefined ? (dept.primary_manager_id as any)?.toString() : input.primary_manager_id,
-      input.secondary_manager_ids === undefined ? dept.secondary_manager_ids?.map(id => id.toString()) : input.secondary_manager_ids
+      finalPrimary === null ? undefined : finalPrimary,
+      finalSecondary === undefined ? [] : finalSecondary
     );
   }
 
@@ -549,6 +584,11 @@ export const moveDepartment = asyncHandler(async (req: Request, res: Response) =
 
     // Check for circular reference: new parent cannot be a descendant of this department
     if (input.parent_id) {
+      const parent = await Department.findOne({ _id: input.parent_id, company_id: req.user.company_id, is_active: true });
+      if (!parent) {
+        throw new AppError('The selected parent department is invalid or inactive.', 400, 'INVALID_PARENT');
+      }
+
       const isDescendant = await isDescendantOf(dept._id.toString(), input.parent_id, req.user.company_id as string);
       if (isDescendant) {
         throw new AppError(

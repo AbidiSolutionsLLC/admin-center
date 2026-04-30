@@ -188,7 +188,11 @@ export const BusinessUnitsTab: React.FC<BusinessUnitsTabProps> = ({ allDepartmen
 
           <Button
             onClick={handleOpenCreate}
-            className="h-9 px-4 text-sm font-medium rounded-md bg-primary hover:bg-primary-hover text-white transition-colors flex items-center gap-2"
+            disabled={isLoading || isTreeLoading}
+            className={cn(
+              "h-9 px-4 text-sm font-medium rounded-md bg-primary hover:bg-primary-hover text-white transition-colors flex items-center gap-2",
+              (isLoading || isTreeLoading) && "opacity-50 cursor-not-allowed"
+            )}
           >
             <Plus className="w-4 h-4" />
             Create Business Unit
@@ -248,10 +252,10 @@ export const BusinessUnitsTab: React.FC<BusinessUnitsTabProps> = ({ allDepartmen
                   className="border-b border-line last:border-0 hover:bg-surface-base cursor-pointer transition-colors duration-100"
                   onClick={() => handleOpenEdit(bu)}
                 >
-                  <td className="h-14 px-4">
-                    <div className="flex flex-col">
-                      <span className="font-medium text-ink">{bu.name}</span>
-                      <span className="text-xs text-ink-muted font-mono">{bu.slug}</span>
+                  <td className="h-14 px-4 max-w-[150px] sm:max-w-[200px]">
+                    <div className="flex flex-col truncate">
+                      <span className="font-medium text-ink truncate block" title={bu.name}>{bu.name}</span>
+                      <span className="text-xs text-ink-muted font-mono truncate">{bu.slug}</span>
                     </div>
                   </td>
                   <td className="h-14 px-4">
@@ -337,7 +341,7 @@ export const BusinessUnitsTab: React.FC<BusinessUnitsTabProps> = ({ allDepartmen
                     </span>
                   </td>
                   <td className="h-14 px-4 text-right">
-                    <div className="flex items-center justify-end gap-1">
+                    <div className="flex items-center justify-end gap-1 flex-shrink-0 min-w-max">
                       <button
                         onClick={(e) => {
                           e.stopPropagation();

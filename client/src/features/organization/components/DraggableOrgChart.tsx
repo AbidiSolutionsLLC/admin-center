@@ -26,13 +26,19 @@ interface DraggableOrgChartProps {
 
 /**
  * DraggableNode Component
- * Higher-order component to make an element draggable.
+ * Provides draggable state and listeners to its children via render prop.
  */
-const DraggableNode: React.FC<{ id: string; children: React.ReactNode; disabled?: boolean }> = ({ 
-  id, 
-  children, 
-  disabled 
-}) => {
+const DraggableNode: React.FC<{ 
+  id: string; 
+  disabled?: boolean;
+  children: (props: { 
+    listeners: any; 
+    attributes: any; 
+    setNodeRef: (node: HTMLElement | null) => void; 
+    style: React.CSSProperties | undefined;
+    isDragging: boolean;
+  }) => React.ReactNode;
+}> = ({ id, disabled, children }) => {
   const { attributes, listeners, setNodeRef, transform, isDragging } = useDraggable({
     id,
     disabled,
@@ -40,24 +46,11 @@ const DraggableNode: React.FC<{ id: string; children: React.ReactNode; disabled?
 
   const style = transform ? {
     transform: `translate3d(${transform.x}px, ${transform.y}px, 0)`,
-    opacity: isDragging ? 0.5 : 1,
+    zIndex: isDragging ? 999 : undefined,
+    position: 'relative' as const,
   } : undefined;
 
-  return (
-    <div ref={setNodeRef} style={style} className="group relative">
-      <div 
-        {...listeners} 
-        {...attributes} 
-        className={cn(
-          "absolute left-[-20px] top-1/2 -translate-y-1/2 opacity-0 group-hover:opacity-100 cursor-grab active:cursor-grabbing p-1 transition-opacity",
-          disabled && "hidden"
-        )}
-      >
-        <GripVertical className="w-4 h-4 text-ink-muted" />
-      </div>
-      {children}
-    </div>
-  );
+  return <>{children({ listeners, attributes, setNodeRef, style, isDragging })}</>;
 };
 
 /**
@@ -124,26 +117,12 @@ export const DraggableOrgChart: React.FC<DraggableOrgChartProps> = ({ treeData, 
 
   const sensors = useSensors(
     useSensor(PointerSensor, {
-      activationConstraint: { distance: 8 },
-      // Prevent dragging when clicking on interactive elements
-      onActivation: (event) => {
-        const target = event.nativeEvent.target as HTMLElement;
-        if (['INPUT', 'TEXTAREA', 'SELECT', 'BUTTON'].includes(target.tagName)) {
-          return false;
-        }
-        return true;
-      }
+      activationConstraint: { distance: 5 },
     }),
     useSensor(KeyboardSensor)
   );
 
-  // TC-018: Add window resize listener to force DND recalculation
-  const [windowSize, setWindowSize] = useState({ width: window.innerWidth, height: window.innerHeight });
-  useEffect(() => {
-    const handleResize = () => setWindowSize({ width: window.innerWidth, height: window.innerHeight });
-    window.addEventListener('resize', handleResize);
-    return () => window.removeEventListener('resize', handleResize);
-  }, []);
+  // TC-018: Removed window resize listener as it breaks DND state
 
   const getDescendantIds = (node: OrgTreeNode): Set<string> => {
     const ids = new Set<string>();
@@ -257,63 +236,80 @@ export const DraggableOrgChart: React.FC<DraggableOrgChartProps> = ({ treeData, 
       <div key={node._id} className="space-y-2">
         <DroppableNode id={node._id} disabled={isCircular}>
           <DraggableNode id={node._id} disabled={isCircular}>
-            <div
-              className={cn(
-                'flex items-center gap-2 p-3 rounded-lg border-2 transition-all duration-200',
-                selectedNode?._id === node._id
-                  ? 'border-primary bg-primaryLight'
-                  : 'border-line hover:border-primary bg-white',
-                isCircular && "opacity-40 border-dashed bg-surface-alt grayscale",
-                moveMutation.isPending && moveMutation.variables?.id === node._id && "ring-2 ring-primary animate-pulse"
-              )}
-            >
-              {/* Expand/Collapse */}
-              {hasChildren ? (
-                <button
-                  type="button"
-                  onClick={(e) => {
-                    e.stopPropagation();
-                    toggleExpand(node._id);
-                  }}
-                  className="h-6 w-6 flex items-center justify-center rounded hover:bg-surface-alt transition-colors"
+            {({ listeners, attributes, setNodeRef, style, isDragging }) => (
+              <div
+                ref={setNodeRef}
+                style={style}
+                className={cn(
+                  'flex items-center gap-2 p-3 rounded-lg border-2 transition-all duration-200',
+                  selectedNode?._id === node._id
+                    ? 'border-primary bg-primaryLight'
+                    : 'border-line hover:border-primary bg-white',
+                  isCircular && "opacity-40 border-dashed bg-surface-alt grayscale",
+                  isDragging && "opacity-50 ring-2 ring-primary border-primary",
+                  moveMutation.isPending && moveMutation.variables?.id === node._id && "ring-2 ring-primary animate-pulse"
+                )}
+              >
+                {/* Drag Handle */}
+                <div 
+                  {...listeners} 
+                  {...attributes} 
+                  className={cn(
+                    "p-1 rounded hover:bg-surface-alt text-ink-muted/50 hover:text-primary transition-colors touch-none cursor-grab active:cursor-grabbing",
+                    isCircular && "pointer-events-none"
+                  )}
                 >
-                  {isExpanded ? <ChevronDown className="w-4 h-4 text-ink-secondary" /> : <ChevronRight className="w-4 h-4 text-ink-secondary" />}
-                </button>
-              ) : (
-                <div className="w-6" />
-              )}
-
-              {/* Content */}
-              <div className="flex-1 min-w-0 cursor-pointer" onClick={() => setSelectedNode(node)}>
-                <div className="flex items-center gap-2">
-                  <span className="text-sm font-semibold text-ink truncate">{node.name}</span>
-                  <span className="text-[9px] font-bold uppercase tracking-wider text-ink-secondary bg-surface-alt px-1.5 py-0.5 rounded">
-                    {node.type.replace(/_/g, ' ')}
-                  </span>
-                  {node.has_intelligence_flag && <AlertTriangle className="w-3 h-3 text-amber-500" />}
-                  {moveMutation.isPending && moveMutation.variables?.id === node._id && (
-                    <Loader2 className="w-3 h-3 animate-spin text-primary" />
-                  )}
+                  <GripVertical className="w-4 h-4" />
                 </div>
-                <div className="flex items-center gap-3 mt-1 text-[11px] text-ink-secondary">
-                  <span className="truncate">{node.primary_manager?.full_name ?? 'No manager'}</span>
-                  {node.headcount !== undefined && (
-                    <span className="flex items-center gap-1 text-ink-muted">
-                      <Users className="w-3 h-3" />
-                      {node.headcount}
+
+                {/* Expand/Collapse */}
+                {hasChildren ? (
+                  <button
+                    type="button"
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      toggleExpand(node._id);
+                    }}
+                    className="h-6 w-6 flex items-center justify-center rounded hover:bg-surface-alt transition-colors"
+                  >
+                    {isExpanded ? <ChevronDown className="w-4 h-4 text-ink-secondary" /> : <ChevronRight className="w-4 h-4 text-ink-secondary" />}
+                  </button>
+                ) : (
+                  <div className="w-6" />
+                )}
+
+                {/* Content */}
+                <div className="flex-1 min-w-0 cursor-pointer" onClick={() => setSelectedNode(node)}>
+                  <div className="flex items-center gap-2">
+                    <span className="text-sm font-semibold text-ink truncate">{node.name}</span>
+                    <span className="text-[9px] font-bold uppercase tracking-wider text-ink-secondary bg-surface-alt px-1.5 py-0.5 rounded">
+                      {node.type.replace(/_/g, ' ')}
                     </span>
-                  )}
+                    {node.has_intelligence_flag && <AlertTriangle className="w-3 h-3 text-amber-500" />}
+                    {moveMutation.isPending && moveMutation.variables?.id === node._id && (
+                      <Loader2 className="w-3 h-3 animate-spin text-primary" />
+                    )}
+                  </div>
+                  <div className="flex items-center gap-3 mt-1 text-[11px] text-ink-secondary">
+                    <span className="truncate">{node.primary_manager?.full_name ?? 'No manager'}</span>
+                    {node.headcount !== undefined && (
+                      <span className="flex items-center gap-1 text-ink-muted">
+                        <Users className="w-3 h-3" />
+                        {node.headcount}
+                      </span>
+                    )}
+                  </div>
                 </div>
-              </div>
 
-              {/* Collapsed badge */}
-              {hasChildren && !isExpanded && (
-                <span className="px-2 py-0.5 rounded-full text-[10px] font-semibold bg-primaryLight text-primary flex items-center gap-1">
-                  <Plus className="w-3 h-3" />
-                  {childCount}
-                </span>
-              )}
-            </div>
+                {/* Collapsed badge */}
+                {hasChildren && !isExpanded && (
+                  <span className="px-2 py-0.5 rounded-full text-[10px] font-semibold bg-primaryLight text-primary flex items-center gap-1">
+                    <Plus className="w-3 h-3" />
+                    {childCount}
+                  </span>
+                )}
+              </div>
+            )}
           </DraggableNode>
         </DroppableNode>
 
@@ -329,7 +325,6 @@ export const DraggableOrgChart: React.FC<DraggableOrgChartProps> = ({ treeData, 
 
   return (
     <DndContext 
-      key={`dnd-context-${windowSize.width}-${windowSize.height}`}
       sensors={sensors} 
       onDragStart={handleDragStart} 
       onDragEnd={handleDragEnd}

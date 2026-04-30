@@ -8,7 +8,7 @@ import type { Team, Department } from '@/types';
 import { cn } from '@/utils/cn';
 
 const schema = z.object({
-  name: z.string().min(1, 'Team name is required').max(100, 'Name too long'),
+  name: z.string().min(1, 'Team name is required').max(100, 'Name too long').regex(/^[a-zA-Z0-9\s]+$/, 'Team name can only contain alphanumeric characters and spaces'),
   description: z.string().max(500, 'Description too long').optional(),
   department_id: z.string().min(1, 'Department is required'),
   team_lead_id: z.string().min(1, 'Team manager is required'),
@@ -156,6 +156,7 @@ export const TeamForm: React.FC<TeamFormProps> = ({
               disabled={isSubmitting}
               hasError={!!errors.team_lead_id}
               placeholder="Select team lead..."
+              onlyActive={true}
             />
           )}
         />

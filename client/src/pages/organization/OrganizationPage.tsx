@@ -159,7 +159,7 @@ export default function OrganizationPage() {
   if (isLoading) {
     return (
       <div className="space-y-5">
-        <PageHeader onCreateClick={handleOpenCreate} />
+        <PageHeader onCreateClick={handleOpenCreate} isLoading={true} />
         <TableSkeleton rows={8} columns={6} />
       </div>
     );
@@ -169,7 +169,7 @@ export default function OrganizationPage() {
   if (isError) {
     return (
       <div className="space-y-5">
-        <PageHeader onCreateClick={handleOpenCreate} />
+        <PageHeader onCreateClick={handleOpenCreate} isLoading={false} />
         <ErrorState
           title="Failed to load departments"
           description="Something went wrong fetching your organization data. Please try again."
@@ -188,6 +188,7 @@ export default function OrganizationPage() {
         onCreateClick={handleOpenCreate}
         departmentCount={departments?.length}
         warningCount={departments?.filter((d) => d.has_intelligence_flag).length}
+        isLoading={false}
       />
 
       {/* ── Intelligence Banner ── */}
@@ -472,9 +473,10 @@ interface PageHeaderProps {
   onCreateClick: () => void;
   departmentCount?: number;
   warningCount?: number;
+  isLoading?: boolean;
 }
 
-function PageHeader({ onCreateClick, departmentCount, warningCount }: PageHeaderProps) {
+function PageHeader({ onCreateClick, departmentCount, warningCount, isLoading }: PageHeaderProps) {
   return (
     <div className="flex items-start justify-between gap-4">
       <div>
@@ -500,7 +502,11 @@ function PageHeader({ onCreateClick, departmentCount, warningCount }: PageHeader
       </div>
       <Button
         onClick={onCreateClick}
-        className="h-9 px-4 text-sm font-medium rounded-md bg-primary hover:bg-primary-hover text-white transition-colors flex items-center gap-2 flex-shrink-0"
+        disabled={isLoading}
+        className={cn(
+          "h-9 px-4 text-sm font-medium rounded-md bg-primary hover:bg-primary-hover text-white transition-colors flex items-center gap-2 flex-shrink-0",
+          isLoading && "opacity-50 cursor-not-allowed"
+        )}
       >
         <Plus className="w-4 h-4" />
         Create Department

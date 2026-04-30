@@ -19,6 +19,7 @@ interface SidebarProps {
 const navGroups = [
   {
     label: 'Structure',
+    roles: ['Super Admin', 'Admin', 'HR', 'super_admin', 'hr_admin'],
     items: [
       { label: 'Organization', href: ROUTES.ORGANIZATION, icon: Building2 },
       { label: 'Teams', href: ROUTES.TEAMS, icon: Users },
@@ -26,12 +27,14 @@ const navGroups = [
   },
   {
     label: 'People',
+    roles: ['Super Admin', 'Admin', 'HR', 'Manager', 'Employee', 'super_admin', 'hr_admin', 'manager', 'employee'], // Or everyone
     items: [
       { label: 'People', href: ROUTES.PEOPLE, icon: Users },
     ],
   },
   {
     label: 'Settings',
+    roles: ['Super Admin', 'Admin', 'super_admin'],
     items: [
       { label: 'Company settings', href: ROUTES.COMPANY_SETTINGS, icon: Settings },
     ],
@@ -53,35 +56,40 @@ export const Sidebar = ({ className }: SidebarProps) => {
       </div>
 
       <nav className="flex-1 overflow-y-auto w-full px-2 space-y-4 [&::-webkit-scrollbar]:hidden [-ms-overflow-style:none] [scrollbar-width:none]">
-        {navGroups.map((group, idx) => (
-          <div key={idx} className="w-full">
-            {group.label && (
-              <h3 className="px-3 mb-2 text-[11px] font-semibold tracking-widest text-sidebar-group-label uppercase">
-                {group.label}
-              </h3>
-            )}
-            <div className="space-y-1 w-full">
-              {group.items.map((item) => {
-                const isActive = location.pathname.startsWith(item.href);
-                return (
-                  <NavLink
-                    key={item.href}
-                    to={item.href}
-                    className={cn(
-                      "h-9 flex items-center gap-2.5 px-3 rounded-md text-[13px] font-medium transition-colors w-full",
-                      isActive 
-                        ? "bg-sidebar-active-bg text-sidebar-text-active border-l-2 border-primary" 
-                        : "text-sidebar-text hover:bg-sidebar-hover hover:text-white border-l-2 border-transparent"
-                    )}
-                  >
-                    <item.icon className={cn("w-4 h-4", isActive ? "text-primary" : "text-sidebar-text")} />
-                    {item.label}
-                  </NavLink>
-                );
-              })}
+        {navGroups.map((group, idx) => {
+          if (group.roles && userRole && !group.roles.includes(userRole)) {
+            return null;
+          }
+          return (
+            <div key={idx} className="w-full">
+              {group.label && (
+                <h3 className="px-3 mb-2 text-[11px] font-semibold tracking-widest text-sidebar-group-label uppercase">
+                  {group.label}
+                </h3>
+              )}
+              <div className="space-y-1 w-full">
+                {group.items.map((item) => {
+                  const isActive = location.pathname.startsWith(item.href);
+                  return (
+                    <NavLink
+                      key={item.href}
+                      to={item.href}
+                      className={cn(
+                        "h-9 flex items-center gap-2.5 px-3 rounded-md text-[13px] font-medium transition-colors w-full",
+                        isActive 
+                          ? "bg-sidebar-active-bg text-sidebar-text-active border-l-2 border-primary" 
+                          : "text-sidebar-text hover:bg-sidebar-hover hover:text-white border-l-2 border-transparent"
+                      )}
+                    >
+                      <item.icon className={cn("w-4 h-4", isActive ? "text-primary" : "text-sidebar-text")} />
+                      {item.label}
+                    </NavLink>
+                  );
+                })}
+              </div>
             </div>
-          </div>
-        ))}
+          );
+        })}
       </nav>
 
       <div className="p-4 border-t border-sidebar-border mt-auto w-full relative">

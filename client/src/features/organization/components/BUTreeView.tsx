@@ -93,9 +93,9 @@ const BUNode: React.FC<BUNodeProps> = ({ node, depth }) => {
         <div className="flex-1 min-w-0">
           <div className="flex items-center gap-2">
             <span className={cn(
-              'font-medium text-ink truncate',
+              'font-medium text-ink truncate block',
               depth === 0 ? 'text-base' : 'text-sm'
-            )}>
+            )} title={node.name}>
               {node.name}
             </span>
             {node.dept_count !== undefined && (
@@ -128,9 +128,9 @@ const BUNode: React.FC<BUNodeProps> = ({ node, depth }) => {
                   className="flex items-center gap-2 p-2 bg-white border border-line rounded-md text-sm"
                 >
                   <Users className="w-3.5 h-3.5 text-success" />
-                  <span className="font-medium text-ink">{team.name}</span>
+                  <span className="font-medium text-ink truncate flex-1" title={team.name}>{team.name}</span>
                   {team.team_lead && (
-                    <span className="text-xs text-ink-muted">· {team.team_lead.full_name}</span>
+                    <span className="text-xs text-ink-muted flex-shrink-0">· {team.team_lead.full_name}</span>
                   )}
                 </div>
               ))}

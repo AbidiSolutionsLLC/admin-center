@@ -1,9 +1,10 @@
 // src/features/teams/components/TeamTable.tsx
-import React, { useMemo } from 'react';
+import React, { useMemo, useState } from 'react';
 import type { ColumnDef } from '@tanstack/react-table';
 import { Edit2, Trash2, Users } from 'lucide-react';
 import type { Team } from '@/types';
 import { DataTable } from '@/components/ui/DataTable';
+import { Modal } from '@/components/ui/Modal';
 
 interface TeamTableProps {
   teams: Team[];
@@ -24,6 +25,12 @@ export const TeamTable: React.FC<TeamTableProps> = ({
   onDelete,
   onViewMembers,
 }) => {
+  const [descModal, setDescModal] = useState<{ isOpen: boolean; title: string; text: string }>({
+    isOpen: false,
+    title: '',
+    text: '',
+  });
+
   const columns = useMemo<ColumnDef<Team>[]>(
     () => [
       {
@@ -92,7 +99,14 @@ export const TeamTable: React.FC<TeamTableProps> = ({
           const desc = row.original.description;
           if (!desc) return <span className="text-ink-muted text-xs">—</span>;
           return (
-            <span className="text-sm text-ink-secondary line-clamp-2">
+            <span 
+              className="text-sm text-ink-secondary line-clamp-2 cursor-pointer hover:text-primary transition-colors"
+              onClick={(e) => {
+                e.stopPropagation();
+                setDescModal({ isOpen: true, title: `${row.original.name} Description`, text: desc });
+              }}
+              title="Click to view full description"
+            >
               {desc}
             </span>
           );
@@ -145,10 +159,21 @@ export const TeamTable: React.FC<TeamTableProps> = ({
   );
 
   return (
-    <DataTable
-      columns={columns}
-      data={teams}
-      onRowClick={onEdit}
-    />
+    <>
+      <DataTable
+        columns={columns}
+        data={teams}
+        onRowClick={onEdit}
+      />
+      <Modal
+        isOpen={descModal.isOpen}
+        onClose={() => setDescModal((prev) => ({ ...prev, isOpen: false }))}
+        title={descModal.title}
+      >
+        <div className="text-sm text-ink whitespace-pre-wrap leading-relaxed py-2">
+          {descModal.text}
+        </div>
+      </Modal>
+    </>
   );
 };

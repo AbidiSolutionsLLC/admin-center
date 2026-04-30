@@ -1,7 +1,10 @@
 // src/features/organization/components/OrgChartView.tsx
-import React from 'react';
+import React, { useState } from 'react';
 import type { OrgTreeNode } from '@/types';
 import { DraggableOrgChart } from './DraggableOrgChart';
+import { VisualOrgChart } from './VisualOrgChart';
+import { Users, Layers } from 'lucide-react';
+import { cn } from '@/utils/cn';
 
 interface OrgChartViewProps {
   treeData: OrgTreeNode[];
@@ -10,14 +13,16 @@ interface OrgChartViewProps {
 
 /**
  * OrgChartView Component
- * Wrapper for the interactive, draggable org chart.
- * Replaces the old static OrgChart with the enhanced DraggableOrgChart.
+ * Wrapper for the organization chart views.
+ * Provides a toggle between the card-based VisualOrgChart and the list-based DraggableOrgChart.
  * Used on: OrganizationPage (org chart view tab).
  */
 export const OrgChartView: React.FC<OrgChartViewProps> = ({
   treeData,
   onNodeClick,
 }) => {
+  const [viewMode, setViewMode] = useState<'visual' | 'interactive'>('visual');
+
   if (!treeData || treeData.length === 0) {
     return (
       <div className="flex items-center justify-center h-[500px]">
@@ -27,8 +32,50 @@ export const OrgChartView: React.FC<OrgChartViewProps> = ({
   }
 
   return (
-    <div className="w-full h-full min-h-[500px]">
-      <DraggableOrgChart treeData={treeData} onNodeClick={onNodeClick} />
+    <div className="space-y-4 pt-4">
+      {/* View Toggle */}
+      <div className="flex items-center justify-between">
+        <div className="flex items-center bg-surface-alt p-1 rounded-lg gap-1 border border-line">
+          <button
+            onClick={() => setViewMode('visual')}
+            className={cn(
+              "flex items-center gap-2 px-3 py-1.5 rounded-md text-sm font-medium transition-all duration-200",
+              viewMode === 'visual' 
+                ? "bg-white text-primary shadow-sm border border-line" 
+                : "text-ink-muted hover:text-ink hover:bg-white/50"
+            )}
+          >
+            <Users className="w-4 h-4" />
+            Visual Chart
+          </button>
+          <button
+            onClick={() => setViewMode('interactive')}
+            className={cn(
+              "flex items-center gap-2 px-3 py-1.5 rounded-md text-sm font-medium transition-all duration-200",
+              viewMode === 'interactive' 
+                ? "bg-white text-primary shadow-sm border border-line" 
+                : "text-ink-muted hover:text-ink hover:bg-white/50"
+            )}
+          >
+            <Layers className="w-4 h-4" />
+            Interactive Tree
+          </button>
+        </div>
+        
+        <p className="text-[11px] text-ink-muted italic pr-4">
+          {viewMode === 'visual' 
+            ? "Use mouse wheel to zoom, drag to pan. Click nodes to view details." 
+            : "Drag nodes to reparent. Use arrows to expand/collapse branches."}
+        </p>
+      </div>
+
+      <div className="w-full h-[600px] rounded-xl overflow-hidden border border-line">
+        {viewMode === 'visual' ? (
+          <VisualOrgChart treeData={treeData} onNodeClick={onNodeClick} />
+        ) : (
+          <DraggableOrgChart treeData={treeData} onNodeClick={onNodeClick} />
+        )}
+      </div>
     </div>
   );
 };

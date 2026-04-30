@@ -129,6 +129,20 @@ export const getLocationById = asyncHandler(async (req: Request, res: Response) 
 export const createLocation = asyncHandler(async (req: Request, res: Response) => {
   const input = CreateLocationSchema.parse(req.body);
 
+  // Check for duplicate location name within the same company
+  const existing = await Location.findOne({
+    company_id: req.user.company_id,
+    name: input.name,
+  });
+
+  if (existing) {
+    throw new AppError(
+      `A location with the name "${input.name}" already exists.`,
+      400,
+      'DUPLICATE_LOCATION_NAME'
+    );
+  }
+
   const location = await Location.create({
     ...input,
     parent_id: input.parent_id || undefined,
@@ -165,6 +179,23 @@ export const updateLocation = asyncHandler(async (req: Request, res: Response) =
 
   if (!location) {
     throw new AppError('Location not found', 404, 'NOT_FOUND');
+  }
+
+  // If name is being changed, check for duplicate name
+  if (input.name && input.name !== location.name) {
+    const existing = await Location.findOne({
+      company_id: req.user.company_id,
+      name: input.name,
+      _id: { $ne: req.params.id },
+    });
+
+    if (existing) {
+      throw new AppError(
+        `Another location with the name "${input.name}" already exists.`,
+        400,
+        'DUPLICATE_LOCATION_NAME'
+      );
+    }
   }
 
   const beforeState = location.toObject();
