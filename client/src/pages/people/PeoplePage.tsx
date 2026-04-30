@@ -18,6 +18,7 @@ import { useRoles } from '@/features/roles/useRoles';
 import { UserTable } from '@/features/people/components/UserTable';
 import { InviteModal } from '@/features/people/components/InviteModal';
 import { UserOrgAssignmentModal } from '@/features/people/components/UserOrgAssignmentModal';
+import { useTeams } from '@/features/teams/hooks/useTeams';
 import { UserForm, type UserFormData } from '@/features/people/components/UserForm';
 import { UserHistoryPanel } from '@/features/people/components/UserHistoryPanel';
 import { LifecycleStateSelector } from '@/features/people/components/LifecycleStateSelector';
@@ -84,6 +85,7 @@ export default function PeoplePage() {
   // ── Server data ──────────────────────────────────────────────────────
   const { data: users, isLoading, isError, refetch } = useUsers();
   const { data: departments = [] } = useDepartments();
+  const { data: teams = [] } = useTeams();
   const { data: locations = [] } = useLocations();
   const { data: roles = [] } = useRoles();
   const { data: stats, isLoading: statsLoading } = useUserStats();
@@ -376,6 +378,7 @@ export default function PeoplePage() {
         isOpen={isInviteModalOpen}
         onClose={handleCloseInvite}
         departments={departments}
+        locations={locations}
         requiredFields={formMetadata?.required_fields || ['email', 'full_name']}
       />
 
@@ -397,6 +400,7 @@ export default function PeoplePage() {
           user={assigningOrgUser}
           isOpen={!!assigningOrgUser}
           onClose={handleCloseAssignOrg}
+          requiredFields={formMetadata?.required_fields || ['email', 'full_name']}
         />
       )}
 

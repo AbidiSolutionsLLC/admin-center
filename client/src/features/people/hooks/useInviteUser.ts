@@ -18,6 +18,7 @@ export const useInviteUser = () => {
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: QUERY_KEYS.USERS });
+      queryClient.invalidateQueries({ queryKey: QUERY_KEYS.USER_STATS });
       queryClient.invalidateQueries({ queryKey: QUERY_KEYS.DEPARTMENTS });
       queryClient.invalidateQueries({ queryKey: QUERY_KEYS.ORG_TREE });
       queryClient.invalidateQueries({ queryKey: QUERY_KEYS.DASHBOARD_STATS });
@@ -25,6 +26,8 @@ export const useInviteUser = () => {
     },
     onError: (err: any) => {
       console.error('User invite failed', err);
+      const message = err.response?.data?.message || 'Failed to invite user';
+      toast.error(message);
     },
   });
 };

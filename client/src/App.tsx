@@ -39,7 +39,7 @@ function App() {
 
           <Route element={<AuthGuard />}>
             <Route path="/" element={<AdminShell />}>
-              <Route index element={<Navigate to={ROUTES.ORGANIZATION} replace />} />
+              <Route index element={<Navigate to={ROUTES.OVERVIEW} replace />} />
               <Route path={ROUTES.OVERVIEW} element={<OverviewPage />} />
               <Route path={ROUTES.ORGANIZATION} element={<OrganizationPage />} />
               <Route path={ROUTES.COMPANY_SETTINGS} element={<CompanySettingsPage />} />

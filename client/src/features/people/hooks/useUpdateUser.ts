@@ -19,13 +19,16 @@ export const useUpdateUser = (userId: string) => {
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: QUERY_KEYS.USERS });
       queryClient.invalidateQueries({ queryKey: QUERY_KEYS.USER_DETAIL(userId) });
+      queryClient.invalidateQueries({ queryKey: QUERY_KEYS.USER_STATS });
       queryClient.invalidateQueries({ queryKey: QUERY_KEYS.DEPARTMENTS });
       queryClient.invalidateQueries({ queryKey: QUERY_KEYS.ORG_TREE });
       queryClient.invalidateQueries({ queryKey: QUERY_KEYS.DASHBOARD_STATS });
       toast.success('User updated successfully');
     },
-    onError: (error) => {
+    onError: (error: any) => {
       console.error('User update failed', error);
+      const message = error.response?.data?.message || 'Failed to update user';
+      toast.error(message);
     },
   });
 };

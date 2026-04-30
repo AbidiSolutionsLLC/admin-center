@@ -18,10 +18,16 @@ export const useBulkInvite = () => {
     },
     onSuccess: (data) => {
       queryClient.invalidateQueries({ queryKey: QUERY_KEYS.USERS });
+      queryClient.invalidateQueries({ queryKey: QUERY_KEYS.USER_STATS });
+      queryClient.invalidateQueries({ queryKey: QUERY_KEYS.DEPARTMENTS });
+      queryClient.invalidateQueries({ queryKey: QUERY_KEYS.ORG_TREE });
+      queryClient.invalidateQueries({ queryKey: QUERY_KEYS.DASHBOARD_STATS });
       toast.success(`Successfully processed bulk invite: ${data.successful} successful, ${data.failed} failed.`);
     },
     onError: (err: any) => {
       console.error('Bulk invite failed', err);
+      const message = err.response?.data?.message || 'Failed to process bulk invite';
+      toast.error(message);
     },
   });
 };

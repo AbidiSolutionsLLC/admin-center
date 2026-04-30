@@ -1,6 +1,6 @@
 
 import { useState } from 'react';
-import { NavLink, useLocation } from 'react-router-dom';
+import { NavLink, useLocation, Link } from 'react-router-dom';
 import { cn } from '@/utils/cn';
 import { ROUTES } from '@/constants/routes';
 import {
@@ -8,7 +8,8 @@ import {
   Users,
   Settings,
   LogOut,
-  MoreVertical
+  MoreVertical,
+  LayoutDashboard
 } from 'lucide-react';
 import { useAuthStore } from '@/store/useAuthStore';
 
@@ -17,6 +18,13 @@ interface SidebarProps {
 }
 
 const navGroups = [
+  {
+    label: 'Dashboard',
+    roles: ['Super Admin', 'Admin', 'HR', 'Manager', 'Employee', 'super_admin', 'hr_admin', 'manager', 'employee'],
+    items: [
+      { label: 'Overview', href: ROUTES.OVERVIEW, icon: LayoutDashboard },
+    ],
+  },
   {
     label: 'Structure',
     roles: ['Super Admin', 'Admin', 'HR', 'super_admin', 'hr_admin'],
@@ -48,12 +56,15 @@ export const Sidebar = ({ className }: SidebarProps) => {
 
   return (
     <aside className={cn("flex flex-col bg-sidebar-bg text-sidebar-text border-r border-sidebar-border", className)}>
-      <div className="h-16 flex items-center px-4 border-b border-sidebar-border mb-4">
+      <Link 
+        to={ROUTES.OVERVIEW}
+        className="h-16 flex items-center px-4 border-b border-sidebar-border mb-4 hover:opacity-80 transition-opacity"
+      >
         <div className="w-8 h-8 bg-primary rounded-md flex items-center justify-center mr-3">
           <span className="text-white font-bold text-sm">AC</span>
         </div>
         <span className="text-white font-semibold tracking-wide">Admin Center</span>
-      </div>
+      </Link>
 
       <nav className="flex-1 overflow-y-auto w-full px-2 space-y-4 [&::-webkit-scrollbar]:hidden [-ms-overflow-style:none] [scrollbar-width:none]">
         {navGroups.map((group, idx) => {
