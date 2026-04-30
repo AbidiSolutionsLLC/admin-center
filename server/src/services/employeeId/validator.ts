@@ -79,12 +79,24 @@ export function validateEmployeeIdFormat(format: string): ValidationResult {
   let match: RegExpExecArray | null;
   let hasCounter = false;
   let tokenCount = 0;
+  const seenTokens = new Set<string>();
 
   while ((match = tokenRegex.exec(format)) !== null) {
     tokenCount += 1;
     const [, rawToken, argument] = match;
     const position = match.index;
     const tokenName = rawToken.toUpperCase() === 'COUNTER' ? 'counter' : rawToken.toUpperCase();
+
+    // TC-034: Check for duplicate tokens
+    const tokenKey = `${tokenName}${argument ? `:${argument}` : ''}`;
+    if (seenTokens.has(tokenKey)) {
+      errors.push({
+        code: 'DUPLICATE_TOKEN',
+        message: `Duplicate token detected: {${rawToken}${argument ? `:${argument}` : ''}}. Each token type should only be used once.`,
+        position,
+      });
+    }
+    seenTokens.add(tokenKey);
 
     parsedTokens.push({
       token: tokenName,

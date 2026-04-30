@@ -25,17 +25,11 @@ const CompanySettingsSchema = z.object({
     .string()
     .min(1, 'Format is required')
     .max(50, 'Format must be 50 characters or fewer')
-    .regex(/\{counter:\d+\}/, 'Format must contain a {counter:N} placeholder'),
+    .regex(/^[A-Z0-9{}_:-]+$/i, 'Format contains invalid characters. Only letters, numbers, and { } _ - : are allowed.')
+    .refine((val) => val.includes('{counter:'), {
+      message: 'Format must include a {counter:N} token (e.g., {counter:5})',
+    }),
 });
-
-function generateFormatPreview(format: string, counter: number) {
-  const match = format.match(/\{counter:(\d+)\}/);
-  if (!match) return 'Invalid format preview';
-
-  const width = parseInt(match[1], 10);
-  const nextCounter = counter + 1;
-  return format.replace(/\{counter:\d+\}/, nextCounter.toString().padStart(width, '0'));
-}
 
 // ── Common IANA timezone list (curated subset for the dropdown) ──────────────
 const COMMON_TIMEZONES = [
@@ -481,6 +475,36 @@ function DomainEnforcementSection() {
       />
     </Card>
   );
+}
+
+/**
+ * Generates a preview string based on the format and current counter value.
+ * Supports {counter:N}, {YYYY}, {YY}, {MM}, {DD}, and {DEPT}.
+ */
+function generateFormatPreview(format: string, counter: number) {
+  if (!format) return '—';
+  
+  let preview = format;
+  const now = new Date();
+  
+  // Replace Date tokens
+  preview = preview.replace(/\{YYYY\}/g, now.getFullYear().toString());
+  preview = preview.replace(/\{YY\}/g, now.getFullYear().toString().slice(-2));
+  preview = preview.replace(/\{MM\}/g, (now.getMonth() + 1).toString().padStart(2, '0'));
+  preview = preview.replace(/\{DD\}/g, now.getDate().toString().padStart(2, '0'));
+  
+  // Replace Dept token (mock)
+  preview = preview.replace(/\{DEPT\}/g, 'ENG');
+  
+  // Replace Counter token
+  const counterMatch = preview.match(/\{counter:(\d+)\}/);
+  if (counterMatch) {
+    const width = parseInt(counterMatch[1], 10);
+    const nextCounter = counter + 1;
+    preview = preview.replace(/\{counter:\d+\}/, nextCounter.toString().padStart(width, '0'));
+  }
+
+  return preview;
 }
 
 export default function CompanySettingsPage() {
