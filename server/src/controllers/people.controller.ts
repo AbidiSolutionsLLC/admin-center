@@ -942,6 +942,9 @@ export const updateUser = asyncHandler(async (req: Request, res: Response) => {
 
   // 3. Validate manager (if changed)
   if (input.manager_id) {
+    if (input.manager_id === req.params.id) {
+      throw new AppError('User cannot be their own manager', 400, 'SELF_ASSIGNMENT');
+    }
     const manager = await User.findOne({
       _id: input.manager_id,
       company_id: req.user.company_id,
@@ -952,6 +955,9 @@ export const updateUser = asyncHandler(async (req: Request, res: Response) => {
 
   // 3.5 Validate secondary managers (if changed)
   if (input.secondary_manager_ids) {
+    if (input.secondary_manager_ids.includes(req.params.id)) {
+      throw new AppError('User cannot be their own secondary manager', 400, 'SELF_ASSIGNMENT');
+    }
     const managers = await User.find({
       _id: { $in: input.secondary_manager_ids },
       company_id: req.user.company_id,

@@ -33,6 +33,7 @@ export const useUpdateRequiredUserFields = () => {
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: QUERY_KEYS.COMPANY_REQUIRED_USER_FIELDS });
       queryClient.invalidateQueries({ queryKey: QUERY_KEYS.COMPANY_EMPLOYEE_ID_FORMAT });
+      queryClient.invalidateQueries({ queryKey: QUERY_KEYS.FORM_METADATA });
       toast.success('Required user fields updated successfully');
     },
     onError: (error: any) => {

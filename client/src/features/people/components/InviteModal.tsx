@@ -14,6 +14,8 @@ interface InviteModalProps {
   isOpen: boolean;
   onClose: () => void;
   departments: Department[];
+  teams: any[];
+  locations: Location[];
   requiredFields?: string[];
 }
 
@@ -48,7 +50,7 @@ const inputClass = (hasError?: boolean) =>
  * 2. Bulk invite — CSV upload with preview table before sending
  * Used on: PeoplePage.
  */
-export const InviteModal: React.FC<InviteModalProps> = ({ isOpen, onClose, departments, requiredFields = [] }) => {
+export const InviteModal: React.FC<InviteModalProps> = ({ isOpen, onClose, departments, locations, requiredFields = [] }) => {
   const [activeTab, setActiveTab] = useState('single');
   const [csvData, setCsvData] = useState<BulkInviteRow[]>([]);
   const [csvError, setCsvError] = useState<string | null>(null);
@@ -57,11 +59,14 @@ export const InviteModal: React.FC<InviteModalProps> = ({ isOpen, onClose, depar
   const [singleForm, setSingleForm] = useState<Partial<InviteUserInput>>({
     full_name: '',
     email: '',
+    phone: '',
     department_id: null,
     manager_id: null,
     secondary_manager_ids: [],
     role: 'Employee',
     employment_type: 'full_time',
+    hire_date: null,
+    location_id: null,
   });
   const [singleError, setSingleError] = useState<Record<string, string>>({});
 
@@ -70,9 +75,20 @@ export const InviteModal: React.FC<InviteModalProps> = ({ isOpen, onClose, depar
 
   const handleSingleInvite = useCallback(() => {
     const errors: Record<string, string> = {};
+    
+    // Basic validation
     if (!singleForm.full_name?.trim()) errors.full_name = 'Name is required';
     if (!singleForm.email?.trim()) errors.email = 'Email is required';
     else if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(singleForm.email)) errors.email = 'Invalid email';
+
+    // Dynamic validation based on company settings
+    if (requiredFields.includes('phone') && !singleForm.phone?.trim()) errors.phone = 'Phone number is required';
+    if (requiredFields.includes('department_id') && !singleForm.department_id) errors.department_id = 'Department is required';
+    if (requiredFields.includes('manager_id') && !singleForm.manager_id) errors.manager_id = 'Manager is required';
+    if (requiredFields.includes('role') && !singleForm.role) errors.role = 'Role is required';
+    if (requiredFields.includes('employment_type') && !singleForm.employment_type) errors.employment_type = 'Employment type is required';
+    if (requiredFields.includes('hire_date') && !singleForm.hire_date) errors.hire_date = 'Hire date is required';
+    if (requiredFields.includes('location_id') && !singleForm.location_id) errors.location_id = 'Location is required';
 
     if (Object.keys(errors).length > 0) {
       setSingleError(errors);
@@ -81,20 +97,23 @@ export const InviteModal: React.FC<InviteModalProps> = ({ isOpen, onClose, depar
 
     inviteUser.mutate(singleForm as InviteUserInput, {
       onSuccess: () => {
-        setSingleForm({ 
-          full_name: '', 
-          email: '', 
-          department_id: null, 
-          manager_id: null,
-          secondary_manager_ids: [],
-          role: 'Employee', 
-          employment_type: 'full_time' 
-        });
+          setSingleForm({ 
+            full_name: '', 
+            email: '', 
+            phone: '',
+            department_id: null, 
+            manager_id: null,
+            secondary_manager_ids: [],
+            role: 'Employee', 
+            employment_type: 'full_time',
+            hire_date: null,
+            location_id: null
+          });
         setSingleError({});
         onClose();
       },
     });
-  }, [singleForm, inviteUser, onClose]);
+  }, [singleForm, inviteUser, onClose, requiredFields]);
 
   const parseCSV = useCallback((text: string) => {
     try {
@@ -286,6 +305,25 @@ export const InviteModal: React.FC<InviteModalProps> = ({ isOpen, onClose, depar
           </div>
 
           <div className="space-y-1.5">
+            <label htmlFor="invite-phone" className="text-sm font-medium text-ink">
+              Phone Number {requiredFields.includes('phone') && <span className="text-red-500">*</span>}
+            </label>
+            <input
+              id="invite-phone"
+              value={singleForm.phone || ''}
+              onChange={(e) => {
+                const val = e.target.value.replace(/\D/g, '');
+                setSingleForm({ ...singleForm, phone: val });
+              }}
+              placeholder="e.g. 1234567890"
+              className={inputClass(!!singleError.phone)}
+            />
+            {singleError.phone && (
+              <p className="text-xs text-red-500">{singleError.phone}</p>
+            )}
+          </div>
+
+          <div className="space-y-1.5">
             <label htmlFor="invite-dept" className="text-sm font-medium text-ink">
               Department {requiredFields.includes('department_id') && <span className="text-red-500">*</span>}
             </label>
@@ -293,7 +331,7 @@ export const InviteModal: React.FC<InviteModalProps> = ({ isOpen, onClose, depar
               id="invite-dept"
               value={singleForm.department_id || ''}
               onChange={(e) => setSingleForm({ ...singleForm, department_id: e.target.value || null })}
-              className={inputClass()}
+              className={inputClass(!!singleError.department_id)}
             >
               <option value="">No department</option>
               {departments.map((d) => (
@@ -302,17 +340,24 @@ export const InviteModal: React.FC<InviteModalProps> = ({ isOpen, onClose, depar
                 </option>
               ))}
             </select>
+            {singleError.department_id && (
+              <p className="text-xs text-red-500">{singleError.department_id}</p>
+            )}
           </div>
 
           <div className="space-y-1.5">
             <label htmlFor="invite-manager" className="text-sm font-medium text-ink">
-              Primary Manager
+              Primary Manager {requiredFields.includes('manager_id') && <span className="text-red-500">*</span>}
             </label>
             <UserSelect
               value={singleForm.manager_id}
               onChange={(val) => setSingleForm({ ...singleForm, manager_id: val })}
               placeholder="Select manager..."
+              hasError={!!singleError.manager_id}
             />
+            {singleError.manager_id && (
+              <p className="text-xs text-red-500">{singleError.manager_id}</p>
+            )}
           </div>
 
           <div className="space-y-1.5">
@@ -336,7 +381,7 @@ export const InviteModal: React.FC<InviteModalProps> = ({ isOpen, onClose, depar
               onChange={(e) =>
                 setSingleForm({ ...singleForm, role: e.target.value as UserRole })
               }
-              className={inputClass()}
+              className={inputClass(!!singleError.role)}
             >
               {ROLE_OPTIONS.map((opt) => (
                 <option key={opt.value} value={opt.value}>
@@ -344,6 +389,9 @@ export const InviteModal: React.FC<InviteModalProps> = ({ isOpen, onClose, depar
                 </option>
               ))}
             </select>
+            {singleError.role && (
+              <p className="text-xs text-red-500">{singleError.role}</p>
+            )}
           </div>
 
           <div className="space-y-1.5">
@@ -356,7 +404,7 @@ export const InviteModal: React.FC<InviteModalProps> = ({ isOpen, onClose, depar
               onChange={(e) =>
                 setSingleForm({ ...singleForm, employment_type: e.target.value as EmploymentType })
               }
-              className={inputClass()}
+              className={inputClass(!!singleError.employment_type)}
             >
               {EMPLOYMENT_TYPE_OPTIONS.map((opt) => (
                 <option key={opt.value} value={opt.value}>
@@ -364,6 +412,47 @@ export const InviteModal: React.FC<InviteModalProps> = ({ isOpen, onClose, depar
                 </option>
               ))}
             </select>
+            {singleError.employment_type && (
+              <p className="text-xs text-red-500">{singleError.employment_type}</p>
+            )}
+          </div>
+
+          <div className="space-y-1.5">
+            <label htmlFor="invite-location" className="text-sm font-medium text-ink">
+              Location {requiredFields.includes('location_id') && <span className="text-red-500">*</span>}
+            </label>
+            <select
+              id="invite-location"
+              value={singleForm.location_id || ''}
+              onChange={(e) => setSingleForm({ ...singleForm, location_id: e.target.value || null })}
+              className={inputClass(!!singleError.location_id)}
+            >
+              <option value="">No location</option>
+              {locations.map((loc) => (
+                <option key={loc._id} value={loc._id}>
+                  {loc.name}
+                </option>
+              ))}
+            </select>
+            {singleError.location_id && (
+              <p className="text-xs text-red-500">{singleError.location_id}</p>
+            )}
+          </div>
+
+          <div className="space-y-1.5">
+            <label htmlFor="invite-hire-date" className="text-sm font-medium text-ink">
+              Hire Date {requiredFields.includes('hire_date') && <span className="text-red-500">*</span>}
+            </label>
+            <input
+              id="invite-hire-date"
+              type="date"
+              value={singleForm.hire_date || ''}
+              onChange={(e) => setSingleForm({ ...singleForm, hire_date: e.target.value })}
+              className={inputClass(!!singleError.hire_date)}
+            />
+            {singleError.hire_date && (
+              <p className="text-xs text-red-500">{singleError.hire_date}</p>
+            )}
           </div>
         </Tabs.Content>
 

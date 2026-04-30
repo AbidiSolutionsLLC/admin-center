@@ -19,11 +19,10 @@ const ROLE_OPTIONS: { value: UserRole; label: string }[] = [
   { value: 'Technician', label: 'Technician' },
 ];
 
-const schema = z.object({
+const createSchema = (requiredFields: string[], editingUserId?: string) => z.object({
   full_name: z.string().min(1, 'Full name is required').max(150, 'Name too long'),
   phone: z.string().regex(/^\d*$/, 'Phone must contain only numbers').optional().nullable(),
   department_id: z.string().optional().nullable(),
-  team_id: z.string().optional().nullable(),
   manager_id: z.string().optional().nullable(),
   secondary_manager_ids: z.array(z.string()).optional().default([]),
   role: z.enum(['Super Admin', 'Admin', 'HR', 'Manager', 'Employee', 'Technician']),
@@ -31,6 +30,37 @@ const schema = z.object({
   hire_date: z.string().optional().nullable(),
   location_id: z.string().optional().nullable(),
 }).superRefine((data, ctx) => {
+  // Check for required fields from company settings
+  // Note: We exclude 'email' here because it's not editable in this form
+  requiredFields.filter(f => f !== 'email').forEach(field => {
+    const value = (data as any)[field];
+    if (value === undefined || value === null || value === '') {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        message: 'This field is required',
+        path: [field],
+      });
+    }
+  });
+
+  // Prevent user from being their own manager
+  if (data.manager_id && data.manager_id === editingUserId) {
+    ctx.addIssue({
+      code: z.ZodIssueCode.custom,
+      message: 'User cannot be their own manager',
+      path: ['manager_id'],
+    });
+  }
+
+  // Prevent user from being their own secondary manager
+  if (data.secondary_manager_ids.includes(editingUserId || '')) {
+    ctx.addIssue({
+      code: z.ZodIssueCode.custom,
+      message: 'User cannot be their own secondary manager',
+      path: ['secondary_manager_ids'],
+    });
+  }
+
   if (data.manager_id && data.secondary_manager_ids.includes(data.manager_id)) {
     ctx.addIssue({
       code: z.ZodIssueCode.custom,
@@ -40,12 +70,12 @@ const schema = z.object({
   }
 });
 
-export type UserFormData = z.infer<typeof schema>;
+export type UserFormData = z.infer<ReturnType<typeof createSchema>>;
 
 interface UserFormProps {
-  initialData?: User;
-  onSubmit: (data: UserFormData) => void;
-  departments: Department[];
+  initialData?: Partial<User>;
+  onSubmit: (data: UserFormData & { custom_fields?: Record<string, unknown> }) => void;
+  departments?: Department[];
   locations?: Location[];
   isSubmitting?: boolean;
   requiredFields?: string[];
@@ -80,10 +110,13 @@ export const UserForm: React.FC<UserFormProps> = ({
   initialData,
   onSubmit,
   departments,
+  teams = [],
   locations = [],
   isSubmitting = false,
   requiredFields = [],
 }) => {
+  const schema = React.useMemo(() => createSchema(requiredFields, initialData?._id), [requiredFields, initialData?._id]);
+
   const {
     register,
     handleSubmit,
@@ -94,14 +127,13 @@ export const UserForm: React.FC<UserFormProps> = ({
     resolver: zodResolver(schema),
     defaultValues: {
       full_name: initialData?.full_name ?? '',
-      phone: initialData?.phone ?? '',
+      phone: initialData?.phone?.replace(/\D/g, '') ?? '',
       department_id: (typeof initialData?.department_id === 'object' && initialData?.department_id !== null) ? initialData.department_id._id : (initialData?.department_id as string ?? ''),
-      team_id: (typeof initialData?.team_id === 'object' && initialData?.team_id !== null) ? initialData.team_id._id : (initialData?.team_id as string ?? ''),
       manager_id: (typeof initialData?.manager_id === 'object' && initialData?.manager_id !== null) ? initialData.manager_id._id : (initialData?.manager_id as string ?? ''),
       secondary_manager_ids: initialData?.secondary_manager_ids ?? [],
-      role: initialData?.role ?? 'Employee',
-      employment_type: initialData?.employment_type ?? 'full_time',
-      hire_date: initialData?.hire_date ?? '',
+      role: initialData?.role || 'Employee',
+      employment_type: initialData?.employment_type || 'full_time',
+      hire_date: initialData?.hire_date ? new Date(initialData.hire_date).toISOString().split('T')[0] : '',
       location_id: (typeof initialData?.location_id === 'object' && initialData?.location_id !== null) ? (initialData.location_id as any)._id : (initialData?.location_id as string ?? ''),
     },
   });
@@ -118,14 +150,13 @@ export const UserForm: React.FC<UserFormProps> = ({
     if (initialData) {
       reset({
         full_name: initialData.full_name ?? '',
-        phone: initialData.phone ?? '',
+        phone: initialData.phone?.replace(/\D/g, '') ?? '',
         department_id: (typeof initialData.department_id === 'object' && initialData.department_id !== null) ? initialData.department_id._id : (initialData.department_id as string ?? ''),
-        team_id: (typeof initialData.team_id === 'object' && initialData.team_id !== null) ? initialData.team_id._id : (initialData.team_id as string ?? ''),
         manager_id: (typeof initialData.manager_id === 'object' && initialData.manager_id !== null) ? initialData.manager_id._id : (initialData.manager_id as string ?? ''),
         secondary_manager_ids: initialData.secondary_manager_ids ?? [],
-        role: initialData.role ?? 'Employee',
-        employment_type: initialData.employment_type ?? 'full_time',
-        hire_date: initialData.hire_date ?? '',
+        role: initialData.role || 'Employee',
+        employment_type: initialData.employment_type || 'full_time',
+        hire_date: initialData.hire_date ? new Date(initialData.hire_date).toISOString().split('T')[0] : '',
         location_id: (typeof initialData.location_id === 'object' && initialData.location_id !== null) ? (initialData.location_id as any)._id : (initialData.location_id as string ?? ''),
       });
       setCustomFieldValues(initialData.custom_fields ?? {});
@@ -157,17 +188,23 @@ export const UserForm: React.FC<UserFormProps> = ({
     return Object.keys(newErrors).length === 0;
   }, [customFields, customFieldValues]);
 
-  // Wrap onSubmit to include custom fields
-  const handleSubmitWithCustomFields = handleSubmit((data) => {
-    if (!validateCustomFields()) return;
-    onSubmit({
-      ...data,
-      custom_fields: customFieldValues,
-    });
-  });
-
   return (
-    <form id="user-form" onSubmit={(e) => { e.preventDefault(); handleSubmitWithCustomFields(); }} className="space-y-5" noValidate>
+    <form
+      id="user-form"
+      onSubmit={handleSubmit(
+        (data) => {
+          if (!validateCustomFields()) return;
+          onSubmit({
+            ...data,
+            custom_fields: customFieldValues,
+          });
+        },
+        (errors) => {
+          console.error('UserForm validation errors:', errors);
+        }
+      )}
+      className="space-y-5"
+    >
       {/* Full Name */}
       <div className="space-y-1.5">
         <label htmlFor="user-name" className="text-sm font-medium text-ink">
@@ -188,14 +225,19 @@ export const UserForm: React.FC<UserFormProps> = ({
       {/* Phone */}
       <div className="space-y-1.5">
         <label htmlFor="user-phone" className="text-sm font-medium text-ink">
-          Phone
+          Phone {requiredFields.includes('phone') && <span className="text-red-500">*</span>}
         </label>
         <input
           id="user-phone"
           {...register('phone')}
-          placeholder="e.g. +1234567890"
+          placeholder="e.g. 1234567890"
           disabled={isSubmitting}
           className={inputClass(!!errors.phone)}
+          onChange={(e) => {
+            const val = e.target.value.replace(/\D/g, '');
+            e.target.value = val;
+            register('phone').onChange(e);
+          }}
         />
         {errors.phone && (
           <p className="text-xs text-red-500">{errors.phone.message}</p>
@@ -211,7 +253,7 @@ export const UserForm: React.FC<UserFormProps> = ({
           id="user-dept"
           {...register('department_id')}
           disabled={isSubmitting}
-          className={inputClass(false)}
+          className={inputClass(!!errors.department_id)}
         >
           <option value="">No department</option>
           {departments.map((d) => (
@@ -223,9 +265,11 @@ export const UserForm: React.FC<UserFormProps> = ({
         <p className="text-[11px] text-ink-muted">
           Assign the user to a department.
         </p>
+        {errors.department_id && (
+          <p className="text-xs text-red-500">{errors.department_id.message}</p>
+        )}
       </div>
 
-      {/* Role */}
       <div className="space-y-1.5">
         <label htmlFor="user-role" className="text-sm font-medium text-ink">
           Role {requiredFields.includes('role') && <span className="text-red-500">*</span>}
@@ -234,7 +278,7 @@ export const UserForm: React.FC<UserFormProps> = ({
           id="user-role"
           {...register('role')}
           disabled={isSubmitting}
-          className={inputClass(false)}
+          className={inputClass(!!errors.role)}
         >
           {ROLE_OPTIONS.map((opt) => (
             <option key={opt.value} value={opt.value}>
@@ -245,6 +289,9 @@ export const UserForm: React.FC<UserFormProps> = ({
         <p className="text-[11px] text-ink-muted">
           Set the user's access role.
         </p>
+        {errors.role && (
+          <p className="text-xs text-red-500">{errors.role.message}</p>
+        )}
       </div>
 
       {/* Location */}
@@ -256,7 +303,7 @@ export const UserForm: React.FC<UserFormProps> = ({
           id="user-location"
           {...register('location_id')}
           disabled={isSubmitting}
-          className={inputClass(false)}
+          className={inputClass(!!errors.location_id)}
         >
           <option value="">No location</option>
           {locations.map((loc) => (
@@ -268,6 +315,9 @@ export const UserForm: React.FC<UserFormProps> = ({
         <p className="text-[11px] text-ink-muted">
           Assign the user to a physical location.
         </p>
+        {errors.location_id && (
+          <p className="text-xs text-red-500">{errors.location_id.message}</p>
+        )}
       </div>
 
       {/* Manager */}
@@ -339,6 +389,9 @@ export const UserForm: React.FC<UserFormProps> = ({
             </option>
           ))}
         </select>
+        <p className="text-[11px] text-ink-muted">
+          Specify employment status.
+        </p>
         {errors.employment_type && (
           <p className="text-xs text-red-500">{errors.employment_type.message}</p>
         )}
@@ -356,6 +409,9 @@ export const UserForm: React.FC<UserFormProps> = ({
           disabled={isSubmitting}
           className={inputClass(!!errors.hire_date)}
         />
+        <p className="text-[11px] text-ink-muted">
+          Official joining date.
+        </p>
         {errors.hire_date && (
           <p className="text-xs text-red-500">{errors.hire_date.message}</p>
         )}

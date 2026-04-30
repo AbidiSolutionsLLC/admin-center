@@ -12,6 +12,7 @@ interface UserOrgAssignmentModalProps {
   user: User | null;
   isOpen: boolean;
   onClose: () => void;
+  requiredFields?: string[];
 }
 
 const inputClass = cn(
@@ -31,13 +32,13 @@ export const UserOrgAssignmentModal: React.FC<UserOrgAssignmentModalProps> = ({
   user,
   isOpen,
   onClose,
+  requiredFields = [],
 }) => {
   const { data: departments } = useDepartments();
   const { data: teams } = useTeams();
   const assignMutation = useAssignUserOrg();
 
   const [selectedDeptId, setSelectedDeptId] = useState<string>('');
-  const [selectedTeamIds, setSelectedTeamIds] = useState<string[]>([]);
 
   // Sync state when user prop changes
   React.useEffect(() => {
@@ -46,20 +47,8 @@ export const UserOrgAssignmentModal: React.FC<UserOrgAssignmentModalProps> = ({
         ? (user.department_id as any)?._id
         : user.department_id;
       setSelectedDeptId(deptId ?? '');
-      setSelectedTeamIds(user.teams?.map((t: any) => t._id) ?? []);
     }
   }, [user, isOpen]);
-
-  // Filter teams by selected department
-  const availableTeams = useMemo(() => {
-    if (!teams || !selectedDeptId) return [];
-    return teams.filter((t) => {
-      const deptId = typeof t.department_id === 'object' 
-        ? (t.department_id as any)?._id 
-        : t.department_id;
-      return deptId === selectedDeptId;
-    });
-  }, [teams, selectedDeptId]);
 
   const handleSubmit = () => {
     if (!user) return;
@@ -69,7 +58,6 @@ export const UserOrgAssignmentModal: React.FC<UserOrgAssignmentModalProps> = ({
         userId: user._id,
         data: {
           department_id: selectedDeptId || null,
-          team_ids: selectedTeamIds.length > 0 ? selectedTeamIds : null,
         },
       },
       {
@@ -80,18 +68,12 @@ export const UserOrgAssignmentModal: React.FC<UserOrgAssignmentModalProps> = ({
     );
   };
 
-  const toggleTeam = (teamId: string) => {
-    setSelectedTeamIds((prev) =>
-      prev.includes(teamId) ? prev.filter((id) => id !== teamId) : [...prev, teamId]
-    );
-  };
-
   return (
     <Modal
       isOpen={isOpen}
       onClose={onClose}
       title="Assign Organization"
-      description={`Update ${user?.full_name}'s department and team memberships.`}
+      description={`Update ${user?.full_name}'s department assignment.`}
       size="md"
       footer={
         <>
@@ -111,7 +93,7 @@ export const UserOrgAssignmentModal: React.FC<UserOrgAssignmentModalProps> = ({
               'disabled:opacity-50 disabled:cursor-not-allowed'
             )}
           >
-            {assignMutation.isPending ? 'Saving...' : 'Save Assignments'}
+            {assignMutation.isPending ? 'Saving...' : 'Save Assignment'}
           </Button>
         </>
       }
@@ -120,14 +102,13 @@ export const UserOrgAssignmentModal: React.FC<UserOrgAssignmentModalProps> = ({
         {/* Department */}
         <div className="space-y-1.5">
           <label htmlFor="user-dept" className="text-sm font-medium text-ink">
-            Department
+            Department {requiredFields.includes('department_id') && <span className="text-red-500">*</span>}
           </label>
           <select
             id="user-dept"
             value={selectedDeptId}
             onChange={(e) => {
               setSelectedDeptId(e.target.value);
-              setSelectedTeamIds([]); // Reset teams when dept changes
             }}
             className={inputClass}
           >
@@ -142,38 +123,6 @@ export const UserOrgAssignmentModal: React.FC<UserOrgAssignmentModalProps> = ({
             Primary department for this user.
           </p>
         </div>
-
-        {/* Teams */}
-        {selectedDeptId && availableTeams.length > 0 && (
-          <div className="space-y-2">
-            <label className="text-sm font-medium text-ink">Teams</label>
-            <div className="space-y-1 max-h-48 overflow-y-auto border border-line rounded-md p-2">
-              {availableTeams.map((team: Team) => (
-                <label
-                  key={team._id}
-                  className="flex items-center gap-2 p-2 rounded hover:bg-surface-alt cursor-pointer"
-                >
-                  <input
-                    type="checkbox"
-                    checked={selectedTeamIds.includes(team._id)}
-                    onChange={() => toggleTeam(team._id)}
-                    className="w-4 h-4 rounded border-line text-primary focus:ring-primary/30"
-                  />
-                  <span className="text-sm text-ink">{team.name}</span>
-                </label>
-              ))}
-            </div>
-            <p className="text-[11px] text-ink-muted">
-              Select all teams this user should belong to.
-            </p>
-          </div>
-        )}
-
-        {selectedDeptId && availableTeams.length === 0 && (
-          <p className="text-xs text-ink-muted">
-            No teams available for the selected department.
-          </p>
-        )}
       </div>
     </Modal>
   );
