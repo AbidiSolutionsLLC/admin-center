@@ -391,7 +391,11 @@ export default function OrganizationPage() {
                     </div>
                   </div>
                 ) : treeData && treeData.length > 0 ? (
-                  <OrgChartView treeData={treeData} onNodeClick={handleOpenEdit} />
+                  <OrgChartView 
+                    treeData={treeData} 
+                    onNodeClick={handleOpenEdit} 
+                    onNodeDelete={handleRequestDelete}
+                  />
                 ) : (
                   <div className="flex items-center justify-center h-[600px]">
                     <p className="text-sm text-ink-muted">No hierarchy data available.</p>

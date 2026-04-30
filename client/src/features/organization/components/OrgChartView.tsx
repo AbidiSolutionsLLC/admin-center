@@ -9,6 +9,7 @@ import { cn } from '@/utils/cn';
 interface OrgChartViewProps {
   treeData: OrgTreeNode[];
   onNodeClick?: (node: OrgTreeNode) => void;
+  onNodeDelete?: (nodeId: string) => void;
 }
 
 /**
@@ -20,6 +21,7 @@ interface OrgChartViewProps {
 export const OrgChartView: React.FC<OrgChartViewProps> = ({
   treeData,
   onNodeClick,
+  onNodeDelete,
 }) => {
   const [viewMode, setViewMode] = useState<'visual' | 'interactive'>('visual');
 
@@ -64,14 +66,18 @@ export const OrgChartView: React.FC<OrgChartViewProps> = ({
         
         <p className="text-[11px] text-ink-muted italic pr-4">
           {viewMode === 'visual' 
-            ? "Use mouse wheel to zoom, drag to pan. Click nodes to view details." 
+            ? "Use mouse wheel to zoom, drag to pan. Use three-dot menu for actions." 
             : "Drag nodes to reparent. Use arrows to expand/collapse branches."}
         </p>
       </div>
 
-      <div className="w-full h-[600px] rounded-xl overflow-hidden border border-line">
+      <div className="w-full h-[700px] rounded-xl border border-line relative">
         {viewMode === 'visual' ? (
-          <VisualOrgChart treeData={treeData} onNodeClick={onNodeClick} />
+          <VisualOrgChart 
+            treeData={treeData} 
+            onNodeClick={onNodeClick} 
+            onNodeDelete={onNodeDelete} 
+          />
         ) : (
           <DraggableOrgChart treeData={treeData} onNodeClick={onNodeClick} />
         )}

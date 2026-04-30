@@ -9,24 +9,29 @@ import {
   RotateCcw, 
   ChevronDown, 
   ChevronRight,
+  ChevronUp,
   User,
-  Building2,
   Users,
-  MoreVertical
+  MoreVertical,
+  Edit2,
+  Trash2
 } from 'lucide-react';
+import * as DropdownMenu from '@radix-ui/react-dropdown-menu';
 import { cn } from '@/utils/cn';
 import type { OrgTreeNode } from '@/types';
 
 interface VisualOrgChartProps {
   treeData: OrgTreeNode[];
   onNodeClick?: (node: OrgTreeNode) => void;
+  onNodeDelete?: (nodeId: string) => void;
 }
 
 const OrgNode: React.FC<{ 
   node: OrgTreeNode; 
   onNodeClick?: (node: OrgTreeNode) => void;
+  onNodeDelete?: (nodeId: string) => void;
   depth: number;
-}> = ({ node, onNodeClick, depth }) => {
+}> = ({ node, onNodeClick, onNodeDelete, depth }) => {
   const [isExpanded, setIsExpanded] = useState(true);
   const hasChildren = node.children && node.children.length > 0;
 
@@ -60,9 +65,8 @@ const OrgNode: React.FC<{
       {/* THE CARD */}
       <div className="relative flex flex-col items-center z-10 group w-64">
         <div
-          onClick={() => onNodeClick?.(node)}
           className={cn(
-            "relative flex flex-col items-center w-full bg-white rounded-xl shadow-sm border border-line hover:shadow-md transition-all duration-300 cursor-pointer overflow-hidden",
+            "relative flex flex-col items-center w-full bg-white rounded-xl shadow-sm border border-line hover:shadow-md transition-all duration-300 overflow-hidden",
             "hover:-translate-y-0.5"
           )}
         >
@@ -77,9 +81,42 @@ const OrgNode: React.FC<{
               )}>
                 {node.type.replace('_', ' ')}
               </span>
-              <button className="text-ink-muted hover:text-ink transition-colors">
-                <MoreVertical className="w-4 h-4" />
-              </button>
+              
+              {/* Actions Dropdown */}
+              <DropdownMenu.Root>
+                <DropdownMenu.Trigger asChild>
+                  <button 
+                    className="text-ink-muted hover:text-ink hover:bg-surface-alt p-1 rounded-md transition-colors outline-none"
+                    onClick={(e) => e.stopPropagation()}
+                  >
+                    <MoreVertical className="w-4 h-4" />
+                  </button>
+                </DropdownMenu.Trigger>
+
+                <DropdownMenu.Portal>
+                  <DropdownMenu.Content 
+                    className="z-[100] min-w-[140px] bg-white rounded-lg border border-line shadow-lg p-1 animate-in fade-in zoom-in-95 duration-100"
+                    align="end"
+                    sideOffset={5}
+                  >
+                    <DropdownMenu.Item 
+                      className="flex items-center gap-2 px-3 py-2 text-sm text-ink rounded-md hover:bg-surface-alt outline-none cursor-pointer"
+                      onClick={() => onNodeClick?.(node)}
+                    >
+                      <Edit2 className="w-3.5 h-3.5 text-ink-secondary" />
+                      Edit Department
+                    </DropdownMenu.Item>
+                    <DropdownMenu.Separator className="h-px bg-line my-1" />
+                    <DropdownMenu.Item 
+                      className="flex items-center gap-2 px-3 py-2 text-sm text-red-600 rounded-md hover:bg-red-50 outline-none cursor-pointer"
+                      onClick={() => onNodeDelete?.(node._id)}
+                    >
+                      <Trash2 className="w-3.5 h-3.5" />
+                      Archive
+                    </DropdownMenu.Item>
+                  </DropdownMenu.Content>
+                </DropdownMenu.Portal>
+              </DropdownMenu.Root>
             </div>
 
             <h3 className="text-sm font-bold text-ink leading-tight mb-1 truncate w-full" title={node.name}>
@@ -118,9 +155,10 @@ const OrgNode: React.FC<{
                 setIsExpanded(!isExpanded);
               }}
               className="absolute -bottom-3 left-1/2 -translate-x-1/2 w-6 h-6 rounded-full bg-white border border-line shadow-sm flex items-center justify-center hover:bg-surface-alt transition-colors z-20"
+              title={isExpanded ? "Collapse" : "Expand"}
             >
               {isExpanded ? (
-                <ChevronDown className="w-3.5 h-3.5 text-ink-muted" />
+                <ChevronUp className="w-3.5 h-3.5 text-ink-muted" />
               ) : (
                 <ChevronRight className="w-3.5 h-3.5 text-ink-muted" />
               )}
@@ -157,7 +195,12 @@ const OrgNode: React.FC<{
                 <div className="w-px h-8 bg-line"></div>
 
                 {/* Recursive Node */}
-                <OrgNode node={child} onNodeClick={onNodeClick} depth={depth + 1} />
+                <OrgNode 
+                  node={child} 
+                  onNodeClick={onNodeClick} 
+                  onNodeDelete={onNodeDelete}
+                  depth={depth + 1} 
+                />
               </div>
             );
           })}
@@ -167,7 +210,7 @@ const OrgNode: React.FC<{
   );
 };
 
-export const VisualOrgChart: React.FC<VisualOrgChartProps> = ({ treeData, onNodeClick }) => {
+export const VisualOrgChart: React.FC<VisualOrgChartProps> = ({ treeData, onNodeClick, onNodeDelete }) => {
   return (
     <div className="w-full h-full bg-surface-alt/30 relative">
       <TransformWrapper
@@ -217,12 +260,13 @@ export const VisualOrgChart: React.FC<VisualOrgChartProps> = ({ treeData, onNode
                 }}
               />
 
-              <div className="min-w-max flex justify-center pb-24 pt-20 relative z-10 px-24">
+              <div className="min-w-max flex justify-center pb-48 pt-20 relative z-10 px-24">
                 {treeData.map((rootNode, idx) => (
                   <div key={rootNode._id} className={idx > 0 ? "ml-20" : ""}>
                     <OrgNode
                       node={rootNode}
                       onNodeClick={onNodeClick}
+                      onNodeDelete={onNodeDelete}
                       depth={0}
                     />
                   </div>
