@@ -30,12 +30,6 @@ export const IntelligenceBanner = ({ module }: IntelligenceBannerProps) => {
       <p className="text-sm text-amber-800 font-medium">
         {criticalCount} critical issue{criticalCount > 1 ? 's' : ''} detected in this module.
       </p>
-      <a 
-        href="#insights" 
-        className="ml-auto text-xs font-semibold text-accent hover:underline flex-shrink-0"
-      >
-        View details →
-      </a>
     </div>
   );
 };
