@@ -24,22 +24,22 @@ const router = Router();
 
 router.use('/health', healthRoutes);
 router.use('/auth', authRoutes);
-router.use('/organization', requireAuth, organizationRoutes);
-router.use('/intelligence', requireAuth, intelligenceRoutes);
+router.use('/organization', organizationRoutes);
+router.use('/intelligence', intelligenceRoutes);
 router.post('/people/verify-invite', verifyInviteToken); // Public endpoint for onboarding
-router.use('/people', requireAuth, peopleRoutes);
+router.use('/people', peopleRoutes);
 router.use('/roles', rolesRoutes);
 router.use('/apps', appsRoutes);
 router.use('/overview', overviewRoutes);
 router.use('/security', securityRoutes);
 router.use('/audit-logs', auditLogsRoutes);
-router.use('/teams', requireAuth, teamsRoutes);
-router.use('/policies', requireAuth, policiesRoutes);
-router.use('/locations', requireAuth, locationsRoutes);
-router.use('/data-fields', requireAuth, dataFieldsRoutes);
-router.use('/integrations', requireAuth, integrationsRoutes);
-router.use('/workflows', requireAuth, workflowsRoutes);
-router.use('/notifications', requireAuth, notificationsRoutes);
+router.use('/teams', teamsRoutes);
+router.use('/policies', policiesRoutes);
+router.use('/locations', locationsRoutes);
+router.use('/data-fields', dataFieldsRoutes);
+router.use('/integrations', integrationsRoutes);
+router.use('/workflows', workflowsRoutes);
+router.use('/notifications', notificationsRoutes);
 router.use('/company', companyRoutes); // FIX-03: Company settings routes
 
 // Protected test route for verifying JWT rejection logic

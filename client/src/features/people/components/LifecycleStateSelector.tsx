@@ -12,20 +12,20 @@ interface LifecycleStateSelectorProps {
 }
 
 const VALID_TRANSITIONS: Record<LifecycleState, LifecycleState[]> = {
-  pending: ['active', 'archived'],
+  invited: ['onboarding', 'active', 'archived'],
   active: ['deactivated', 'archived'],
   deactivated: ['active', 'archived'],
-  archived: ['pending'],
+  archived: ['invited'],
 };
 
 const lifecycleStateConfig: Record<
   LifecycleState,
   { label: string; variant: 'success' | 'warning' | 'error' | 'info' | 'neutral' | 'primary' | 'accent'; description: string }
 > = {
-  pending: {
-    label: 'Pending',
+  invited: {
+    label: 'Invited',
     variant: 'info',
-    description: 'User has been invited and is pending activation',
+    description: 'User has been invited and is awaiting activation',
   },
   active: {
     label: 'Active',

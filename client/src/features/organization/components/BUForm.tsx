@@ -159,6 +159,7 @@ export const BUForm: React.FC<BUFormProps> = ({
               disabled={isSubmitting}
               hasError={!!errors.primary_manager_id}
               placeholder="Select primary manager"
+              onlyActive={true}
             />
           )}
         />
@@ -185,6 +186,7 @@ export const BUForm: React.FC<BUFormProps> = ({
               disabled={isSubmitting}
               hasError={!!errors.secondary_manager_ids}
               placeholder="Select secondary managers"
+              onlyActive={true}
             />
           )}
         />

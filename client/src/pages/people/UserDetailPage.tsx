@@ -184,7 +184,7 @@ function InfoCard({ label, value }: { label: string; value: string }) {
 
 function LifecycleStateBadge({ state }: { state: string }) {
   const config: Record<string, { bg: string; text: string; label: string }> = {
-    invited: { bg: 'bg-primary-light', text: 'text-primary', label: 'Pending' },
+    invited: { bg: 'bg-primary-light', text: 'text-primary', label: 'Invited' },
     onboarding: { bg: 'bg-sky-50', text: 'text-sky-600', label: 'Onboarding' },
     active: { bg: 'bg-emerald-50', text: 'text-emerald-600', label: 'Active' },
     probation: { bg: 'bg-violet-50', text: 'text-violet-600', label: 'Probation' },

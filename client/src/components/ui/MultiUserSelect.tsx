@@ -10,6 +10,7 @@ export interface MultiUserSelectProps {
   hasError?: boolean;
   className?: string;
   placeholder?: string;
+  onlyActive?: boolean;
 }
 
 /**
@@ -23,6 +24,7 @@ export const MultiUserSelect: React.FC<MultiUserSelectProps> = ({
   hasError = false,
   className,
   placeholder = 'Select managers...',
+  onlyActive = false,
 }) => {
   const { data: users, isLoading } = useUsers();
   const [isOpen, setIsOpen] = useState(false);
@@ -41,10 +43,12 @@ export const MultiUserSelect: React.FC<MultiUserSelectProps> = ({
   }, []);
 
   const selectedUsers = users?.filter((u) => value.includes(u._id)) || [];
-  const filteredUsers = users?.filter((u) => 
-    u.full_name.toLowerCase().includes(search.toLowerCase()) || 
-    u.email.toLowerCase().includes(search.toLowerCase())
-  ) || [];
+  const filteredUsers = users?.filter((u) => {
+    const matchesSearch = u.full_name.toLowerCase().includes(search.toLowerCase()) || 
+                         u.email.toLowerCase().includes(search.toLowerCase());
+    const matchesStatus = !onlyActive || u.lifecycle_state === 'active';
+    return matchesSearch && matchesStatus;
+  }) || [];
 
   const toggleUser = (userId: string) => {
     const newValue = value.includes(userId)

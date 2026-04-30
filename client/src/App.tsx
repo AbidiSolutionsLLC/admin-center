@@ -42,6 +42,7 @@ function App() {
               <Route index element={<Navigate to={ROUTES.OVERVIEW} replace />} />
               <Route path={ROUTES.OVERVIEW} element={<OverviewPage />} />
               <Route path={ROUTES.ORGANIZATION} element={<OrganizationPage />} />
+              <Route path="/organization/:id" element={<OrganizationPage />} />
               <Route path={ROUTES.COMPANY_SETTINGS} element={<CompanySettingsPage />} />
               <Route path={ROUTES.TEAMS} element={<TeamsPage />} />
               <Route path={ROUTES.PEOPLE} element={<PeoplePage />} />
