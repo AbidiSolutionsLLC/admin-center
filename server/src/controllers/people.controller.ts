@@ -837,7 +837,7 @@ export const inviteUser = asyncHandler(async (req: Request, res: Response) => {
     company_id: req.user.company_id as any, // Needed due to Mongoose Types.ObjectId vs string mismatch
     password_hash,
     role: input.role || 'Employee', // Default to 'Employee' if not provided
-        lifecycle_state: 'pending',
+        lifecycle_state: 'invited',
     is_active: false, // User is not active until they complete onboarding
     phone: input.phone ?? undefined,
     // Normalize empty strings → undefined

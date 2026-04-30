@@ -7,6 +7,31 @@ import { auditLogger } from '../lib/auditLogger';
 import { z } from 'zod';
 import { validateEmployeeIdFormat } from '../services/employeeId';
 
+// ── Common timezones list for validation ────────────────────────────────────
+let VALID_TIMEZONES: string[] = [];
+try {
+  // Intl.supportedValuesOf is available in Node 16+ / V8 9.3+
+  VALID_TIMEZONES = (Intl as any).supportedValuesOf('timeZone') as string[];
+} catch {
+  // Fallback: skip server-side validation — client already restricts to known values
+  VALID_TIMEZONES = [];
+}
+
+const UpdateCompanyNameSchema = z.object({
+  name: z.string().min(2, 'Company name must be at least 2 characters').max(100, 'Company name must be 100 characters or fewer'),
+});
+
+const UpdateTimezoneSchema = z.object({
+  timezone: z.string().min(1, 'Timezone is required'),
+});
+
+const UpdateLocaleSchema = z.object({
+  locale: z
+    .string()
+    .min(2, 'Locale is required')
+    .regex(/^[a-z]{2}(-[A-Z]{2})?$/, 'Locale must be a valid IETF language tag (e.g. en-US, fr-FR)'),
+});
+
 const UpdateEmployeeIdFormatSchema = z.object({
   employee_id_format: z
     .string()
@@ -123,6 +148,137 @@ export const updateDomainEnforcement = asyncHandler(async (req: Request, res: Re
       allowed_domains: input.allowed_domains,
       is_domain_enforcement_active: input.is_domain_enforcement_active,
     },
+  });
+
+  res.json({ success: true, data: company });
+});
+
+/**
+ * Resets company settings to factory defaults.
+ */
+export const resetCompanySettings = asyncHandler(async (req: Request, res: Response) => {
+  const before = await Company.findById(req.user.company_id).lean();
+  if (!before) throw new AppError('Company not found', 404, 'COMPANY_NOT_FOUND');
+
+  const defaults = {
+    employee_id_format: 'EMP-{counter:5}',
+    'settings.required_user_fields': ['email', 'full_name'],
+    'settings.is_domain_enforcement_active': false,
+    'settings.allowed_domains': [],
+    'settings.timezone': 'UTC',
+    'settings.locale': 'en-US',
+  };
+
+  const company = await Company.findByIdAndUpdate(
+    req.user.company_id,
+    defaults,
+    { new: true, runValidators: true }
+  );
+
+  await auditLogger.log({
+    req,
+    action: 'company.settings_reset',
+    module: 'company',
+    object_type: 'company',
+    object_id: req.user.company_id,
+    object_label: company?.name || 'company',
+    before_state: before,
+    after_state: company?.toObject(),
+  });
+
+  res.json({ success: true, data: company });
+});
+
+/**
+ * PUT /settings/company-name
+ * Updates the company display name.
+ */
+export const updateCompanyName = asyncHandler(async (req: Request, res: Response) => {
+  const input = UpdateCompanyNameSchema.parse(req.body);
+
+  const before = await Company.findById(req.user.company_id).lean();
+  if (!before) throw new AppError('Company not found', 404, 'COMPANY_NOT_FOUND');
+
+  const company = await Company.findByIdAndUpdate(
+    req.user.company_id,
+    { name: input.name },
+    { new: true, runValidators: true },
+  );
+
+  await auditLogger.log({
+    req,
+    action: 'company.name_updated',
+    module: 'company',
+    object_type: 'company',
+    object_id: req.user.company_id,
+    object_label: company?.name || 'company',
+    before_state: { name: before.name },
+    after_state: { name: input.name },
+  });
+
+  res.json({ success: true, data: company });
+});
+
+/**
+ * PUT /settings/timezone
+ * Updates the company-wide default timezone.
+ */
+export const updateTimezone = asyncHandler(async (req: Request, res: Response) => {
+  const input = UpdateTimezoneSchema.parse(req.body);
+
+  // Validate the timezone is an IANA timezone identifier
+  if (VALID_TIMEZONES.length > 1 && !VALID_TIMEZONES.includes(input.timezone)) {
+    throw new AppError(`Invalid timezone: "${input.timezone}". Must be a valid IANA timezone.`, 400, 'INVALID_TIMEZONE');
+  }
+
+  const before = await Company.findById(req.user.company_id).lean();
+  if (!before) throw new AppError('Company not found', 404, 'COMPANY_NOT_FOUND');
+
+  const company = await Company.findByIdAndUpdate(
+    req.user.company_id,
+    { 'settings.timezone': input.timezone },
+    { new: true, runValidators: true },
+  );
+
+  await auditLogger.log({
+    req,
+    action: 'company.timezone_updated',
+    module: 'company',
+    object_type: 'company',
+    object_id: req.user.company_id,
+    object_label: company?.name || 'company',
+    before_state: { timezone: before.settings?.timezone || 'UTC' },
+    after_state: { timezone: input.timezone },
+  });
+
+  res.json({ success: true, data: company });
+});
+
+/**
+ * PUT /settings/locale
+ * Updates the company-wide locale (e.g. en-US, fr-FR).
+ */
+export const updateLocale = asyncHandler(async (req: Request, res: Response) => {
+  const input = UpdateLocaleSchema.parse(req.body);
+
+  const before = await Company.findById(req.user.company_id).lean();
+  if (!before) throw new AppError('Company not found', 404, 'COMPANY_NOT_FOUND');
+
+  const company = await Company.findByIdAndUpdate(
+    req.user.company_id,
+    { 'settings.locale': input.locale },
+    { new: true, runValidators: true },
+  );
+
+  await auditLogger.log({
+    req,
+    action: 'company.locale_updated',
+    module: 'company',
+    object_type: 'company',
+    object_id: req.user.company_id,
+    object_label: company?.name || 'company',
+    before_state: { locale: before.settings?.locale || 'en-US' },
+    after_state: { locale: input.locale },
   });
 
   res.json({ success: true, data: company });

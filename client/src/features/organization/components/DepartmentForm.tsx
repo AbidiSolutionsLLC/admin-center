@@ -250,6 +250,7 @@ export const DepartmentForm: React.FC<DepartmentFormProps> = ({
               disabled={isSubmitting}
               hasError={!!errors.primary_manager_id}
               placeholder="None"
+              onlyActive={true}
             />
           )}
         />
@@ -276,6 +277,7 @@ export const DepartmentForm: React.FC<DepartmentFormProps> = ({
               disabled={isSubmitting}
               hasError={!!errors.secondary_manager_ids}
               placeholder="Select secondary managers..."
+              onlyActive={true}
             />
           )}
         />

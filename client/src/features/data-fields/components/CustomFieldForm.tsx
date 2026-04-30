@@ -6,6 +6,7 @@ import { z } from 'zod';
 import type { CustomField, FieldType, TargetObject } from '@/types';
 import { cn } from '@/utils/cn';
 import { Plus, X } from 'lucide-react';
+import { Switch } from '@/components/ui/switch';
 
 const schema = z.object({
   name: z.string().min(1, 'Name is required').max(100).regex(/^[a-z0-9_]+$/, 'Lowercase letters, numbers, and underscores only'),
@@ -250,18 +251,26 @@ export const CustomFieldForm: React.FC<CustomFieldFormProps> = ({
         {errors.description && <p className="text-xs text-error">{errors.description.message}</p>}
       </div>
 
-      {/* Required Checkbox */}
-      <div className="flex items-center gap-2">
-        <input
-          id="cf-required"
-          type="checkbox"
-          {...register('required')}
-          disabled={isSubmitting}
-          className="w-4 h-4 rounded border-line text-primary focus:ring-primary/30"
+      {/* Required Toggle */}
+      <div className="flex items-center justify-between p-3 rounded-lg border border-line bg-surface-alt/30">
+        <div className="space-y-0.5">
+          <label htmlFor="cf-required" className="text-sm font-medium text-ink cursor-pointer">
+            Required field
+          </label>
+          <p className="text-xs text-ink-secondary">Force users to fill this field before saving</p>
+        </div>
+        <Controller
+          name="required"
+          control={control}
+          render={({ field }) => (
+            <Switch
+              id="cf-required"
+              checked={field.value}
+              onCheckedChange={field.onChange}
+              disabled={isSubmitting}
+            />
+          )}
         />
-        <label htmlFor="cf-required" className="text-sm font-medium text-ink">
-          Required field
-        </label>
       </div>
 
       {/* Visibility */}

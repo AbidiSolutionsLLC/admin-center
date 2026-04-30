@@ -1,5 +1,6 @@
-// client/src/features/overview/InsightCard.tsx
 import { AlertTriangle, AlertCircle, Info, ExternalLink, Check } from 'lucide-react';
+import { useNavigate } from 'react-router-dom';
+import { ROUTES } from '@/constants/routes';
 import type { Insight } from '@/types';
 
 interface InsightCardProps {
@@ -17,6 +18,8 @@ export const InsightCard: React.FC<InsightCardProps> = ({
   onDismiss,
   isDismissing = false,
 }) => {
+  const navigate = useNavigate();
+
   const getSeverityConfig = () => {
     switch (insight.severity) {
       case 'critical':
@@ -70,6 +73,35 @@ export const InsightCard: React.FC<InsightCardProps> = ({
     });
   };
 
+  const handleViewIssue = () => {
+    if (insight.remediation_url) {
+      navigate(insight.remediation_url);
+      return;
+    }
+
+    if (!insight.affected_object_type || !insight.affected_object_id) return;
+
+    // Fallback navigation based on object type
+    switch (insight.affected_object_type.toLowerCase()) {
+      case 'department':
+        navigate(`${ROUTES.ORGANIZATION}?id=${insight.affected_object_id}`);
+        break;
+      case 'team':
+        navigate(`${ROUTES.TEAMS}?id=${insight.affected_object_id}`);
+        break;
+      case 'user':
+      case 'employee':
+        navigate(ROUTES.USER_DETAIL(insight.affected_object_id));
+        break;
+      case 'location':
+        navigate(ROUTES.LOCATIONS);
+        break;
+      default:
+        // Default to relevant module page if possible
+        break;
+    }
+  };
+
   return (
     <div className={`p-4 rounded-lg border ${config.bg} ${config.border}`}>
       <div className="flex items-start gap-3">
@@ -113,9 +145,12 @@ export const InsightCard: React.FC<InsightCardProps> = ({
           {/* Actions */}
           <div className="flex items-center gap-2 mt-3">
             {insight.remediation_action && (
-              <button className="inline-flex items-center gap-1 text-xs font-medium text-primary-600 hover:text-primary-700 transition-colors">
+              <button 
+                onClick={handleViewIssue}
+                className="inline-flex items-center gap-1 text-xs font-medium text-primary-600 hover:text-primary-700 transition-colors"
+              >
                 <ExternalLink className="h-3 w-3" />
-                View issue →
+                {insight.remediation_action} →
               </button>
             )}
             <button

@@ -354,6 +354,7 @@ export const InviteModal: React.FC<InviteModalProps> = ({ isOpen, onClose, depar
               onChange={(val) => setSingleForm({ ...singleForm, manager_id: val })}
               placeholder="Select manager..."
               hasError={!!singleError.manager_id}
+              onlyActive={true}
             />
             {singleError.manager_id && (
               <p className="text-xs text-red-500">{singleError.manager_id}</p>
@@ -368,6 +369,7 @@ export const InviteModal: React.FC<InviteModalProps> = ({ isOpen, onClose, depar
               value={singleForm.secondary_manager_ids}
               onChange={(val) => setSingleForm({ ...singleForm, secondary_manager_ids: val })}
               placeholder="Select secondary managers..."
+              onlyActive={true}
             />
           </div>
 

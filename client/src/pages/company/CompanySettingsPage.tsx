@@ -5,12 +5,13 @@ import * as z from 'zod';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
-import { Checkbox } from '@/components/ui/checkbox';
+import { Switch } from '@/components/ui/switch';
 import { ConfirmDialog } from '@/components/ui/ConfirmDialog';
 import { useEmployeeIdFormat, useUpdateEmployeeIdFormat } from '@/hooks/useEmployeeIdFormat';
 import { useRequiredUserFields, useUpdateRequiredUserFields } from '@/hooks/useRequiredUserFields';
 import { useDomainEnforcement, useUpdateDomainEnforcement } from '@/hooks/useDomainEnforcement';
-import { ROUTES } from '@/constants/routes';
+import { useResetCompanySettings } from '@/hooks/useResetCompanySettings';
+import { useUpdateCompanyName, useUpdateTimezone, useUpdateLocale } from '@/hooks/useCompanyProfile';
 import { AVAILABLE_USER_FIELDS } from '@/types';
 import { cn } from '@/utils/cn';
 import { toast } from 'sonner';
@@ -36,6 +37,202 @@ function generateFormatPreview(format: string, counter: number) {
   return format.replace(/\{counter:\d+\}/, nextCounter.toString().padStart(width, '0'));
 }
 
+// ── Common IANA timezone list (curated subset for the dropdown) ──────────────
+const COMMON_TIMEZONES = [
+  'UTC',
+  'America/New_York',
+  'America/Chicago',
+  'America/Denver',
+  'America/Los_Angeles',
+  'America/Anchorage',
+  'America/Halifax',
+  'America/Sao_Paulo',
+  'America/Bogota',
+  'America/Mexico_City',
+  'America/Toronto',
+  'America/Vancouver',
+  'Europe/London',
+  'Europe/Paris',
+  'Europe/Berlin',
+  'Europe/Madrid',
+  'Europe/Rome',
+  'Europe/Amsterdam',
+  'Europe/Brussels',
+  'Europe/Stockholm',
+  'Europe/Warsaw',
+  'Europe/Istanbul',
+  'Europe/Moscow',
+  'Africa/Cairo',
+  'Africa/Johannesburg',
+  'Africa/Lagos',
+  'Africa/Nairobi',
+  'Asia/Dubai',
+  'Asia/Karachi',
+  'Asia/Kolkata',
+  'Asia/Dhaka',
+  'Asia/Bangkok',
+  'Asia/Singapore',
+  'Asia/Shanghai',
+  'Asia/Tokyo',
+  'Asia/Seoul',
+  'Asia/Hong_Kong',
+  'Australia/Sydney',
+  'Australia/Melbourne',
+  'Pacific/Auckland',
+];
+
+const COMMON_LOCALES = [
+  { value: 'en-US', label: 'English (US)' },
+  { value: 'en-GB', label: 'English (UK)' },
+  { value: 'en-AU', label: 'English (Australia)' },
+  { value: 'en-CA', label: 'English (Canada)' },
+  { value: 'fr-FR', label: 'French (France)' },
+  { value: 'fr-CA', label: 'French (Canada)' },
+  { value: 'de-DE', label: 'German (Germany)' },
+  { value: 'es-ES', label: 'Spanish (Spain)' },
+  { value: 'es-MX', label: 'Spanish (Mexico)' },
+  { value: 'pt-BR', label: 'Portuguese (Brazil)' },
+  { value: 'pt-PT', label: 'Portuguese (Portugal)' },
+  { value: 'it-IT', label: 'Italian (Italy)' },
+  { value: 'nl-NL', label: 'Dutch (Netherlands)' },
+  { value: 'sv-SE', label: 'Swedish (Sweden)' },
+  { value: 'pl-PL', label: 'Polish (Poland)' },
+  { value: 'tr-TR', label: 'Turkish (Turkey)' },
+  { value: 'ar-SA', label: 'Arabic (Saudi Arabia)' },
+  { value: 'zh-CN', label: 'Chinese Simplified (China)' },
+  { value: 'zh-TW', label: 'Chinese Traditional (Taiwan)' },
+  { value: 'ja-JP', label: 'Japanese (Japan)' },
+  { value: 'ko-KR', label: 'Korean (South Korea)' },
+  { value: 'hi-IN', label: 'Hindi (India)' },
+  { value: 'ur-PK', label: 'Urdu (Pakistan)' },
+];
+
+function CompanyProfileSection() {
+  const { data: settings, isLoading } = useEmployeeIdFormat();
+  const updateName = useUpdateCompanyName();
+  const updateTimezone = useUpdateTimezone();
+  const updateLocale = useUpdateLocale();
+
+  const [name, setName] = useState('');
+  const [timezone, setTimezone] = useState('UTC');
+  const [locale, setLocale] = useState('en-US');
+
+  useEffect(() => {
+    if (settings) {
+      setName(settings.name || '');
+      setTimezone(settings.settings?.timezone || 'UTC');
+      setLocale(settings.settings?.locale || 'en-US');
+    }
+  }, [settings]);
+
+  if (isLoading) {
+    return (
+      <Card className="shadow-card">
+        <CardHeader>
+          <CardTitle>Company Profile</CardTitle>
+          <CardDescription>Loading...</CardDescription>
+        </CardHeader>
+      </Card>
+    );
+  }
+
+  return (
+    <Card className="shadow-card">
+      <CardHeader>
+        <CardTitle>Company Profile</CardTitle>
+        <CardDescription>
+          Set your company name, default timezone, and language locale.
+        </CardDescription>
+      </CardHeader>
+      <CardContent className="space-y-6">
+        {/* Company Name */}
+        <div className="space-y-2">
+          <label className="block text-sm font-medium text-ink" htmlFor="company-name">
+            Company Name
+          </label>
+          <div className="flex gap-3">
+            <Input
+              id="company-name"
+              value={name}
+              onChange={(e) => setName(e.target.value)}
+              placeholder="e.g. Acme Corporation"
+              className="flex-1"
+              maxLength={100}
+            />
+            <Button
+              onClick={() => {
+                if (!name.trim() || name.trim().length < 2) {
+                  toast.error('Company name must be at least 2 characters');
+                  return;
+                }
+                updateName.mutate({ name: name.trim() });
+              }}
+              disabled={updateName.isPending || name === settings?.name}
+            >
+              {updateName.isPending ? 'Saving...' : 'Save'}
+            </Button>
+          </div>
+          <p className="text-xs text-ink-secondary">Displayed across the app and in email communications.</p>
+        </div>
+
+        <div className="grid gap-6 sm:grid-cols-2">
+          {/* Timezone */}
+          <div className="space-y-2">
+            <label className="block text-sm font-medium text-ink" htmlFor="company-timezone">
+              Default Timezone
+            </label>
+            <div className="flex gap-3">
+              <select
+                id="company-timezone"
+                value={timezone}
+                onChange={(e) => setTimezone(e.target.value)}
+                className="flex-1 h-10 pl-3 pr-8 text-sm rounded-md border border-line bg-white text-ink focus:outline-none focus:ring-2 focus:ring-primary/30 focus:border-primary transition-all appearance-none"
+              >
+                {COMMON_TIMEZONES.map((tz) => (
+                  <option key={tz} value={tz}>{tz.replace(/_/g, ' ')}</option>
+                ))}
+              </select>
+              <Button
+                onClick={() => updateTimezone.mutate({ timezone })}
+                disabled={updateTimezone.isPending || timezone === (settings?.settings?.timezone || 'UTC')}
+              >
+                {updateTimezone.isPending ? 'Saving...' : 'Save'}
+              </Button>
+            </div>
+            <p className="text-xs text-ink-secondary">Used for scheduling and date display across the app.</p>
+          </div>
+
+          {/* Locale */}
+          <div className="space-y-2">
+            <label className="block text-sm font-medium text-ink" htmlFor="company-locale">
+              Language & Locale
+            </label>
+            <div className="flex gap-3">
+              <select
+                id="company-locale"
+                value={locale}
+                onChange={(e) => setLocale(e.target.value)}
+                className="flex-1 h-10 pl-3 pr-8 text-sm rounded-md border border-line bg-white text-ink focus:outline-none focus:ring-2 focus:ring-primary/30 focus:border-primary transition-all appearance-none"
+              >
+                {COMMON_LOCALES.map((loc) => (
+                  <option key={loc.value} value={loc.value}>{loc.label}</option>
+                ))}
+              </select>
+              <Button
+                onClick={() => updateLocale.mutate({ locale })}
+                disabled={updateLocale.isPending || locale === (settings?.settings?.locale || 'en-US')}
+              >
+                {updateLocale.isPending ? 'Saving...' : 'Save'}
+              </Button>
+            </div>
+            <p className="text-xs text-ink-secondary">Controls date, number, and currency formatting.</p>
+          </div>
+        </div>
+      </CardContent>
+    </Card>
+  );
+}
+
 function RequiredUserFieldsSection() {
   const { data: requiredFields, isLoading: isLoadingRequired } = useRequiredUserFields();
   const updateRequiredFields = useUpdateRequiredUserFields();
@@ -47,11 +244,9 @@ function RequiredUserFieldsSection() {
     }
   }, [requiredFields]);
 
-  const handleToggle = (fieldKey: string) => {
+  const handleToggle = (fieldKey: string, isChecked: boolean) => {
     setSelectedFields(prev =>
-      prev.includes(fieldKey)
-        ? prev.filter(f => f !== fieldKey)
-        : [...prev, fieldKey]
+      isChecked ? [...prev, fieldKey] : prev.filter(f => f !== fieldKey)
     );
   };
 
@@ -79,37 +274,29 @@ function RequiredUserFieldsSection() {
       <CardHeader>
         <CardTitle>Required User Fields</CardTitle>
         <CardDescription>
-          Configure which fields are required when inviting new users. Check the fields that must be filled out.
+          Configure which fields are required when inviting new users.
         </CardDescription>
       </CardHeader>
       <CardContent>
-        <div className="space-y-4">
-          <div className="grid gap-3 sm:grid-cols-2">
-            {AVAILABLE_USER_FIELDS.map((field) => (
-              <div
-                key={field.key}
-                className="flex items-start gap-3 rounded-lg border border-line p-3 transition-colors hover:bg-surface-alt"
-              >
-                <Checkbox
-                  id={field.key}
-                  checked={selectedFields.includes(field.key)}
-                  onCheckedChange={() => handleToggle(field.key)}
-                  className="mt-0.5"
-                />
-                <div className="flex-1 space-y-1">
-                  <label
-                    htmlFor={field.key}
-                    className="text-sm font-medium text-ink cursor-pointer"
-                  >
-                    {field.label}
-                  </label>
-                  <p className="text-xs text-ink-secondary">{field.description}</p>
-                </div>
+        <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
+          {AVAILABLE_USER_FIELDS.map((field) => (
+            <div
+              key={field.key}
+              className="flex items-center justify-between gap-3 rounded-lg border border-line p-3 transition-colors hover:bg-surface-alt"
+            >
+              <div className="flex flex-col">
+                <span className="text-sm font-medium text-ink">{field.label}</span>
+                <span className="text-xs text-ink-secondary">{field.key}</span>
               </div>
-            ))}
-          </div>
-
-          <div className="flex items-center justify-between pt-4 border-t border-line">
+              <Switch
+                checked={selectedFields.includes(field.key)}
+                onCheckedChange={(checked) => handleToggle(field.key, checked)}
+                disabled={updateRequiredFields.isPending}
+              />
+            </div>
+          ))}
+        </div>
+        <div className="flex items-center justify-between pt-4 border-t border-line mt-6">
             <p className="text-sm text-ink-secondary">
               {selectedFields.length} field{selectedFields.length !== 1 ? 's' : ''} marked as required
             </p>
@@ -120,7 +307,6 @@ function RequiredUserFieldsSection() {
               {updateRequiredFields.isPending ? 'Saving...' : 'Save Changes'}
             </Button>
           </div>
-        </div>
       </CardContent>
     </Card>
   );
@@ -202,34 +388,24 @@ function DomainEnforcementSection() {
       <CardHeader>
         <CardTitle>Email Domain Enforcement</CardTitle>
         <CardDescription>
-          Restrict user invitations to specific email domains. When enabled, only emails from allowed domains can be invited.
+          Restrict user invitations to specific email domains.
         </CardDescription>
       </CardHeader>
       <CardContent>
         <div className="space-y-6">
           {/* Toggle */}
-          <div className="flex items-center justify-between">
-            <div className="space-y-1">
-              <p className="text-sm font-medium text-ink">Enable Domain Enforcement</p>
+          <div className="flex items-center justify-between bg-surface-alt/50 p-4 rounded-lg border border-line">
+            <div className="flex flex-col gap-1">
+              <span className="text-sm font-semibold text-ink">Strict Domain Enforcement</span>
               <p className="text-xs text-ink-secondary">
-                When enabled, only emails from allowed domains can be invited
+                Only users with email addresses from the allowed domains below will be able to join.
               </p>
             </div>
-            <button
-              onClick={handleToggle}
+            <Switch
+              checked={isEnabled}
+              onCheckedChange={handleToggle}
               disabled={updateDomainEnforcement.isPending}
-              className={cn(
-                'relative inline-flex h-6 w-11 items-center rounded-full transition-colors',
-                isEnabled ? 'bg-primary' : 'bg-gray-300'
-              )}
-            >
-              <span
-                className={cn(
-                  'inline-block h-4 w-4 transform rounded-full bg-white transition-transform',
-                  isEnabled ? 'translate-x-6' : 'translate-x-1'
-                )}
-              />
-            </button>
+            />
           </div>
 
           {/* Domain List */}
@@ -421,9 +597,58 @@ export default function CompanySettingsPage() {
         </CardContent>
       </Card>
 
+      <CompanyProfileSection />
+
       <RequiredUserFieldsSection />
 
       <DomainEnforcementSection />
+
+      <ResetToFactorySection />
     </div>
+  );
+}
+
+function ResetToFactorySection() {
+  const [isConfirmOpen, setIsConfirmOpen] = useState(false);
+  const resetSettings = useResetCompanySettings();
+
+  const handleReset = async () => {
+    await resetSettings.mutateAsync();
+    setIsConfirmOpen(false);
+    // Reload to reflect all changes
+    window.location.reload();
+  };
+
+  return (
+    <>
+      <Card className="border-red-200 bg-red-50/30">
+        <CardHeader>
+          <CardTitle className="text-red-700">Danger Zone</CardTitle>
+          <CardDescription>
+            Resetting to factory defaults will revert all company-level configurations to their original state. 
+            Custom fields, employee ID formats, and required field settings will be restored.
+          </CardDescription>
+        </CardHeader>
+        <CardContent>
+          <Button 
+            variant="destructive" 
+            onClick={() => setIsConfirmOpen(true)}
+            disabled={resetSettings.isPending}
+          >
+            {resetSettings.isPending ? 'Resetting...' : 'Reset to Factory Settings'}
+          </Button>
+        </CardContent>
+      </Card>
+
+      <ConfirmDialog
+        isOpen={isConfirmOpen}
+        onClose={() => setIsConfirmOpen(false)}
+        onConfirm={handleReset}
+        title="Reset to Factory Settings?"
+        description="This action will restore all company configurations to their original defaults. This cannot be undone."
+        confirmLabel="Reset Everything"
+        variant="danger"
+      />
+    </>
   );
 }

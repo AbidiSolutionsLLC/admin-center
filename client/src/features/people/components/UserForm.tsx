@@ -335,6 +335,7 @@ export const UserForm: React.FC<UserFormProps> = ({
               disabled={isSubmitting}
               hasError={!!errors.manager_id}
               placeholder="Select manager..."
+              onlyActive={true}
             />
           )}
         />
@@ -361,6 +362,7 @@ export const UserForm: React.FC<UserFormProps> = ({
               disabled={isSubmitting}
               hasError={!!errors.secondary_manager_ids}
               placeholder="Select secondary managers..."
+              onlyActive={true}
             />
           )}
         />

@@ -9,9 +9,11 @@ import {
   Settings,
   LogOut,
   MoreVertical,
-  LayoutDashboard
+  LayoutDashboard,
+  X
 } from 'lucide-react';
 import { useAuthStore } from '@/store/useAuthStore';
+import { useUIStore } from '@/store/useUIStore';
 
 interface SidebarProps {
   className?: string;
@@ -51,20 +53,30 @@ const navGroups = [
 
 export const Sidebar = ({ className }: SidebarProps) => {
   const { clearAuth, userName, userRole } = useAuthStore();
+  const { closeSidebar } = useUIStore();
   const [showDropdown, setShowDropdown] = useState(false);
   const location = useLocation();
 
   return (
     <aside className={cn("flex flex-col bg-sidebar-bg text-sidebar-text border-r border-sidebar-border", className)}>
-      <Link 
-        to={ROUTES.OVERVIEW}
-        className="h-16 flex items-center px-4 border-b border-sidebar-border mb-4 hover:opacity-80 transition-opacity"
-      >
-        <div className="w-8 h-8 bg-primary rounded-md flex items-center justify-center mr-3">
-          <span className="text-white font-bold text-sm">AC</span>
-        </div>
-        <span className="text-white font-semibold tracking-wide">Admin Center</span>
-      </Link>
+      <div className="h-16 flex items-center justify-between px-4 border-b border-sidebar-border mb-4">
+        <Link 
+          to={ROUTES.OVERVIEW}
+          onClick={closeSidebar}
+          className="flex items-center hover:opacity-80 transition-opacity"
+        >
+          <div className="w-8 h-8 bg-primary rounded-md flex items-center justify-center mr-3">
+            <span className="text-white font-bold text-sm">AC</span>
+          </div>
+          <span className="text-white font-semibold tracking-wide">Admin Center</span>
+        </Link>
+        <button 
+          onClick={closeSidebar}
+          className="lg:hidden p-1 rounded-md hover:bg-sidebar-hover text-sidebar-text"
+        >
+          <X className="w-5 h-5" />
+        </button>
+      </div>
 
       <nav className="flex-1 overflow-y-auto w-full px-2 space-y-4 [&::-webkit-scrollbar]:hidden [-ms-overflow-style:none] [scrollbar-width:none]">
         {navGroups.map((group, idx) => {
@@ -85,6 +97,7 @@ export const Sidebar = ({ className }: SidebarProps) => {
                     <NavLink
                       key={item.href}
                       to={item.href}
+                      onClick={closeSidebar}
                       className={cn(
                         "h-9 flex items-center gap-2.5 px-3 rounded-md text-[13px] font-medium transition-colors w-full",
                         isActive 

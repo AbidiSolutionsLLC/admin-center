@@ -44,6 +44,8 @@ export interface CompanySettings {
     employee_id_format?: string;
     allowed_domains?: string[];
     is_domain_enforcement_active?: boolean;
+    timezone?: string;
+    locale?: string;
   };
 }
 

@@ -58,8 +58,8 @@ export function ReportingLinesPanel({ userId }: ReportingLinesPanelProps) {
     );
   };
 
-  // Filter out the current user from potential managers
-  const availableManagers = allUsers?.filter(u => u._id !== userId) || [];
+  // Filter out the current user and inactive users from potential managers
+  const availableManagers = allUsers?.filter(u => u._id !== userId && u.lifecycle_state === 'active') || [];
 
   if (isLoading) {
     return <ReportingLinesSkeleton />;

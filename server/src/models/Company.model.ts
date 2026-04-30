@@ -22,6 +22,8 @@ export interface ICompany extends Document {
     employee_id_format: string;       // Format for auto-generated employee IDs
     allowed_domains: string[];        // Allowed email domains (e.g. ["@company.com", "company.org"])
     is_domain_enforcement_active: boolean; // Whether to enforce domain restrictions
+    timezone: string;                 // Company default timezone (e.g. 'America/New_York')
+    locale: string;                   // Company locale (e.g. 'en-US')
   };
   plan: 'free' | 'starter' | 'pro';
   is_active: boolean;
@@ -64,7 +66,15 @@ const CompanySchema = new Schema<ICompany>({
     is_domain_enforcement_active: { 
       type: Boolean, 
       default: false 
-    }
+    },
+    timezone: {
+      type: String,
+      default: 'UTC',
+    },
+    locale: {
+      type: String,
+      default: 'en-US',
+    },
   },
   plan: { type: String, enum: ['free', 'starter', 'pro'], default: 'free' },
   is_active: { type: Boolean, default: true },
