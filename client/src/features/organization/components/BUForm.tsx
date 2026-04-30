@@ -10,12 +10,21 @@ import { cn } from '@/utils/cn';
 
 const schema = z.object({
   name: z.string()
+    .trim()
     .min(1, 'Business Unit name is required')
     .max(100, 'Name too long')
-    .regex(/^[a-zA-Z0-9\s\-\.\(\)]+$/, 'Name contains invalid characters'),
+    .regex(/^[^<>]+$/, 'HTML tags not allowed'),
   parent_id: z.string().optional().nullable(),
   primary_manager_id: z.string().optional().nullable(),
   secondary_manager_ids: z.array(z.string()).optional().default([]),
+}).superRefine((data, ctx) => {
+  if (data.primary_manager_id && data.secondary_manager_ids.includes(data.primary_manager_id)) {
+    ctx.addIssue({
+      code: z.ZodIssueCode.custom,
+      message: 'User cannot be both primary and secondary manager',
+      path: ['secondary_manager_ids'],
+    });
+  }
 });
 
 export type BUFormData = z.infer<typeof schema>;
@@ -55,6 +64,7 @@ export const BUForm: React.FC<BUFormProps> = ({
     handleSubmit,
     control,
     reset,
+    watch,
     formState: { errors },
   } = useForm<BUFormData>({
     resolver: zodResolver(schema),
@@ -90,13 +100,19 @@ export const BUForm: React.FC<BUFormProps> = ({
         <label htmlFor="bu-name" className="text-sm font-medium text-ink">
           Business Unit Name <span className="text-red-500">*</span>
         </label>
-        <input
-          id="bu-name"
-          {...register('name')}
-          placeholder="e.g. North America Operations"
-          disabled={isSubmitting}
-          className={inputClass(!!errors.name)}
-        />
+        <div className="relative">
+          <input
+            id="bu-name"
+            {...register('name')}
+            placeholder="e.g. North America Operations"
+            disabled={isSubmitting}
+            maxLength={100}
+            className={inputClass(!!errors.name)}
+          />
+          <div className="absolute right-2 top-1/2 -translate-y-1/2 text-[10px] text-ink-muted bg-white px-1">
+            {watch('name')?.length || 0}/100
+          </div>
+        </div>
         {errors.name && (
           <p className="text-xs text-red-500">{errors.name.message}</p>
         )}
@@ -147,7 +163,7 @@ export const BUForm: React.FC<BUFormProps> = ({
           )}
         />
         <p className="text-[11px] text-ink-muted">
-          Designate a leader for this business unit.
+          Select the primary manager who leads and is accountable for this business unit.
         </p>
         {errors.primary_manager_id && (
           <p className="text-xs text-red-500">{errors.primary_manager_id.message}</p>
@@ -173,7 +189,7 @@ export const BUForm: React.FC<BUFormProps> = ({
           )}
         />
         <p className="text-[11px] text-ink-muted">
-          Optional secondary managers for matrix leadership and coverage.
+          Assign one or more secondary managers who provide matrix leadership or dotted-line supervision.
         </p>
         {errors.secondary_manager_ids && (
           <p className="text-xs text-red-500">{errors.secondary_manager_ids.message}</p>

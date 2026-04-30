@@ -21,7 +21,7 @@ const ROLE_OPTIONS: { value: UserRole; label: string }[] = [
 
 const schema = z.object({
   full_name: z.string().min(1, 'Full name is required').max(150, 'Name too long'),
-  phone: z.string().optional().nullable(),
+  phone: z.string().regex(/^\d*$/, 'Phone must contain only numbers').optional().nullable(),
   department_id: z.string().optional().nullable(),
   team_id: z.string().optional().nullable(),
   manager_id: z.string().optional().nullable(),
@@ -30,6 +30,14 @@ const schema = z.object({
   employment_type: z.enum(['full_time', 'part_time', 'contractor', 'intern']),
   hire_date: z.string().optional().nullable(),
   location_id: z.string().optional().nullable(),
+}).superRefine((data, ctx) => {
+  if (data.manager_id && data.secondary_manager_ids.includes(data.manager_id)) {
+    ctx.addIssue({
+      code: z.ZodIssueCode.custom,
+      message: 'User cannot be both primary and secondary manager',
+      path: ['secondary_manager_ids'],
+    });
+  }
 });
 
 export type UserFormData = z.infer<typeof schema>;
@@ -281,7 +289,7 @@ export const UserForm: React.FC<UserFormProps> = ({
           )}
         />
         <p className="text-[11px] text-ink-muted">
-          Enter the 24-character hex ID of the manager.
+          Select the primary manager this user reports to directly.
         </p>
         {errors.manager_id && (
           <p className="text-xs text-red-500">{errors.manager_id.message}</p>
@@ -307,7 +315,7 @@ export const UserForm: React.FC<UserFormProps> = ({
           )}
         />
         <p className="text-[11px] text-ink-muted">
-          Assign one or more secondary managers for matrix reporting.
+          Assign one or more secondary managers for matrix reporting or dotted-line supervision.
         </p>
         {errors.secondary_manager_ids && (
           <p className="text-xs text-red-500">{errors.secondary_manager_ids.message}</p>

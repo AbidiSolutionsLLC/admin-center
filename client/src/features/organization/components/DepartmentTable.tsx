@@ -71,8 +71,8 @@ export const DepartmentTable: React.FC<DepartmentTableProps> = ({
                 </div>
               )}
               <div className="flex flex-col">
-                <div className="flex items-center gap-2">
-                  <span className="font-medium text-ink">{dept.name}</span>
+                <div className="flex items-center gap-2 max-w-[200px] sm:max-w-[300px]">
+                  <span className="font-medium text-ink truncate block" title={dept.name}>{dept.name}</span>
                   {dept.has_intelligence_flag && (
                     <span
                       title="Intelligence warning: this department has issues needing attention"
@@ -211,7 +211,7 @@ export const DepartmentTable: React.FC<DepartmentTableProps> = ({
         header: 'Actions',
         meta: { align: 'right' },
         cell: ({ row }) => (
-          <div className="flex items-center justify-end gap-1">
+          <div className="flex items-center justify-end gap-1 flex-shrink-0 min-w-max">
             <button
               onClick={(e) => {
                 e.stopPropagation();

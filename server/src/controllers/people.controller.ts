@@ -50,7 +50,7 @@ import { InviteToken } from '../models/InviteToken.model';
 const InviteUserSchema = z.object({
   full_name: z.string().min(1, 'Full name is required').max(100),
   email: z.string().email('Invalid email address').transform(v => v.toLowerCase()),
-  phone: z.string().optional().nullable(),
+  phone: z.string().regex(/^\d*$/, 'Phone must contain only numbers').optional().nullable(),
   department_id: z.string().optional().nullable(),
   team_id: z.string().optional().nullable(),
   manager_id: z.string().optional().nullable(),
@@ -64,7 +64,7 @@ const InviteUserSchema = z.object({
 
 const UpdateUserSchema = z.object({
   full_name: z.string().min(1).max(100).optional(),
-  phone: z.string().optional().nullable(),
+  phone: z.string().regex(/^\d*$/, 'Phone must contain only numbers').optional().nullable(),
   avatar_url: z.string().url().optional().nullable(),
   department_id: z.string().optional().nullable(),
   team_id: z.string().optional().nullable(),
@@ -95,7 +95,7 @@ const UpdateLifecycleSchema = z.object({
 const BulkInviteRowSchema = z.object({
   full_name: z.string().min(1, 'Full name is required').max(100),
   email: z.string().email('Invalid email address').transform(v => v.toLowerCase()),
-  phone: z.string().optional(),
+  phone: z.string().regex(/^\d*$/, 'Phone must contain only numbers').optional(),
   department_id: z.string().optional(),
   team_id: z.string().optional(),
   manager_id: z.string().optional(),
@@ -136,8 +136,10 @@ async function validateRequiredFields(
   const requiredFields = company.settings?.required_user_fields || ['email', 'full_name'];
   const missingFields: string[] = [];
 
+  const getNestedValue = (obj: any, path: string) => path.split('.').reduce((acc, part) => acc && acc[part], obj);
+
   for (const field of requiredFields) {
-    const value = body[field];
+    const value = getNestedValue(body, field);
     const isMissing = value === undefined || value === null || value === '';
     
     if (isMissing) {
@@ -187,13 +189,13 @@ async function validateEmailDomain(req: Request, email: string): Promise<void> {
 
   // Domain match: If domain enforcement is active, check if domain is authorized
   if (is_domain_enforcement_active && allowed_domains.length > 0) {
-    // Extract domain from email
-    const emailDomain = email.toLowerCase().substring(email.indexOf('@'));
+    // Extract domain from email (remove @)
+    const emailDomain = email.toLowerCase().substring(email.indexOf('@') + 1);
 
-    // Check if email domain is in allowed_domains
+    // Check if email domain is in allowed_domains (strict or subdomain)
     const isDomainAllowed = allowed_domains.some(domain => {
-      const normalizedDomain = domain.toLowerCase();
-      return emailDomain === normalizedDomain || emailDomain.endsWith(normalizedDomain);
+      const normalized = domain.toLowerCase();
+      return emailDomain === normalized || emailDomain.endsWith('.' + normalized);
     });
 
     if (!isDomainAllowed) {
@@ -228,8 +230,10 @@ async function checkAndFlagUserDataIntegrity(user: any, companyId: string): Prom
     const requiredFields = company.settings.required_user_fields;
     let isMissingRequiredField = false;
 
+    const getNestedValue = (obj: any, path: string) => path.split('.').reduce((acc, part) => acc && acc[part], obj);
+
     for (const field of requiredFields) {
-      const value = user[field];
+      const value = getNestedValue(user, field);
       if (value === undefined || value === null || value === '') {
         isMissingRequiredField = true;
         break;
@@ -346,6 +350,7 @@ async function runLifecycleAutomations(
   currentState: LifecycleState,
   targetState: LifecycleState,
   req: Request,
+  reason?: string
 ): Promise<void> {
   const transitionKey = `${currentState}_to_${targetState}`;
   const company = await Company.findById(req.user.company_id);
@@ -357,6 +362,7 @@ async function runLifecycleAutomations(
   const originalUserEmail = user.email;
   const originalUserFullName = user.full_name;
   const originalUserFirstName = originalUserFullName.split(' ')[0];
+  const originalManagerId = user.manager_id;
 
   // 1. Target-Specific Side Effects (Revocation, Anonymization, etc.)
   if (targetState === 'archived' || targetState === 'deactivated' || targetState === 'terminated') {
@@ -392,10 +398,10 @@ async function runLifecycleAutomations(
 
   if (targetState === 'archived') {
     user.full_name = 'Archived User';
-    user.email = `archived-${user._id}@archived.local`;
+    user.email = `archived-${crypto.randomBytes(6).toString('hex')}@archived.local`;
     user.phone = undefined;
     user.avatar_url = undefined;
-    user.employee_id = `ARCHIVED-${user._id.toString().slice(-8)}`;
+    user.employee_id = `ARCHIVED-${crypto.randomBytes(4).toString('hex').toUpperCase()}`;
     user.is_active = false;
     (user as any).department_id = undefined;
     (user as any).team_id = undefined;
@@ -479,7 +485,9 @@ async function runLifecycleAutomations(
     user_full_name: originalUserFullName,
     user_email: originalUserEmail,
     company_name: company.name,
-    detail: `Status changed from ${currentState} to ${targetState}.`,
+    detail: reason 
+      ? `Status changed from ${currentState} to ${targetState}. Reason: ${reason}`
+      : `Status changed from ${currentState} to ${targetState}.`,
     triggered_by_event: 'user.lifecycle_changed',
     triggered_by_object_type: 'User',
     triggered_by_object_id: user._id.toString(),
@@ -548,8 +556,8 @@ async function runLifecycleAutomations(
   });
 
   // Notify the manager
-  if (user.manager_id) {
-    const manager = await User.findById(user.manager_id);
+  if (originalManagerId) {
+    const manager = await User.findById(originalManagerId);
     if (manager) {
       await sendLifecycleNotification({
         templateKey: 'manager_lifecycle_alert',
@@ -1004,11 +1012,11 @@ export const updateUser = asyncHandler(async (req: Request, res: Response) => {
   }
 
   // Audit log
-  const afterState = user.toObject();
+  const afterState = user.toObject() as any;
   delete afterState.password_hash;
   delete afterState.refresh_token_hash;
   
-  const sanitizedBefore = beforeState;
+  const sanitizedBefore = beforeState as any;
   delete sanitizedBefore.password_hash;
   delete sanitizedBefore.refresh_token_hash;
 
@@ -1083,7 +1091,7 @@ export const updateUserLifecycle = asyncHandler(async (req: Request, res: Respon
   // ── Lifecycle Automations ─────────────────────────────────────────────
   // Each automation fires an audit event and performs its specific action
   try {
-    await runLifecycleAutomations(user, currentState, targetState, req);
+    await runLifecycleAutomations(user, currentState, targetState, req, input.reason);
   } catch (automationError) {
     const transitionKey = `${currentState}_to_${targetState}`;
     console.error(`[Lifecycle Automation Error] ${transitionKey}:`, automationError);
@@ -1101,9 +1109,13 @@ export const updateUserLifecycle = asyncHandler(async (req: Request, res: Respon
   }
 
   // MANDATORY: Main audit log for lifecycle change
-  const afterState = user.toObject();
+  const afterState = user.toObject() as any;
   delete afterState.password_hash;
   delete afterState.refresh_token_hash;
+
+  const sanitizedBefore = beforeState as any;
+  delete sanitizedBefore.password_hash;
+  delete sanitizedBefore.refresh_token_hash;
 
   await auditLogger.log({
     req,
@@ -1112,67 +1124,9 @@ export const updateUserLifecycle = asyncHandler(async (req: Request, res: Respon
     object_type: 'User',
     object_id: user._id.toString(),
     object_label: user.full_name,
-    before_state: beforeState, // beforeState should already be sanitized if it comes from user.toObject() in this file
+    before_state: sanitizedBefore,
     after_state: afterState,
   });
-
-  // ── Send deactivation/termination notifications ──────────────────────────────────────
-  if (targetState === 'deactivated' || targetState === 'terminated') {
-    try {
-      const company = await Company.findById(req.user.company_id);
-      const stateLabel = targetState === 'deactivated' ? 'Deactivated' : 'Terminated';
-
-      // Send email to the user
-      await sendEmail({
-        to: user.email,
-        subject: `${company?.name || 'Your Company'} - Account ${stateLabel}`,
-        html: `
-          <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;">
-            <h2>Account ${stateLabel}</h2>
-            <p>Dear ${user.full_name},</p>
-            <p>Your account has been marked as <strong>${targetState}</strong> by an administrator.</p>
-            <p><strong>Reason:</strong> ${input.reason || 'No reason provided'}</p>
-            <p>If you believe this was done in error, please contact support.</p>
-            <p>Best regards,<br>${company?.name || 'Your Company'} Team</p>
-          </div>
-        `,
-      });
-
-      // Send email to the user's manager (if they have one)
-      if (user.manager_id) {
-        const manager = await User.findById(user.manager_id);
-        if (manager) {
-          await sendEmail({
-            to: manager.email,
-            subject: `${company?.name || 'Your Company'} - Employee Account ${stateLabel}`,
-            html: `
-              <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;">
-                <h2>Employee Account ${stateLabel}</h2>
-                <p>Dear ${manager.full_name},</p>
-                <p>This is to inform you that ${user.full_name}'s (${user.email}) account has been marked as <strong>${targetState}</strong>.</p>
-                <p><strong>Reason:</strong> ${input.reason || 'No reason provided'}</p>
-                <p>Please contact HR or support if you need additional information.</p>
-                <p>Best regards,<br>${company?.name || 'Your Company'} Team</p>
-              </div>
-            `,
-          });
-        }
-      }
-    } catch (emailError) {
-      console.error('[Deactivation Email Error]', emailError);
-      // Log but don't fail the deactivation
-      await auditLogger.log({
-        req,
-        action: 'user.lifecycle_email_error',
-        module: 'people',
-        object_type: 'User',
-        object_id: user._id.toString(),
-        object_label: user.full_name,
-        before_state: { transition: `${currentState}_to_${targetState}` },
-        after_state: { error: emailError instanceof Error ? emailError.message : 'Email send failed' },
-      });
-    }
-  }
 
   // ── Workflow Engine: Fire lifecycle event to matching workflows ─────────
   // Fire-and-forget: workflows execute asynchronously, don't block the response
@@ -1241,6 +1195,9 @@ export const bulkInviteUsers = asyncHandler(async (req: Request, res: Response) 
       });
       continue;
     }
+    
+    // Track emails processed in this payload to avoid internal duplicates
+    existingEmails.add(email);
 
     try {
       await validateEmailDomain(req, email);
@@ -1315,7 +1272,7 @@ export const bulkInviteUsers = asyncHandler(async (req: Request, res: Response) 
       }
 
       // Prepare audit log
-      const afterState = user.toObject();
+      const afterState = user.toObject() as any;
       delete afterState.password_hash;
       delete afterState.refresh_token_hash;
 
@@ -1437,6 +1394,14 @@ export const deleteUser = asyncHandler(async (req: Request, res: Response) => {
   user.is_active = false;
   await user.save();
 
+  const afterState = user.toObject() as any;
+  delete afterState.password_hash;
+  delete afterState.refresh_token_hash;
+
+  const sanitizedBefore = beforeState as any;
+  delete sanitizedBefore.password_hash;
+  delete sanitizedBefore.refresh_token_hash;
+
   // Audit log
   await auditLogger.log({
     req,
@@ -1445,8 +1410,8 @@ export const deleteUser = asyncHandler(async (req: Request, res: Response) => {
     object_type: 'User',
     object_id: user._id.toString(),
     object_label: user.full_name,
-    before_state: beforeState,
-    after_state: user.toObject(),
+    before_state: sanitizedBefore,
+    after_state: afterState,
   });
 
   res.status(200).json({ success: true, data: {} });
@@ -1528,73 +1493,20 @@ export const bulkUpdateLifecycle = asyncHandler(async (req: Request, res: Respon
 
     await user.save();
 
-    // Send deactivation notifications if applicable
-    if (targetState === 'deactivated' && input.reason) {
-      try {
-        const company = await Company.findById(req.user.company_id);
-
-        // Send email to the user
-        await sendEmail({
-          to: user.email,
-          subject: `${company?.name || 'Your Company'} - Account Deactivated`,
-          html: `
-            <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;">
-              <h2>Account Deactivated</h2>
-              <p>Dear ${user.full_name},</p>
-              <p>Your account has been deactivated by an administrator.</p>
-              <p><strong>Reason:</strong> ${input.reason}</p>
-              <p>If you believe this was done in error, please contact support.</p>
-              <p>Best regards,<br>${company?.name || 'Your Company'} Team</p>
-            </div>
-          `,
-        });
-
-        // Send email to the user's manager (if they have one)
-        if (user.manager_id) {
-          const manager = await User.findById(user.manager_id);
-          if (manager) {
-            await sendEmail({
-              to: manager.email,
-              subject: `${company?.name || 'Your Company'} - Employee Account Deactivated`,
-              html: `
-                <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;">
-                  <h2>Employee Account Deactivated</h2>
-                  <p>Dear ${manager.full_name},</p>
-                  <p>This is to inform you that ${user.full_name}'s (${user.email}) account has been deactivated.</p>
-                  <p><strong>Reason:</strong> ${input.reason}</p>
-                  <p>Please contact HR or support if you need additional information.</p>
-                  <p>Best regards,<br>${company?.name || 'Your Company'} Team</p>
-                </div>
-              `,
-            });
-          }
-        }
-      } catch (emailError) {
-        console.error('[Bulk Deactivation Email Error]', emailError);
-        // Log but don't fail the bulk operation
-        await auditLogger.log({
-          req,
-          action: 'user.lifecycle_email_error',
-          module: 'people',
-          object_type: 'User',
-          object_id: user._id.toString(),
-          object_label: user.full_name,
-          before_state: { bulk_operation: true },
-          after_state: { error: emailError instanceof Error ? emailError.message : 'Email send failed' },
-        });
-      }
-    }
-
     try {
-      await runLifecycleAutomations(user, currentState, targetState, req);
+      await runLifecycleAutomations(user, currentState, targetState, req, input.reason);
     } catch (automationError) {
       console.error(`[Bulk Lifecycle Automation Error] ${user._id}:`, automationError);
     }
 
     // Individual audit event for each user
-    const afterState = user.toObject();
+    const afterState = user.toObject() as any;
     delete afterState.password_hash;
     delete afterState.refresh_token_hash;
+
+    const sanitizedBefore = beforeState as any;
+    delete sanitizedBefore.password_hash;
+    delete sanitizedBefore.refresh_token_hash;
 
     await auditLogger.log({
       req,
@@ -1603,7 +1515,7 @@ export const bulkUpdateLifecycle = asyncHandler(async (req: Request, res: Respon
       object_type: 'User',
       object_id: user._id.toString(),
       object_label: user.full_name,
-      before_state: beforeState,
+      before_state: sanitizedBefore,
       after_state: afterState,
     });
 

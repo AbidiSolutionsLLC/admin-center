@@ -74,10 +74,11 @@ export const errorHandler = (err: any, req: Request, res: Response, next: NextFu
 
   // 5. Handle Mongoose CastError (invalid ObjectId)
   if (err.name === 'CastError') {
-    return res.status(400).json({
+    const isIdError = err.path === '_id' || err.path === 'id';
+    return res.status(isIdError ? 404 : 400).json({
       success: false,
-      error: `Invalid format for ${err.path}: ${err.value}.`,
-      code: 'INVALID_ID_FORMAT'
+      error: isIdError ? 'User not found' : `Invalid format for ${err.path}: ${err.value}.`,
+      code: isIdError ? 'NOT_FOUND' : 'INVALID_ID_FORMAT'
     });
   }
 

@@ -11,11 +11,19 @@ import type { Department, CustomField } from '@/types';
 import { cn } from '@/utils/cn';
 
 const schema = z.object({
-  name: z.string().min(1, 'Department name is required').max(100, 'Name too long'),
+  name: z.string().trim().min(1, 'Department name is required').max(100, 'Name too long').regex(/^[^<>]+$/, 'HTML tags not allowed'),
   type: z.enum(['business_unit', 'division', 'department', 'cost_center']),
   parent_id: z.string().optional().nullable(),
   primary_manager_id: z.string().optional().nullable(),
   secondary_manager_ids: z.array(z.string()).optional().default([]),
+}).superRefine((data, ctx) => {
+  if (data.primary_manager_id && data.secondary_manager_ids.includes(data.primary_manager_id)) {
+    ctx.addIssue({
+      code: z.ZodIssueCode.custom,
+      message: 'User cannot be both primary and secondary manager',
+      path: ['secondary_manager_ids'],
+    });
+  }
 }).refine(data => {
   // Only Business Units are allowed to be top-level (no parent_id)
   if (data.type !== 'business_unit' && !data.parent_id) {
@@ -155,13 +163,19 @@ export const DepartmentForm: React.FC<DepartmentFormProps> = ({
         <label htmlFor="dept-name" className="text-sm font-medium text-ink">
           Department Name <span className="text-red-500">*</span>
         </label>
-        <input
-          id="dept-name"
-          {...register('name')}
-          placeholder="e.g. Engineering"
-          disabled={isSubmitting}
-          className={inputClass(!!errors.name)}
-        />
+        <div className="relative">
+          <input
+            id="dept-name"
+            {...register('name')}
+            placeholder="e.g. Engineering"
+            disabled={isSubmitting}
+            maxLength={100}
+            className={inputClass(!!errors.name)}
+          />
+          <div className="absolute right-2 top-1/2 -translate-y-1/2 text-[10px] text-ink-muted bg-white px-1">
+            {watch('name')?.length || 0}/100
+          </div>
+        </div>
         {errors.name && (
           <p className="text-xs text-red-500">{errors.name.message}</p>
         )}
@@ -240,7 +254,7 @@ export const DepartmentForm: React.FC<DepartmentFormProps> = ({
           )}
         />
         <p className="text-[11px] text-ink-muted">
-          Select the manager for this department.
+          Select the primary manager who leads and is accountable for this department.
         </p>
         {errors.primary_manager_id && (
           <p className="text-xs text-red-500">{errors.primary_manager_id.message}</p>
@@ -266,7 +280,7 @@ export const DepartmentForm: React.FC<DepartmentFormProps> = ({
           )}
         />
         <p className="text-[11px] text-ink-muted">
-          Assign one or more secondary managers for matrix leadership.
+          Assign one or more secondary managers who provide matrix leadership or dotted-line supervision.
         </p>
         {errors.secondary_manager_ids && (
           <p className="text-xs text-red-500">{errors.secondary_manager_ids.message}</p>

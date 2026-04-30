@@ -30,7 +30,7 @@ interface TeamMemberFilter {
 // ── Zod Schemas ──────────────────────────────────────────────────────────────
 
 const CreateTeamSchema = z.object({
-  name: z.string().min(1, 'Name is required').max(100),
+  name: z.string().min(1, 'Name is required').max(100).regex(/^[a-zA-Z0-9\s]+$/, 'Team name can only contain alphanumeric characters and spaces'),
   description: z.string().max(500).optional(),
   department_id: z.string().min(1, 'Department is required'),
   team_lead_id: z.string().min(1, 'Team manager (lead) is required'),
@@ -164,11 +164,15 @@ export const createTeam = asyncHandler(async (req: Request, res: Response) => {
     const lead = await User.findOne({
       _id: input.team_lead_id,
       company_id: req.user.company_id,
-      is_active: true,
     });
     if (!lead) {
-      throw new AppError('Team lead user not found, inactive, or belonging to another company', 404, 'NOT_FOUND');
+      throw new AppError('Team lead user not found or belonging to another company', 404, 'NOT_FOUND');
     }
+    if (lead.lifecycle_state === 'deactivated') throw new AppError('User is not active. Cannot assign as manager', 400, 'INVALID_USER_STATE');
+    if (lead.lifecycle_state === 'archived') throw new AppError('User is archived. Cannot assign as manager', 400, 'INVALID_USER_STATE');
+    if (lead.lifecycle_state === 'terminated') throw new AppError('User is terminated. Cannot assign as manager', 400, 'INVALID_USER_STATE');
+    if (lead.lifecycle_state === 'on_leave') throw new AppError('User is on leave. Cannot assign as manager', 400, 'INVALID_USER_STATE');
+    if (lead.lifecycle_state === 'invited') throw new AppError('User has not activated account yet', 400, 'INVALID_USER_STATE');
   }
 
   const team = await Team.create({
@@ -253,11 +257,15 @@ export const updateTeam = asyncHandler(async (req: Request, res: Response) => {
     const lead = await User.findOne({
       _id: input.team_lead_id,
       company_id: req.user.company_id,
-      is_active: true,
     });
     if (!lead) {
-      throw new AppError('Team lead user not found, inactive, or access denied', 404, 'NOT_FOUND');
+      throw new AppError('Team lead user not found or access denied', 404, 'NOT_FOUND');
     }
+    if (lead.lifecycle_state === 'deactivated') throw new AppError('User is not active. Cannot assign as manager', 400, 'INVALID_USER_STATE');
+    if (lead.lifecycle_state === 'archived') throw new AppError('User is archived. Cannot assign as manager', 400, 'INVALID_USER_STATE');
+    if (lead.lifecycle_state === 'terminated') throw new AppError('User is terminated. Cannot assign as manager', 400, 'INVALID_USER_STATE');
+    if (lead.lifecycle_state === 'on_leave') throw new AppError('User is on leave. Cannot assign as manager', 400, 'INVALID_USER_STATE');
+    if (lead.lifecycle_state === 'invited') throw new AppError('User has not activated account yet', 400, 'INVALID_USER_STATE');
   }
 
   const updates: Record<string, unknown> = { ...input };
@@ -397,6 +405,17 @@ export const addTeamMember = asyncHandler(async (req: Request, res: Response) =>
 
   if (!user) {
     throw new AppError('User not found', 404, 'NOT_FOUND');
+  }
+
+  // Check if user is already a member of this team
+  const existingMember = await TeamMember.exists({ 
+    company_id: req.user.company_id,
+    team_id: team._id, 
+    user_id: user._id 
+  });
+
+  if (existingMember) {
+    throw new AppError('User is already a member of this team', 400, 'DUPLICATE_MEMBER');
   }
 
   const member = await TeamMember.create({
