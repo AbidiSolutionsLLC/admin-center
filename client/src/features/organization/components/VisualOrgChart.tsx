@@ -106,14 +106,6 @@ const OrgNode: React.FC<{
                       <Edit2 className="w-3.5 h-3.5 text-ink-secondary" />
                       Edit Department
                     </DropdownMenu.Item>
-                    <DropdownMenu.Separator className="h-px bg-line my-1" />
-                    <DropdownMenu.Item 
-                      className="flex items-center gap-2 px-3 py-2 text-sm text-red-600 rounded-md hover:bg-red-50 outline-none cursor-pointer"
-                      onClick={() => onNodeDelete?.(node._id)}
-                    >
-                      <Trash2 className="w-3.5 h-3.5" />
-                      Archive
-                    </DropdownMenu.Item>
                   </DropdownMenu.Content>
                 </DropdownMenu.Portal>
               </DropdownMenu.Root>
@@ -160,7 +152,7 @@ const OrgNode: React.FC<{
               {isExpanded ? (
                 <ChevronUp className="w-3.5 h-3.5 text-ink-muted" />
               ) : (
-                <ChevronRight className="w-3.5 h-3.5 text-ink-muted" />
+                <ChevronDown className="w-3.5 h-3.5 text-ink-muted" />
               )}
             </button>
           )}
