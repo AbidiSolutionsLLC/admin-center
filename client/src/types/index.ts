@@ -312,7 +312,7 @@ export interface UpdateTeamMemberInput {
 // People / Users
 // ─────────────────────────────────────────────────────────────────────────────
 
-export type LifecycleState = 'pending' | 'invited' | 'onboarding' | 'active' | 'probation' | 'on_leave' | 'deactivated' | 'terminated' | 'archived';
+export type LifecycleState = 'invited' | 'onboarding' | 'active' | 'probation' | 'on_leave' | 'deactivated' | 'terminated' | 'archived';
 export type EmploymentType = 'full_time' | 'part_time' | 'contractor' | 'intern';
 export type UserRole = 'Super Admin' | 'Admin' | 'HR' | 'Manager' | 'Employee' | 'Technician';
 

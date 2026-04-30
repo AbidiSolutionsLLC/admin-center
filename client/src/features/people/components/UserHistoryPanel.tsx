@@ -116,7 +116,6 @@ function StatusBadge({ state, isPrevious }: { state: string | null; isPrevious?:
   if (!state) return <span className="text-xs text-ink-muted italic">None</span>;
 
   const config: Record<string, { bg: string; text: string; label: string }> = {
-    pending: { bg: 'bg-amber-50', text: 'text-amber-600', label: 'Pending' },
     invited: { bg: 'bg-primary-light', text: 'text-primary', label: 'Invited' },
     onboarding: { bg: 'bg-sky-50', text: 'text-sky-600', label: 'Onboarding' },
     active: { bg: 'bg-emerald-50', text: 'text-emerald-600', label: 'Active' },

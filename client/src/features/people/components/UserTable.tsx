@@ -23,7 +23,7 @@ const lifecycleStateConfig: Record<
   LifecycleState,
   { label: string; variant: 'success' | 'warning' | 'error' | 'info' | 'neutral' | 'primary' | 'accent' }
 > = {
-  pending: { label: 'Pending', variant: 'info' },
+  invited: { label: 'Invited', variant: 'info' },
   active: { label: 'Active', variant: 'success' },
   deactivated: { label: 'Deactivated', variant: 'error' },
   archived: { label: 'Archived', variant: 'neutral' },

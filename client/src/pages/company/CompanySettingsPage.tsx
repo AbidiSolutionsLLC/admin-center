@@ -137,7 +137,7 @@ function CompanyProfileSection() {
   }
 
   return (
-    <Card className="shadow-card">
+    <Card className="bg-white border-line shadow-card">
       <CardHeader>
         <CardTitle>Company Profile</CardTitle>
         <CardDescription>
@@ -270,7 +270,7 @@ function RequiredUserFieldsSection() {
   }
 
   return (
-    <Card className="shadow-card">
+    <Card className="bg-white border-line shadow-card">
       <CardHeader>
         <CardTitle>Required User Fields</CardTitle>
         <CardDescription>
@@ -282,7 +282,7 @@ function RequiredUserFieldsSection() {
           {AVAILABLE_USER_FIELDS.map((field) => (
             <div
               key={field.key}
-              className="flex items-center justify-between gap-3 rounded-lg border border-line p-3 transition-colors hover:bg-surface-alt"
+              className="flex items-center justify-between gap-3 rounded-lg border border-line bg-white p-3 transition-colors hover:bg-surface-alt"
             >
               <div className="flex flex-col">
                 <span className="text-sm font-medium text-ink">{field.label}</span>
@@ -384,7 +384,7 @@ function DomainEnforcementSection() {
   }
 
   return (
-    <Card className="shadow-card">
+    <Card className="bg-white border-line shadow-card">
       <CardHeader>
         <CardTitle>Email Domain Enforcement</CardTitle>
         <CardDescription>
@@ -394,7 +394,7 @@ function DomainEnforcementSection() {
       <CardContent>
         <div className="space-y-6">
           {/* Toggle */}
-          <div className="flex items-center justify-between bg-surface-alt/50 p-4 rounded-lg border border-line">
+          <div className="flex items-center justify-between bg-surface-alt p-4 rounded-lg border border-line">
             <div className="flex flex-col gap-1">
               <span className="text-sm font-semibold text-ink">Strict Domain Enforcement</span>
               <p className="text-xs text-ink-secondary">
@@ -536,7 +536,7 @@ export default function CompanySettingsPage() {
   }
 
   return (
-    <div className="space-y-5">
+    <div className="space-y-6">
       <div className="flex items-start justify-between gap-4">
         <div>
           <h1 className="text-[22px] font-semibold tracking-tight text-ink">Company Settings</h1>
@@ -546,7 +546,7 @@ export default function CompanySettingsPage() {
         </div>
       </div>
 
-      <Card className="shadow-card">
+      <Card className="bg-white border-line shadow-card">
         <CardHeader>
           <CardTitle>Employee ID Format</CardTitle>
           <CardDescription>
@@ -575,11 +575,11 @@ export default function CompanySettingsPage() {
             </div>
 
             <div className="grid gap-4 sm:grid-cols-2">
-              <div className="rounded-lg border border-line bg-surface-base p-4">
+              <div className="rounded-lg border border-line bg-surface-alt p-4">
                 <p className="text-xs uppercase tracking-[0.2em] text-ink-secondary">Current format</p>
                 <p className="mt-2 text-sm text-ink">{data?.employee_id_format || 'Not configured'}</p>
               </div>
-              <div className="rounded-lg border border-line bg-surface-base p-4">
+              <div className="rounded-lg border border-line bg-surface-alt p-4">
                 <p className="text-xs uppercase tracking-[0.2em] text-ink-secondary">Next employee ID preview</p>
                 <p className="mt-2 text-sm text-ink">{preview || 'Enter a valid format to preview'}</p>
               </div>
@@ -621,7 +621,7 @@ function ResetToFactorySection() {
 
   return (
     <>
-      <Card className="border-red-200 bg-red-50/30">
+      <Card className="border-red-200 bg-red-50/30 shadow-card">
         <CardHeader>
           <CardTitle className="text-red-700">Danger Zone</CardTitle>
           <CardDescription>

@@ -1,5 +1,6 @@
 // src/pages/organization/OrganizationPage.tsx
-import { useState, useMemo } from 'react';
+import { useState, useMemo, useEffect } from 'react';
+import { useParams, useNavigate } from 'react-router-dom';
 import { Building2, Plus, LayoutGrid, List, Search, ChevronDown, X, FolderTree, Activity, History } from 'lucide-react';
 import * as Tabs from '@radix-ui/react-tabs';
 import { useDepartments } from '@/features/organization/hooks/useDepartments';
@@ -23,7 +24,6 @@ import { IntelligenceBanner } from '@/components/ui/IntelligenceBanner';
 import { Button } from '@/components/ui/button';
 import { cn } from '@/utils/cn';
 import type { Department, DepartmentFilters, Insight } from '@/types';
-import { useNavigate } from 'react-router-dom';
 
 const DEPT_TYPE_OPTIONS: { value: Department['type'] | ''; label: string }[] = [
   { value: '', label: 'All Types' },
@@ -47,6 +47,7 @@ const DEPT_TYPE_OPTIONS: { value: Department['type'] | ''; label: string }[] = [
  */
 export default function OrganizationPage() {
   const navigate = useNavigate();
+  const { id } = useParams<{ id: string }>();
 
   // ── Server data ──────────────────────────────────────────────────────
   const { data: departments, isLoading, isError, refetch } = useDepartments();
@@ -62,6 +63,17 @@ export default function OrganizationPage() {
 
   // ── Confirm-archive dialog state ───────────────────────────────────────
   const [departmentToArchive, setDepartmentToArchive] = useState<Department | null>(null);
+
+  // ── Effect: Auto-open edit modal if ID is in URL ────────────────────────
+  useEffect(() => {
+    if (id && departments && !editingDept && !isFormModalOpen) {
+      const dept = departments.find(d => d._id === id);
+      if (dept) {
+        setEditingDept(dept);
+        setIsFormModalOpen(true);
+      }
+    }
+  }, [id, departments, editingDept, isFormModalOpen]);
 
   // ── Handlers ──────────────────────────────────────────────────────────
   const handleNavigateToHealthRecord = (insight: Insight) => {
@@ -117,6 +129,9 @@ export default function OrganizationPage() {
   const handleCloseModal = () => {
     setIsFormModalOpen(false);
     setEditingDept(null);
+    if (id) {
+      navigate('/organization', { replace: true });
+    }
   };
 
   const handleSubmit = (formData: DepartmentFormData & { custom_fields?: Record<string, unknown> }) => {

@@ -103,7 +103,7 @@ async function seedDemoData() {
       full_name: string;
       email: string;
       role: 'Super Admin' | 'Admin' | 'HR' | 'Manager' | 'Employee' | 'Technician';
-      lifecycle_state: 'pending' | 'invited' | 'onboarding' | 'active' | 'on_leave' | 'terminated' | 'archived';
+      lifecycle_state: 'invited' | 'onboarding' | 'active' | 'on_leave' | 'terminated' | 'archived';
       department_id?: mongoose.Types.ObjectId;
       assignRole?: mongoose.Document | null;
       is_active: boolean;

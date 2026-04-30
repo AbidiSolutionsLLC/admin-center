@@ -79,7 +79,7 @@ const UpdateUserSchema = z.object({
 });
 
 const UpdateLifecycleSchema = z.object({
-  lifecycle_state: z.enum(['pending', 'invited', 'onboarding', 'active', 'probation', 'on_leave', 'deactivated', 'terminated', 'archived']),
+  lifecycle_state: z.enum(['invited', 'onboarding', 'active', 'probation', 'on_leave', 'deactivated', 'terminated', 'archived']),
   reason: z.string().optional(),
 }).refine((data) => {
   // Require reason for deactivation and archiving
@@ -650,7 +650,7 @@ export const getUsers = asyncHandler(async (req: Request, res: Response) => {
 
   if (lifecycle_state) {
     // Validate lifecycle_state is a valid value
-    const VALID_LIFECYCLE_STATES: LifecycleState[] = ['pending', 'invited', 'onboarding', 'active', 'probation', 'on_leave', 'deactivated', 'terminated', 'archived'];
+    const VALID_LIFECYCLE_STATES = ['invited', 'onboarding', 'active', 'probation', 'on_leave', 'deactivated', 'terminated', 'archived'];
     if (VALID_LIFECYCLE_STATES.includes(lifecycle_state as LifecycleState)) {
       filter.lifecycle_state = lifecycle_state as LifecycleState;
     }
@@ -744,7 +744,7 @@ export const getUserHistory = asyncHandler(async (req: Request, res: Response) =
  * POST /people/invite
  * Invites a new user to the company.
  * - Generates employee_id automatically via User model hook
- * - Creates user with 'pending' lifecycle state
+ * - Creates user with 'invited' lifecycle state
  * - Sends welcome email via emailService
  * - Produces audit event
  */
@@ -1219,7 +1219,7 @@ export const bulkInviteUsers = asyncHandler(async (req: Request, res: Response) 
         company_id: req.user.company_id,
         password_hash,
         role: row.role || 'Employee',
-        lifecycle_state: 'pending',
+        lifecycle_state: 'invited',
         is_active: false,
         hire_date: row.hire_date ? new Date(row.hire_date) : undefined,
         _tokenHash: tokenHash, // Temporary storage for token creation
@@ -1427,7 +1427,7 @@ export const deleteUser = asyncHandler(async (req: Request, res: Response) => {
 
 const BulkLifecycleSchema = z.object({
   user_ids: z.array(z.string()).min(1, 'At least one user ID is required').max(500),
-  lifecycle_state: z.enum(['pending', 'invited', 'onboarding', 'active', 'probation', 'on_leave', 'deactivated', 'terminated', 'archived']),
+  lifecycle_state: z.enum(['invited', 'onboarding', 'active', 'probation', 'on_leave', 'deactivated', 'terminated', 'archived']),
   reason: z.string().optional(),
 }).refine((data) => {
   // Require reason for deactivation and archiving
@@ -1683,7 +1683,7 @@ export const exportUsers = asyncHandler(async (req: Request, res: Response) => {
   };
 
   if (lifecycle_state) {
-    const VALID_LIFECYCLE_STATES: LifecycleState[] = ['pending', 'active', 'deactivated', 'archived'];
+    const VALID_LIFECYCLE_STATES: LifecycleState[] = ['invited', 'active', 'deactivated', 'archived'];
     if (VALID_LIFECYCLE_STATES.includes(lifecycle_state as LifecycleState)) {
       filter.lifecycle_state = lifecycle_state as LifecycleState;
     }
@@ -1794,7 +1794,7 @@ export const resendInvite = asyncHandler(async (req: Request, res: Response) => 
     throw new AppError('User not found', 404, 'NOT_FOUND');
   }
 
-  if (user.lifecycle_state !== 'pending') {
+  if (user.lifecycle_state !== 'invited') {
     throw new AppError('Only users in "invited" state can have their invitation resent', 400, 'BAD_REQUEST');
   }
 

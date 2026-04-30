@@ -38,7 +38,7 @@ export const AdminShell = () => {
           <span className="ml-3 font-semibold text-ink">Admin Center</span>
         </header>
 
-        <main className="flex-1 overflow-y-auto p-4 md:p-6 lg:p-8">
+        <main className="flex-1 overflow-y-auto p-4 md:p-6 lg:p-8 bg-surface-base">
           <div className="max-w-7xl mx-auto">
             <Outlet />
           </div>

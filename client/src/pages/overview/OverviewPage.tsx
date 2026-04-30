@@ -86,7 +86,7 @@ export default function OverviewPage() {
         <StatCard
           title="Total Users"
           value={stats?.users.total ?? 0}
-          subtitle={`${stats?.users.active ?? 0} active, ${stats?.users.invited ?? 0} pending`}
+          subtitle={`${stats?.users.active ?? 0} active, ${stats?.users.invited ?? 0} invited`}
           icon={Users}
         />
         <StatCard
@@ -168,9 +168,9 @@ export default function OverviewPage() {
                       </div>
                     )}
 
-                    {severityInsights.map((insight) => (
+                    {severityInsights.map((insight, index) => (
                       <InsightCard
-                        key={insight._id}
+                        key={`${insight._id}-${index}`}
                         insight={insight}
                         onDismiss={() => dismissInsightMutation.mutate(insight._id)}
                         isDismissing={dismissInsightMutation.isPending}

@@ -35,7 +35,7 @@ import { Checkbox } from '@/components/ui/checkbox';
 const LIFECYCLE_STATE_OPTIONS: { value: LifecycleState | ''; label: string }[] = [
   { value: '', label: 'All Statuses' },
   { value: 'active', label: 'Active' },
-  { value: 'pending', label: 'Pending' },
+  { value: 'invited', label: 'Invited' },
   { value: 'on_leave', label: 'On Leave' },
   { value: 'deactivated', label: 'Deactivated' },
   { value: 'terminated', label: 'Terminated' },
@@ -495,7 +495,7 @@ function StatsRow({ stats, isLoading }: StatsRowProps) {
   const statItems = [
     { label: 'Total', value: stats.total, icon: Users, color: 'text-ink' },
     { label: 'Active', value: stats.active, icon: Users, color: 'text-emerald-600' },
-    { label: 'Pending', value: stats.invited, icon: Users, color: 'text-sky-600' },
+    { label: 'Invited', value: stats.invited, icon: Users, color: 'text-sky-600' },
     { label: 'On Leave', value: stats.on_leave, icon: Users, color: 'text-amber-600' },
     { label: 'Terminated', value: stats.terminated, icon: Users, color: 'text-red-600' },
   ];
