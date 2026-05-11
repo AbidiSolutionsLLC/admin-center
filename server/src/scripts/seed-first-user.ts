@@ -4,6 +4,7 @@ import dotenv from 'dotenv';
 import path from 'path';
 import { Company, User, Role, UserRole } from '../models';
 import { seedDatabase } from '../lib/seed';
+import { ROLES } from '../constants/roles';
 
 // Load env vars
 dotenv.config({ path: path.join(__dirname, '../../.env') });
@@ -46,9 +47,9 @@ async function seedFirstUser() {
     await seedDatabase(company._id as string);
 
     // 3. Find the Super Admin Role (created by seedDatabase)
-    const role = await Role.findOne({ company_id: company._id, name: 'Super Admin' });
+    const role = await Role.findOne({ company_id: company._id, name: ROLES.SUPER_ADMIN });
     if (!role) {
-      throw new Error('Super Admin role not found after seeding');
+      throw new Error(`${ROLES.SUPER_ADMIN} role not found after seeding`);
     }
 
     // 4. Create User
@@ -63,7 +64,7 @@ async function seedFirstUser() {
         full_name: fullName,
         email: email,
         password_hash: password_hash,
-        role: 'Super Admin',
+        role: ROLES.SUPER_ADMIN,
         lifecycle_state: 'active',
         is_active: true,
         employment_type: 'full_time',
@@ -83,10 +84,11 @@ async function seedFirstUser() {
     // 5. Assign Role to User
     const userRole = await UserRole.findOne({ user_id: user._id, role_id: role._id });
     if (!userRole) {
-      console.log('Assigning Super Admin role to user...');
+      console.log(`Assigning ${ROLES.SUPER_ADMIN} role to user...`);
       await UserRole.create({
         user_id: user._id,
         role_id: role._id,
+        company_id: company._id,
         assigned_by: user._id, // First user assigns to themselves
         assigned_at: new Date(),
       });

@@ -1,6 +1,7 @@
 import jwt from 'jsonwebtoken';
+import { ROLES } from '../constants/roles';
 
-export type UserRole = 'Super Admin' | 'Admin' | 'HR' | 'Manager' | 'Employee' | 'Technician';
+export type UserRole = typeof ROLES[keyof typeof ROLES];
 
 export interface AdminClaim {
   userId: string;

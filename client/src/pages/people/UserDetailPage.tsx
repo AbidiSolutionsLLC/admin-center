@@ -7,6 +7,7 @@ import { useUserDetail } from '@/features/people/hooks/useUserDetail';
 import { useResendInvite } from '@/features/people/hooks/useResendInvite';
 import { useCallback } from 'react';
 import { ReportingLinesPanel } from '@/features/people/components/ReportingLinesPanel';
+import { EffectivePermissionsPanel } from '@/features/people/components/EffectivePermissionsPanel';
 
 import { ErrorState } from '@/components/ui/ErrorState';
 import { EmptyState } from '@/components/ui/EmptyState';
@@ -159,6 +160,11 @@ export default function UserDetailPage() {
         <h2 className="text-base font-semibold text-ink">Reporting Structure</h2>
       </div>
       <ReportingLinesPanel userId={user._id} />
+
+      {/* ── Effective Permissions Panel ── */}
+      <div className="pt-4">
+        <EffectivePermissionsPanel userId={user._id} />
+      </div>
 
       {/* ── History Panel ── */}
       <div className="flex items-center gap-2 mb-2 pt-4">

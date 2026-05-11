@@ -1,9 +1,4 @@
-// server/src/constants/roles.ts
-
-/**
- * Centralized role constants to ensure consistency across the application.
- * Maps user-friendly role names to permission groups.
- */
+// client/src/constants/roles.ts
 
 export const ROLES = {
   SUPER_ADMIN: 'Super Admin',
@@ -19,27 +14,11 @@ export const ROLES = {
 
 export type UserRole = typeof ROLES[keyof typeof ROLES];
 
-/**
- * Permission groups for route protection
- */
 export const PERMISSION_GROUPS = {
-  // Full system access
   SUPER_ADMINS: [ROLES.SUPER_ADMIN],
-  
-  // Role management: Super Admin, HR Admin, Ops Admin
   ROLE_ADMINS: [ROLES.SUPER_ADMIN, ROLES.HR_ADMIN, ROLES.OPS_ADMIN],
-
-  // People management: Super Admin, Admin, HR, HR Admin
   PEOPLE_ADMINS: [ROLES.SUPER_ADMIN, ROLES.ADMIN, ROLES.HR, ROLES.HR_ADMIN],
-  
-  // Operations management: Super Admin, Admin, Ops Admin
   OPS_ADMINS: [ROLES.SUPER_ADMIN, ROLES.ADMIN, ROLES.OPS_ADMIN],
-  
-  // IT management: Super Admin, Admin, IT Admin
   IT_ADMINS: [ROLES.SUPER_ADMIN, ROLES.ADMIN, ROLES.IT_ADMIN],
-  
-  // All authenticated users
   ALL: Object.values(ROLES),
 } as const;
-
-export type PermissionGroup = typeof PERMISSION_GROUPS[keyof typeof PERMISSION_GROUPS];

@@ -9,6 +9,7 @@ export const ROUTES = {
   USER_DETAIL: (id: string) => `/people/${id}`,
   ROLES: '/roles',
   ROLE_DETAIL: (id: string) => `/roles/${id}`,
+  GROUPS: '/groups',
   APPS: '/apps',
   COMPANY_SETTINGS: '/company/settings',
   POLICIES: '/policies',

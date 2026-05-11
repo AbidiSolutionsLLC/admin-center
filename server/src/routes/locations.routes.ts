@@ -11,11 +11,13 @@ import {
   deleteLocation,
 } from '../controllers/locations.controller';
 
+import { PERMISSION_GROUPS } from '../constants/roles';
+
 const router = Router();
 
 router.use(requireAuth);
 
-const LOCATION_MANAGERS = ['Super Admin', 'Ops Admin'];
+const LOCATION_MANAGERS = PERMISSION_GROUPS.OPS_ADMINS;
 
 // ── Static Routes ────────────────────────────────────────────────────────────
 router.get('/tree', getLocationTree);

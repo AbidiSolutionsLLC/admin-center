@@ -6,6 +6,7 @@ import type { User, LifecycleState } from '@/types';
 import { DataTable } from '@/components/ui/DataTable';
 import { StatusBadge } from '@/components/ui/StatusBadge';
 import { formatDistanceToNow } from 'date-fns';
+import { IdentityHealthBadge } from './IdentityHealthBadge';
 
 interface UserTableProps {
   users: User[];
@@ -98,7 +99,10 @@ export const UserTable: React.FC<UserTableProps> = ({ users, onEdit, onAssignOrg
                   )}
                 </div>
                 <div className="flex flex-col">
-                  <span className="font-medium text-ink">{user.full_name}</span>
+                  <div className="flex items-center gap-2">
+                    <span className="font-medium text-ink">{user.full_name}</span>
+                    <IdentityHealthBadge user={user} />
+                  </div>
                   <span className="text-xs text-ink-muted">{user.email}</span>
                 </div>
               </div>
@@ -193,6 +197,14 @@ export const UserTable: React.FC<UserTableProps> = ({ users, onEdit, onAssignOrg
           cell: ({ row }) => {
             const roles = row.original.roles;
             if (!roles || roles.length === 0) {
+              const legacyRole = row.original.role;
+              if (legacyRole) {
+                return (
+                  <StatusBadge variant="neutral">
+                    {legacyRole}
+                  </StatusBadge>
+                );
+              }
               return (
                 <span className="inline-flex items-center gap-1 text-xs text-amber-600">
                   <AlertTriangle className="w-3 h-3" />

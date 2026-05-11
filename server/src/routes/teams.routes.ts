@@ -14,12 +14,14 @@ import {
   removeBulkTeamMembers,
 } from '../controllers/teams.controller';
 
+import { PERMISSION_GROUPS } from '../constants/roles';
+
 const router = Router();
 
 // All team routes require authentication
 router.use(requireAuth);
 
-const TEAM_MANAGERS = ['Super Admin', 'HR Admin', 'Ops Admin'];
+const TEAM_MANAGERS = PERMISSION_GROUPS.ROLE_ADMINS;
 
 // ── Team routes ──────────────────────────────────────────────────────────────
 router.get('/', getTeams);

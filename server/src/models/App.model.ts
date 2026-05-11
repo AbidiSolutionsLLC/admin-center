@@ -11,6 +11,7 @@ export interface IApp extends Document {
   status: 'active' | 'inactive' | 'maintenance';
   is_system_app: boolean;
   company_id?: Types.ObjectId;
+  owner_id?: Types.ObjectId;
   is_active: boolean;
   /** Slugs of apps that must be assigned first */
   dependencies?: string[];
@@ -32,6 +33,7 @@ const AppSchema = new Schema<IApp>({
   },
   is_system_app: { type: Boolean, default: false },
   company_id: { type: Schema.Types.ObjectId, ref: 'Company' },
+  owner_id: { type: Schema.Types.ObjectId, ref: 'User' },
   is_active: { type: Boolean, default: true },
   dependencies: [{ type: String }],
 }, { timestamps: { createdAt: 'created_at', updatedAt: 'updated_at' } });

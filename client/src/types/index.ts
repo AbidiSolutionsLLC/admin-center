@@ -1,4 +1,5 @@
 // src/types/index.ts
+import { ROLES } from '../constants/roles';
 
 export interface Department {
   _id: string;                   // MongoDB ObjectId as string
@@ -314,7 +315,7 @@ export interface UpdateTeamMemberInput {
 
 export type LifecycleState = 'invited' | 'onboarding' | 'active' | 'probation' | 'on_leave' | 'deactivated' | 'terminated' | 'archived';
 export type EmploymentType = 'full_time' | 'part_time' | 'contractor' | 'intern';
-export type UserRole = 'Super Admin' | 'Admin' | 'HR' | 'Manager' | 'Employee' | 'Technician';
+export type UserRole = typeof ROLES[keyof typeof ROLES];
 
 export interface User {
   _id: string;
@@ -360,6 +361,7 @@ export interface InviteUserInput {
   manager_id?: string | null;
   secondary_manager_ids?: string[];
   role?: UserRole;
+  role_ids?: string[];
   employment_type?: EmploymentType;
   hire_date?: string | null;
   location_id?: string | null;
@@ -375,6 +377,7 @@ export interface UpdateUserInput {
   manager_id?: string | null;
   secondary_manager_ids?: string[];
   role?: UserRole;
+  role_ids?: string[];
   employment_type?: EmploymentType;
   hire_date?: string | null;
   termination_date?: string | null;
@@ -469,6 +472,7 @@ export interface CreateRoleInput {
   description?: string;
   type?: 'system' | 'custom';
   parent_role_id?: string;
+  template_role_id?: string;
 }
 
 export interface UpdateRoleInput {
@@ -480,7 +484,7 @@ export interface UpdateRoleInput {
 
 export interface PermissionUpdate {
   permission_id: string;
-  granted: boolean;
+  granted: boolean | null;
 }
 
 export interface PermissionMatrixData {

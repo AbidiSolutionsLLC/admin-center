@@ -10,10 +10,13 @@ import {
   LogOut,
   MoreVertical,
   LayoutDashboard,
-  X
+  Shield,
+  X,
+  Package
 } from 'lucide-react';
 import { useAuthStore } from '@/store/useAuthStore';
 import { useUIStore } from '@/store/useUIStore';
+import { ROLES, PERMISSION_GROUPS } from '@/constants/roles';
 
 interface SidebarProps {
   className?: string;
@@ -22,29 +25,32 @@ interface SidebarProps {
 const navGroups = [
   {
     label: 'Dashboard',
-    roles: ['Super Admin', 'Admin', 'HR', 'Manager', 'Employee', 'super_admin', 'hr_admin', 'manager', 'employee'],
+    roles: [...PERMISSION_GROUPS.ALL, 'super_admin', 'hr_admin', 'manager', 'employee'],
     items: [
       { label: 'Overview', href: ROUTES.OVERVIEW, icon: LayoutDashboard },
     ],
   },
   {
     label: 'Structure',
-    roles: ['Super Admin', 'Admin', 'HR', 'super_admin', 'hr_admin'],
+    roles: [...PERMISSION_GROUPS.ROLE_ADMINS, 'super_admin', 'hr_admin', 'ops_admin'],
     items: [
       { label: 'Organization', href: ROUTES.ORGANIZATION, icon: Building2 },
       { label: 'Teams', href: ROUTES.TEAMS, icon: Users },
+      { label: 'Roles & Permissions', href: ROUTES.ROLES, icon: Shield },
+      { label: 'Groups', href: ROUTES.GROUPS, icon: Users },
+      { label: 'Apps', href: ROUTES.APPS, icon: Package },
     ],
   },
   {
     label: 'People',
-    roles: ['Super Admin', 'Admin', 'HR', 'Manager', 'Employee', 'super_admin', 'hr_admin', 'manager', 'employee'], // Or everyone
+    roles: [...PERMISSION_GROUPS.ALL, 'super_admin', 'hr_admin', 'manager', 'employee'], // Or everyone
     items: [
       { label: 'People', href: ROUTES.PEOPLE, icon: Users },
     ],
   },
   {
     label: 'Settings',
-    roles: ['Super Admin', 'Admin', 'super_admin'],
+    roles: [...PERMISSION_GROUPS.IT_ADMINS, 'super_admin'],
     items: [
       { label: 'Company settings', href: ROUTES.COMPANY_SETTINGS, icon: Settings },
     ],

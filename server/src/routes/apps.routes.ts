@@ -2,6 +2,7 @@
 import { Router } from 'express';
 import { requireAuth } from '../middleware/auth';
 import { requireRole } from '../middleware/requireRole';
+import { PERMISSION_GROUPS } from '../constants/roles';
 import {
   getApps,
   getAppById,
@@ -27,11 +28,11 @@ router.get('/:id/timeline', getAppAssignmentTimeline);
 router.get('/:id/users', getAppUsers);
 router.get('/:id/dependencies', checkAppDependencies);
 
-// Mutation routes - restricted to Super Admin, IT Admin, and Ops Admin
-router.post('/', requireRole(['Super Admin', 'IT Admin']), createApp);
-router.put('/:id', requireRole(['Super Admin', 'IT Admin']), updateApp);
-router.delete('/:id', requireRole(['Super Admin', 'IT Admin']), deleteApp);
-router.post('/:id/assign', requireRole(['Super Admin', 'IT Admin', 'Ops Admin']), assignApp);
-router.post('/:id/revoke', requireRole(['Super Admin', 'IT Admin', 'Ops Admin']), revokeApp);
+// Mutation routes - restricted to Super Admin, IT Admin
+router.post('/', requireRole(PERMISSION_GROUPS.IT_ADMINS), createApp);
+router.put('/:id', requireRole(PERMISSION_GROUPS.IT_ADMINS), updateApp);
+router.delete('/:id', requireRole(PERMISSION_GROUPS.IT_ADMINS), deleteApp);
+router.post('/:id/assign', requireRole(PERMISSION_GROUPS.OPS_ADMINS), assignApp);
+router.post('/:id/revoke', requireRole(PERMISSION_GROUPS.OPS_ADMINS), revokeApp);
 
 export default router;

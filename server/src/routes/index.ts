@@ -19,8 +19,14 @@ import integrationsRoutes from './integrations.routes';
 import workflowsRoutes from './workflows.routes';
 import notificationsRoutes from './notifications.routes';
 import companyRoutes from './company.routes';
+import groupsRoutes from './groups.routes';
 
 const router = Router();
+
+// Roles should be high priority
+router.use('/roles', rolesRoutes);
+router.use('/groups', groupsRoutes);
+
 
 router.use('/health', healthRoutes);
 router.use('/auth', authRoutes);
@@ -28,7 +34,6 @@ router.use('/organization', organizationRoutes);
 router.use('/intelligence', intelligenceRoutes);
 router.post('/people/verify-invite', verifyInviteToken); // Public endpoint for onboarding
 router.use('/people', peopleRoutes);
-router.use('/roles', rolesRoutes);
 router.use('/apps', appsRoutes);
 router.use('/overview', overviewRoutes);
 router.use('/security', securityRoutes);
