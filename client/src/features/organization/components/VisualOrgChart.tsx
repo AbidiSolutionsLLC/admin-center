@@ -146,7 +146,7 @@ const OrgNode: React.FC<{
                 e.stopPropagation();
                 setIsExpanded(!isExpanded);
               }}
-              className="absolute -bottom-3 left-1/2 -translate-x-1/2 w-6 h-6 rounded-full bg-white border border-line shadow-sm flex items-center justify-center hover:bg-surface-alt transition-colors z-20"
+              className="absolute -bottom-1 left-1/2 -translate-x-1/2 w-6 h-6 rounded-full bg-white border border-line shadow-sm flex items-center justify-center hover:bg-surface-alt transition-colors z-20"
               title={isExpanded ? "Collapse" : "Expand"}
             >
               {isExpanded ? (
@@ -215,7 +215,7 @@ export const VisualOrgChart: React.FC<VisualOrgChartProps> = ({ treeData, onNode
         {({ zoomIn, zoomOut, resetTransform }) => (
           <>
             {/* Controls */}
-            <div className="absolute top-4 right-4 z-40 flex flex-col gap-2 bg-white/80 backdrop-blur-sm p-1.5 rounded-xl border border-line shadow-sm">
+            <div className="absolute top-2 right-4 z-40 flex flex-col gap-2 bg-white/80 backdrop-blur-sm p-1.5 rounded-xl border border-line shadow-sm">
               <button 
                 onClick={() => zoomIn()} 
                 className="p-2 hover:bg-surface-alt rounded-lg text-ink-secondary transition-colors" 
@@ -252,7 +252,7 @@ export const VisualOrgChart: React.FC<VisualOrgChartProps> = ({ treeData, onNode
                 }}
               />
 
-              <div className="min-w-max flex justify-center pb-48 pt-20 relative z-10 px-24">
+              <div className="min-w-max flex justify-center pb-48 pt-10 relative z-10 px-24">
                 {treeData.map((rootNode, idx) => (
                   <div key={rootNode._id} className={idx > 0 ? "ml-20" : ""}>
                     <OrgNode
