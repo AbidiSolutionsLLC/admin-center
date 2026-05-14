@@ -1,5 +1,6 @@
 // src/features/people/components/UserTable.tsx
 import React, { useMemo } from 'react';
+import { useNavigate } from 'react-router-dom';
 import type { ColumnDef } from '@tanstack/react-table';
 import { Edit2, MoreVertical, AlertTriangle, Building2, Mail } from 'lucide-react';
 import type { User, LifecycleState } from '@/types';
@@ -37,6 +38,7 @@ const lifecycleStateConfig: Record<
  * Used on: PeoplePage.
  */
 export const UserTable: React.FC<UserTableProps> = ({ users, onEdit, onAssignOrg, onChangeState, onResendInvite, selectedIds, onToggleRow, onToggleAll, isAllSelected }) => {
+  const navigate = useNavigate();
   const hasSelection = !!selectedIds && !!onToggleRow && !!onToggleAll;
 
   const columns = useMemo<ColumnDef<User>[]>(
@@ -319,5 +321,5 @@ export const UserTable: React.FC<UserTableProps> = ({ users, onEdit, onAssignOrg
     return user.is_flagged ? 'bg-red-50/50 hover:bg-red-50/70' : '';
   };
 
-  return <DataTable columns={columns} data={users} onRowClick={onEdit} getRowClassName={getRowClassName} />;
+  return <DataTable columns={columns} data={users} onRowClick={(user) => navigate(`/people/${user._id}`)} getRowClassName={getRowClassName} />;
 };
