@@ -2,6 +2,7 @@
 import { Router } from 'express';
 import { requireAuth } from '../middleware/auth';
 import { requireRole } from '../middleware/requireRole';
+import { PERMISSION_GROUPS } from '../constants/roles';
 import {
   getPolicies,
   getPolicyVersions,
@@ -65,19 +66,19 @@ router.get('/:id', getPolicyVersionById);
  * Publish a new policy version (increments version number)
  * Requires super_admin or ops_admin role
  */
-router.post('/publish', requireRole(['super_admin', 'ops_admin']), publishPolicy);
+router.post('/publish', requireRole(PERMISSION_GROUPS.OPS_ADMINS), publishPolicy);
 
 /**
  * PUT /policies/:id/draft
  * Update a draft policy version (only for status='draft')
  */
-router.put('/:id/draft', updatePolicyDraft);
+router.put('/:id/draft', requireRole(PERMISSION_GROUPS.OPS_ADMINS), updatePolicyDraft);
 
 /**
  * POST /policies/:id/archive
  * Archive a published policy version (soft delete)
  */
-router.post('/:id/archive', archivePolicy);
+router.post('/:id/archive', requireRole(PERMISSION_GROUPS.OPS_ADMINS), archivePolicy);
 
 /**
  * POST /policies/:id/acknowledge
@@ -102,7 +103,7 @@ router.get('/:id/acknowledgment-status', getAcknowledgmentStatus);
  * Save assignment rules (targeting) for a policy version
  * Runs RULE-08 conflict check automatically
  */
-router.post('/:id/assignments', saveAssignmentRules);
+router.post('/:id/assignments', requireRole(PERMISSION_GROUPS.OPS_ADMINS), saveAssignmentRules);
 
 /**
  * GET /policies/:id/assignments

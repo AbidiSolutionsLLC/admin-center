@@ -65,10 +65,11 @@ const simulatePermissionsSchema = z.object({
  */
 export const getRoles = asyncHandler(async (req: Request, res: Response) => {
   const companyId = req.user.company_id;
+  const companyObjectId = new Types.ObjectId(companyId as string);
   const { search } = req.query;
 
   const filter: FilterQuery<any> = { 
-    company_id: companyId, 
+    company_id: companyObjectId, 
     is_active: true 
   };
 
@@ -114,11 +115,12 @@ export const getRoles = asyncHandler(async (req: Request, res: Response) => {
  */
 export const getRoleById = asyncHandler(async (req: Request, res: Response) => {
   const companyId = req.user.company_id;
+  const companyObjectId = new Types.ObjectId(companyId as string);
   const roleId = req.params.id;
 
   const role = await Role.findOne({
-    _id: roleId,
-    company_id: companyId,
+    _id: new Types.ObjectId(roleId),
+    company_id: companyObjectId,
   }).lean();
 
   if (!role) {
@@ -146,12 +148,13 @@ export const getRoleById = asyncHandler(async (req: Request, res: Response) => {
  */
 export const createRole = asyncHandler(async (req: Request, res: Response) => {
   const companyId = req.user.company_id;
+  const companyObjectId = new Types.ObjectId(companyId as string);
 
   const validated = createRoleSchema.parse(req.body);
 
   // Case-insensitive duplicate check
   const existingRole = await Role.findOne({
-    company_id: companyId,
+    company_id: companyObjectId,
     name: { $regex: `^${validated.name}$`, $options: 'i' },
   });
 
@@ -178,7 +181,7 @@ export const createRole = asyncHandler(async (req: Request, res: Response) => {
   }
 
   const role = await Role.create({
-    company_id: companyId,
+    company_id: companyObjectId,
     name: validated.name,
     description: validated.description,
     type: validated.type,
@@ -228,13 +231,14 @@ export const createRole = asyncHandler(async (req: Request, res: Response) => {
  */
 export const updateRole = asyncHandler(async (req: Request, res: Response) => {
   const companyId = req.user.company_id;
+  const companyObjectId = new Types.ObjectId(companyId as string);
   const roleId = req.params.id;
 
   const validated = updateRoleSchema.parse(req.body);
 
   const role = await Role.findOne({
-    _id: roleId,
-    company_id: companyId,
+    _id: new Types.ObjectId(roleId),
+    company_id: companyObjectId,
   });
 
   if (!role) {
@@ -244,14 +248,28 @@ export const updateRole = asyncHandler(async (req: Request, res: Response) => {
   // Case-insensitive duplicate check if name is being updated
   if (validated.name && validated.name !== role.name) {
     const duplicate = await Role.findOne({
-      company_id: companyId,
+      company_id: companyObjectId,
       name: { $regex: `^${validated.name}$`, $options: 'i' },
-      _id: { $ne: roleId },
+      _id: { $ne: new Types.ObjectId(roleId) },
     });
 
     if (duplicate) {
       throw new AppError('A role with this name already exists', 400, 'DUPLICATE');
     }
+  }
+
+  // Check if any users are assigned to this role (prevent editing if assigned)
+  const assignedUsersCount = await UserRole.countDocuments({
+    role_id: roleId,
+    company_id: new Types.ObjectId(companyId),
+  });
+
+  if (assignedUsersCount > 0) {
+    throw new AppError(
+      `Cannot edit role: ${assignedUsersCount} user(s) still assigned. Unassign all users before editing.`,
+      400,
+      'HAS_DEPENDENTS'
+    );
   }
 
   const beforeState = role.toObject();
@@ -289,11 +307,12 @@ export const updateRole = asyncHandler(async (req: Request, res: Response) => {
  */
 export const deleteRole = asyncHandler(async (req: Request, res: Response) => {
   const companyId = req.user.company_id;
+  const companyObjectId = new Types.ObjectId(companyId as string);
   const roleId = req.params.id;
 
   const role = await Role.findOne({
-    _id: roleId,
-    company_id: companyId,
+    _id: new Types.ObjectId(roleId),
+    company_id: companyObjectId,
   });
 
   if (!role) {
@@ -302,8 +321,8 @@ export const deleteRole = asyncHandler(async (req: Request, res: Response) => {
 
   // Check if any users are assigned to this role
   const assignedUsersCount = await UserRole.countDocuments({
-    role_id: roleId,
-    company_id: new Types.ObjectId(companyId),
+    role_id: new Types.ObjectId(roleId),
+    company_id: companyObjectId,
   });
 
   if (assignedUsersCount > 0) {
@@ -316,8 +335,8 @@ export const deleteRole = asyncHandler(async (req: Request, res: Response) => {
 
   // Check if any other roles have this role as a parent
   const childRolesCount = await Role.countDocuments({
-    parent_role_id: roleId,
-    company_id: companyId,
+    parent_role_id: new Types.ObjectId(roleId),
+    company_id: companyObjectId,
   });
 
   if (childRolesCount > 0) {

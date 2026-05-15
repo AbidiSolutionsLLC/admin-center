@@ -256,20 +256,29 @@ export const PermissionMatrix: React.FC<PermissionMatrixProps> = ({
           </div>
         </div>
 
-        <button
-          onClick={handleSave}
-          disabled={localState.size === 0 || isSaving}
-          className={`
-            h-9 px-4 text-sm font-medium rounded-md transition-all
-            ${
-              localState.size === 0 || isSaving
-                ? 'bg-surface-alt text-ink-muted cursor-not-allowed'
-                : 'bg-primary text-white hover:bg-primary-700'
-            }
-          `}
-        >
-          {isSaving ? 'Saving...' : `Save Changes (${localState.size})`}
-        </button>
+        <div className="flex items-center gap-3">
+          <button
+            onClick={() => setLocalState(new Map())}
+            disabled={localState.size === 0 || isSaving}
+            className="h-9 px-4 text-sm font-medium rounded-md border border-line text-ink hover:bg-surface-alt transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+          >
+            Cancel
+          </button>
+          <button
+            onClick={handleSave}
+            disabled={localState.size === 0 || isSaving}
+            className={`
+              h-9 px-4 text-sm font-medium rounded-md transition-all
+              ${
+                localState.size === 0 || isSaving
+                  ? 'bg-surface-alt text-ink-muted cursor-not-allowed'
+                  : 'bg-primary text-white hover:bg-primary-700'
+              }
+            `}
+          >
+            {isSaving ? 'Saving...' : `Save Changes (${localState.size})`}
+          </button>
+        </div>
       </div>
     </div>
   );

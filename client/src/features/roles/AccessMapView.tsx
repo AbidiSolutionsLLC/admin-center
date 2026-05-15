@@ -57,7 +57,7 @@ export function AccessMapView({}: AccessMapViewProps) {
   }
 
   return (
-    <div className="bg-[#F7F8FA] rounded-lg border border-line shadow-card overflow-hidden flex flex-col h-[700px] relative">
+    <div className="bg-[#F7F8FA] rounded-lg border border-line shadow-card overflow-hidden flex flex-col h-[calc(100vh-220px)] min-h-[600px] relative">
       <TransformWrapper
         initialScale={1}
         minScale={0.2}

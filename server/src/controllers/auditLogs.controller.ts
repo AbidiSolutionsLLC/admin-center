@@ -10,6 +10,7 @@ import { AuditEvent } from '../models/AuditEvent.model';
 import { User } from '../models/User.model';
 import { auditLogger } from '../lib/auditLogger';
 import { AppError } from '../utils/AppError';
+import { escapeRegExp } from '../utils/regex';
 
 /**
  * GET /api/v1/audit-logs
@@ -37,12 +38,12 @@ export const getAuditEvents = asyncHandler(async (req: Request, res: Response) =
 
   // Filter by actor email
   if (req.query.actor_email) {
-    filter.actor_email = new RegExp(req.query.actor_email as string, 'i');
+    filter.actor_email = new RegExp(escapeRegExp(req.query.actor_email as string), 'i');
   }
 
   // Search in object_label, action, or actor_email
   if (req.query.search) {
-    const searchRegex = new RegExp(req.query.search as string, 'i');
+    const searchRegex = new RegExp(escapeRegExp(req.query.search as string), 'i');
     filter.$or = [
       { object_label: searchRegex },
       { action: searchRegex },
@@ -144,11 +145,11 @@ export const exportAuditLogCSV = asyncHandler(async (req: Request, res: Response
   }
 
   if (req.query.actor_email) {
-    filter.actor_email = new RegExp(req.query.actor_email as string, 'i');
+    filter.actor_email = new RegExp(escapeRegExp(req.query.actor_email as string), 'i');
   }
 
   if (req.query.search) {
-    const searchRegex = new RegExp(req.query.search as string, 'i');
+    const searchRegex = new RegExp(escapeRegExp(req.query.search as string), 'i');
     filter.$or = [
       { object_label: searchRegex },
       { action: searchRegex },
