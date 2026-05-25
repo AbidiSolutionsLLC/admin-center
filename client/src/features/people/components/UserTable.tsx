@@ -26,8 +26,12 @@ const lifecycleStateConfig: Record<
   { label: string; variant: 'success' | 'warning' | 'error' | 'info' | 'neutral' | 'primary' | 'accent' }
 > = {
   invited: { label: 'Invited', variant: 'info' },
+  onboarding: { label: 'Onboarding', variant: 'primary' },
   active: { label: 'Active', variant: 'success' },
+  probation: { label: 'Probation', variant: 'warning' },
+  on_leave: { label: 'On Leave', variant: 'warning' },
   deactivated: { label: 'Deactivated', variant: 'error' },
+  terminated: { label: 'Terminated', variant: 'error' },
   archived: { label: 'Archived', variant: 'neutral' },
 };
 

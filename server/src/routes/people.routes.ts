@@ -17,6 +17,7 @@ import {
   resendInvite,
   getUserHistory,
   getEffectivePermissions,
+  getUserAppAccessHistory,
 } from '../controllers/people.controller';
 
 import { assignUserOrg } from '../controllers/organization.controller';
@@ -93,6 +94,12 @@ router.get('/:id', getUserById);
  * Returns audit history for a single user
  */
 router.get('/:id/history', requireRole(PEOPLE_MANAGERS), getUserHistory);
+
+/**
+ * GET /people/:id/app-history
+ * Returns app access history for a single user
+ */
+router.get('/:id/app-history', requireRole(PEOPLE_MANAGERS), getUserAppAccessHistory);
 
 /**
  * GET /people/:id/effective-permissions

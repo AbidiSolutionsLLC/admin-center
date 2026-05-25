@@ -1,6 +1,6 @@
 // client/src/pages/roles/RolesPage.tsx
 import { useState, useMemo } from 'react';
-import { Shield, Plus, Edit2, Trash2, Key, Search, X, Loader2, Copy, Users, UserPlus, UserMinus } from 'lucide-react';
+import { Shield, Plus, Edit2, Trash2, Key, Search, X, Loader2, Copy, Users, UserPlus, UserMinus, Monitor } from 'lucide-react';
 import type { ColumnDef } from '@tanstack/react-table';
 import { useRoles, useCreateRole, useUpdateRole, useDeleteRole, useRoleUsers, useAssignRole, useUnassignRole } from '@/features/roles/useRoles';
 import { useRolePermissions, useAllPermissions, useUpdateRolePermissions } from '@/features/roles/useRolePermissions';
@@ -8,6 +8,7 @@ import { useUsers } from '@/features/people/hooks/useUsers';
 import { PermissionMatrix } from '@/features/roles/PermissionMatrix';
 import { PermissionSimulator } from '@/features/roles/PermissionSimulator';
 import { AccessMapView } from '@/features/roles/AccessMapView';
+import { TargetAppAccessPanel } from '@/features/apps/TargetAppAccessPanel';
 import { Modal } from '@/components/ui/Modal';
 import { DataTable } from '@/components/ui/DataTable';
 import { ConfirmDialog } from '@/components/ui/ConfirmDialog';
@@ -41,6 +42,7 @@ export default function RolesPage() {
   const [isFormModalOpen, setIsFormModalOpen] = useState(false);
   const [isMatrixModalOpen, setIsMatrixModalOpen] = useState(false);
   const [isUsersModalOpen, setIsUsersModalOpen] = useState(false);
+  const [isAppsModalOpen, setIsAppsModalOpen] = useState(false);
   const [isSimulatorOpen, setIsSimulatorOpen] = useState(false);
   const [roleToDelete, setRoleToDelete] = useState<Role | null>(null);
   const [selectedRole, setSelectedRole] = useState<Role | null>(null);
@@ -127,6 +129,11 @@ export default function RolesPage() {
     setSelectedRole(role);
     setIsUsersModalOpen(true);
     setUserSearchQuery('');
+  };
+
+  const handleOpenAppsModal = (role: Role) => {
+    setSelectedRole(role);
+    setIsAppsModalOpen(true);
   };
 
   const handleSaveRole = async () => {
@@ -246,6 +253,16 @@ export default function RolesPage() {
         const role = row.original;
         return (
           <div className="flex items-center justify-end gap-1">
+            <button
+              onClick={(e) => {
+                e.stopPropagation();
+                handleOpenAppsModal(role);
+              }}
+              className="p-2 text-ink-muted hover:text-ink hover:bg-surface-alt rounded-lg transition-all"
+              title="Assigned Apps"
+            >
+              <Monitor className="h-4 w-4" />
+            </button>
             <button
               onClick={(e) => {
                 e.stopPropagation();
@@ -635,6 +652,28 @@ export default function RolesPage() {
           <div className="flex justify-end pt-2">
             <button
               onClick={() => setIsUsersModalOpen(false)}
+              className="h-9 px-6 bg-surface-alt text-ink text-sm font-medium rounded-md hover:bg-line transition-colors"
+            >
+              Close
+            </button>
+          </div>
+        </div>
+      </Modal>
+
+      {/* Assigned Apps Modal */}
+      <Modal
+        isOpen={isAppsModalOpen}
+        onClose={() => setIsAppsModalOpen(false)}
+        title={`Assigned Apps: ${selectedRole?.name}`}
+        size="md"
+      >
+        <div className="space-y-6">
+          {selectedRole && (
+            <TargetAppAccessPanel targetType="role" targetId={selectedRole._id} />
+          )}
+          <div className="flex justify-end pt-2">
+            <button
+              onClick={() => setIsAppsModalOpen(false)}
               className="h-9 px-6 bg-surface-alt text-ink text-sm font-medium rounded-md hover:bg-line transition-colors"
             >
               Close

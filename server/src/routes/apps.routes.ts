@@ -14,6 +14,7 @@ import {
   getAppAssignmentTimeline,
   checkAppDependencies,
   getAppUsers,
+  getAppAssignmentsByTarget,
 } from '../controllers/apps.controller';
 
 const router = Router();
@@ -23,6 +24,7 @@ router.use(requireAuth);
 
 // Public read routes (any authenticated user can view apps)
 router.get('/', getApps);
+router.get('/target/:target_type/:target_id', getAppAssignmentsByTarget);
 router.get('/:id', getAppById);
 router.get('/:id/timeline', getAppAssignmentTimeline);
 router.get('/:id/users', getAppUsers);
@@ -32,7 +34,7 @@ router.get('/:id/dependencies', checkAppDependencies);
 router.post('/', requireRole(PERMISSION_GROUPS.IT_ADMINS), createApp);
 router.put('/:id', requireRole(PERMISSION_GROUPS.IT_ADMINS), updateApp);
 router.delete('/:id', requireRole(PERMISSION_GROUPS.IT_ADMINS), deleteApp);
-router.post('/:id/assign', requireRole(PERMISSION_GROUPS.OPS_ADMINS), assignApp);
-router.post('/:id/revoke', requireRole(PERMISSION_GROUPS.OPS_ADMINS), revokeApp);
+router.post('/:id/assign', requireRole(PERMISSION_GROUPS.IT_ADMINS), assignApp);
+router.post('/:id/revoke', requireRole(PERMISSION_GROUPS.IT_ADMINS), revokeApp);
 
 export default router;

@@ -74,16 +74,35 @@ export const useRevokeApp = () => {
       const response = await apiClient.post(`/apps/${appId}/revoke`, { assignment_id: assignmentId });
       return response.data.data;
     },
-    onSuccess: (_, { appId }) => {
-      queryClient.invalidateQueries({ queryKey: QUERY_KEYS.APPS });
-      queryClient.invalidateQueries({ queryKey: QUERY_KEYS.APP_DETAIL(appId) });
-      queryClient.invalidateQueries({ queryKey: QUERY_KEYS.APP_ASSIGNMENTS(appId) });
-      queryClient.invalidateQueries({ queryKey: QUERY_KEYS.APP_TIMELINE(appId) });
-      toast.success('App assignment revoked');
+    onMutate: async ({ appId, assignmentId }) => {
+      await queryClient.cancelQueries({ queryKey: QUERY_KEYS.APP_DETAIL(appId) });
+      const previousApp = queryClient.getQueryData(QUERY_KEYS.APP_DETAIL(appId));
+
+      queryClient.setQueryData(QUERY_KEYS.APP_DETAIL(appId), (old: any) => {
+        if (!old) return old;
+        return {
+          ...old,
+          assignments: old.assignments?.filter((a: any) => a._id !== assignmentId),
+        };
+      });
+
+      return { previousApp, appId };
     },
-    onError: (error: any) => {
+    onError: (error: any, variables, context) => {
+      if (context?.previousApp) {
+        queryClient.setQueryData(QUERY_KEYS.APP_DETAIL(context.appId), context.previousApp);
+      }
       const message = error.response?.data?.error || 'Failed to revoke assignment';
       toast.error(message);
+    },
+    onSettled: (data, error, variables) => {
+      queryClient.invalidateQueries({ queryKey: QUERY_KEYS.APPS });
+      queryClient.invalidateQueries({ queryKey: QUERY_KEYS.APP_DETAIL(variables.appId) });
+      queryClient.invalidateQueries({ queryKey: QUERY_KEYS.APP_ASSIGNMENTS(variables.appId) });
+      queryClient.invalidateQueries({ queryKey: QUERY_KEYS.APP_TIMELINE(variables.appId) });
+    },
+    onSuccess: () => {
+      toast.success('App assignment revoked');
     },
   });
 };
@@ -113,14 +132,14 @@ export const useAppTimeline = (appId: string, page = 1, limit = 50) => {
 /**
  * Check app dependencies for a target
  */
-export const useCheckAppDependencies = (appId: string, targetType: string, targetId: string) => {
+export const useCheckAppDependencies = (appId: string, targetType: string, targetId: string, attributeName?: string, attributeValue?: string) => {
   return useQuery({
-    queryKey: QUERY_KEYS.APP_DEPENDENCIES(appId, targetType, targetId),
+    queryKey: QUERY_KEYS.APP_DEPENDENCIES(appId, targetType, targetId, attributeName, attributeValue),
     queryFn: async () => {
       const response = await apiClient.get<ApiResponse<DependencyCheckResult>>(
         `/apps/${appId}/dependencies`,
         {
-          params: { target_type: targetType, target_id: targetId },
+          params: { target_type: targetType, target_id: targetId, attribute_name: attributeName, attribute_value: attributeValue },
         }
       );
       return response.data.data;
@@ -151,4 +170,21 @@ export const useUpdateApp = () => {
     },
   });
 };
+
+/**
+ * Fetch all apps assigned to a specific target (role, dept, etc.)
+ */
+export const useTargetApps = (targetType: string, targetId: string) => {
+  return useQuery({
+    queryKey: [...QUERY_KEYS.APPS, 'target', targetType, targetId],
+    queryFn: async () => {
+      const response = await apiClient.get<ApiResponse<(AppAssignment & { app_info?: any; granted_by_info?: any })[]>>(
+        `/apps/target/${targetType}/${targetId}`
+      );
+      return response.data.data;
+    },
+    enabled: !!targetType && !!targetId,
+  });
+};
+
 

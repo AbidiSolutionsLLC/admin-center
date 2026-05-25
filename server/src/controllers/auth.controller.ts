@@ -315,7 +315,7 @@ export const getMe = asyncHandler(async (req: Request, res: Response) => {
 });
 
 const SetupPasswordSchema = z.object({
-  email: z.string().email(),
+  email: z.string().email().transform(v => v.toLowerCase()),
   token: z.string().min(1),
   newPassword: z.string().min(8),
 });

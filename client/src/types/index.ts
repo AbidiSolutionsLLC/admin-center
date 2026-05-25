@@ -508,6 +508,7 @@ export interface App {
   is_system_app: boolean;
   is_active: boolean;
   dependencies?: string[];
+  mutually_exclusive?: string[];
   created_at: string;
   updated_at: string;
   assignment_count?: number;
@@ -517,8 +518,10 @@ export interface AppAssignment {
   _id: string;
   company_id: string;
   app_id: string;
-  target_type: 'role' | 'department' | 'group' | 'user';
-  target_id: string;
+  target_type: 'role' | 'department' | 'group' | 'user' | 'attribute';
+  target_id?: string;
+  attribute_name?: string;
+  attribute_value?: string;
   granted_by: string;
   granted_at: string;
   revoked_by?: string;
@@ -532,8 +535,10 @@ export interface AppAssignment {
 }
 
 export interface AssignAppInput {
-  target_type: 'role' | 'department' | 'group' | 'user';
-  target_id: string;
+  target_type: 'role' | 'department' | 'group' | 'user' | 'attribute';
+  target_id?: string;
+  attribute_name?: string;
+  attribute_value?: string;
   reason?: string;
 }
 
@@ -543,6 +548,8 @@ export interface DependencyCheckResult {
   required?: string[];
   assigned?: string[];
   missing?: string[];
+  has_conflicts: boolean;
+  conflicting_apps?: string[];
 }
 
 export interface AssignmentTimelineEntry {

@@ -245,6 +245,16 @@ export const addSecondaryManager = asyncHandler(async (req: Request, res: Respon
     throw new AppError('Manager not found or does not belong to this company', 404, 'MANAGER_NOT_FOUND');
   }
 
+  // TC-RL-025: Block terminated, archived, or deactivated users from being assigned as managers
+  const blockedLifecycleStates: string[] = ['terminated', 'archived', 'deactivated'];
+  if (blockedLifecycleStates.includes(manager.lifecycle_state)) {
+    throw new AppError(
+      `Cannot assign a ${manager.lifecycle_state} user as a manager. Only active users can be assigned as managers.`,
+      400,
+      'TERMINATED_MANAGER'
+    );
+  }
+
   // Check for self-assignment
   if (isSelfAssignment(user._id.toString(), input.manager_id)) {
     throw new AppError('Cannot assign yourself as your own manager', 400, 'SELF_ASSIGNMENT_NOT_ALLOWED');
@@ -452,6 +462,16 @@ export const changePrimaryManager = asyncHandler(async (req: Request, res: Respo
 
   if (!manager) {
     throw new AppError('Manager not found or does not belong to this company', 404, 'MANAGER_NOT_FOUND');
+  }
+
+  // TC-RL-025: Block terminated, archived, or deactivated users from being assigned as managers
+  const blockedLifecycleStates: string[] = ['terminated', 'archived', 'deactivated'];
+  if (blockedLifecycleStates.includes(manager.lifecycle_state)) {
+    throw new AppError(
+      `Cannot assign a ${manager.lifecycle_state} user as a manager. Only active users can be assigned as managers.`,
+      400,
+      'TERMINATED_MANAGER'
+    );
   }
 
   // Check for self-assignment

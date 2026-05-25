@@ -2,12 +2,20 @@
 import { useParams, useNavigate } from 'react-router-dom';
 import { UserHistoryPanel } from '@/features/people/components/UserHistoryPanel';
 import { TableSkeleton } from '@/components/ui/TableSkeleton';
-import { History, ArrowLeft, Users, Edit2, Mail } from 'lucide-react';
+import { History, ArrowLeft, Users, Edit2, Mail, RefreshCw, Monitor } from 'lucide-react';
 import { useUserDetail } from '@/features/people/hooks/useUserDetail';
 import { useResendInvite } from '@/features/people/hooks/useResendInvite';
-import { useCallback } from 'react';
+import { useCallback, useState } from 'react';
 import { ReportingLinesPanel } from '@/features/people/components/ReportingLinesPanel';
 import { EffectivePermissionsPanel } from '@/features/people/components/EffectivePermissionsPanel';
+import { UserAppAccessPanel } from '@/features/people/components/UserAppAccessPanel';
+
+import { useUpdateUser } from '@/features/people/hooks/useUpdateUser';
+import { useDepartments } from '@/features/organization/hooks/useDepartments';
+import { useLocations } from '@/features/locations/hooks/useLocations';
+import { useFormMetadata } from '@/features/people/hooks/useFormMetadata';
+import { UserForm, type UserFormData } from '@/features/people/components/UserForm';
+import { Modal } from '@/components/ui/Modal';
 
 import { ErrorState } from '@/components/ui/ErrorState';
 import { EmptyState } from '@/components/ui/EmptyState';
@@ -27,11 +35,39 @@ export default function UserDetailPage() {
   const { data: user, isLoading, isError, refetch } = useUserDetail(id!);
   const resendInvite = useResendInvite();
 
+  const [isEditModalOpen, setIsEditModalOpen] = useState(false);
+  const updateUser = useUpdateUser(id!);
+  const { data: departments = [] } = useDepartments();
+  const { data: locations = [] } = useLocations();
+  const { data: formMetadata } = useFormMetadata();
+
   const handleResendInvite = useCallback(() => {
     if (user) {
       resendInvite.mutate(user._id);
     }
   }, [resendInvite, user]);
+
+  const handleEditSubmit = useCallback(
+    (formData: UserFormData & { custom_fields?: Record<string, unknown> }) => {
+      const normalized = {
+        ...formData,
+        department_id: formData.department_id || null,
+        team_id: formData.team_id || null,
+        manager_id: formData.manager_id || null,
+        location_id: formData.location_id || null,
+        hire_date: formData.hire_date || null,
+        phone: formData.phone || null,
+        custom_fields: formData.custom_fields || {},
+      };
+
+      updateUser.mutate(normalized, {
+        onSuccess: () => {
+          setIsEditModalOpen(false);
+        },
+      });
+    },
+    [updateUser]
+  );
 
   if (!id) {
     return (
@@ -134,7 +170,7 @@ export default function UserDetailPage() {
             </button>
           )}
           <button
-            onClick={() => navigate(ROUTES.PEOPLE)}
+            onClick={() => setIsEditModalOpen(true)}
             className="h-9 px-4 text-sm font-medium rounded-md border border-line bg-white text-ink hover:bg-surface-alt transition-colors flex items-center gap-2"
           >
             <Edit2 className="w-4 h-4" />
@@ -166,12 +202,64 @@ export default function UserDetailPage() {
         <EffectivePermissionsPanel userId={user._id} />
       </div>
 
+      {/* ── App Access Panel ── */}
+      <div className="flex items-center gap-2 mb-2 pt-4">
+        <Monitor className="w-5 h-5 text-ink-secondary" />
+        <h2 className="text-base font-semibold text-ink">App Access History</h2>
+      </div>
+      <UserAppAccessPanel userId={user._id} />
+
       {/* ── History Panel ── */}
       <div className="flex items-center gap-2 mb-2 pt-4">
         <History className="w-5 h-5 text-ink-secondary" />
         <h2 className="text-base font-semibold text-ink">User History</h2>
       </div>
       <UserHistoryPanel userId={user._id} />
+
+      {/* ── Edit Modal ── */}
+      {isEditModalOpen && (
+        <Modal
+          isOpen={isEditModalOpen}
+          onClose={() => setIsEditModalOpen(false)}
+          title="Edit User"
+          description={`Update profile for ${user.full_name}`}
+          size="md"
+          footer={
+            <>
+              <button
+                onClick={() => setIsEditModalOpen(false)}
+                disabled={updateUser.isPending}
+                className="h-9 px-4 text-sm font-medium rounded-md border border-line bg-white text-ink hover:bg-surface-alt transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+              >
+                Cancel
+              </button>
+              <button
+                form="user-form"
+                type="submit"
+                disabled={updateUser.isPending}
+                className="h-9 px-4 text-sm font-medium rounded-md bg-primary hover:bg-primary-hover text-white transition-colors disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2"
+              >
+                {updateUser.isPending ? (
+                  <>
+                    <RefreshCw className="w-4 h-4 animate-spin" />
+                    Saving...
+                  </>
+                ) : (
+                  'Save Changes'
+                )}
+              </button>
+            </>
+          }
+        >
+          <UserForm
+            initialData={user}
+            onSubmit={handleEditSubmit}
+            departments={departments}
+            locations={locations}
+            requiredFields={formMetadata?.required_fields || ['email', 'full_name']}
+          />
+        </Modal>
+      )}
     </div>
   );
 }

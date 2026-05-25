@@ -27,15 +27,35 @@ const lifecycleStateConfig: Record<
     variant: 'info',
     description: 'User has been invited and is awaiting activation',
   },
+  onboarding: {
+    label: 'Onboarding',
+    variant: 'primary',
+    description: 'User is currently going through the onboarding process',
+  },
   active: {
     label: 'Active',
     variant: 'success',
     description: 'User is actively working',
   },
+  probation: {
+    label: 'Probation',
+    variant: 'warning',
+    description: 'User is on a probation period',
+  },
+  on_leave: {
+    label: 'On Leave',
+    variant: 'warning',
+    description: 'User is temporarily on leave',
+  },
   deactivated: {
     label: 'Deactivated',
     variant: 'error',
     description: 'User account has been temporarily deactivated',
+  },
+  terminated: {
+    label: 'Terminated',
+    variant: 'error',
+    description: 'User has been terminated',
   },
   archived: {
     label: 'Archived',
@@ -108,7 +128,11 @@ export const LifecycleStateSelector: React.FC<LifecycleStateSelectorProps> = ({
         <p className="text-sm font-medium text-ink">Transition To</p>
         <div className="space-y-2">
           {validNextStates.map((nextState) => {
-            const nextConfig = lifecycleStateConfig[nextState];
+            const nextConfig = lifecycleStateConfig[nextState] || {
+              label: nextState || 'Unknown',
+              variant: 'neutral',
+              description: 'Transition to ' + nextState,
+            };
             const requiresReason = nextState === 'deactivated' || nextState === 'archived';
             const isSelected = selectedState === nextState;
 

@@ -56,10 +56,14 @@ export const getAuditEvents = asyncHandler(async (req: Request, res: Response) =
   if (req.query.date_from || req.query.date_to) {
     filter.created_at = {};
     if (req.query.date_from) {
-      (filter.created_at as Record<string, unknown>).$gte = new Date(req.query.date_from as string);
+      const fromDate = new Date(req.query.date_from as string);
+      if (isNaN(fromDate.getTime())) throw new AppError('Invalid date_from format', 400, 'INVALID_DATE');
+      (filter.created_at as Record<string, unknown>).$gte = fromDate;
     }
     if (req.query.date_to) {
-      (filter.created_at as Record<string, unknown>).$lte = new Date(req.query.date_to as string);
+      const toDate = new Date(req.query.date_to as string);
+      if (isNaN(toDate.getTime())) throw new AppError('Invalid date_to format', 400, 'INVALID_DATE');
+      (filter.created_at as Record<string, unknown>).$lte = toDate;
     }
   }
 
@@ -161,10 +165,14 @@ export const exportAuditLogCSV = asyncHandler(async (req: Request, res: Response
   if (req.query.date_from || req.query.date_to) {
     filter.created_at = {};
     if (req.query.date_from) {
-      (filter.created_at as Record<string, unknown>).$gte = new Date(req.query.date_from as string);
+      const fromDate = new Date(req.query.date_from as string);
+      if (isNaN(fromDate.getTime())) throw new AppError('Invalid date_from format', 400, 'INVALID_DATE');
+      (filter.created_at as Record<string, unknown>).$gte = fromDate;
     }
     if (req.query.date_to) {
-      (filter.created_at as Record<string, unknown>).$lte = new Date(req.query.date_to as string);
+      const toDate = new Date(req.query.date_to as string);
+      if (isNaN(toDate.getTime())) throw new AppError('Invalid date_to format', 400, 'INVALID_DATE');
+      (filter.created_at as Record<string, unknown>).$lte = toDate;
     }
   }
 

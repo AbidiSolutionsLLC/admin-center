@@ -4,9 +4,11 @@ import { Schema, model, Document, Types } from 'mongoose';
 export interface IAppAssignment extends Document {
   company_id: Types.ObjectId;
   app_id: Types.ObjectId;
-  // Assignment target: can be role, department, group, or individual user
-  target_type: 'role' | 'department' | 'group' | 'user';
-  target_id: Types.ObjectId;
+  // Assignment target: can be role, department, group, user, or attribute
+  target_type: 'role' | 'department' | 'group' | 'user' | 'attribute';
+  target_id?: Types.ObjectId;
+  attribute_name?: string;
+  attribute_value?: string;
   // Assignment metadata
   granted_by: Types.ObjectId;
   granted_at: Date;
@@ -23,10 +25,16 @@ const AppAssignmentSchema = new Schema<IAppAssignment>({
   app_id: { type: Schema.Types.ObjectId, ref: 'App', required: true, index: true },
   target_type: {
     type: String,
-    enum: ['role', 'department', 'group', 'user'],
+    enum: ['role', 'department', 'group', 'user', 'attribute'],
     required: true,
   },
-  target_id: { type: Schema.Types.ObjectId, required: true, index: true },
+  target_id: { 
+    type: Schema.Types.ObjectId, 
+    required: function(this: any) { return this.target_type !== 'attribute'; },
+    index: true 
+  },
+  attribute_name: { type: String },
+  attribute_value: { type: String },
   granted_by: { type: Schema.Types.ObjectId, ref: 'User', required: true },
   granted_at: { type: Date, default: Date.now },
   revoked_by: { type: Schema.Types.ObjectId, ref: 'User' },
