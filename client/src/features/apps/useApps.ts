@@ -10,15 +10,16 @@ interface ApiResponse<T> {
   data: T;
 }
 
-/**
- * Fetch all apps
- */
-export const useApps = () => {
+export const useApps = (params?: { search?: string; status?: string; category?: string; page?: number; limit?: number }) => {
   return useQuery({
-    queryKey: QUERY_KEYS.APPS,
+    queryKey: params ? [...QUERY_KEYS.APPS, params] : [...QUERY_KEYS.APPS],
     queryFn: async () => {
-      const response = await apiClient.get<ApiResponse<App[]>>('/apps');
-      return response.data.data;
+      const response = await apiClient.get<ApiResponse<App[]>>('/apps', { params });
+      const data = response.data.data;
+      if ((response.data as any).pagination) {
+        (data as any).pagination = (response.data as any).pagination;
+      }
+      return data;
     },
   });
 };
@@ -30,7 +31,7 @@ export const useApp = (appId: string) => {
   return useQuery({
     queryKey: QUERY_KEYS.APP_DETAIL(appId),
     queryFn: async () => {
-      const response = await apiClient.get<ApiResponse<App>>(`/apps/${appId}`);
+      const response = await apiClient.get<ApiResponse<App & { assignments?: AppAssignment[]; owner_info?: any }>>(`/apps/${appId}`);
       return response.data.data;
     },
     enabled: !!appId,
@@ -127,3 +128,27 @@ export const useCheckAppDependencies = (appId: string, targetType: string, targe
     enabled: !!appId && !!targetType && !!targetId,
   });
 };
+
+/**
+ * Update an app (e.g. toggling status or is_active)
+ */
+export const useUpdateApp = () => {
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: async ({ appId, data }: { appId: string; data: Partial<App> }) => {
+      const response = await apiClient.put(`/apps/${appId}`, data);
+      return response.data.data;
+    },
+    onSuccess: (data, { appId }) => {
+      queryClient.invalidateQueries({ queryKey: QUERY_KEYS.APPS });
+      queryClient.invalidateQueries({ queryKey: QUERY_KEYS.APP_DETAIL(appId) });
+      toast.success('App updated successfully');
+    },
+    onError: (error: any) => {
+      const message = error.response?.data?.error || 'Failed to update app';
+      toast.error(message);
+    },
+  });
+};
+

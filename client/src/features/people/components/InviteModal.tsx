@@ -7,8 +7,10 @@ import { useInviteUser } from '../hooks/useInviteUser';
 import { useBulkInvite } from '../hooks/useBulkInvite';
 import { UserSelect } from '@/components/ui/UserSelect';
 import { MultiUserSelect } from '@/components/ui/MultiUserSelect';
+import { MultiRoleSelect } from '@/components/ui/MultiRoleSelect';
 import type { InviteUserInput, Department, BulkInviteRow, EmploymentType, UserRole } from '@/types';
 import { cn } from '@/utils/cn';
+import { ROLES } from '@/constants/roles';
 
 interface InviteModalProps {
   isOpen: boolean;
@@ -27,12 +29,12 @@ const EMPLOYMENT_TYPE_OPTIONS: { value: EmploymentType; label: string }[] = [
 ];
 
 const ROLE_OPTIONS: { value: UserRole; label: string }[] = [
-  { value: 'Super Admin', label: 'Super Admin' },
-  { value: 'Admin', label: 'Admin' },
-  { value: 'HR', label: 'HR' },
-  { value: 'Manager', label: 'Manager' },
-  { value: 'Employee', label: 'Employee' },
-  { value: 'Technician', label: 'Technician' },
+  { value: ROLES.SUPER_ADMIN, label: 'Super Admin' },
+  { value: ROLES.ADMIN, label: 'Admin' },
+  { value: ROLES.HR, label: 'HR' },
+  { value: ROLES.MANAGER, label: 'Manager' },
+  { value: ROLES.EMPLOYEE, label: 'Employee' },
+  { value: ROLES.TECHNICIAN, label: 'Technician' },
 ];
 
 const inputClass = (hasError?: boolean) =>
@@ -63,7 +65,8 @@ export const InviteModal: React.FC<InviteModalProps> = ({ isOpen, onClose, depar
     department_id: null,
     manager_id: null,
     secondary_manager_ids: [],
-    role: 'Employee',
+    role: ROLES.EMPLOYEE,
+    role_ids: [],
     employment_type: 'full_time',
     hire_date: null,
     location_id: null,
@@ -85,7 +88,7 @@ export const InviteModal: React.FC<InviteModalProps> = ({ isOpen, onClose, depar
     if (requiredFields.includes('phone') && !singleForm.phone?.trim()) errors.phone = 'Phone number is required';
     if (requiredFields.includes('department_id') && !singleForm.department_id) errors.department_id = 'Department is required';
     if (requiredFields.includes('manager_id') && !singleForm.manager_id) errors.manager_id = 'Manager is required';
-    if (requiredFields.includes('role') && !singleForm.role) errors.role = 'Role is required';
+    if (requiredFields.includes('role_ids') && (!singleForm.role_ids || singleForm.role_ids.length === 0)) errors.role_ids = 'Role is required';
     if (requiredFields.includes('employment_type') && !singleForm.employment_type) errors.employment_type = 'Employment type is required';
     if (requiredFields.includes('hire_date') && !singleForm.hire_date) errors.hire_date = 'Hire date is required';
     if (requiredFields.includes('location_id') && !singleForm.location_id) errors.location_id = 'Location is required';
@@ -104,7 +107,8 @@ export const InviteModal: React.FC<InviteModalProps> = ({ isOpen, onClose, depar
             department_id: null, 
             manager_id: null,
             secondary_manager_ids: [],
-            role: 'Employee', 
+            role: ROLES.EMPLOYEE, 
+            role_ids: [],
             employment_type: 'full_time',
             hire_date: null,
             location_id: null
@@ -149,7 +153,7 @@ export const InviteModal: React.FC<InviteModalProps> = ({ isOpen, onClose, depar
           department_id: row.department_id || undefined,
           team_id: row.team_id || undefined,
           manager_id: row.manager_id || undefined,
-          role: (row.role as UserRole) || 'Employee',
+          role: (row.role as UserRole) || ROLES.EMPLOYEE,
           employment_type: (row.employment_type as EmploymentType) || 'full_time',
           hire_date: row.hire_date || undefined,
           location_id: row.location_id || undefined,
@@ -375,24 +379,15 @@ export const InviteModal: React.FC<InviteModalProps> = ({ isOpen, onClose, depar
 
           <div className="space-y-1.5">
             <label htmlFor="invite-role" className="text-sm font-medium text-ink">
-              Role {requiredFields.includes('role') && <span className="text-red-500">*</span>}
+              Roles {requiredFields.includes('role_ids') && <span className="text-red-500">*</span>}
             </label>
-            <select
-              id="invite-role"
-              value={singleForm.role || 'Employee'}
-              onChange={(e) =>
-                setSingleForm({ ...singleForm, role: e.target.value as UserRole })
-              }
-              className={inputClass(!!singleError.role)}
-            >
-              {ROLE_OPTIONS.map((opt) => (
-                <option key={opt.value} value={opt.value}>
-                  {opt.label}
-                </option>
-              ))}
-            </select>
-            {singleError.role && (
-              <p className="text-xs text-red-500">{singleError.role}</p>
+            <MultiRoleSelect
+              value={singleForm.role_ids || []}
+              onChange={(val) => setSingleForm({ ...singleForm, role_ids: val })}
+              hasError={!!singleError.role_ids}
+            />
+            {singleError.role_ids && (
+              <p className="text-xs text-red-500">{singleError.role_ids}</p>
             )}
           </div>
 

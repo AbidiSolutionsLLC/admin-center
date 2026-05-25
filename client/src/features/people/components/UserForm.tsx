@@ -5,18 +5,20 @@ import { zodResolver } from '@hookform/resolvers/zod';
 import { z } from 'zod';
 import { UserSelect } from '@/components/ui/UserSelect';
 import { MultiUserSelect } from '@/components/ui/MultiUserSelect';
+import { MultiRoleSelect } from '@/components/ui/MultiRoleSelect';
 import { DynamicCustomFields } from '@/features/data-fields/components/DynamicCustomFields';
 import { useCustomFields } from '@/features/data-fields/hooks/useCustomFields';
 import type { User, EmploymentType, Department, CustomField, Location, UserRole } from '@/types';
 import { cn } from '@/utils/cn';
+import { ROLES } from '@/constants/roles';
 
 const ROLE_OPTIONS: { value: UserRole; label: string }[] = [
-  { value: 'Super Admin', label: 'Super Admin' },
-  { value: 'Admin', label: 'Admin' },
-  { value: 'HR', label: 'HR' },
-  { value: 'Manager', label: 'Manager' },
-  { value: 'Employee', label: 'Employee' },
-  { value: 'Technician', label: 'Technician' },
+  { value: ROLES.SUPER_ADMIN, label: 'Super Admin' },
+  { value: ROLES.ADMIN, label: 'Admin' },
+  { value: ROLES.HR, label: 'HR' },
+  { value: ROLES.MANAGER, label: 'Manager' },
+  { value: ROLES.EMPLOYEE, label: 'Employee' },
+  { value: ROLES.TECHNICIAN, label: 'Technician' },
 ];
 
 const createSchema = (requiredFields: string[], editingUserId?: string) => z.object({
@@ -25,7 +27,8 @@ const createSchema = (requiredFields: string[], editingUserId?: string) => z.obj
   department_id: z.string().optional().nullable(),
   manager_id: z.string().optional().nullable(),
   secondary_manager_ids: z.array(z.string()).optional().default([]),
-  role: z.enum(['Super Admin', 'Admin', 'HR', 'Manager', 'Employee', 'Technician']),
+  role: z.enum(Object.values(ROLES) as [string, ...string[]]).optional(),
+  role_ids: z.array(z.string()).optional().default([]),
   employment_type: z.enum(['full_time', 'part_time', 'contractor', 'intern']),
   hire_date: z.string().optional().nullable(),
   location_id: z.string().optional().nullable(),
@@ -131,7 +134,8 @@ export const UserForm: React.FC<UserFormProps> = ({
       department_id: (typeof initialData?.department_id === 'object' && initialData?.department_id !== null) ? initialData.department_id._id : (initialData?.department_id as string ?? ''),
       manager_id: (typeof initialData?.manager_id === 'object' && initialData?.manager_id !== null) ? initialData.manager_id._id : (initialData?.manager_id as string ?? ''),
       secondary_manager_ids: initialData?.secondary_manager_ids ?? [],
-      role: initialData?.role || 'Employee',
+      role: initialData?.role || ROLES.EMPLOYEE,
+      role_ids: initialData?.roles?.map(r => r._id) || [],
       employment_type: initialData?.employment_type || 'full_time',
       hire_date: initialData?.hire_date ? new Date(initialData.hire_date).toISOString().split('T')[0] : '',
       location_id: (typeof initialData?.location_id === 'object' && initialData?.location_id !== null) ? (initialData.location_id as any)._id : (initialData?.location_id as string ?? ''),
@@ -154,7 +158,8 @@ export const UserForm: React.FC<UserFormProps> = ({
         department_id: (typeof initialData.department_id === 'object' && initialData.department_id !== null) ? initialData.department_id._id : (initialData.department_id as string ?? ''),
         manager_id: (typeof initialData.manager_id === 'object' && initialData.manager_id !== null) ? initialData.manager_id._id : (initialData.manager_id as string ?? ''),
         secondary_manager_ids: initialData.secondary_manager_ids ?? [],
-        role: initialData.role || 'Employee',
+        role: initialData.role || ROLES.EMPLOYEE,
+        role_ids: initialData.roles?.map(r => r._id) || [],
         employment_type: initialData.employment_type || 'full_time',
         hire_date: initialData.hire_date ? new Date(initialData.hire_date).toISOString().split('T')[0] : '',
         location_id: (typeof initialData.location_id === 'object' && initialData.location_id !== null) ? (initialData.location_id as any)._id : (initialData.location_id as string ?? ''),
@@ -272,25 +277,25 @@ export const UserForm: React.FC<UserFormProps> = ({
 
       <div className="space-y-1.5">
         <label htmlFor="user-role" className="text-sm font-medium text-ink">
-          Role {requiredFields.includes('role') && <span className="text-red-500">*</span>}
+          Roles {requiredFields.includes('role_ids') && <span className="text-red-500">*</span>}
         </label>
-        <select
-          id="user-role"
-          {...register('role')}
-          disabled={isSubmitting}
-          className={inputClass(!!errors.role)}
-        >
-          {ROLE_OPTIONS.map((opt) => (
-            <option key={opt.value} value={opt.value}>
-              {opt.label}
-            </option>
-          ))}
-        </select>
+        <Controller
+          name="role_ids"
+          control={control}
+          render={({ field }) => (
+            <MultiRoleSelect
+              value={field.value}
+              onChange={field.onChange}
+              disabled={isSubmitting}
+              hasError={!!errors.role_ids}
+            />
+          )}
+        />
         <p className="text-[11px] text-ink-muted">
-          Set the user's access role.
+          Assign one or more roles to the user.
         </p>
-        {errors.role && (
-          <p className="text-xs text-red-500">{errors.role.message}</p>
+        {errors.role_ids && (
+          <p className="text-xs text-red-500">{errors.role_ids.message}</p>
         )}
       </div>
 

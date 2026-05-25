@@ -571,6 +571,210 @@ export const runIntelligenceRules = async (companyId: string | Types.ObjectId): 
   }
 
   // ────────────────────────────────────────────────────────────────────────────
+  // RULE-14: Conflicting permissions (Allow vs Deny)
+  // RULE-15: Overlapping role assignments
+  // ────────────────────────────────────────────────────────────────────────────
+
+  // Efficiently fetch all roles and their permissions
+  const companyRolePerms = await RolePermission.find({ company_id: companyObjectId }).lean();
+  const companyPermIds = [...new Set(companyRolePerms.map(rp => rp.permission_id.toString()))];
+  const { Permission } = await import('../models/Permission.model');
+  const companyPerms = await Permission.find({ _id: { $in: companyPermIds } }).lean();
+  const companyPermMap = new Map(companyPerms.map(p => [p._id.toString(), p]));
+
+  // Build role permission maps
+  const rolePermDetailsMap = new Map<string, { key: string, granted: boolean, module: string, action: string, data_scope: string }[]>();
+  for (const rp of companyRolePerms) {
+    const rId = rp.role_id.toString();
+    if (!rolePermDetailsMap.has(rId)) rolePermDetailsMap.set(rId, []);
+    
+    const perm = companyPermMap.get(rp.permission_id.toString());
+    if (perm) {
+      rolePermDetailsMap.get(rId)!.push({
+        key: `${perm.module}:${perm.action}:${perm.data_scope}`,
+        granted: rp.granted,
+        module: perm.module,
+        action: perm.action,
+        data_scope: perm.data_scope
+      });
+    }
+  }
+
+  // Get all user roles to find multiple assignments
+  const allUserRoles = await UserRole.find({ company_id: companyObjectId }).lean();
+  const userRolesMap = new Map<string, string[]>();
+  for (const ur of allUserRoles) {
+    const uId = ur.user_id.toString();
+    if (!userRolesMap.has(uId)) userRolesMap.set(uId, []);
+    userRolesMap.get(uId)!.push(ur.role_id.toString());
+  }
+
+  // Build a lookup for user objects and role objects for nice labels
+  const userMap = new Map(activeUsers.map(u => [u._id.toString(), u]));
+  const roleMap = new Map(allRoles.map(r => [r._id.toString(), r]));
+
+  for (const [uId, rIds] of userRolesMap.entries()) {
+    if (rIds.length < 2) continue; // Only relevant for users with multiple roles
+    const user = userMap.get(uId);
+    if (!user) continue;
+
+    // --- Check RULE-14 (Conflict: Allow vs Deny) ---
+    const grantedKeys = new Map<string, string>(); // perm_key -> role_id
+    const deniedKeys = new Map<string, string>();  // perm_key -> role_id
+
+    for (const rId of rIds) {
+      const perms = rolePermDetailsMap.get(rId) || [];
+      for (const p of perms) {
+        if (p.granted) grantedKeys.set(p.key, rId);
+        else deniedKeys.set(p.key, rId);
+      }
+    }
+
+    const conflicts = [];
+    for (const [key, grantRoleId] of grantedKeys.entries()) {
+      if (deniedKeys.has(key)) {
+        conflicts.push({
+          key,
+          grantRoleId,
+          denyRoleId: deniedKeys.get(key)!,
+        });
+      }
+    }
+
+    if (conflicts.length > 0) {
+      const sampleConflict = conflicts[0];
+      const grantRoleName = roleMap.get(sampleConflict.grantRoleId)?.name || 'Unknown Role';
+      const denyRoleName = roleMap.get(sampleConflict.denyRoleId)?.name || 'Unknown Role';
+
+      insightsToUpsert.push({
+        company_id: companyObjectId,
+        category: 'misconfiguration',
+        severity: 'warning',
+        title: `Conflicting permissions for ${user.full_name}`,
+        description: 'User has been assigned roles with conflicting permissions (one grants access, another explicitly denies it). Deny will override the grant.',
+        reasoning: `Found ${conflicts.length} conflict(s). E.g., "${sampleConflict.key}" is granted by "${grantRoleName}" but denied by "${denyRoleName}".`,
+        affected_object_type: 'User',
+        affected_object_id: user._id.toString(),
+        affected_object_label: user.full_name,
+        remediation_url: `/people/${user._id}`,
+        remediation_action: 'Review and adjust assigned roles',
+        is_resolved: false,
+        detected_at: new Date(),
+      });
+    }
+
+    // --- Check RULE-15 (Overlapping role assignments) ---
+    for (let i = 0; i < rIds.length; i++) {
+      for (let j = i + 1; j < rIds.length; j++) {
+        const r1 = rIds[i];
+        const r2 = rIds[j];
+
+        const perms1 = new Set((rolePermDetailsMap.get(r1) || []).filter(p => p.granted).map(p => p.key));
+        const perms2 = new Set((rolePermDetailsMap.get(r2) || []).filter(p => p.granted).map(p => p.key));
+
+        if (perms1.size === 0 && perms2.size === 0) continue;
+
+        let isSubset = true;
+        for (const k of perms1) {
+          if (!perms2.has(k)) { isSubset = false; break; }
+        }
+
+        let isSuperset = true;
+        for (const k of perms2) {
+          if (!perms1.has(k)) { isSuperset = false; break; }
+        }
+
+        if (isSubset || isSuperset) {
+          const role1Name = roleMap.get(r1)?.name || 'Unknown Role';
+          const role2Name = roleMap.get(r2)?.name || 'Unknown Role';
+          const [redundantRole, dominantRole] = isSubset ? [role1Name, role2Name] : [role2Name, role1Name];
+
+          insightsToUpsert.push({
+            company_id: companyObjectId,
+            category: 'misconfiguration',
+            severity: 'info',
+            title: `Redundant role assignment for ${user.full_name}`,
+            description: 'User is assigned multiple roles where one role provides access that is fully encompassed by another.',
+            reasoning: `Role "${redundantRole}" is fully covered by permissions in Role "${dominantRole}". Removing the redundant role is recommended.`,
+            affected_object_type: 'User',
+            affected_object_id: user._id.toString(),
+            affected_object_label: user.full_name,
+            remediation_url: `/people/${user._id}`,
+            remediation_action: 'Remove redundant role assignment',
+            is_resolved: false,
+            detected_at: new Date(),
+          });
+        }
+      }
+    }
+  }
+
+  // ────────────────────────────────────────────────────────────────────────────
+  // RULE-16: Over-permissioned user (user with effective permissions having > 10 delete/export on 'all' scope)
+  // ────────────────────────────────────────────────────────────────────────────
+  for (const user of activeUsers) {
+    const rIds = userRolesMap.get(user._id.toString()) || [];
+    if (rIds.length === 0) continue;
+
+    // Calculate effective permissions for this user
+    const userPermMap = new Map<string, boolean>();
+
+    // First pass: collect all grants
+    for (const rId of rIds) {
+      const perms = rolePermDetailsMap.get(rId) || [];
+      for (const p of perms) {
+        if (p.granted) {
+          if (!userPermMap.has(p.key)) {
+            userPermMap.set(p.key, true);
+          }
+        }
+      }
+    }
+
+    // Second pass: apply denies (deny overrides grant)
+    for (const rId of rIds) {
+      const perms = rolePermDetailsMap.get(rId) || [];
+      for (const p of perms) {
+        if (!p.granted) {
+          userPermMap.set(p.key, false);
+        }
+      }
+    }
+
+    // Count high-risk permissions (delete or export with 'all' scope)
+    let highRiskCount = 0;
+    for (const [key, granted] of userPermMap.entries()) {
+      if (!granted) continue;
+      const parts = key.split(':');
+      if (parts.length >= 3) {
+        const action = parts[1];
+        const scope = parts[2];
+        if ((action === 'delete' || action === 'export') && scope === 'all') {
+          highRiskCount++;
+        }
+      }
+    }
+
+    if (highRiskCount > 10) {
+      insightsToUpsert.push({
+        company_id: companyObjectId,
+        category: 'misconfiguration',
+        severity: 'warning',
+        title: `${user.full_name} is over-permissioned`,
+        description: `This user has ${highRiskCount} high-risk permissions (delete/export with 'all' scope) across assigned roles. Review and reduce to follow least-privilege principle.`,
+        reasoning: `User "${user.full_name}" has ${userPermMap.size} effective permissions, including ${highRiskCount} high-risk ones. Consider removing unnecessary role assignments or reducing role permission scopes.`,
+        affected_object_type: 'User',
+        affected_object_id: user._id.toString(),
+        affected_object_label: user.full_name,
+        remediation_url: `/people/${user._id}`,
+        remediation_action: 'Review and adjust user role assignments',
+        is_resolved: false,
+        detected_at: new Date(),
+      });
+    }
+  }
+
+  // ────────────────────────────────────────────────────────────────────────────
   // Upsert insights (avoid duplicates)
   // ────────────────────────────────────────────────────────────────────────────
   
@@ -1049,6 +1253,77 @@ export const runIntelligenceRules = async (companyId: string | Types.ObjectId): 
             resolved_at: new Date(),
           }
         }
+      );
+    }
+  }
+
+  // ────────────────────────────────────────────────────────────────────────────
+  // Auto-resolve RULE-14 & RULE-15 insights
+  // ────────────────────────────────────────────────────────────────────────────
+  
+  // Find which users actually triggered RULE-14/15 this run
+  const flaggedForConflict = new Set(
+    insightsToUpsert
+      .filter(i => i.title?.startsWith('Conflicting permissions for '))
+      .map(i => i.affected_object_id)
+  );
+
+  const flaggedForRedundancy = new Set(
+    insightsToUpsert
+      .filter(i => i.title?.startsWith('Redundant role assignment for '))
+      .map(i => i.affected_object_id)
+  );
+
+  // Auto-resolve RULE-14
+  const activeConflictInsights = await Insight.find({
+    company_id: companyObjectId,
+    title: { $regex: /^Conflicting permissions for / },
+    is_resolved: false
+  }).lean();
+
+  for (const insight of activeConflictInsights) {
+    if (insight.affected_object_id && !flaggedForConflict.has(insight.affected_object_id)) {
+      await Insight.updateOne(
+        { _id: insight._id },
+        { $set: { is_resolved: true, resolved_at: new Date() } }
+      );
+    }
+  }
+
+  // Auto-resolve RULE-15
+  const activeRedundancyInsights = await Insight.find({
+    company_id: companyObjectId,
+    title: { $regex: /^Redundant role assignment for / },
+    is_resolved: false
+  }).lean();
+
+  for (const insight of activeRedundancyInsights) {
+    if (insight.affected_object_id && !flaggedForRedundancy.has(insight.affected_object_id)) {
+      await Insight.updateOne(
+        { _id: insight._id },
+        { $set: { is_resolved: true, resolved_at: new Date() } }
+      );
+    }
+  }
+
+  // Auto-resolve RULE-16
+  const flaggedForOverPermission = new Set(
+    insightsToUpsert
+      .filter(i => i.title?.endsWith(' is over-permissioned'))
+      .map(i => i.affected_object_id)
+  );
+
+  const activeOverPermissionInsights = await Insight.find({
+    company_id: companyObjectId,
+    title: { $regex: / is over-permissioned$/ },
+    is_resolved: false
+  }).lean();
+
+  for (const insight of activeOverPermissionInsights) {
+    if (insight.affected_object_id && !flaggedForOverPermission.has(insight.affected_object_id)) {
+      await Insight.updateOne(
+        { _id: insight._id },
+        { $set: { is_resolved: true, resolved_at: new Date() } }
       );
     }
   }

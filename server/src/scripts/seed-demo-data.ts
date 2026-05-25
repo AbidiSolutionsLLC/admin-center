@@ -21,6 +21,7 @@ import path from 'path';
 dotenv.config({ path: path.join(__dirname, '../../.env') });
 
 import { Company, User, Department, Role, UserRole } from '../models';
+import { ROLES } from '../constants/roles';
 
 const DEMO_PASSWORD = 'Demo@12345';
 
@@ -42,9 +43,9 @@ async function seedDemoData() {
     console.log(`📦 Company: ${company.name} (${companyId})`);
 
     // ── 2. Find roles seeded by seedDatabase() ───────────────────────────────
-    const hrAdminRole = await Role.findOne({ company_id: companyId, name: 'HR Admin' });
-    const managerRole = await Role.findOne({ company_id: companyId, name: 'Manager' });
-    const employeeRole = await Role.findOne({ company_id: companyId, name: 'Employee' });
+    const hrAdminRole = await Role.findOne({ company_id: companyId, name: ROLES.HR_ADMIN });
+    const managerRole = await Role.findOne({ company_id: companyId, name: ROLES.MANAGER });
+    const employeeRole = await Role.findOne({ company_id: companyId, name: ROLES.EMPLOYEE });
 
     if (!hrAdminRole || !managerRole || !employeeRole) {
       console.warn('⚠️  Some roles not found — will skip role assignments for missing roles.');
@@ -102,7 +103,7 @@ async function seedDemoData() {
     interface UserDef {
       full_name: string;
       email: string;
-      role: 'Super Admin' | 'Admin' | 'HR' | 'Manager' | 'Employee' | 'Technician';
+      role: typeof ROLES[keyof typeof ROLES];
       lifecycle_state: 'invited' | 'onboarding' | 'active' | 'on_leave' | 'terminated' | 'archived';
       department_id?: mongoose.Types.ObjectId;
       assignRole?: mongoose.Document | null;
@@ -115,7 +116,7 @@ async function seedDemoData() {
       {
         full_name: 'Sara Mitchell',
         email: 'sara.mitchell@abidisolutions.com',
-        role: 'Manager',
+        role: ROLES.MANAGER,
         lifecycle_state: 'active',
         department_id: engineeringDept._id as mongoose.Types.ObjectId,
         assignRole: managerRole,
@@ -125,7 +126,7 @@ async function seedDemoData() {
       {
         full_name: 'James Park',
         email: 'james.park@abidisolutions.com',
-        role: 'Employee',
+        role: ROLES.EMPLOYEE,
         lifecycle_state: 'active',
         department_id: engineeringDept._id as mongoose.Types.ObjectId,
         assignRole: employeeRole,
@@ -135,7 +136,7 @@ async function seedDemoData() {
       {
         full_name: 'Aisha Okonkwo',
         email: 'aisha.okonkwo@abidisolutions.com',
-        role: 'Employee',
+        role: ROLES.EMPLOYEE,
         lifecycle_state: 'onboarding',
         department_id: engineeringDept._id as mongoose.Types.ObjectId,
         assignRole: employeeRole,
@@ -146,7 +147,7 @@ async function seedDemoData() {
       {
         full_name: 'Priya Sharma',
         email: 'priya.sharma@abidisolutions.com',
-        role: 'Employee',
+        role: ROLES.EMPLOYEE,
         lifecycle_state: 'active',
         department_id: peopleDept._id as mongoose.Types.ObjectId,
         assignRole: hrAdminRole,
@@ -156,7 +157,7 @@ async function seedDemoData() {
       {
         full_name: 'David Chen',
         email: 'david.chen@abidisolutions.com',
-        role: 'Employee',
+        role: ROLES.EMPLOYEE,
         lifecycle_state: 'invited',
         department_id: peopleDept._id as mongoose.Types.ObjectId,
         assignRole: null, // No role yet → triggers RULE-01 if activated
@@ -166,7 +167,7 @@ async function seedDemoData() {
       {
         full_name: 'Marcus Thompson',
         email: 'marcus.thompson@abidisolutions.com',
-        role: 'Employee',
+        role: ROLES.EMPLOYEE,
         lifecycle_state: 'active',
         department_id: financeDept._id as mongoose.Types.ObjectId,
         assignRole: null, // ← INTENTIONALLY no role → RULE-01 fires
@@ -176,7 +177,7 @@ async function seedDemoData() {
       {
         full_name: 'Linda Vasquez',
         email: 'linda.vasquez@abidisolutions.com',
-        role: 'Employee',
+        role: ROLES.EMPLOYEE,
         lifecycle_state: 'on_leave',
         department_id: financeDept._id as mongoose.Types.ObjectId,
         assignRole: employeeRole,
@@ -218,6 +219,7 @@ async function seedDemoData() {
           await UserRole.create({
             user_id: user._id,
             role_id: (def.assignRole as any)._id,
+            company_id: companyId,
             assigned_by: user._id,
             assigned_at: new Date(),
           });

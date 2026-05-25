@@ -16,11 +16,13 @@ import {
   getOrgHistory,
 } from '../controllers/organization.controller';
 
+import { PERMISSION_GROUPS } from '../constants/roles';
+
 const router = Router();
 
 router.use(requireAuth);
 
-const DEPT_MANAGERS = ['Super Admin', 'HR Admin', 'Ops Admin'];
+const DEPT_MANAGERS = PERMISSION_GROUPS.ROLE_ADMINS;
 
 // Static routes first
 router.get('/', getDepartments);

@@ -5,11 +5,14 @@ import { asyncHandler } from '../utils/asyncHandler';
 import { AppError } from '../utils/AppError';
 import { auditLogger } from '../lib/auditLogger';
 import { App, IApp } from '../models/App.model';
+import { PERMISSION_GROUPS } from '../constants/roles';
 import { AppAssignment, IAppAssignment } from '../models/AppAssignment.model';
 import { User } from '../models/User.model';
 import { Role } from '../models/Role.model';
 import { Department } from '../models/Department.model';
 import { UserRole } from '../models/UserRole.model';
+import { Group } from '../models/Group.model';
+import { GroupMember } from '../models/GroupMember.model';
 import { Types } from 'mongoose';
 
 /**
@@ -23,6 +26,7 @@ const createAppSchema = z.object({
   category: z.string().min(1),
   provider: z.string().optional(),
   dependencies: z.array(z.string()).optional(),
+  owner_id: z.string().optional(),
 });
 
 /**
@@ -36,6 +40,7 @@ const updateAppSchema = z.object({
   provider: z.string().optional(),
   status: z.enum(['active', 'inactive', 'maintenance']).optional(),
   dependencies: z.array(z.string()).optional(),
+  owner_id: z.string().optional(),
   is_active: z.boolean().optional(),
 });
 
@@ -62,9 +67,62 @@ const revokeAppSchema = z.object({
 export const getApps = asyncHandler(async (req: Request, res: Response) => {
   const companyId = req.user!.company_id;
 
-  const apps = await App.find({ company_id: companyId }).sort({ name: 1 }).lean();
+  const search = req.query.search as string;
+  const status = req.query.status as string;
+  const category = req.query.category as string;
+  const page = parseInt(req.query.page as string) || 1;
+  const limit = parseInt(req.query.limit as string) || 12;
+  const skip = (page - 1) * limit;
 
-  // Enrich with assignment counts
+  const isItAdmin = PERMISSION_GROUPS.IT_ADMINS.includes((req.user as any)?.user_role);
+
+  // Find system apps (no company_id) and company-specific apps
+  const query: any = {
+    $or: [{ company_id: companyId }, { company_id: { $exists: false } }],
+  };
+
+  if (!isItAdmin) {
+    query.is_active = true;
+    query.status = { $ne: 'inactive' };
+  }
+
+  if (search) {
+    query.$and = [
+      {
+        $or: [
+          { name: { $regex: search, $options: 'i' } },
+          { category: { $regex: search, $options: 'i' } },
+          { description: { $regex: search, $options: 'i' } },
+        ],
+      },
+    ];
+  }
+
+  if (status) {
+    if (query.$and) {
+      query.$and.push({ status });
+    } else {
+      query.status = status;
+    }
+  }
+
+  if (category) {
+    if (query.$and) {
+      query.$and.push({ category });
+    } else {
+      query.category = category;
+    }
+  }
+
+  const total = await App.countDocuments(query);
+
+  const apps = await App.find(query)
+    .sort({ name: 1 })
+    .skip(skip)
+    .limit(limit)
+    .lean();
+
+  // Enrich with assignment counts and owner info
   const appsWithCounts = await Promise.all(
     apps.map(async (app) => {
       const assignmentCount = await AppAssignment.countDocuments({
@@ -73,9 +131,17 @@ export const getApps = asyncHandler(async (req: Request, res: Response) => {
         is_active: true,
       });
 
+      let owner_info = null;
+      if (app.owner_id) {
+        owner_info = await User.findById(app.owner_id)
+          .select('full_name email')
+          .lean();
+      }
+
       return {
         ...app,
         assignment_count: assignmentCount,
+        owner_info,
       };
     })
   );
@@ -83,6 +149,12 @@ export const getApps = asyncHandler(async (req: Request, res: Response) => {
   res.status(200).json({
     success: true,
     data: appsWithCounts,
+    pagination: {
+      page,
+      limit,
+      total,
+      pages: Math.ceil(total / limit),
+    },
   });
 });
 
@@ -96,11 +168,17 @@ export const getAppById = asyncHandler(async (req: Request, res: Response) => {
 
   const app = await App.findOne({
     _id: appId,
-    company_id: companyId,
+    $or: [{ company_id: companyId }, { company_id: { $exists: false } }],
   }).lean();
 
   if (!app) {
     throw new AppError('App not found', 404, 'APP_NOT_FOUND');
+  }
+
+  // Prevent non-admins from retrieving disabled apps
+  const isItAdmin = PERMISSION_GROUPS.IT_ADMINS.includes((req.user as any)?.user_role);
+  if ((!app.is_active || app.status === 'inactive') && !isItAdmin) {
+    throw new AppError('App is disabled', 403, 'APP_DISABLED');
   }
 
   // Get active assignments
@@ -110,11 +188,43 @@ export const getAppById = asyncHandler(async (req: Request, res: Response) => {
     is_active: true,
   }).lean();
 
+  // Enrich assignments with target names
+  const enrichedAssignments = await Promise.all(
+    assignments.map(async (assignment) => {
+      let target_name = '';
+      if (assignment.target_type === 'role') {
+        const role = await Role.findById(assignment.target_id).select('name').lean();
+        target_name = role ? role.name : 'Unknown Role';
+      } else if (assignment.target_type === 'department') {
+        const dept = await Department.findById(assignment.target_id).select('name').lean();
+        target_name = dept ? dept.name : 'Unknown Department';
+      } else if (assignment.target_type === 'user') {
+        const user = await User.findById(assignment.target_id).select('full_name').lean();
+        target_name = user ? user.full_name : 'Unknown User';
+      } else if (assignment.target_type === 'group') {
+        const group = await Group.findById(assignment.target_id).select('name').lean();
+        target_name = group ? group.name : 'Unknown Group';
+      }
+      return {
+        ...assignment,
+        target_name,
+      };
+    })
+  );
+
+  let owner_info = null;
+  if (app.owner_id) {
+    owner_info = await User.findById(app.owner_id)
+      .select('full_name email')
+      .lean();
+  }
+
   res.status(200).json({
     success: true,
     data: {
       ...app,
-      assignments,
+      owner_info,
+      assignments: enrichedAssignments,
     },
   });
 });
@@ -174,7 +284,7 @@ export const updateApp = asyncHandler(async (req: Request, res: Response) => {
 
   const app = await App.findOne({
     _id: appId,
-    company_id: companyId,
+    $or: [{ company_id: companyId }, { company_id: { $exists: false } }],
   });
 
   if (!app) {
@@ -183,15 +293,50 @@ export const updateApp = asyncHandler(async (req: Request, res: Response) => {
 
   const beforeState = { ...app.toObject() };
 
+  const deactivating = 
+    (validated.is_active === false && app.is_active !== false) ||
+    (validated.status === 'inactive' && app.status !== 'inactive');
+
+  if (deactivating) {
+    // Check if any other active app depends on this app (by slug)
+    const dependentApps = await App.find({
+      company_id: companyId,
+      is_active: true,
+      status: { $ne: 'inactive' },
+      _id: { $ne: app._id },
+      dependencies: app.slug,
+    }).select('name').lean();
+
+    if (dependentApps.length > 0) {
+      const dependentNames = dependentApps.map(a => a.name).join(', ');
+      throw new AppError(
+        `Cannot disable app "${app.name}" because the following active app(s) depend on it: ${dependentNames}`,
+        400,
+        'DEPENDENCY_CONFLICT'
+      );
+    }
+  }
+
   Object.assign(app, validated);
   await app.save();
 
   const afterState = { ...app.toObject() };
 
+  let action = 'apps.updated';
+  if (validated.is_active === true && beforeState.is_active === false) {
+    action = 'apps.enabled';
+  } else if (validated.is_active === false && beforeState.is_active === true) {
+    action = 'apps.disabled';
+  } else if (validated.status === 'inactive' && beforeState.status !== 'inactive') {
+    action = 'apps.disabled';
+  } else if (validated.status !== 'inactive' && beforeState.status === 'inactive') {
+    action = 'apps.enabled';
+  }
+
   // Audit log
   await auditLogger.log({
     req,
-    action: 'apps.updated',
+    action,
     module: 'apps',
     object_type: 'App',
     object_id: app._id.toString(),
@@ -279,6 +424,10 @@ export const assignApp = asyncHandler(async (req: Request, res: Response) => {
     throw new AppError('App not found', 404, 'APP_NOT_FOUND');
   }
 
+  if (!app.is_active || app.status === 'inactive') {
+    throw new AppError('Cannot assign a disabled app. Enable it first.', 400, 'APP_DISABLED');
+  }
+
   // Verify target exists
   if (validated.target_type === 'role') {
     const role = await Role.findOne({
@@ -303,6 +452,14 @@ export const assignApp = asyncHandler(async (req: Request, res: Response) => {
     });
     if (!user) {
       throw new AppError('Target user not found', 404, 'TARGET_NOT_FOUND');
+    }
+  } else if (validated.target_type === 'group') {
+    const group = await Group.findOne({
+      _id: new Types.ObjectId(validated.target_id),
+      company_id: companyId,
+    });
+    if (!group) {
+      throw new AppError('Target group not found', 404, 'TARGET_NOT_FOUND');
     }
   }
 
@@ -350,6 +507,10 @@ export const assignApp = asyncHandler(async (req: Request, res: Response) => {
     });
   } else if (validated.target_type === 'user') {
     affectedUsers = 1;
+  } else if (validated.target_type === 'group') {
+    affectedUsers = await GroupMember.countDocuments({
+      group_id: targetIdObj,
+    });
   }
 
   // Audit log
@@ -441,10 +602,10 @@ export const getAppAssignmentTimeline = asyncHandler(async (req: Request, res: R
   const companyId = req.user!.company_id;
   const appId = req.params.id;
 
-  // Verify app exists
+  // Verify app exists (support company-scoped and system-scoped apps)
   const app = await App.findOne({
     _id: appId,
-    company_id: companyId,
+    $or: [{ company_id: companyId }, { company_id: { $exists: false } }],
   });
 
   if (!app) {

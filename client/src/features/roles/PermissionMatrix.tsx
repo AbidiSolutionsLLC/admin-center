@@ -98,21 +98,19 @@ export const PermissionMatrix: React.FC<PermissionMatrixProps> = ({
     const updates: PermissionUpdate[] = [];
 
     localState.forEach((granted, key) => {
-      if (granted !== null) {
-        const [permModule, permAction, permScope] = key.split(':');
-        const permission = permissions.find(
-          (p) =>
-            p.module === permModule &&
-            p.action === permAction &&
-            p.data_scope === permScope
-        );
+      const [permModule, permAction, permScope] = key.split(':');
+      const permission = permissions.find(
+        (p) =>
+          p.module === permModule &&
+          p.action === permAction &&
+          p.data_scope === permScope
+      );
 
-        if (permission) {
-          updates.push({
-            permission_id: permission._id,
-            granted,
-          });
-        }
+      if (permission) {
+        updates.push({
+          permission_id: permission._id,
+          granted, // Can be boolean or null
+        });
       }
     });
 

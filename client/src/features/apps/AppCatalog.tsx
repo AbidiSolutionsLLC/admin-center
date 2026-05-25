@@ -42,13 +42,13 @@ export const AppCatalog: React.FC<AppCatalogProps> = ({
   const getStatusColor = (status: App['status']) => {
     switch (status) {
       case 'active':
-        return 'bg-success text-success';
+        return 'bg-success/10 text-success font-semibold uppercase text-[10px] tracking-wider';
       case 'inactive':
-        return 'bg-ink-muted text-ink-secondary';
+        return 'bg-ink-muted/10 text-ink-secondary font-semibold uppercase text-[10px] tracking-wider';
       case 'maintenance':
-        return 'bg-warning text-warning';
+        return 'bg-warning/10 text-warning font-semibold uppercase text-[10px] tracking-wider';
       default:
-        return 'bg-ink-muted text-ink-secondary';
+        return 'bg-ink-muted/10 text-ink-secondary font-semibold uppercase text-[10px] tracking-wider';
     }
   };
 
@@ -68,6 +68,7 @@ export const AppCatalog: React.FC<AppCatalogProps> = ({
     <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
       {apps.map((app) => {
         const Icon = getCategoryIcon(app.category);
+        const isDisabled = app.is_active === false || app.status === 'inactive';
         const isSelected = selectedApp?._id === app._id;
 
         return (
@@ -75,6 +76,8 @@ export const AppCatalog: React.FC<AppCatalogProps> = ({
             key={app._id}
             onClick={() => onSelect(app)}
             className={`p-4 rounded-lg border text-left transition-all hover:shadow-card ${
+              isDisabled ? 'opacity-65 grayscale-[30%]' : ''
+            } ${
               isSelected
                 ? 'border-primary bg-primary-light shadow-card'
                 : 'border-line bg-surface hover:border-primary/50'
@@ -90,13 +93,20 @@ export const AppCatalog: React.FC<AppCatalogProps> = ({
                   <p className="text-xs text-ink-muted">{app.category}</p>
                 </div>
               </div>
-              <span
-                className={`text-xs px-2 py-0.5 rounded-full ${getStatusColor(
-                  app.status
-                )}`}
-              >
-                {app.status}
-              </span>
+              <div className="flex flex-col items-end gap-1">
+                <span
+                  className={`text-xs px-2 py-0.5 rounded-full ${getStatusColor(
+                    app.status
+                  )}`}
+                >
+                  {app.status}
+                </span>
+                {app.is_active === false && (
+                  <span className="text-[9px] font-bold tracking-wider px-1.5 py-0.5 bg-error/10 text-error rounded-full uppercase">
+                    Disabled
+                  </span>
+                )}
+              </div>
             </div>
 
             {app.description && (

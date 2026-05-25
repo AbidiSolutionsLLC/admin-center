@@ -27,6 +27,7 @@ export const QUERY_KEYS = {
   ROLE_PERMISSIONS: (id: string) => ['role', 'permissions', id] as const,
   ROLE_USERS: (id: string) => ['role', 'users', id] as const,
   ALL_PERMISSIONS: ['permissions', 'all'] as const,
+  ACCESS_MAP: ['access-map'] as const,
   // Apps
   APPS: ['apps'] as const,
   APP_DETAIL: (id: string) => ['app', id] as const,

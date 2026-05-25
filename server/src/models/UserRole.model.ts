@@ -4,6 +4,7 @@ import { Schema, model, Document, Types } from 'mongoose';
 export interface IUserRole extends Document {
   user_id: Types.ObjectId;
   role_id: Types.ObjectId;
+  company_id: Types.ObjectId;
   assigned_by: Types.ObjectId;
   assigned_at: Date;
 }
@@ -11,6 +12,7 @@ export interface IUserRole extends Document {
 const UserRoleSchema = new Schema<IUserRole>({
   user_id: { type: Schema.Types.ObjectId, ref: 'User', required: true, index: true },
   role_id: { type: Schema.Types.ObjectId, ref: 'Role', required: true, index: true },
+  company_id: { type: Schema.Types.ObjectId, ref: 'Company', required: true, index: true },
   assigned_by: { type: Schema.Types.ObjectId, ref: 'User', required: true },
   assigned_at: { type: Date, default: Date.now },
 }, { timestamps: false });

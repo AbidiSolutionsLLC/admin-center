@@ -17,6 +17,7 @@ import TeamsPage from './pages/teams/TeamsPage';
 import PeoplePage from './pages/people/PeoplePage';
 import UserDetailPage from './pages/people/UserDetailPage';
 import RolesPage from './pages/roles/RolesPage';
+import GroupsPage from './pages/groups/GroupsPage';
 import AppsPage from './pages/apps/AppsPage';
 import SecurityPage from './pages/security/SecurityPage';
 import AuditLogsPage from './pages/audit-logs/AuditLogsPage';
@@ -48,6 +49,7 @@ function App() {
               <Route path={ROUTES.PEOPLE} element={<PeoplePage />} />
               <Route path="/people/:id" element={<UserDetailPage />} />
               <Route path={ROUTES.ROLES} element={<RolesPage />} />
+              <Route path={ROUTES.GROUPS} element={<GroupsPage />} />
               <Route path={ROUTES.APPS} element={<AppsPage />} />
               <Route path={ROUTES.SECURITY} element={<SecurityPage />} />
               <Route path={ROUTES.AUDIT_LOGS} element={<AuditLogsPage />} />

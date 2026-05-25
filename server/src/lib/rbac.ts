@@ -4,6 +4,7 @@ import { Role, IRole } from '../models/Role.model';
 import { Permission, IPermission } from '../models/Permission.model';
 import { RolePermission, IRolePermission } from '../models/RolePermission.model';
 import { UserRole, IUserRole } from '../models/UserRole.model';
+import { rbacCache } from './rbacCache';
 
 /**
  * Represents a resolved permission with its grant/deny state
@@ -38,6 +39,12 @@ export const resolveUserPermissions = async (
   userId: Types.ObjectId,
   companyId: Types.ObjectId
 ): Promise<UserEffectivePermissions> => {
+  const cacheKey = userId.toString();
+  const cached = rbacCache.getUserPermissions(cacheKey);
+  if (cached) {
+    return cached;
+  }
+
   // Get all roles assigned to this user
   const userRoles = await UserRole.find({ user_id: userId, company_id: companyId }).lean();
 
@@ -102,7 +109,7 @@ export const resolveUserPermissions = async (
     }
   }
 
-  return {
+  const result = {
     user_id: userId,
     company_id: companyId,
     roles: roles.map((r) => ({
@@ -111,6 +118,9 @@ export const resolveUserPermissions = async (
     })),
     permissions: permissionMap,
   };
+
+  rbacCache.setUserPermissions(cacheKey, result);
+  return result;
 };
 
 /**
@@ -197,7 +207,7 @@ export const getRolePermissions = async (
 export const batchUpdateRolePermissions = async (
   roleId: Types.ObjectId,
   companyId: Types.ObjectId,
-  updates: Array<{ permission_id: Types.ObjectId; granted: boolean }>
+  updates: Array<{ permission_id: Types.ObjectId; granted: boolean | null }>
 ): Promise<number> => {
   // Verify role belongs to company
   const role = await Role.findOne({
@@ -213,20 +223,30 @@ export const batchUpdateRolePermissions = async (
 
   // Process each update
   for (const update of updates) {
-    await RolePermission.updateOne(
-      {
+    if (update.granted === null) {
+      // Remove the permission entry if granted is null (Not Set)
+      await RolePermission.deleteOne({
         role_id: roleId,
         permission_id: update.permission_id,
-      },
-      {
-        $set: {
+      });
+    } else {
+      // Upsert the permission entry
+      await RolePermission.updateOne(
+        {
           role_id: roleId,
           permission_id: update.permission_id,
-          granted: update.granted,
         },
-      },
-      { upsert: true }
-    );
+        {
+          $set: {
+            role_id: roleId,
+            permission_id: update.permission_id,
+            company_id: companyId, // Ensure company_id is set
+            granted: update.granted,
+          },
+        },
+        { upsert: true }
+      );
+    }
     updatedCount++;
   }
 

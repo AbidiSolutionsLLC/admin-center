@@ -1,9 +1,8 @@
-// server/src/models/User.model.ts
 import { Schema, model, Document, Types } from 'mongoose';
 import { Company } from './Company.model';
 import { generateEmployeeId } from '../services/employeeId';
+import { ROLES, UserRole } from '../constants/roles';
 
-export type UserRoleType = 'Super Admin' | 'Admin' | 'HR' | 'Manager' | 'Employee' | 'Technician';
 export type LifecycleState = 'invited' | 'onboarding' | 'active' | 'probation' | 'on_leave' | 'deactivated' | 'terminated' | 'archived';
 export type EmploymentType = 'full_time' | 'part_time' | 'contractor' | 'intern';
 
@@ -19,7 +18,7 @@ export interface IUser extends Document {
   team_id?: Types.ObjectId;
   manager_id?: Types.ObjectId;
   secondary_manager_ids?: Types.ObjectId[];
-  role: UserRoleType;
+  role: UserRole;
   lifecycle_state: LifecycleState;
   lifecycle_changed_at: Date;
   hire_date?: Date;
@@ -50,8 +49,8 @@ const UserSchema = new Schema<IUser>({
   secondary_manager_ids: [{ type: Schema.Types.ObjectId, ref: 'User' }],
   role: { 
     type: String, 
-    enum: ['Super Admin', 'Admin', 'HR', 'Manager', 'Employee', 'Technician'],
-    default: 'Employee',
+    enum: Object.values(ROLES),
+    default: ROLES.EMPLOYEE,
     required: true,
   },
   lifecycle_state: {

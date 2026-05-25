@@ -13,7 +13,7 @@ import { AppError } from '../utils/AppError';
  * // Only super admins and ops admins can access
  * router.post('/something', requireRole(['Super Admin', 'Ops Admin']), handler);
  */
-export const requireRole = (allowedRoles: string[]) => {
+export const requireRole = (allowedRoles: readonly string[]) => {
   return (req: Request, res: Response, next: NextFunction) => {
     // req.user is set by requireAuth middleware
     const userRole = (req.user as any)?.user_role;

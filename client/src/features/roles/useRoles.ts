@@ -13,15 +13,17 @@ interface ApiResponse<T> {
 /**
  * Fetch all roles for the current company
  */
-export const useRoles = () => {
+export const useRoles = (search?: string) => {
   return useQuery({
-    queryKey: QUERY_KEYS.ROLES,
+    queryKey: [...QUERY_KEYS.ROLES, search],
     queryFn: async () => {
-      const response = await apiClient.get<ApiResponse<Role[]>>('/roles');
+      const params = search ? { search } : {};
+      const response = await apiClient.get<ApiResponse<Role[]>>('/roles', { params });
       return response.data.data;
     },
   });
 };
+
 
 /**
  * Fetch a single role by ID with its permissions
@@ -99,6 +101,84 @@ export const useDeleteRole = () => {
     },
     onError: (error: any) => {
       const message = error.response?.data?.error || 'Failed to delete role';
+      toast.error(message);
+    },
+  });
+};
+/**
+ * Fetch all users assigned to a specific role
+ */
+export const useRoleUsers = (roleId: string) => {
+  return useQuery({
+    queryKey: QUERY_KEYS.ROLE_USERS(roleId),
+    queryFn: async () => {
+      const response = await apiClient.get<ApiResponse<any[]>>(`/roles/${roleId}/users`);
+      return response.data.data;
+    },
+    enabled: !!roleId,
+  });
+};
+
+/**
+ * Assign a user to a role
+ */
+export const useAssignRole = () => {
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: async ({ roleId, userId }: { roleId: string; userId: string }) => {
+      console.log('DEBUG: Assigning role', { roleId, userId });
+      const response = await apiClient.post(`/roles/${roleId}/users`, { user_id: userId });
+      return response.data;
+    },
+    onSuccess: (_, { roleId }) => {
+      queryClient.invalidateQueries({ queryKey: QUERY_KEYS.ROLE_USERS(roleId) });
+      queryClient.invalidateQueries({ queryKey: QUERY_KEYS.ROLES });
+      toast.success('User assigned to role');
+    },
+    onError: (error: any) => {
+      const message = error.response?.data?.error || 'Failed to assign role';
+      toast.error(message);
+    },
+  });
+};
+
+/**
+ * Unassign a user from a role
+ */
+export const useUnassignRole = () => {
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: async ({ roleId, userId }: { roleId: string; userId: string }) => {
+      const response = await apiClient.delete(`/roles/${roleId}/users/${userId}`);
+      return response.data;
+    },
+    onSuccess: (_, { roleId }) => {
+      queryClient.invalidateQueries({ queryKey: QUERY_KEYS.ROLE_USERS(roleId) });
+      queryClient.invalidateQueries({ queryKey: QUERY_KEYS.ROLES });
+      toast.success('User unassigned from role');
+    },
+    onError: (error: any) => {
+      const message = error.response?.data?.error || 'Failed to unassign role';
+      toast.error(message);
+    },
+  });
+};
+
+/**
+ * Simulate permissions for a user with hypothetical roles
+ */
+export const useSimulatePermissions = () => {
+  return useMutation({
+    mutationFn: async ({ userId, hypotheticalRoleIds }: { userId: string; hypotheticalRoleIds: string[] }) => {
+      const response = await apiClient.post(`/roles/simulate-permissions?user_id=${userId}`, {
+        hypothetical_role_ids: hypotheticalRoleIds,
+      });
+      return response.data.data;
+    },
+    onError: (error: any) => {
+      const message = error.response?.data?.error || 'Failed to simulate permissions';
       toast.error(message);
     },
   });

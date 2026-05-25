@@ -16,6 +16,7 @@ import {
   deleteUser,
   resendInvite,
   getUserHistory,
+  getEffectivePermissions,
 } from '../controllers/people.controller';
 
 import { assignUserOrg } from '../controllers/organization.controller';
@@ -92,6 +93,12 @@ router.get('/:id', getUserById);
  * Returns audit history for a single user
  */
 router.get('/:id/history', requireRole(PEOPLE_MANAGERS), getUserHistory);
+
+/**
+ * GET /people/:id/effective-permissions
+ * Returns effective permissions for a single user
+ */
+router.get('/:id/effective-permissions', requireRole(PEOPLE_MANAGERS), getEffectivePermissions);
 
 /**
  * POST /people/:id/resend-invite

@@ -4,6 +4,7 @@ import { Role } from '../models/Role.model';
 import { RolePermission } from '../models/RolePermission.model';
 import { SecurityPolicy } from '../models/SecurityPolicy.model';
 import { Types } from 'mongoose';
+import { ROLES } from '../constants/roles';
 
 /**
  * Seeds all permissions into the database.
@@ -86,32 +87,32 @@ export const seedSystemRoles = async (companyId: string | Types.ObjectId): Promi
 
   const systemRoles = [
     {
-      name: 'Super Admin',
+      name: ROLES.SUPER_ADMIN,
       description: 'Full system access - can manage all modules, users, and settings',
       type: 'system' as const,
     },
     {
-      name: 'HR Admin',
+      name: ROLES.HR_ADMIN,
       description: 'Manages people, lifecycle, roles, and org structure',
       type: 'system' as const,
     },
     {
-      name: 'IT Admin',
+      name: ROLES.IT_ADMIN,
       description: 'Manages apps, integrations, security policies, and technical settings',
       type: 'system' as const,
     },
     {
-      name: 'Ops Admin',
+      name: ROLES.OPS_ADMIN,
       description: 'Manages workflows, policies, locations, and operational settings',
       type: 'system' as const,
     },
     {
-      name: 'Manager',
+      name: ROLES.MANAGER,
       description: 'Can view and manage their department and team members',
       type: 'system' as const,
     },
     {
-      name: 'Employee',
+      name: ROLES.EMPLOYEE,
       description: 'Basic user - can view own profile and company directory',
       type: 'system' as const,
     },
@@ -143,7 +144,7 @@ export const seedSystemRoles = async (companyId: string | Types.ObjectId): Promi
   console.log(`✅ System roles created: ${Object.keys(createdRoles).length}`);
 
   // Assign permissions to roles
-  await assignRolePermissions(createdRoles);
+  await assignRolePermissions(createdRoles, companyObjectId);
 
   console.log('✅ System role permissions assigned');
 };
@@ -152,7 +153,10 @@ export const seedSystemRoles = async (companyId: string | Types.ObjectId): Promi
  * Assigns permissions to system roles.
  * Defines what each role can do across all modules.
  */
-async function assignRolePermissions(roles: { [key: string]: Types.ObjectId }): Promise<void> {
+async function assignRolePermissions(
+  roles: { [key: string]: Types.ObjectId },
+  companyId: Types.ObjectId
+): Promise<void> {
   // Get all permissions from DB
   const allPermissions = await Permission.find({}).lean();
   const permissionMap = new Map<string, Types.ObjectId>();
@@ -172,100 +176,103 @@ async function assignRolePermissions(roles: { [key: string]: Types.ObjectId }): 
     if (!permId) return;
     await RolePermission.updateOne(
       { role_id: roleId, permission_id: permId },
-      { $setOnInsert: { role_id: roleId, permission_id: permId, granted } },
+      { 
+        $set: { granted },
+        $setOnInsert: { role_id: roleId, permission_id: permId, company_id: companyId } 
+      },
       { upsert: true }
     );
   };
 
   // ── SUPER ADMIN: Full access to everything ──
-  if (roles['Super Admin']) {
+  if (roles[ROLES.SUPER_ADMIN]) {
     for (const [, permId] of permissionMap) {
-      await assign(roles['Super Admin'], permId, true);
+      await assign(roles[ROLES.SUPER_ADMIN], permId, true);
     }
   }
 
   // ── HR ADMIN: People, roles, org, audit logs, insights ──
-  if (roles['HR Admin']) {
+  if (roles[ROLES.HR_ADMIN]) {
     const modules = ['people', 'roles', 'organization', 'audit_logs', 'insights'];
     const actions = ['create', 'read', 'update', 'delete', 'export'];
 
     for (const module of modules) {
       for (const action of actions) {
-        await assign(roles['HR Admin'], getPerm(module, action, 'all'), true);
+        await assign(roles[ROLES.HR_ADMIN], getPerm(module, action, 'all'), true);
       }
     }
   }
 
   // ── IT ADMIN: Apps, integrations, security, data fields ──
-  if (roles['IT Admin']) {
+  if (roles[ROLES.IT_ADMIN]) {
     const modules = ['apps', 'integrations', 'security', 'data_fields'];
     const actions = ['create', 'read', 'update', 'delete', 'export'];
 
     for (const module of modules) {
       for (const action of actions) {
-        await assign(roles['IT Admin'], getPerm(module, action, 'all'), true);
+        await assign(roles[ROLES.IT_ADMIN], getPerm(module, action, 'all'), true);
       }
     }
 
     // IT Admin can also read people, org, audit logs, insights
-    await assign(roles['IT Admin'], getPerm('people', 'read', 'all'), true);
-    await assign(roles['IT Admin'], getPerm('organization', 'read', 'all'), true);
-    await assign(roles['IT Admin'], getPerm('audit_logs', 'read', 'all'), true);
-    await assign(roles['IT Admin'], getPerm('insights', 'read', 'all'), true);
-    await assign(roles['IT Admin'], getPerm('insights', 'update', 'all'), true);
+    await assign(roles[ROLES.IT_ADMIN], getPerm('people', 'read', 'all'), true);
+    await assign(roles[ROLES.IT_ADMIN], getPerm('organization', 'read', 'all'), true);
+    await assign(roles[ROLES.IT_ADMIN], getPerm('audit_logs', 'read', 'all'), true);
+    await assign(roles[ROLES.IT_ADMIN], getPerm('insights', 'read', 'all'), true);
+    await assign(roles[ROLES.IT_ADMIN], getPerm('insights', 'update', 'all'), true);
   }
 
   // ── OPS ADMIN: Workflows, policies, locations, notifications ──
-  if (roles['Ops Admin']) {
+  if (roles[ROLES.OPS_ADMIN]) {
     const modules = ['workflows', 'policies', 'locations', 'notifications'];
     const actions = ['create', 'read', 'update', 'delete', 'export'];
 
     for (const module of modules) {
       for (const action of actions) {
-        await assign(roles['Ops Admin'], getPerm(module, action, 'all'), true);
+        await assign(roles[ROLES.OPS_ADMIN], getPerm(module, action, 'all'), true);
       }
     }
 
     // Ops Admin can also read people, org, audit logs, insights
-    await assign(roles['Ops Admin'], getPerm('people', 'read', 'all'), true);
-    await assign(roles['Ops Admin'], getPerm('organization', 'read', 'all'), true);
-    await assign(roles['Ops Admin'], getPerm('audit_logs', 'read', 'all'), true);
-    await assign(roles['Ops Admin'], getPerm('insights', 'read', 'all'), true);
+    await assign(roles[ROLES.OPS_ADMIN], getPerm('people', 'read', 'all'), true);
+    await assign(roles[ROLES.OPS_ADMIN], getPerm('organization', 'read', 'all'), true);
+    await assign(roles[ROLES.OPS_ADMIN], getPerm('audit_logs', 'read', 'all'), true);
+    await assign(roles[ROLES.OPS_ADMIN], getPerm('insights', 'read', 'all'), true);
   }
 
   // ── MANAGER: Department-level access to people and org ──
-  if (roles['Manager']) {
+  if (roles[ROLES.MANAGER]) {
     // Can manage their department
-    await assign(roles['Manager'], getPerm('people', 'read', 'department'), true);
-    await assign(roles['Manager'], getPerm('people', 'update', 'department'), true);
-    await assign(roles['Manager'], getPerm('organization', 'read', 'department'), true);
-    await assign(roles['Manager'], getPerm('apps', 'read', 'all'), true);
+    await assign(roles[ROLES.MANAGER], getPerm('people', 'read', 'department'), true);
+    await assign(roles[ROLES.MANAGER], getPerm('people', 'update', 'department'), true);
+    await assign(roles[ROLES.MANAGER], getPerm('organization', 'read', 'department'), true);
+    await assign(roles[ROLES.MANAGER], getPerm('apps', 'read', 'all'), true);
 
     // Can read company-wide org structure and policies
-    await assign(roles['Manager'], getPerm('organization', 'read', 'all'), true);
-    await assign(roles['Manager'], getPerm('policies', 'read', 'all'), true);
+    await assign(roles[ROLES.MANAGER], getPerm('organization', 'read', 'all'), true);
+    await assign(roles[ROLES.MANAGER], getPerm('policies', 'read', 'all'), true);
 
     // Can read insights
-    await assign(roles['Manager'], getPerm('insights', 'read', 'department'), true);
+    await assign(roles[ROLES.MANAGER], getPerm('insights', 'read', 'department'), true);
   }
 
   // ── EMPLOYEE: Own data only ──
-  if (roles['Employee']) {
+  if (roles[ROLES.EMPLOYEE]) {
     // Can read own profile
-    await assign(roles['Employee'], getPerm('people', 'read', 'own'), true);
-    await assign(roles['Employee'], getPerm('people', 'update', 'own'), true);
+    await assign(roles[ROLES.EMPLOYEE], getPerm('people', 'read', 'own'), true);
+    await assign(roles[ROLES.EMPLOYEE], getPerm('people', 'update', 'own'), true);
 
     // Can read company org structure (directory)
-    await assign(roles['Employee'], getPerm('organization', 'read', 'all'), true);
+    await assign(roles[ROLES.EMPLOYEE], getPerm('organization', 'read', 'all'), true);
     
     // Can read apps assigned to them
-    await assign(roles['Employee'], getPerm('apps', 'read', 'own'), true);
+    await assign(roles[ROLES.EMPLOYEE], getPerm('apps', 'read', 'own'), true);
     
     // Can read policies
-    await assign(roles['Employee'], getPerm('policies', 'read', 'all'), true);
+    await assign(roles[ROLES.EMPLOYEE], getPerm('policies', 'read', 'all'), true);
 
     // Can read insights assigned to them
-    await assign(roles['Employee'], getPerm('insights', 'read', 'own'), true);
+    await assign(roles[ROLES.EMPLOYEE], getPerm('insights', 'read', 'own'), true);
   }
 }
 

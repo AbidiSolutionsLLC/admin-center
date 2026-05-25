@@ -4,12 +4,14 @@ import { Schema, model, Document, Types } from 'mongoose';
 export interface IRolePermission extends Document {
   role_id: Types.ObjectId;
   permission_id: Types.ObjectId;
+  company_id: Types.ObjectId;
   granted: boolean;
 }
 
 const RolePermissionSchema = new Schema<IRolePermission>({
   role_id: { type: Schema.Types.ObjectId, ref: 'Role', required: true, index: true },
   permission_id: { type: Schema.Types.ObjectId, ref: 'Permission', required: true },
+  company_id: { type: Schema.Types.ObjectId, ref: 'Company', required: true, index: true },
   granted: { type: Boolean, required: true },
 }, { timestamps: false });
 

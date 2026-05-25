@@ -19,9 +19,10 @@ import { Location } from '../models/Location.model';
 import { Team } from '../models/Team.model';
 import { handleLifecycleEvent } from '../lib/workflowEngine';
 import { deliverNotification } from '../lib/notificationEngine';
-import { PERMISSION_GROUPS } from '../constants/roles';
+import { PERMISSION_GROUPS, ROLES } from '../constants/roles';
 import { NotificationTemplate } from '../models/NotificationTemplate.model';
 import { AuditEvent } from '../models/AuditEvent.model';
+import { resolveUserPermissions } from '../lib/rbac';
 
 
 // ── Types & Interfaces ───────────────────────────────────────────────────────
@@ -55,7 +56,8 @@ const InviteUserSchema = z.object({
   team_id: z.string().optional().nullable(),
   manager_id: z.string().optional().nullable(),
   secondary_manager_ids: z.array(z.string()).optional(),
-  role: z.enum(['Super Admin', 'Admin', 'HR', 'Manager', 'Employee', 'Technician']).optional(),
+  role: z.enum(Object.values(ROLES) as [string, ...string[]]).optional(),
+  role_ids: z.array(z.string()).optional(),
   employment_type: z.enum(['full_time', 'part_time', 'contractor', 'intern']).optional(),
   hire_date: z.string().optional().nullable(),
   location_id: z.string().optional().nullable(),
@@ -70,7 +72,8 @@ const UpdateUserSchema = z.object({
   team_id: z.string().optional().nullable(),
   manager_id: z.string().optional().nullable(),
   secondary_manager_ids: z.array(z.string()).optional(),
-  role: z.enum(['Super Admin', 'Admin', 'HR', 'Manager', 'Employee', 'Technician']).optional(),
+  role: z.enum(Object.values(ROLES) as [string, ...string[]]).optional(),
+  role_ids: z.array(z.string()).optional(),
   employment_type: z.enum(['full_time', 'part_time', 'contractor', 'intern']).optional(),
   hire_date: z.string().optional().nullable(),
   termination_date: z.string().optional().nullable(),
@@ -100,7 +103,8 @@ const BulkInviteRowSchema = z.object({
   team_id: z.string().optional(),
   manager_id: z.string().optional(),
   secondary_manager_ids: z.array(z.string()).optional(),
-  role: z.enum(['Super Admin', 'Admin', 'HR', 'Manager', 'Employee', 'Technician']).optional(),
+  role: z.enum(Object.values(ROLES) as [string, ...string[]]).optional(),
+  role_ids: z.array(z.string()).optional(),
   employment_type: z.enum(['full_time', 'part_time', 'contractor', 'intern']).optional(),
   hire_date: z.string().optional(),
   location_id: z.string().optional(),
@@ -194,7 +198,7 @@ async function validateEmailDomain(req: Request, email: string): Promise<void> {
 
     // Check if email domain is in allowed_domains (strict or subdomain)
     const isDomainAllowed = allowed_domains.some(domain => {
-      const normalized = domain.toLowerCase();
+      const normalized = domain.toLowerCase().replace(/^@/, '');
       return emailDomain === normalized || emailDomain.endsWith('.' + normalized);
     });
 
@@ -429,7 +433,7 @@ async function runLifecycleAutomations(
   if (transitionKey === 'onboarding_to_active') {
     // RBAC: Grant 'Employee' role by default if not set
     if (!user.role) {
-      user.role = 'Employee';
+      user.role = ROLES.EMPLOYEE;
     }
     user.is_active = true;
     await user.save();
@@ -849,6 +853,28 @@ export const inviteUser = asyncHandler(async (req: Request, res: Response) => {
     hire_date: input.hire_date ? new Date(input.hire_date) : undefined,
   });
 
+  // Assign multiple roles if provided
+  if (input.role_ids && input.role_ids.length > 0) {
+    const roles = await Role.find({
+      _id: { $in: input.role_ids },
+      company_id: req.user.company_id,
+      is_active: true,
+    });
+    
+    if (roles.length !== input.role_ids.length) {
+      throw new AppError('One or more roles not found or inactive', 404, 'NOT_FOUND');
+    }
+
+    const userRolesToCreate = roles.map(role => ({
+      user_id: user._id,
+      role_id: role._id,
+      company_id: req.user.company_id,
+      assigned_by: req.user.userId,
+    }));
+    
+    await UserRole.insertMany(userRolesToCreate);
+  }
+
   // Generate secure invite token
   const rawToken = crypto.randomBytes(32).toString('hex');
   const tokenHash = crypto.createHash('sha256').update(rawToken).digest('hex');
@@ -942,7 +968,7 @@ export const updateUser = asyncHandler(async (req: Request, res: Response) => {
 
   // 3. Validate manager (if changed)
   if (input.manager_id) {
-    if (input.manager_id === req.params.id) {
+    if (input.manager_id === getRouteId(req.params.id)) {
       throw new AppError('User cannot be their own manager', 400, 'SELF_ASSIGNMENT');
     }
     const manager = await User.findOne({
@@ -955,7 +981,7 @@ export const updateUser = asyncHandler(async (req: Request, res: Response) => {
 
   // 3.5 Validate secondary managers (if changed)
   if (input.secondary_manager_ids) {
-    if (input.secondary_manager_ids.includes(req.params.id)) {
+    if (input.secondary_manager_ids.includes(getRouteId(req.params.id))) {
       throw new AppError('User cannot be their own secondary manager', 400, 'SELF_ASSIGNMENT');
     }
     const managers = await User.find({
@@ -1002,6 +1028,50 @@ export const updateUser = asyncHandler(async (req: Request, res: Response) => {
 
   Object.assign(user, updates);
   await user.save();
+
+  // Sync multiple roles if provided
+  if (input.role_ids !== undefined) {
+    const roleIds = input.role_ids;
+    
+    if (roleIds.length > 0) {
+      const roles = await Role.find({
+        _id: { $in: roleIds },
+        company_id: req.user.company_id,
+        is_active: true,
+      });
+      
+      if (roles.length !== roleIds.length) {
+        throw new AppError('One or more roles not found or inactive', 404, 'NOT_FOUND');
+      }
+    }
+
+    await UserRole.deleteMany({
+      user_id: user._id,
+      company_id: req.user.company_id
+    });
+
+    if (roleIds.length > 0) {
+      const userRolesToCreate = roleIds.map(roleId => ({
+        user_id: user._id,
+        role_id: roleId,
+        company_id: req.user.company_id,
+        assigned_by: req.user.userId,
+      }));
+      
+      await UserRole.insertMany(userRolesToCreate);
+    }
+    
+    await auditLogger.log({
+      req,
+      action: 'user.roles_updated',
+      module: 'people',
+      object_type: 'User',
+      object_id: user._id.toString(),
+      object_label: user.full_name,
+      before_state: null,
+      after_state: { role_ids: roleIds },
+    });
+  }
 
   // Audit log — location change fires a dedicated event
   if (updates.location_id && updates.location_id !== beforeState.location_id) {
@@ -1831,4 +1901,38 @@ export const resendInvite = asyncHandler(async (req: Request, res: Response) => 
   });
 
   res.json({ success: true, message: 'Invitation resent successfully' });
+});
+
+/**
+ * GET /people/:id/effective-permissions
+ * Returns the effective permissions and roles for a single user.
+ */
+export const getEffectivePermissions = asyncHandler(async (req: Request, res: Response) => {
+  const userId = getRouteId(req.params.id);
+  const user = await User.findOne({
+    _id: userId,
+    company_id: req.user.company_id,
+  });
+
+  if (!user) {
+    throw new AppError('User not found', 404, 'NOT_FOUND');
+  }
+
+  const effective = await resolveUserPermissions(user._id, new Types.ObjectId(req.user.company_id));
+
+  // Convert Map to plain object
+  const permissionsObj: Record<string, boolean> = {};
+  for (const [key, val] of effective.permissions.entries()) {
+    permissionsObj[key] = val;
+  }
+
+  res.json({
+    success: true,
+    data: {
+      user_id: effective.user_id,
+      company_id: effective.company_id,
+      roles: effective.roles,
+      permissions: permissionsObj,
+    },
+  });
 });
