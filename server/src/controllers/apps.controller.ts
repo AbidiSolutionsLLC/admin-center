@@ -4,6 +4,7 @@ import { z } from 'zod';
 import { asyncHandler } from '../utils/asyncHandler';
 import { AppError } from '../utils/AppError';
 import { auditLogger } from '../lib/auditLogger';
+import { escapeRegExp } from '../utils/regex';
 import { App, IApp } from '../models/App.model';
 import { PERMISSION_GROUPS } from '../constants/roles';
 import { AppAssignment, IAppAssignment } from '../models/AppAssignment.model';
@@ -87,12 +88,13 @@ export const getApps = asyncHandler(async (req: Request, res: Response) => {
   }
 
   if (search) {
+    const sanitizedSearch = escapeRegExp(search);
     query.$and = [
       {
         $or: [
-          { name: { $regex: search, $options: 'i' } },
-          { category: { $regex: search, $options: 'i' } },
-          { description: { $regex: search, $options: 'i' } },
+          { name: { $regex: sanitizedSearch, $options: 'i' } },
+          { category: { $regex: sanitizedSearch, $options: 'i' } },
+          { description: { $regex: sanitizedSearch, $options: 'i' } },
         ],
       },
     ];

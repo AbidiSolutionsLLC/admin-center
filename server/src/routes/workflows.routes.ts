@@ -2,6 +2,7 @@
 import { Router } from 'express';
 import { requireAuth } from '../middleware/auth';
 import { requireRole } from '../middleware/requireRole';
+import { PERMISSION_GROUPS } from '../constants/roles';
 import {
   getWorkflows,
   getWorkflowById,
@@ -34,7 +35,7 @@ router.get('/', getWorkflows);
  * POST /workflows
  * Create a new workflow (draft)
  */
-router.post('/', createWorkflow);
+router.post('/', requireRole(PERMISSION_GROUPS.OPS_ADMINS), createWorkflow);
 
 /**
  * POST /workflows/trigger/lifecycle_changed
@@ -52,49 +53,49 @@ router.get('/:id', getWorkflowById);
  * PUT /workflows/:id
  * Update a draft workflow
  */
-router.put('/:id', requireRole(['super_admin', 'ops_admin']), updateWorkflow);
+router.put('/:id', requireRole(PERMISSION_GROUPS.OPS_ADMINS), updateWorkflow);
 
 /**
  * POST /workflows/:id/enable
  * Enable a draft workflow
  */
-router.post('/:id/enable', requireRole(['super_admin', 'ops_admin']), enableWorkflow);
+router.post('/:id/enable', requireRole(PERMISSION_GROUPS.OPS_ADMINS), enableWorkflow);
 
 /**
  * POST /workflows/:id/disable
  * Disable an enabled workflow
  */
-router.post('/:id/disable', requireRole(['super_admin', 'ops_admin']), disableWorkflow);
+router.post('/:id/disable', requireRole(PERMISSION_GROUPS.OPS_ADMINS), disableWorkflow);
 
 /**
  * DELETE /workflows/:id
  * Delete a draft workflow
  */
-router.delete('/:id', requireRole(['super_admin', 'ops_admin']), deleteWorkflow);
+router.delete('/:id', requireRole(PERMISSION_GROUPS.OPS_ADMINS), deleteWorkflow);
 
 /**
  * POST /workflows/:id/steps
  * Add a step to a workflow
  */
-router.post('/:id/steps', requireRole(['super_admin', 'ops_admin']), addWorkflowStep);
+router.post('/:id/steps', requireRole(PERMISSION_GROUPS.OPS_ADMINS), addWorkflowStep);
 
 /**
  * PUT /workflows/:id/steps/:stepId
  * Update an existing step
  */
-router.put('/:id/steps/:stepId', requireRole(['super_admin', 'ops_admin']), updateWorkflowStep);
+router.put('/:id/steps/:stepId', requireRole(PERMISSION_GROUPS.OPS_ADMINS), updateWorkflowStep);
 
 /**
  * DELETE /workflows/:id/steps/:stepId
  * Delete a step
  */
-router.delete('/:id/steps/:stepId', requireRole(['super_admin', 'ops_admin']), deleteWorkflowStep);
+router.delete('/:id/steps/:stepId', requireRole(PERMISSION_GROUPS.OPS_ADMINS), deleteWorkflowStep);
 
 /**
  * POST /workflows/:id/steps/reorder
  * Reorder steps via drag-and-drop
  */
-router.post('/:id/steps/reorder', requireRole(['super_admin', 'ops_admin']), reorderWorkflowSteps);
+router.post('/:id/steps/reorder', requireRole(PERMISSION_GROUPS.OPS_ADMINS), reorderWorkflowSteps);
 
 /**
  * GET /workflows/:id/runs
@@ -106,6 +107,6 @@ router.get('/:id/runs', getWorkflowRuns);
  * POST /workflows/:id/test
  * Test workflow with mock payload
  */
-router.post('/:id/test', requireRole(['super_admin', 'ops_admin']), testWorkflow);
+router.post('/:id/test', requireRole(PERMISSION_GROUPS.OPS_ADMINS), testWorkflow);
 
 export default router;
