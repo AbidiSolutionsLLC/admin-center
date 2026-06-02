@@ -12,7 +12,8 @@ import {
   LayoutDashboard,
   Shield,
   X,
-  Package
+  Package,
+  FileText
 } from 'lucide-react';
 import { useAuthStore } from '@/store/useAuthStore';
 import { useUIStore } from '@/store/useUIStore';
@@ -39,6 +40,7 @@ const navGroups = [
       { label: 'Roles & Permissions', href: ROUTES.ROLES, icon: Shield },
       { label: 'Groups', href: ROUTES.GROUPS, icon: Users },
       { label: 'Apps', href: ROUTES.APPS, icon: Package },
+      { label: 'Policies', href: ROUTES.POLICIES, icon: FileText },
     ],
   },
   {

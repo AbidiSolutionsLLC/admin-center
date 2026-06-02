@@ -148,6 +148,56 @@ export const useArchivePolicy = () => {
 };
 
 /**
+ * Hard deletes a draft or archived policy version.
+ * Produces audit event: policy.deleted
+ * Used on: PoliciesPage (version actions)
+ */
+export const useDeletePolicy = () => {
+  const queryClient = useQueryClient();
+
+  return useMutation<void, Error, { policy_id: string }>({
+    mutationFn: async ({ policy_id }: { policy_id: string }) => {
+      await apiClient.delete(`/policies/${policy_id}`);
+    },
+    onSuccess: (_, vars) => {
+      queryClient.invalidateQueries({ queryKey: QUERY_KEYS.POLICIES });
+      toast.success('Policy deleted successfully');
+    },
+    onError: (error: unknown) => {
+      const err = error as { response?: { data?: { error?: string } } };
+      const message = err?.response?.data?.error || 'Failed to delete policy';
+      toast.error(message);
+    },
+  });
+};
+
+/**
+ * Rolls back to a specific policy version.
+ * Produces audit event: policy.rolled_back
+ * Used on: PoliciesPage (version actions)
+ */
+export const useRollbackPolicy = () => {
+  const queryClient = useQueryClient();
+
+  return useMutation<PolicyVersion, Error, { policy_id: string }>({
+    mutationFn: async ({ policy_id }: { policy_id: string }) => {
+      const { data } = await apiClient.post(`/policies/${policy_id}/rollback`);
+      return data.data;
+    },
+    onSuccess: (_, vars) => {
+      queryClient.invalidateQueries({ queryKey: QUERY_KEYS.POLICIES });
+      queryClient.invalidateQueries({ queryKey: QUERY_KEYS.POLICY_DETAIL(vars.policy_id) });
+      toast.success('Policy rolled back successfully');
+    },
+    onError: (error: unknown) => {
+      const err = error as { response?: { data?: { error?: string } } };
+      const message = err?.response?.data?.error || 'Failed to rollback policy';
+      toast.error(message);
+    },
+  });
+};
+
+/**
  * Acknowledges a policy version on behalf of the current user.
  * Used on: PoliciesPage (acknowledge modal)
  */
@@ -173,12 +223,18 @@ export const useAcknowledgePolicy = (policyId: string) => {
   });
 };
 
+export interface PolicyAcknowledgmentReport {
+  acknowledged: PolicyAcknowledgment[];
+  pending: Array<{ _id: string; user: any }>;
+  total_targeted: number;
+}
+
 /**
- * Fetches all acknowledgments for a specific policy version.
+ * Fetches all acknowledgments and pending users for a specific policy version.
  * Used on: PoliciesPage (acknowledgments list)
  */
 export const usePolicyAcknowledgments = (policyId: string) => {
-  return useQuery<PolicyAcknowledgment[]>({
+  return useQuery<PolicyAcknowledgmentReport>({
     queryKey: QUERY_KEYS.POLICY_ACKNOWLEDGMENTS(policyId),
     queryFn: async () => {
       const { data } = await apiClient.get(`/policies/${policyId}/acknowledgments`);

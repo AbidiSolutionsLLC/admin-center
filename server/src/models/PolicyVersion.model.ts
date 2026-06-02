@@ -54,40 +54,31 @@ PolicyVersionSchema.index({ company_id: 1, created_at: -1 });
  * This pre-save hook prevents modifications to any document with status='published'.
  * New versions should be created instead of updating existing ones.
  */
-PolicyVersionSchema.pre('save', function(next: any) {
+PolicyVersionSchema.pre('save', function() {
   if (this.isModified() && !this.isNew && this.status === 'published') {
-    const error = new Error('Cannot modify published policy version. Create a new version instead.');
-    return next(error);
+    throw new Error('Cannot modify published policy version. Create a new version instead.');
   }
-  next();
 });
 
-// Prevent updates via Mongoose middleware
-PolicyVersionSchema.pre('updateOne', function(next: any) {
+PolicyVersionSchema.pre('updateOne', function() {
   const filter = this.getFilter();
   if (filter.status === 'published') {
-    const error = new Error('Cannot update published policy version. Create a new version instead.');
-    return next(error);
+    throw new Error('Cannot update published policy version. Create a new version instead.');
   }
-  next();
 });
 
-PolicyVersionSchema.pre('findOneAndUpdate', function(next: any) {
+PolicyVersionSchema.pre('findOneAndUpdate', function() {
   const filter = this.getFilter();
   if (filter.status === 'published') {
-    const error = new Error('Cannot update published policy version. Create a new version instead.');
-    return next(error);
+    throw new Error('Cannot update published policy version. Create a new version instead.');
   }
-  next();
 });
 
-PolicyVersionSchema.pre('updateMany', function(next: any) {
+PolicyVersionSchema.pre('updateMany', function() {
   const filter = this.getFilter();
   if (filter.status === 'published') {
-    const error = new Error('Cannot update published policy version. Create a new version instead.');
-    return next(error);
+    throw new Error('Cannot update published policy version. Create a new version instead.');
   }
-  next();
 });
 
 export const PolicyVersion = model<IPolicyVersion>('PolicyVersion', PolicyVersionSchema);

@@ -17,6 +17,8 @@ import {
   conflictCheckHandler,
   getPolicyVersionDiff,
   getPolicyAssignments,
+  deletePolicy,
+  rollbackPolicy,
 } from '../controllers/policies.controller';
 
 const router = Router();
@@ -56,17 +58,18 @@ router.get('/versions', getPolicyVersions);
 router.get('/versions/diff', getPolicyVersionDiff);
 
 /**
- * GET /policies/:id
- * Get a specific policy version by ID
- */
-router.get('/:id', getPolicyVersionById);
-
-/**
  * POST /policies/publish
  * Publish a new policy version (increments version number)
  * Requires super_admin or ops_admin role
  */
 router.post('/publish', requireRole(PERMISSION_GROUPS.OPS_ADMINS), publishPolicy);
+
+/**
+ * GET /policies/:id
+ * Get a specific policy version by ID
+ */
+router.get('/:id', getPolicyVersionById);
+
 
 /**
  * PUT /policies/:id/draft
@@ -79,6 +82,18 @@ router.put('/:id/draft', requireRole(PERMISSION_GROUPS.OPS_ADMINS), updatePolicy
  * Archive a published policy version (soft delete)
  */
 router.post('/:id/archive', requireRole(PERMISSION_GROUPS.OPS_ADMINS), archivePolicy);
+
+/**
+ * DELETE /policies/:id
+ * Hard delete a draft or archived policy version
+ */
+router.delete('/:id', requireRole(PERMISSION_GROUPS.OPS_ADMINS), deletePolicy);
+
+/**
+ * POST /policies/:id/rollback
+ * Creates a new policy version based on a previous version.
+ */
+router.post('/:id/rollback', requireRole(PERMISSION_GROUPS.OPS_ADMINS), rollbackPolicy);
 
 /**
  * POST /policies/:id/acknowledge

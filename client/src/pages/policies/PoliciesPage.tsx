@@ -16,14 +16,19 @@ import {
   useSaveAssignmentRules,
   usePolicyConflictCheck,
   usePolicyAssignments,
+  useDeletePolicy,
+  useRollbackPolicy,
 } from '@/features/policies/hooks/usePolicies';
 import { useUserStats } from '@/features/people/hooks/useUserStats';
 import { useDepartments } from '@/features/organization/hooks/useDepartments';
 import { useRoles } from '@/features/roles/useRoles';
+import { useGroups } from '@/features/groups/useGroups';
+import { useUsers } from '@/features/people/hooks/useUsers';
 import { TableSkeleton } from '@/components/ui/TableSkeleton';
 import { ErrorState } from '@/components/ui/ErrorState';
 import { EmptyState } from '@/components/ui/EmptyState';
 import { Modal } from '@/components/ui/Modal';
+import { ConfirmDialog } from '@/components/ui/ConfirmDialog';
 import { PolicyEditor } from '@/components/ui/PolicyEditor';
 import { cn } from '@/utils/cn';
 import { formatDate } from '@/utils/formatDate';
@@ -89,11 +94,14 @@ export default function PoliciesPage() {
   const { data: policies, isLoading, isError, refetch } = usePolicies();
   const publishMutation = usePublishPolicy();
   const archiveMutation = useArchivePolicy();
+  const deleteMutation = useDeletePolicy();
 
   // ── Modal state ──────────────────────────────────────────────────────
   const [isPublishModalOpen, setIsPublishModalOpen] = useState(false);
   const [selectedPolicy, setSelectedPolicy] = useState<PolicyVersion | null>(null);
   const [activeDetailTab, setActiveDetailTab] = useState<'content' | 'versions' | 'acknowledgments' | 'targeting'>('content');
+  const [policyToDelete, setPolicyToDelete] = useState<string | null>(null);
+  const [policyToArchive, setPolicyToArchive] = useState<string | null>(null);
 
   // ── Filters ──────────────────────────────────────────────────────────
   const [search, setSearch] = useState('');
@@ -230,7 +238,8 @@ export default function PoliciesPage() {
                         setSelectedPolicy(policy);
                         setActiveDetailTab('content');
                       }}
-                      onArchive={() => archiveMutation.mutate({ policy_id: policy._id })}
+                      onArchive={() => setPolicyToArchive(policy._id)}
+                      onDelete={() => setPolicyToDelete(policy._id)}
                     />
                   ))}
                 </tbody>
@@ -257,6 +266,41 @@ export default function PoliciesPage() {
           onTabChange={setActiveDetailTab}
         />
       )}
+
+      {/* ── Confirm Modals ── */}
+      <ConfirmDialog
+        isOpen={!!policyToDelete}
+        title="Delete Policy"
+        description="Are you sure you want to delete this policy? This action cannot be undone."
+        confirmLabel="Delete Policy"
+        isLoading={deleteMutation.isPending}
+        onConfirm={() => {
+          if (policyToDelete) {
+            deleteMutation.mutate(
+              { policy_id: policyToDelete },
+              { onSuccess: () => setPolicyToDelete(null) }
+            );
+          }
+        }}
+        onClose={() => setPolicyToDelete(null)}
+      />
+
+      <ConfirmDialog
+        isOpen={!!policyToArchive}
+        title="Archive Policy"
+        description="Are you sure you want to archive this policy? Archived policies are no longer active but their history is preserved."
+        confirmLabel="Archive Policy"
+        isLoading={archiveMutation.isPending}
+        onConfirm={() => {
+          if (policyToArchive) {
+            archiveMutation.mutate(
+              { policy_id: policyToArchive },
+              { onSuccess: () => setPolicyToArchive(null) }
+            );
+          }
+        }}
+        onClose={() => setPolicyToArchive(null)}
+      />
     </div>
   );
 }
@@ -392,9 +436,10 @@ interface PolicyRowProps {
   policy: PolicyVersion;
   onView: () => void;
   onArchive: () => void;
+  onDelete: () => void;
 }
 
-function PolicyRow({ policy, onView, onArchive }: PolicyRowProps) {
+function PolicyRow({ policy, onView, onArchive, onDelete }: PolicyRowProps) {
   const { data: ackStatus } = useAcknowledgmentStatus(policy._id);
 
   return (
@@ -452,10 +497,19 @@ function PolicyRow({ policy, onView, onArchive }: PolicyRowProps) {
           {policy.status === 'published' && (
             <button
               onClick={onArchive}
-              className="h-7 px-3 text-xs font-medium rounded-md border border-line bg-white text-ink-secondary hover:text-error hover:border-error/30 hover:bg-error-light transition-colors inline-flex items-center gap-1.5"
+              className="h-7 px-3 text-xs font-medium rounded-md border border-line bg-white text-ink-secondary hover:text-warning hover:border-warning/30 hover:bg-warning-light transition-colors inline-flex items-center gap-1.5"
               title="Archive this version"
             >
               <Archive className="w-3.5 h-3.5" />
+            </button>
+          )}
+          {policy.status !== 'published' && (
+            <button
+              onClick={onDelete}
+              className="h-7 px-3 text-xs font-medium rounded-md border border-line bg-white text-ink-secondary hover:text-error hover:border-error/30 hover:bg-error-light transition-colors inline-flex items-center gap-1.5"
+              title="Delete this policy"
+            >
+              <X className="w-3.5 h-3.5" />
             </button>
           )}
           {ackStatus?.acknowledged && (
@@ -819,6 +873,8 @@ function PolicyVersionsView({
   onSelectionChange,
 }: PolicyVersionsViewProps) {
   const { data: versions, isLoading } = usePolicyVersions(policyKey);
+  const rollbackMutation = useRollbackPolicy();
+  const [versionToRollback, setVersionToRollback] = useState<{ id: string; num: number } | null>(null);
 
   if (isLoading) return <TableSkeleton rows={4} columns={4} />;
 
@@ -863,6 +919,9 @@ function PolicyVersionsView({
               </th>
               <th className="text-[11px] font-semibold text-ink-secondary uppercase tracking-wider h-10 px-4 text-left">
                 Publisher
+              </th>
+              <th className="text-[11px] font-semibold text-ink-secondary uppercase tracking-wider h-10 px-4 text-right">
+                Actions
               </th>
             </tr>
           </thead>
@@ -909,11 +968,42 @@ function PolicyVersionsView({
                 <td className="h-10 px-4 text-sm text-ink-secondary">
                   {version.published_by?.full_name || '—'}
                 </td>
+                <td className="h-10 px-4 text-right">
+                  <button
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      setVersionToRollback({ id: version._id, num: version.version_number });
+                    }}
+                    disabled={rollbackMutation.isPending || version.status !== 'published'}
+                    className="h-7 px-3 text-xs font-medium rounded-md border border-line bg-white text-ink hover:bg-surface-alt transition-colors disabled:opacity-50 inline-flex items-center gap-1.5"
+                    title="Rollback to this version"
+                  >
+                    <History className="w-3.5 h-3.5" />
+                    Rollback
+                  </button>
+                </td>
               </tr>
             ))}
           </tbody>
         </table>
       </div>
+
+      <ConfirmDialog
+        isOpen={!!versionToRollback}
+        title={`Rollback to v${versionToRollback?.num}`}
+        description={`Are you sure you want to rollback to version ${versionToRollback?.num}? A new version will be created based on this one.`}
+        confirmLabel="Rollback"
+        isLoading={rollbackMutation.isPending}
+        onConfirm={() => {
+          if (versionToRollback) {
+            rollbackMutation.mutate(
+              { policy_id: versionToRollback.id },
+              { onSuccess: () => setVersionToRollback(null) }
+            );
+          }
+        }}
+        onClose={() => setVersionToRollback(null)}
+      />
     </div>
   );
 }
@@ -993,15 +1083,22 @@ function VersionDiffView({ policyKey, versionA, versionB, onClose }: VersionDiff
 // ── Tab: Acknowledgments View ───────────────────────────────────────────────
 
 function PolicyAcknowledgmentsView({ policyId }: { policyId: string }) {
-  const { data: acknowledgments, isLoading } = usePolicyAcknowledgments(policyId);
+  const { data: report, isLoading } = usePolicyAcknowledgments(policyId);
   const { data: ackStatus } = useAcknowledgmentStatus(policyId);
-  const { data: userStats } = useUserStats();
 
-  const totalUsers = userStats?.total ?? 0;
-  const acknowledgedCount = acknowledgments?.length || 0;
+  const totalUsers = report?.total_targeted ?? 0;
+  const acknowledgedCount = report?.acknowledged?.length || 0;
   const percentage = totalUsers > 0 ? Math.round((acknowledgedCount / totalUsers) * 100) : 0;
 
   if (isLoading) return <TableSkeleton rows={4} columns={3} />;
+
+  const acknowledgments = report?.acknowledged || [];
+  const pending = report?.pending || [];
+
+  const allUsers = [
+    ...acknowledgments.map(a => ({ _id: a._id, user: a.user, acknowledged_at: a.acknowledged_at, status: 'Acknowledged' as const })),
+    ...pending.map(p => ({ _id: p._id, user: p.user, acknowledged_at: null, status: 'Pending' as const }))
+  ];
 
   return (
     <div className="space-y-4">
@@ -1027,12 +1124,12 @@ function PolicyAcknowledgmentsView({ policyId }: { policyId: string }) {
         )}
       </div>
 
-      {/* Acknowledged Users List */}
+      {/* Users List */}
       <div>
         <h4 className="text-sm font-semibold text-ink mb-2">
-          Acknowledged By
+          Targeted Users
         </h4>
-        {acknowledgments && acknowledgments.length > 0 ? (
+        {allUsers.length > 0 ? (
           <div className="border border-line rounded-md overflow-hidden max-h-64 overflow-y-auto">
             <table className="w-full">
               <thead className="bg-surface-base border-b border-line">
@@ -1041,18 +1138,32 @@ function PolicyAcknowledgmentsView({ policyId }: { policyId: string }) {
                     User
                   </th>
                   <th className="text-[11px] font-semibold text-ink-secondary uppercase tracking-wider h-10 px-4 text-left">
+                    Status
+                  </th>
+                  <th className="text-[11px] font-semibold text-ink-secondary uppercase tracking-wider h-10 px-4 text-left">
                     Acknowledged At
                   </th>
                 </tr>
               </thead>
               <tbody>
-                {acknowledgments.map((ack) => (
-                  <tr key={ack._id} className="border-b border-line last:border-0">
+                {allUsers.map((item) => (
+                  <tr key={item._id} className="border-b border-line last:border-0">
                     <td className="h-10 px-4 text-sm text-ink">
-                      {ack.user.full_name}
+                      {item.user.full_name}
+                    </td>
+                    <td className="h-10 px-4">
+                      {item.status === 'Acknowledged' ? (
+                        <span className="inline-flex items-center gap-1 text-[11px] font-semibold text-emerald-700 bg-emerald-50 border border-emerald-200 rounded-full px-2.5 py-0.5">
+                          Acknowledged
+                        </span>
+                      ) : (
+                        <span className="inline-flex items-center gap-1 text-[11px] font-semibold text-amber-700 bg-amber-50 border border-amber-200 rounded-full px-2.5 py-0.5">
+                          Pending
+                        </span>
+                      )}
                     </td>
                     <td className="h-10 px-4 text-sm text-ink-secondary">
-                      {formatDate(ack.acknowledged_at)}
+                      {item.acknowledged_at ? formatDate(item.acknowledged_at) : '—'}
                     </td>
                   </tr>
                 ))}
@@ -1063,7 +1174,7 @@ function PolicyAcknowledgmentsView({ policyId }: { policyId: string }) {
           <div className="p-8 text-center border border-line rounded-md">
             <Users className="w-8 h-8 text-ink-muted mx-auto mb-2" />
             <p className="text-sm text-ink-secondary">
-              No acknowledgments yet
+              No users are targeted by this policy yet
             </p>
           </div>
         )}
@@ -1191,6 +1302,8 @@ interface TargetingModalProps {
 function TargetingModal({ isOpen, onClose, saveMutation, onSaved }: TargetingModalProps) {
   const { data: departments } = useDepartments();
   const { data: roles } = useRoles();
+  const { data: groups } = useGroups();
+  const { data: users } = useUsers();
   const [rules, setRules] = useState<Array<{ target_type: PolicyTargetType; target_id: string }>>([
     { target_type: 'all', target_id: 'all' },
   ]);
@@ -1262,16 +1375,43 @@ function TargetingModal({ isOpen, onClose, saveMutation, onSaved }: TargetingMod
       );
     }
 
-    // For 'user' and 'group', fall back to text input (these would need dedicated selectors in production)
-    return (
-      <input
-        type="text"
-        value={rule.target_id}
-        onChange={(e) => updateRule(index, 'target_id', e.target.value)}
-        placeholder={`Enter ${rule.target_type} ID...`}
-        className="flex-1 h-9 px-3 text-sm rounded-md border border-line bg-white text-ink placeholder:text-ink-muted focus:outline-none focus:ring-2 focus:ring-primary/30 focus:border-primary transition-all duration-150"
-      />
-    );
+    if (rule.target_type === 'group') {
+      return (
+        <select
+          value={rule.target_id}
+          onChange={(e) => updateRule(index, 'target_id', e.target.value)}
+          className="flex-1 h-9 px-3 text-sm rounded-md border border-line bg-white text-ink focus:outline-none focus:ring-2 focus:ring-primary/30 focus:border-primary transition-all duration-150"
+          aria-label="Select group"
+        >
+          <option value="">Select group...</option>
+          {groups?.map((group) => (
+            <option key={group._id} value={group._id}>
+              {group.name}
+            </option>
+          ))}
+        </select>
+      );
+    }
+
+    if (rule.target_type === 'user') {
+      return (
+        <select
+          value={rule.target_id}
+          onChange={(e) => updateRule(index, 'target_id', e.target.value)}
+          className="flex-1 h-9 px-3 text-sm rounded-md border border-line bg-white text-ink focus:outline-none focus:ring-2 focus:ring-primary/30 focus:border-primary transition-all duration-150"
+          aria-label="Select user"
+        >
+          <option value="">Select user...</option>
+          {users?.map((user) => (
+            <option key={user._id} value={user._id}>
+              {user.full_name}
+            </option>
+          ))}
+        </select>
+      );
+    }
+
+    return null;
   };
 
   return (

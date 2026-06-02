@@ -16,13 +16,13 @@ import { Types } from 'mongoose';
 // ── Zod Schemas ──────────────────────────────────────────────────────────────
 
 const PublishPolicySchema = z.object({
-  title: z.string().min(1, 'Title is required').max(200),
-  content: z.string().min(1, 'Content is required'),
+  title: z.string().trim().min(1, 'Title is required').max(200),
+  content: z.string().trim().min(1, 'Content is required'),
   category: z.enum(['hr', 'it', 'security', 'compliance', 'operations', 'other']),
-  effective_date: z.string().refine((val) => !isNaN(Date.parse(val)), {
+  effective_date: z.string().trim().refine((val) => !isNaN(Date.parse(val)), {
     message: 'Invalid date format',
   }),
-  summary: z.string().optional(),
+  summary: z.string().trim().optional(),
   assignment_rules: z
     .array(
       z.object({
@@ -34,14 +34,14 @@ const PublishPolicySchema = z.object({
 });
 
 const UpdateDraftPolicySchema = z.object({
-  title: z.string().min(1).max(200).optional(),
-  content: z.string().min(1).optional(),
+  title: z.string().trim().min(1).max(200).optional(),
+  content: z.string().trim().min(1).optional(),
   category: z.enum(['hr', 'it', 'security', 'compliance', 'operations', 'other']).optional(),
   effective_date: z
-    .string()
+    .string().trim()
     .refine((val) => !isNaN(Date.parse(val)), { message: 'Invalid date format' })
     .optional(),
-  summary: z.string().optional(),
+  summary: z.string().trim().optional(),
 });
 
 const AcknowledgePolicySchema = z.object({
@@ -52,9 +52,9 @@ const AssignmentRulesSchema = z.object({
   rules: z.array(
     z.object({
       target_type: z.enum(['all', 'role', 'department', 'group', 'user']),
-      target_id: z.string().min(1, 'Target ID is required'),
+      target_id: z.string().trim().min(1, 'Target ID is required'),
     })
-  ),
+  ).min(1, 'At least one assignment rule is required'),
 });
 
 // ── Label resolvers for assignment targets ───────────────────────────────────
@@ -74,7 +74,28 @@ async function resolveTargetLabel(
 ): Promise<string> {
   if (targetType === 'all') return TARGET_LABELS.all;
 
-  // For now, use a generic label. In production, resolve from actual collections.
+  try {
+    if (targetType === 'user') {
+      const { User } = await import('../models/User.model');
+      const user = await User.findById(targetId).select('full_name');
+      if (user) return user.full_name;
+    } else if (targetType === 'role') {
+      const { Role } = await import('../models/Role.model');
+      const role = await Role.findById(targetId).select('name');
+      if (role) return role.name;
+    } else if (targetType === 'department') {
+      const { Department } = await import('../models/Department.model');
+      const dept = await Department.findById(targetId).select('name');
+      if (dept) return dept.name;
+    } else if (targetType === 'group') {
+      const { Group } = await import('../models/Group.model');
+      const group = await Group.findById(targetId).select('name');
+      if (group) return group.name;
+    }
+  } catch (err) {
+    console.error(`Failed to resolve target label for ${targetType} ${targetId}`, err);
+  }
+
   return `${TARGET_LABELS[targetType] || 'Target'} (${targetId})`;
 }
 
@@ -125,8 +146,12 @@ async function resolveTargetedUsers(
         break;
 
       case 'group':
-        // TODO: Implement group targeting when Team model supports it
-        // For now, skip group targeting
+        // Users in specific group
+        const { GroupMember } = await import('../models/GroupMember.model');
+        const groupMembers = await GroupMember.find({
+          group_id: new Types.ObjectId(rule.target_id),
+        });
+        groupMembers.forEach((gm) => targetedUserIds.add(gm.user_id.toString()));
         break;
 
       default:
@@ -250,6 +275,18 @@ export const publishPolicy = asyncHandler(async (req: Request, res: Response) =>
     policy_key: policyKey,
   })
     .sort({ version_number: -1 });
+
+  // Duplicate check using case-insensitive regex
+  if (!latestVersion) {
+    const existing = await PolicyVersion.findOne({
+      title: { $regex: `^${input.title}$`, $options: 'i' },
+      company_id: new Types.ObjectId(req.user.company_id),
+    });
+
+    if (existing) {
+      throw new AppError('A policy with this name already exists', 400, 'DUPLICATE_NAME');
+    }
+  }
 
   // Determine next version number
   const versionNumber = latestVersion ? latestVersion.version_number + 1 : 1;
@@ -429,7 +466,7 @@ export const acknowledgePolicy = asyncHandler(async (req: Request, res: Response
 
 /**
  * GET /policies/:id/acknowledgments
- * Returns all users who have acknowledged a specific policy version.
+ * Returns an acknowledgment report with acknowledged users, pending users, and total targeted count.
  */
 export const getPolicyAcknowledgments = asyncHandler(async (req: Request, res: Response) => {
   const policyVersion = await PolicyVersion.findOne({
@@ -441,20 +478,65 @@ export const getPolicyAcknowledgments = asyncHandler(async (req: Request, res: R
     throw new AppError('Policy version not found', 404, 'POLICY_VERSION_NOT_FOUND');
   }
 
+  // Find all acknowledgments
   const acknowledgments = await PolicyAcknowledgment.find({
     company_id: new Types.ObjectId(req.user.company_id),
     policy_version_id: policyVersion._id,
   })
-    .populate('user_id', 'full_name email avatar_url')
+    .populate<{ user_id: any }>('user_id', 'full_name email avatar_url')
     .sort({ acknowledged_at: -1 });
+
+  const acknowledgedUsersMap = new Map(
+    acknowledgments.map(a => [a.user_id._id.toString(), a])
+  );
+
+  // Find targeted users
+  const assignments = await PolicyAssignment.find({
+    company_id: new Types.ObjectId(req.user.company_id),
+    policy_version_id: policyVersion._id,
+  });
+
+  let targetedUsers: Array<any> = [];
+  if (assignments.length > 0) {
+    targetedUsers = await resolveTargetedUsers(
+      req.user.company_id,
+      assignments.map(a => ({ target_type: a.target_type, target_id: a.target_id }))
+    );
+  } else {
+    // If no assignment rules, no one is targeted explicitly, but fallback to empty list.
+    // Or we consider all users targeted? The PRD might want explicit targeting.
+    // Publish schema makes assignment_rules optional, but without it no one is notified.
+  }
+
+  const pending: Array<any> = [];
+  
+  targetedUsers.forEach(user => {
+    if (!acknowledgedUsersMap.has(user._id.toString())) {
+      pending.push({
+        _id: `pending-${user._id}`,
+        user: {
+          _id: user._id,
+          full_name: user.full_name,
+          email: user.email,
+          avatar_url: user.avatar_url,
+        }
+      });
+    }
+  });
+
+  const formattedAcknowledged = acknowledgments.map((a) => ({
+    _id: a._id,
+    user: a.user_id,
+    acknowledged_at: a.acknowledged_at,
+  }));
 
   res.status(200).json({
     success: true,
-    data: acknowledgments.map((a) => ({
-      _id: a._id,
-      user: a.user_id,
-      acknowledged_at: a.acknowledged_at,
-    })),
+    data: {
+      acknowledged: formattedAcknowledged,
+      pending,
+      total_targeted: targetedUsers.length,
+    },
   });
 });
 
@@ -599,6 +681,141 @@ export const archivePolicy = asyncHandler(async (req: Request, res: Response) =>
   );
 
   res.status(200).json({ success: true, data: populatedPolicy });
+});
+
+/**
+ * DELETE /policies/:id
+ * Hard deletes a draft or archived policy version.
+ */
+export const deletePolicy = asyncHandler(async (req: Request, res: Response) => {
+  const policyVersion = await PolicyVersion.findOne({
+    _id: req.params.id,
+    company_id: new Types.ObjectId(req.user.company_id),
+  });
+
+  if (!policyVersion) {
+    throw new AppError('Policy version not found', 404, 'NOT_FOUND');
+  }
+
+  if (policyVersion.status === 'published') {
+    throw new AppError('Cannot delete published policy. Archive it instead.', 400, 'CANNOT_DELETE_PUBLISHED');
+  }
+
+  // Prevent deleting entities with dependents
+  const assignments = await PolicyAssignment.countDocuments({
+    policy_version_id: policyVersion._id,
+  });
+  if (assignments > 0) {
+    throw new AppError('Cannot delete: Policy still has assignment rules assigned', 400, 'HAS_DEPENDENTS');
+  }
+
+  await PolicyVersion.deleteOne({ _id: policyVersion._id });
+
+  // Audit log
+  await auditLogger.log({
+    req,
+    action: 'policy.deleted',
+    module: 'policies',
+    object_type: 'PolicyVersion',
+    object_id: policyVersion._id.toString(),
+    object_label: policyVersion.title,
+    before_state: { title: policyVersion.title, status: policyVersion.status },
+    after_state: null,
+  });
+
+  res.status(200).json({ success: true, data: { _id: policyVersion._id } });
+});
+
+/**
+ * POST /policies/:id/rollback
+ * Creates a new policy version based on a previous version.
+ * - Increments version number
+ * - Sets status to 'published'
+ * - Copies content, category, assignment rules from the old version
+ */
+export const rollbackPolicy = asyncHandler(async (req: Request, res: Response) => {
+  const oldVersion = await PolicyVersion.findOne({
+    _id: req.params.id,
+    company_id: new Types.ObjectId(req.user.company_id),
+  });
+
+  if (!oldVersion) {
+    throw new AppError('Policy version not found', 404, 'NOT_FOUND');
+  }
+
+  // Find the latest version for this policy_key to determine next version number
+  const latestVersion: typeof PolicyVersion.prototype | null = await PolicyVersion.findOne({
+    company_id: new Types.ObjectId(req.user.company_id),
+    policy_key: oldVersion.policy_key,
+  }).sort({ version_number: -1 });
+
+  const versionNumber = latestVersion ? latestVersion.version_number + 1 : 1;
+
+  // Create new published policy version
+  const policyVersion = await PolicyVersion.create({
+    company_id: new Types.ObjectId(req.user.company_id),
+    policy_key: oldVersion.policy_key,
+    title: oldVersion.title,
+    content: oldVersion.content,
+    version_number: versionNumber,
+    status: 'published',
+    category: oldVersion.category,
+    effective_date: new Date(),
+    published_by: new Types.ObjectId(req.user.userId),
+    published_at: new Date(),
+    summary: `Rolled back to version ${oldVersion.version_number}`,
+    is_active: true,
+  });
+
+  // Copy assignment rules from old version
+  const oldAssignments = await PolicyAssignment.find({
+    company_id: new Types.ObjectId(req.user.company_id),
+    policy_version_id: oldVersion._id,
+  });
+
+  if (oldAssignments && oldAssignments.length > 0) {
+    for (const rule of oldAssignments) {
+      await PolicyAssignment.create({
+        company_id: new Types.ObjectId(req.user.company_id),
+        policy_version_id: policyVersion._id,
+        target_type: rule.target_type,
+        target_id: rule.target_id,
+        target_label: rule.target_label,
+      });
+    }
+  }
+
+  // Audit log
+  await auditLogger.log({
+    req,
+    action: 'policy.rolled_back',
+    module: 'policies',
+    object_type: 'PolicyVersion',
+    object_id: policyVersion._id.toString(),
+    object_label: `${policyVersion.title} v${policyVersion.version_number}`,
+    before_state: null,
+    after_state: {
+      policy_key: policyVersion.policy_key,
+      title: policyVersion.title,
+      version_number: policyVersion.version_number,
+      status: policyVersion.status,
+      category: policyVersion.category,
+      effective_date: policyVersion.effective_date,
+      published_by: req.user.userId,
+      published_at: policyVersion.published_at,
+      summary: policyVersion.summary,
+    },
+  });
+
+  const populatedPolicy = await PolicyVersion.findById(policyVersion._id).populate(
+    'published_by',
+    'full_name email avatar_url'
+  );
+
+  res.status(201).json({
+    success: true,
+    data: populatedPolicy,
+  });
 });
 
 /**
