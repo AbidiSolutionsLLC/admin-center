@@ -13,6 +13,8 @@ import { Modal } from '@/components/ui/Modal';
 import { TableSkeleton } from '@/components/ui/TableSkeleton';
 import { ErrorState } from '@/components/ui/ErrorState';
 import { EmptyState } from '@/components/ui/EmptyState';
+import { useAuthStore } from '@/store/useAuthStore';
+import { PERMISSION_GROUPS } from '@/constants/roles';
 import type { App } from '@/types';
 
 /**
@@ -21,6 +23,10 @@ import type { App } from '@/types';
  */
 export default function AppsPage() {
   // ── States ────────────────────────────────────────────────────────────
+  const { userRole } = useAuthStore();
+  const isItAdmin = userRole && PERMISSION_GROUPS.IT_ADMINS.includes(userRole as any);
+  const isOpsAdmin = userRole && PERMISSION_GROUPS.OPS_ADMINS.includes(userRole as any);
+
   const [search, setSearch] = useState('');
   const [statusFilter, setStatusFilter] = useState('');
   const [categoryFilter, setCategoryFilter] = useState('');
@@ -32,9 +38,15 @@ export default function AppsPage() {
   const [isWarningModalOpen, setIsWarningModalOpen] = useState(false);
 
   // Assignment form state
-  const [assignTargetType, setAssignTargetType] = useState<'role' | 'department' | 'group' | 'user'>('role');
+  const [assignTargetType, setAssignTargetType] = useState<'role' | 'department' | 'group' | 'user' | 'attribute'>('role');
   const [assignTargetId, setAssignTargetId] = useState('');
+  const [assignAttributeName, setAssignAttributeName] = useState('department_id');
+  const [assignAttributeValue, setAssignAttributeValue] = useState('');
   const [assignReason, setAssignReason] = useState('');
+
+  // Revoke state
+  const [isRevokeModalOpen, setIsRevokeModalOpen] = useState(false);
+  const [assignmentToRevoke, setAssignmentToRevoke] = useState<string | null>(null);
 
   // ── Server data ──────────────────────────────────────────────────────
   const { data: apps, isLoading: isLoadingApps, isError, refetch } = useApps({
@@ -72,6 +84,8 @@ export default function AppsPage() {
   const handleOpenAssignModal = () => {
     setAssignTargetType('role');
     setAssignTargetId('');
+    setAssignAttributeName('department_id');
+    setAssignAttributeValue('');
     setAssignReason('');
     setIsAssignModalOpen(true);
   };
@@ -81,14 +95,21 @@ export default function AppsPage() {
   };
 
   const handleAssignApp = async () => {
-    if (!selectedApp || !assignTargetId) return;
+    if (!selectedApp) return;
+    if (assignTargetType !== 'attribute' && !assignTargetId) return;
+    if (assignTargetType === 'attribute' && (!assignAttributeName || !assignAttributeValue)) return;
 
     await assignAppMutation.mutateAsync({
       appId: selectedApp._id,
       data: {
         target_type: assignTargetType,
-        target_id: assignTargetId,
-        reason: assignReason || undefined,
+        ...(assignTargetType === 'attribute' ? {
+          attribute_name: assignAttributeName,
+          attribute_value: assignAttributeValue
+        } : {
+          target_id: assignTargetId
+        }),
+        reason: assignReason.trim() || undefined,
       },
     });
 
@@ -96,12 +117,19 @@ export default function AppsPage() {
     refetchDetailedApp();
   };
 
-  const handleRevokeAssignment = async (assignmentId: string) => {
-    if (!selectedApp) return;
+  const handleOpenRevokeModal = (assignmentId: string) => {
+    setAssignmentToRevoke(assignmentId);
+    setIsRevokeModalOpen(true);
+  };
+
+  const handleConfirmRevoke = async () => {
+    if (!selectedApp || !assignmentToRevoke) return;
     await revokeAppMutation.mutateAsync({
       appId: selectedApp._id,
-      assignmentId,
+      assignmentId: assignmentToRevoke,
     });
+    setIsRevokeModalOpen(false);
+    setAssignmentToRevoke(null);
     refetchDetailedApp();
   };
 
@@ -189,20 +217,24 @@ export default function AppsPage() {
         </div>
         {selectedApp && (
           <div className="flex items-center gap-2">
-            <button
-              onClick={handleOpenTimelineModal}
-              className="inline-flex items-center gap-2 h-9 px-4 text-sm font-medium text-ink-secondary border border-line rounded-md hover:bg-surface-alt transition-colors"
-            >
-              <Clock className="h-4 w-4" />
-              Timeline
-            </button>
-            <button
-              onClick={handleOpenAssignModal}
-              className="inline-flex items-center gap-2 h-9 px-4 bg-primary text-white text-sm font-medium rounded-md hover:bg-primary-hover transition-colors"
-            >
-              <Users className="h-4 w-4" />
-              Assign App
-            </button>
+            {isOpsAdmin && (
+              <>
+                <button
+                  onClick={handleOpenTimelineModal}
+                  className="inline-flex items-center gap-2 h-9 px-4 text-sm font-medium text-ink-secondary border border-line rounded-md hover:bg-surface-alt transition-colors"
+                >
+                  <Clock className="h-4 w-4" />
+                  Timeline
+                </button>
+                <button
+                  onClick={handleOpenAssignModal}
+                  className="inline-flex items-center gap-2 h-9 px-4 bg-primary text-white text-sm font-medium rounded-md hover:bg-primary-hover transition-colors"
+                >
+                  <Users className="h-4 w-4" />
+                  Assign App
+                </button>
+              </>
+            )}
           </div>
         )}
       </div>
@@ -355,78 +387,84 @@ export default function AppsPage() {
               </div>
             </div>
 
-            <div className="mt-5 pt-4 border-t border-line flex flex-col gap-2">
-              <button
-                onClick={handleToggleAppStatus}
-                disabled={updateAppMutation.isPending}
-                className={`w-full h-9 text-xs font-semibold rounded-md transition-all border ${
-                  currentApp.is_active !== false && currentApp.status !== 'inactive'
-                    ? 'bg-error/5 hover:bg-error/10 text-error border-error/20'
-                    : 'bg-success/5 hover:bg-success/10 text-success border-success/20'
-                }`}
-              >
-                {updateAppMutation.isPending
-                  ? 'Updating...'
-                  : currentApp.is_active !== false && currentApp.status !== 'inactive'
-                  ? 'Disable System-Wide App'
-                  : 'Enable System-Wide App'}
-              </button>
-            </div>
-          </div>
-
-          <div className="lg:col-span-2 bg-surface border border-line rounded-lg shadow-card p-6">
-            <h3 className="text-sm font-semibold text-ink mb-4 flex items-center gap-2">
-              <Shield className="h-4 w-4 text-primary" />
-              Active Assignments Control
-            </h3>
-            {detailedApp?.assignments && detailedApp.assignments.length > 0 ? (
-              <div className="divide-y divide-line border border-line rounded-lg overflow-hidden bg-surface">
-                {detailedApp.assignments.map((assignment: any) => (
-                  <div
-                    key={assignment._id}
-                    className="flex items-center justify-between p-3.5 hover:bg-surface-alt/40 transition-all"
-                  >
-                    <div className="flex items-center gap-3">
-                      <div
-                        className={`text-[10px] font-bold tracking-wider px-2 py-0.5 rounded-full ${
-                          assignment.target_type === 'role'
-                            ? 'bg-primary/10 text-primary'
-                            : assignment.target_type === 'department'
-                            ? 'bg-success/10 text-success'
-                            : assignment.target_type === 'group'
-                            ? 'bg-warning/10 text-warning'
-                            : 'bg-indigo/10 text-indigo'
-                        }`}
-                      >
-                        {assignment.target_type.toUpperCase()}
-                      </div>
-                      <div>
-                        <span className="text-sm font-semibold text-ink">
-                          {assignment.target_name || assignment.target_id}
-                        </span>
-                        {assignment.reason && (
-                          <span className="text-[11px] text-ink-muted block mt-0.5 italic">
-                            "{assignment.reason}"
-                          </span>
-                        )}
-                      </div>
-                    </div>
-                    <button
-                      onClick={() => handleRevokeAssignment(assignment._id)}
-                      disabled={revokeAppMutation.isPending}
-                      className="text-xs font-semibold text-error hover:text-error-hover bg-error/5 hover:bg-error/10 px-3 h-8 rounded-md transition-all border border-error/10"
-                    >
-                      Revoke
-                    </button>
-                  </div>
-                ))}
-              </div>
-            ) : (
-              <div className="text-center py-8 border border-dashed border-line rounded-lg">
-                <p className="text-xs text-ink-muted italic">No active assignments for this app.</p>
+            {isItAdmin && (
+              <div className="mt-5 pt-4 border-t border-line flex flex-col gap-2">
+                <button
+                  onClick={handleToggleAppStatus}
+                  disabled={updateAppMutation.isPending}
+                  className={`w-full h-9 text-xs font-semibold rounded-md transition-all border ${
+                    currentApp.is_active !== false && currentApp.status !== 'inactive'
+                      ? 'bg-error/5 hover:bg-error/10 text-error border-error/20'
+                      : 'bg-success/5 hover:bg-success/10 text-success border-success/20'
+                  }`}
+                >
+                  {updateAppMutation.isPending
+                    ? 'Updating...'
+                    : currentApp.is_active !== false && currentApp.status !== 'inactive'
+                    ? 'Disable System-Wide App'
+                    : 'Enable System-Wide App'}
+                </button>
               </div>
             )}
           </div>
+
+          {isOpsAdmin && (
+            <div className="lg:col-span-2 bg-surface border border-line rounded-lg shadow-card p-6">
+              <h3 className="text-sm font-semibold text-ink mb-4 flex items-center gap-2">
+                <Shield className="h-4 w-4 text-primary" />
+                Active Assignments Control
+              </h3>
+              {detailedApp?.assignments && detailedApp.assignments.length > 0 ? (
+                <div className="divide-y divide-line border border-line rounded-lg overflow-hidden bg-surface">
+                  {detailedApp.assignments.map((assignment: any) => (
+                    <div
+                      key={assignment._id}
+                      className="flex items-center justify-between p-3.5 hover:bg-surface-alt/40 transition-all"
+                    >
+                      <div className="flex items-center gap-3">
+                        <div
+                          className={`text-[10px] font-bold tracking-wider px-2 py-0.5 rounded-full ${
+                            assignment.target_type === 'role'
+                              ? 'bg-primary/10 text-primary'
+                              : assignment.target_type === 'department'
+                              ? 'bg-success/10 text-success'
+                              : assignment.target_type === 'group'
+                              ? 'bg-warning/10 text-warning'
+                              : 'bg-indigo/10 text-indigo'
+                          }`}
+                        >
+                          {assignment.target_type.toUpperCase()}
+                        </div>
+                        <div>
+                          <span className="text-sm font-semibold text-ink">
+                            {assignment.target_type === 'attribute' 
+                              ? `${assignment.attribute_name} = ${assignment.attribute_value}`
+                              : assignment.target_name || assignment.target_id}
+                          </span>
+                          {assignment.reason && (
+                            <span className="text-[11px] text-ink-muted block mt-0.5 italic">
+                              "{assignment.reason}"
+                            </span>
+                          )}
+                        </div>
+                      </div>
+                      <button
+                        onClick={() => handleOpenRevokeModal(assignment._id)}
+                        disabled={revokeAppMutation.isPending}
+                        className="text-xs font-semibold text-error hover:text-error-hover bg-error/5 hover:bg-error/10 px-3 h-8 rounded-md transition-all border border-error/10"
+                      >
+                        Revoke
+                      </button>
+                    </div>
+                  ))}
+                </div>
+              ) : (
+                <div className="text-center py-8 border border-dashed border-line rounded-lg">
+                  <p className="text-xs text-ink-muted italic">No active assignments for this app.</p>
+                </div>
+              )}
+            </div>
+          )}
         </div>
       )}
 
@@ -444,13 +482,15 @@ export default function AppsPage() {
               <label className="block text-xs font-bold text-ink-secondary uppercase tracking-wider mb-2">
                 Assign To Target Type
               </label>
-              <div className="grid grid-cols-4 gap-2">
-                {(['role', 'department', 'group', 'user'] as const).map((type) => (
+              <div className="grid grid-cols-5 gap-2">
+                {(['role', 'department', 'group', 'user', 'attribute'] as const).map((type) => (
                   <button
                     key={type}
                     onClick={() => {
                       setAssignTargetType(type);
                       setAssignTargetId('');
+                      setAssignAttributeName('department_id');
+                      setAssignAttributeValue('');
                     }}
                     type="button"
                     className={`h-9 text-xs font-semibold rounded-md transition-all ${
@@ -466,43 +506,75 @@ export default function AppsPage() {
             </div>
 
             {/* Target Selector */}
-            <div>
-              <label className="block text-xs font-bold text-ink-secondary uppercase tracking-wider mb-1.5">
-                Select {assignTargetType.charAt(0).toUpperCase() + assignTargetType.slice(1)}{' '}
-                <span className="text-error">*</span>
-              </label>
-              <select
-                value={assignTargetId}
-                onChange={(e) => setAssignTargetId(e.target.value)}
-                className="w-full h-9 px-3 text-sm bg-surface border border-line rounded-md focus:outline-none focus:ring-2 focus:ring-primary-600 cursor-pointer"
-              >
-                <option value="">Select...</option>
-                {assignTargetType === 'role' &&
-                  roles?.map((role) => (
-                    <option key={role._id} value={role._id}>
-                      {role.name}
-                    </option>
-                  ))}
-                {assignTargetType === 'department' &&
-                  departments?.map((dept) => (
-                    <option key={dept._id} value={dept._id}>
-                      {dept.name}
-                    </option>
-                  ))}
-                {assignTargetType === 'group' &&
-                  groups?.map((group) => (
-                    <option key={group._id} value={group._id}>
-                      {group.name}
-                    </option>
-                  ))}
-                {assignTargetType === 'user' &&
-                  users?.map((user) => (
-                    <option key={user._id} value={user._id}>
-                      {user.full_name} ({user.email})
-                    </option>
-                  ))}
-              </select>
-            </div>
+            {assignTargetType !== 'attribute' ? (
+              <div>
+                <label className="block text-xs font-bold text-ink-secondary uppercase tracking-wider mb-1.5">
+                  Select {assignTargetType.charAt(0).toUpperCase() + assignTargetType.slice(1)}{' '}
+                  <span className="text-error">*</span>
+                </label>
+                <select
+                  value={assignTargetId}
+                  onChange={(e) => setAssignTargetId(e.target.value)}
+                  className="w-full h-9 px-3 text-sm bg-surface border border-line rounded-md focus:outline-none focus:ring-2 focus:ring-primary-600 cursor-pointer"
+                >
+                  <option value="">Select...</option>
+                  {assignTargetType === 'role' &&
+                    roles?.filter(r => r.is_active !== false).map((role) => (
+                      <option key={role._id} value={role._id}>
+                        {role.name}
+                      </option>
+                    ))}
+                  {assignTargetType === 'department' &&
+                    departments?.filter(d => d.is_active !== false).map((dept) => (
+                      <option key={dept._id} value={dept._id}>
+                        {dept.name}
+                      </option>
+                    ))}
+                  {assignTargetType === 'group' &&
+                    groups?.filter(g => g.is_active !== false).map((group) => (
+                      <option key={group._id} value={group._id}>
+                        {group.name}
+                      </option>
+                    ))}
+                  {assignTargetType === 'user' &&
+                    users?.filter(u => u.is_active !== false && u.lifecycle_state === 'active').map((user) => (
+                      <option key={user._id} value={user._id}>
+                        {user.full_name} ({user.email})
+                      </option>
+                    ))}
+                </select>
+              </div>
+            ) : (
+              <div className="flex gap-4">
+                <div className="flex-1">
+                  <label className="block text-xs font-bold text-ink-secondary uppercase tracking-wider mb-1.5">
+                    Attribute Name <span className="text-error">*</span>
+                  </label>
+                  <select
+                    value={assignAttributeName}
+                    onChange={(e) => setAssignAttributeName(e.target.value)}
+                    className="w-full h-9 px-3 text-sm bg-surface border border-line rounded-md focus:outline-none focus:ring-2 focus:ring-primary-600 cursor-pointer"
+                  >
+                    <option value="department_id">Department ID</option>
+                    <option value="team_id">Team ID</option>
+                    <option value="location_id">Location ID</option>
+                    <option value="domain">Email Domain</option>
+                  </select>
+                </div>
+                <div className="flex-1">
+                  <label className="block text-xs font-bold text-ink-secondary uppercase tracking-wider mb-1.5">
+                    Attribute Value <span className="text-error">*</span>
+                  </label>
+                  <input
+                    type="text"
+                    value={assignAttributeValue}
+                    onChange={(e) => setAssignAttributeValue(e.target.value)}
+                    className="w-full h-9 px-3 text-sm bg-surface border border-line rounded-md focus:outline-none focus:ring-2 focus:ring-primary-600"
+                    placeholder="Value..."
+                  />
+                </div>
+              </div>
+            )}
 
             {/* Reason (Optional) */}
             <div>
@@ -519,14 +591,18 @@ export default function AppsPage() {
             </div>
 
             {/* Dependency Warning & Confirm */}
-            {assignTargetId && (
+            {(assignTargetId || (assignTargetType === 'attribute' && assignAttributeName && assignAttributeValue)) && (
               <AssignmentRuleBuilder
                 appId={selectedApp._id}
                 appName={selectedApp.name}
                 targetType={assignTargetType}
-                targetId={assignTargetId}
+                targetId={assignTargetType === 'attribute' ? 'attribute' : assignTargetId}
+                attributeName={assignTargetType === 'attribute' ? assignAttributeName : undefined}
+                attributeValue={assignTargetType === 'attribute' ? assignAttributeValue : undefined}
                 targetName={
-                  assignTargetType === 'role'
+                  assignTargetType === 'attribute'
+                    ? `${assignAttributeName}=${assignAttributeValue}`
+                    : assignTargetType === 'role'
                     ? roles?.find((r) => r._id === assignTargetId)?.name ?? ''
                     : assignTargetType === 'department'
                     ? departments?.find((d) => d._id === assignTargetId)?.name ?? ''
@@ -537,6 +613,7 @@ export default function AppsPage() {
                     : assignTargetId
                 }
                 onConfirm={handleAssignApp}
+                onCancel={() => setIsAssignModalOpen(false)}
                 isSubmitting={assignAppMutation.isPending}
               />
             )}
@@ -589,9 +666,46 @@ export default function AppsPage() {
             <button
               onClick={handleDisableApp}
               disabled={updateAppMutation.isPending}
-              className="h-9 px-4 text-sm font-medium text-white bg-error rounded-md hover:bg-error-hover transition-colors"
+              className="h-9 px-4 text-sm font-medium text-white bg-error rounded-md hover:bg-error-hover transition-colors flex items-center justify-center gap-2"
             >
               {updateAppMutation.isPending ? 'Disabling...' : 'Yes, Disable App'}
+            </button>
+          </div>
+        </div>
+      </Modal>
+
+      {/* Revoke Confirmation Modal */}
+      <Modal
+        isOpen={isRevokeModalOpen}
+        onClose={() => setIsRevokeModalOpen(false)}
+        title="Confirm Revocation"
+        size="md"
+      >
+        <div className="space-y-4">
+          <div className="flex items-start gap-3">
+            <AlertTriangle className="h-6 w-6 text-error flex-shrink-0" />
+            <div>
+              <p className="text-sm font-semibold text-ink">
+                Revoke Assignment?
+              </p>
+              <p className="text-xs text-ink-secondary mt-1">
+                Are you sure you want to revoke this app assignment? This action cannot be undone.
+              </p>
+            </div>
+          </div>
+          <div className="flex gap-2 justify-end pt-2 border-t border-line">
+            <button
+              onClick={() => setIsRevokeModalOpen(false)}
+              className="h-9 px-4 text-sm font-medium text-ink-secondary border border-line rounded-md hover:bg-surface-alt transition-colors"
+            >
+              Cancel
+            </button>
+            <button
+              onClick={handleConfirmRevoke}
+              disabled={revokeAppMutation.isPending}
+              className="h-9 px-4 text-sm font-medium text-white bg-error rounded-md hover:bg-red-700 transition-colors flex items-center justify-center gap-2"
+            >
+              {revokeAppMutation.isPending ? 'Revoking...' : 'Confirm'}
             </button>
           </div>
         </div>

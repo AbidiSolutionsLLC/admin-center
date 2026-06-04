@@ -20,6 +20,9 @@ import workflowsRoutes from './workflows.routes';
 import notificationsRoutes from './notifications.routes';
 import companyRoutes from './company.routes';
 import groupsRoutes from './groups.routes';
+import accessControlPoliciesRoutes from './accessControlPolicies.routes';
+import dataGovernancePoliciesRoutes from './dataGovernancePolicies.routes';
+import policyTemplatesRoutes from './policyTemplates.routes';
 
 const router = Router();
 
@@ -46,6 +49,9 @@ router.use('/integrations', integrationsRoutes);
 router.use('/workflows', workflowsRoutes);
 router.use('/notifications', notificationsRoutes);
 router.use('/company', companyRoutes); // FIX-03: Company settings routes
+router.use('/access-control-policies', accessControlPoliciesRoutes);
+router.use('/data-governance-policies', dataGovernancePoliciesRoutes);
+router.use('/policy-templates', policyTemplatesRoutes);
 
 // Protected test route for verifying JWT rejection logic
 router.get('/protected-test', requireAuth, (req, res) => {

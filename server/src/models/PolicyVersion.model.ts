@@ -1,5 +1,6 @@
 // server/src/models/PolicyVersion.model.ts
 import { Schema, model, Document, Types } from 'mongoose';
+import { AppError } from '../utils/AppError';
 
 export type PolicyCategory = 'hr' | 'it' | 'security' | 'compliance' | 'operations' | 'other';
 export type PolicyStatus = 'draft' | 'published' | 'archived';
@@ -13,6 +14,7 @@ export interface IPolicyVersion extends Document {
   status: PolicyStatus;
   category: PolicyCategory;
   effective_date: Date;
+  expiry_date?: Date;             // Optional expiry — triggers re-acknowledgment when passed
   published_by?: Types.ObjectId;  // User who published this version
   published_at?: Date;
   summary?: string;               // Brief description of changes in this version
@@ -31,6 +33,7 @@ const PolicyVersionSchema = new Schema<IPolicyVersion>({
   status: { type: String, enum: ['draft', 'published', 'archived'], default: 'draft', index: true },
   category: { type: String, enum: ['hr', 'it', 'security', 'compliance', 'operations', 'other'], required: true },
   effective_date: { type: Date, required: true },
+  expiry_date: { type: Date },
   published_by: { type: Schema.Types.ObjectId, ref: 'User' },
   published_at: { type: Date },
   summary: { type: String },
@@ -47,47 +50,41 @@ PolicyVersionSchema.index({ company_id: 1, status: 1 });
 PolicyVersionSchema.index({ company_id: 1, category: 1 });
 // Index for sorting by creation date
 PolicyVersionSchema.index({ company_id: 1, created_at: -1 });
+// Index for querying expiring policies
+PolicyVersionSchema.index({ company_id: 1, expiry_date: 1 });
 
 // ── Immutability Guard: No UPDATE or DELETE on published versions ────────────
 /**
  * PolicyVersion is immutable once published.
  * This pre-save hook prevents modifications to any document with status='published'.
  * New versions should be created instead of updating existing ones.
+ * Exception: archiving a published policy (status changes to 'archived') is allowed.
  */
-PolicyVersionSchema.pre('save', function(next: any) {
+PolicyVersionSchema.pre('save', function() {
   if (this.isModified() && !this.isNew && this.status === 'published') {
-    const error = new Error('Cannot modify published policy version. Create a new version instead.');
-    return next(error);
+    throw new AppError('Cannot modify published policy version. Create a new version instead.', 400, 'CANNOT_MODIFY_PUBLISHED');
   }
-  next();
 });
 
-// Prevent updates via Mongoose middleware
-PolicyVersionSchema.pre('updateOne', function(next: any) {
+PolicyVersionSchema.pre('updateOne', function() {
   const filter = this.getFilter();
   if (filter.status === 'published') {
-    const error = new Error('Cannot update published policy version. Create a new version instead.');
-    return next(error);
+    throw new AppError('Cannot update published policy version. Create a new version instead.', 400, 'CANNOT_MODIFY_PUBLISHED');
   }
-  next();
 });
 
-PolicyVersionSchema.pre('findOneAndUpdate', function(next: any) {
+PolicyVersionSchema.pre('findOneAndUpdate', function() {
   const filter = this.getFilter();
   if (filter.status === 'published') {
-    const error = new Error('Cannot update published policy version. Create a new version instead.');
-    return next(error);
+    throw new AppError('Cannot update published policy version. Create a new version instead.', 400, 'CANNOT_MODIFY_PUBLISHED');
   }
-  next();
 });
 
-PolicyVersionSchema.pre('updateMany', function(next: any) {
+PolicyVersionSchema.pre('updateMany', function() {
   const filter = this.getFilter();
   if (filter.status === 'published') {
-    const error = new Error('Cannot update published policy version. Create a new version instead.');
-    return next(error);
+    throw new AppError('Cannot update published policy version. Create a new version instead.', 400, 'CANNOT_MODIFY_PUBLISHED');
   }
-  next();
 });
 
 export const PolicyVersion = model<IPolicyVersion>('PolicyVersion', PolicyVersionSchema);

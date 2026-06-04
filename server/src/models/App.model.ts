@@ -15,6 +15,8 @@ export interface IApp extends Document {
   is_active: boolean;
   /** Slugs of apps that must be assigned first */
   dependencies?: string[];
+  /** Slugs of apps that cannot be assigned together with this app */
+  mutually_exclusive?: string[];
   created_at: Date;
   updated_at: Date;
 }
@@ -36,6 +38,7 @@ const AppSchema = new Schema<IApp>({
   owner_id: { type: Schema.Types.ObjectId, ref: 'User' },
   is_active: { type: Boolean, default: true },
   dependencies: [{ type: String }],
+  mutually_exclusive: [{ type: String }],
 }, { timestamps: { createdAt: 'created_at', updatedAt: 'updated_at' } });
 
 // Unique index for system apps (slug only) and company apps (company_id + slug)

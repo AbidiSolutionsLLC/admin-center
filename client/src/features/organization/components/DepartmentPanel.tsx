@@ -1,7 +1,8 @@
 // src/features/organization/components/DepartmentPanel.tsx
 import React from 'react';
-import { X, Building2, Users, AlertTriangle, ChevronRight } from 'lucide-react';
+import { X, Building2, Users, AlertTriangle, ChevronRight, Monitor } from 'lucide-react';
 import type { OrgTreeNode } from '@/types';
+import { TargetAppAccessPanel } from '@/features/apps/TargetAppAccessPanel';
 
 interface DepartmentPanelProps {
   department: OrgTreeNode;
@@ -186,6 +187,16 @@ export const DepartmentPanel: React.FC<DepartmentPanelProps> = ({
             </div>
           </div>
         )}
+
+        {/* Assigned Apps */}
+        <div className="pt-2 border-t border-line">
+          <p className="text-[11px] font-semibold uppercase tracking-wider text-ink-secondary mb-2 flex items-center gap-1">
+            <Monitor className="w-3.5 h-3.5" /> Assigned Apps
+          </p>
+          <div className="-mx-2">
+            <TargetAppAccessPanel targetType="department" targetId={department._id} />
+          </div>
+        </div>
 
         {/* Children */}
         {childCount > 0 && (

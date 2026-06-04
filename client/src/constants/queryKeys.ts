@@ -33,7 +33,7 @@ export const QUERY_KEYS = {
   APP_DETAIL: (id: string) => ['app', id] as const,
   APP_ASSIGNMENTS: (id: string) => ['app', 'assignments', id] as const,
   APP_TIMELINE: (id: string) => ['app', 'timeline', id] as const,
-  APP_DEPENDENCIES: (id: string, targetType: string, targetId: string) => ['app', 'dependencies', id, targetType, targetId] as const,
+  APP_DEPENDENCIES: (id: string, targetType: string, targetId: string, attributeName?: string, attributeValue?: string) => ['app', 'dependencies', id, targetType, targetId, attributeName, attributeValue] as const,
   APP_USERS: (id: string) => ['app', 'users', id] as const,
   // Overview
   DASHBOARD_STATS: ['overview', 'stats'] as const,

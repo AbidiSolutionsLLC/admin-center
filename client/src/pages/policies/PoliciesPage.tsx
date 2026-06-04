@@ -16,15 +16,25 @@ import {
   useSaveAssignmentRules,
   usePolicyConflictCheck,
   usePolicyAssignments,
+  useDeletePolicy,
+  useSimulatePolicy,
+  useCreateDraftPolicy,
+  useRollbackPolicy,
 } from '@/features/policies/hooks/usePolicies';
 import { useUserStats } from '@/features/people/hooks/useUserStats';
 import { useDepartments } from '@/features/organization/hooks/useDepartments';
 import { useRoles } from '@/features/roles/useRoles';
+import { useGroups } from '@/features/groups/useGroups';
+import { useUsers } from '@/features/people/hooks/useUsers';
 import { TableSkeleton } from '@/components/ui/TableSkeleton';
 import { ErrorState } from '@/components/ui/ErrorState';
 import { EmptyState } from '@/components/ui/EmptyState';
 import { Modal } from '@/components/ui/Modal';
+import { ConfirmDialog } from '@/components/ui/ConfirmDialog';
 import { PolicyEditor } from '@/components/ui/PolicyEditor';
+import { AccessControlPoliciesView } from './components/AccessControlPoliciesView';
+import { DataGovernancePoliciesView } from './components/DataGovernancePoliciesView';
+import { PolicyTemplatesView } from './components/PolicyTemplatesView';
 import { cn } from '@/utils/cn';
 import { formatDate } from '@/utils/formatDate';
 import type {
@@ -88,12 +98,19 @@ export default function PoliciesPage() {
   // ── Server data ──────────────────────────────────────────────────────
   const { data: policies, isLoading, isError, refetch } = usePolicies();
   const publishMutation = usePublishPolicy();
+  const draftMutation = useCreateDraftPolicy();
   const archiveMutation = useArchivePolicy();
+  const deleteMutation = useDeletePolicy();
 
   // ── Modal state ──────────────────────────────────────────────────────
   const [isPublishModalOpen, setIsPublishModalOpen] = useState(false);
   const [selectedPolicy, setSelectedPolicy] = useState<PolicyVersion | null>(null);
   const [activeDetailTab, setActiveDetailTab] = useState<'content' | 'versions' | 'acknowledgments' | 'targeting'>('content');
+  const [policyToDelete, setPolicyToDelete] = useState<string | null>(null);
+  const [policyToArchive, setPolicyToArchive] = useState<string | null>(null);
+
+  // ── Main Page Tabs ────────────────────────────────────────────────────
+  const [activePolicyType, setActivePolicyType] = useState<'general' | 'access' | 'governance' | 'templates'>('general');
 
   // ── Filters ──────────────────────────────────────────────────────────
   const [search, setSearch] = useState('');
@@ -147,16 +164,68 @@ export default function PoliciesPage() {
         policyCount={policies?.length}
       />
 
-      {/* ── Empty State ── */}
-      {!hasData ? (
-        <EmptyState
-          icon={FileText}
-          title="No policies yet"
-          description="Publish your first policy to get started."
-          action={{ label: 'Publish Policy', onClick: () => setIsPublishModalOpen(true) }}
-        />
-      ) : (
+      {/* ── Top Tabs ── */}
+      <div className="border-b border-line mb-6">
+        <nav className="-mb-px flex space-x-8">
+          <button
+            onClick={() => setActivePolicyType('general')}
+            className={`whitespace-nowrap py-4 px-1 border-b-2 font-medium text-[13px] transition-colors ${
+              activePolicyType === 'general'
+                ? 'border-primary text-primary'
+                : 'border-transparent text-ink-secondary hover:text-ink hover:border-line-strong'
+            }`}
+          >
+            General Policies
+          </button>
+          <button
+            onClick={() => setActivePolicyType('access')}
+            className={`whitespace-nowrap py-4 px-1 border-b-2 font-medium text-[13px] transition-colors ${
+              activePolicyType === 'access'
+                ? 'border-primary text-primary'
+                : 'border-transparent text-ink-secondary hover:text-ink hover:border-line-strong'
+            }`}
+          >
+            Access Control
+          </button>
+          <button
+            onClick={() => setActivePolicyType('governance')}
+            className={`whitespace-nowrap py-4 px-1 border-b-2 font-medium text-[13px] transition-colors ${
+              activePolicyType === 'governance'
+                ? 'border-primary text-primary'
+                : 'border-transparent text-ink-secondary hover:text-ink hover:border-line-strong'
+            }`}
+          >
+            Data Governance
+          </button>
+          <button
+            onClick={() => setActivePolicyType('templates')}
+            className={`whitespace-nowrap py-4 px-1 border-b-2 font-medium text-[13px] transition-colors ${
+              activePolicyType === 'templates'
+                ? 'border-primary text-primary'
+                : 'border-transparent text-ink-secondary hover:text-ink hover:border-line-strong'
+            }`}
+          >
+            Templates
+          </button>
+        </nav>
+      </div>
+
+      {activePolicyType === 'access' && <AccessControlPoliciesView />}
+      {activePolicyType === 'governance' && <DataGovernancePoliciesView />}
+      {activePolicyType === 'templates' && <PolicyTemplatesView />}
+
+      {activePolicyType === 'general' && (
         <>
+          {/* ── Empty State ── */}
+          {!hasData ? (
+            <EmptyState
+              icon={FileText}
+              title="No policies yet"
+              description="Publish your first policy to get started."
+              action={{ label: 'Publish Policy', onClick: () => setIsPublishModalOpen(true) }}
+            />
+          ) : (
+            <>
           {/* ── Filter Bar ── */}
           <FilterBar
             search={search}
@@ -230,7 +299,8 @@ export default function PoliciesPage() {
                         setSelectedPolicy(policy);
                         setActiveDetailTab('content');
                       }}
-                      onArchive={() => archiveMutation.mutate({ policy_id: policy._id })}
+                      onArchive={() => setPolicyToArchive(policy._id)}
+                      onDelete={() => setPolicyToDelete(policy._id)}
                     />
                   ))}
                 </tbody>
@@ -245,6 +315,7 @@ export default function PoliciesPage() {
         isOpen={isPublishModalOpen}
         onClose={() => setIsPublishModalOpen(false)}
         publishMutation={publishMutation}
+        draftMutation={draftMutation}
       />
 
       {/* ── Policy Detail Modal ── */}
@@ -257,6 +328,42 @@ export default function PoliciesPage() {
           onTabChange={setActiveDetailTab}
         />
       )}
+
+      {/* ── Confirm Modals ── */}
+      <ConfirmDialog
+        isOpen={!!policyToDelete}
+        title="Delete Policy"
+        description="Are you sure you want to delete this policy? This action cannot be undone."
+        confirmLabel="Delete Policy"
+        isLoading={deleteMutation.isPending}
+        onConfirm={() => {
+          if (policyToDelete) {
+            deleteMutation.mutate(
+              { policy_id: policyToDelete },
+              { onSuccess: () => setPolicyToDelete(null) }
+            );
+          }
+        }}
+        onClose={() => setPolicyToDelete(null)}
+      />
+
+      <ConfirmDialog
+        isOpen={!!policyToArchive}
+        title="Archive Policy"
+        description="Are you sure you want to archive this policy? Archived policies are no longer active but their history is preserved."
+        confirmLabel="Archive Policy"
+        isLoading={archiveMutation.isPending}
+        onConfirm={() => {
+          if (policyToArchive) {
+            archiveMutation.mutate(
+              { policy_id: policyToArchive },
+              { onSuccess: () => setPolicyToArchive(null) }
+            );
+          }
+        }}
+        onClose={() => setPolicyToArchive(null)}
+      />
+      </>)}
     </div>
   );
 }
@@ -392,9 +499,10 @@ interface PolicyRowProps {
   policy: PolicyVersion;
   onView: () => void;
   onArchive: () => void;
+  onDelete: () => void;
 }
 
-function PolicyRow({ policy, onView, onArchive }: PolicyRowProps) {
+function PolicyRow({ policy, onView, onArchive, onDelete }: PolicyRowProps) {
   const { data: ackStatus } = useAcknowledgmentStatus(policy._id);
 
   return (
@@ -452,10 +560,19 @@ function PolicyRow({ policy, onView, onArchive }: PolicyRowProps) {
           {policy.status === 'published' && (
             <button
               onClick={onArchive}
-              className="h-7 px-3 text-xs font-medium rounded-md border border-line bg-white text-ink-secondary hover:text-error hover:border-error/30 hover:bg-error-light transition-colors inline-flex items-center gap-1.5"
+              className="h-7 px-3 text-xs font-medium rounded-md border border-line bg-white text-ink-secondary hover:text-warning hover:border-warning/30 hover:bg-warning-light transition-colors inline-flex items-center gap-1.5"
               title="Archive this version"
             >
               <Archive className="w-3.5 h-3.5" />
+            </button>
+          )}
+          {policy.status !== 'published' && (
+            <button
+              onClick={onDelete}
+              className="h-7 px-3 text-xs font-medium rounded-md border border-line bg-white text-ink-secondary hover:text-error hover:border-error/30 hover:bg-error-light transition-colors inline-flex items-center gap-1.5"
+              title="Delete this policy"
+            >
+              <X className="w-3.5 h-3.5" />
             </button>
           )}
           {ackStatus?.acknowledged && (
@@ -476,18 +593,21 @@ interface PublishPolicyModalProps {
   isOpen: boolean;
   onClose: () => void;
   publishMutation: ReturnType<typeof usePublishPolicy>;
+  draftMutation: ReturnType<typeof useCreateDraftPolicy>;
 }
 
 function PublishPolicyModal({
   isOpen,
   onClose,
   publishMutation,
+  draftMutation,
 }: PublishPolicyModalProps) {
   const [formData, setFormData] = useState({
     title: '',
     content: '',
     category: 'hr' as PolicyCategory,
     effective_date: new Date().toISOString().split('T')[0],
+    expiry_date: '',
     summary: '',
   });
 
@@ -498,6 +618,7 @@ function PublishPolicyModal({
         content: formData.content,
         category: formData.category,
         effective_date: formData.effective_date,
+        expiry_date: formData.expiry_date || undefined,
         summary: formData.summary || undefined,
       },
       {
@@ -508,6 +629,33 @@ function PublishPolicyModal({
             content: '',
             category: 'hr',
             effective_date: new Date().toISOString().split('T')[0],
+            expiry_date: '',
+            summary: '',
+          });
+        },
+      }
+    );
+  };
+
+  const handleSaveDraft = () => {
+    draftMutation.mutate(
+      {
+        title: formData.title,
+        content: formData.content,
+        category: formData.category,
+        effective_date: formData.effective_date,
+        expiry_date: formData.expiry_date || undefined,
+        summary: formData.summary || undefined,
+      },
+      {
+        onSuccess: () => {
+          onClose();
+          setFormData({
+            title: '',
+            content: '',
+            category: 'hr',
+            effective_date: new Date().toISOString().split('T')[0],
+            expiry_date: '',
             summary: '',
           });
         },
@@ -526,15 +674,29 @@ function PublishPolicyModal({
         <>
           <button
             onClick={onClose}
-            disabled={publishMutation.isPending}
-            className="h-9 px-4 text-sm font-medium rounded-md border border-line bg-white text-ink hover:bg-surface-alt transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+            disabled={publishMutation.isPending || draftMutation.isPending}
+            className="h-9 px-4 text-sm font-medium rounded-md border border-line bg-white text-ink hover:bg-surface-alt transition-colors disabled:opacity-50 disabled:cursor-not-allowed mr-auto"
           >
             Cancel
+          </button>
+          <button
+            onClick={handleSaveDraft}
+            disabled={
+              draftMutation.isPending ||
+              publishMutation.isPending ||
+              !formData.title ||
+              !formData.content ||
+              !formData.effective_date
+            }
+            className="h-9 px-4 text-sm font-medium rounded-md border border-line bg-white text-ink hover:bg-surface-alt transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+          >
+            {draftMutation.isPending ? 'Saving...' : 'Save as Draft'}
           </button>
           <button
             onClick={handleSubmit}
             disabled={
               publishMutation.isPending ||
+              draftMutation.isPending ||
               !formData.title ||
               !formData.content ||
               !formData.effective_date
@@ -819,6 +981,8 @@ function PolicyVersionsView({
   onSelectionChange,
 }: PolicyVersionsViewProps) {
   const { data: versions, isLoading } = usePolicyVersions(policyKey);
+  const rollbackMutation = useRollbackPolicy();
+  const [versionToRollback, setVersionToRollback] = useState<{ id: string; num: number } | null>(null);
 
   if (isLoading) return <TableSkeleton rows={4} columns={4} />;
 
@@ -863,6 +1027,9 @@ function PolicyVersionsView({
               </th>
               <th className="text-[11px] font-semibold text-ink-secondary uppercase tracking-wider h-10 px-4 text-left">
                 Publisher
+              </th>
+              <th className="text-[11px] font-semibold text-ink-secondary uppercase tracking-wider h-10 px-4 text-right">
+                Actions
               </th>
             </tr>
           </thead>
@@ -909,11 +1076,42 @@ function PolicyVersionsView({
                 <td className="h-10 px-4 text-sm text-ink-secondary">
                   {version.published_by?.full_name || '—'}
                 </td>
+                <td className="h-10 px-4 text-right">
+                  <button
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      setVersionToRollback({ id: version._id, num: version.version_number });
+                    }}
+                    disabled={rollbackMutation.isPending || version.status !== 'published'}
+                    className="h-7 px-3 text-xs font-medium rounded-md border border-line bg-white text-ink hover:bg-surface-alt transition-colors disabled:opacity-50 inline-flex items-center gap-1.5"
+                    title="Rollback to this version"
+                  >
+                    <History className="w-3.5 h-3.5" />
+                    Rollback
+                  </button>
+                </td>
               </tr>
             ))}
           </tbody>
         </table>
       </div>
+
+      <ConfirmDialog
+        isOpen={!!versionToRollback}
+        title={`Rollback to v${versionToRollback?.num}`}
+        description={`Are you sure you want to rollback to version ${versionToRollback?.num}? A new version will be created based on this one.`}
+        confirmLabel="Rollback"
+        isLoading={rollbackMutation.isPending}
+        onConfirm={() => {
+          if (versionToRollback) {
+            rollbackMutation.mutate(
+              { policy_id: versionToRollback.id },
+              { onSuccess: () => setVersionToRollback(null) }
+            );
+          }
+        }}
+        onClose={() => setVersionToRollback(null)}
+      />
     </div>
   );
 }
@@ -993,15 +1191,22 @@ function VersionDiffView({ policyKey, versionA, versionB, onClose }: VersionDiff
 // ── Tab: Acknowledgments View ───────────────────────────────────────────────
 
 function PolicyAcknowledgmentsView({ policyId }: { policyId: string }) {
-  const { data: acknowledgments, isLoading } = usePolicyAcknowledgments(policyId);
+  const { data: report, isLoading } = usePolicyAcknowledgments(policyId);
   const { data: ackStatus } = useAcknowledgmentStatus(policyId);
-  const { data: userStats } = useUserStats();
 
-  const totalUsers = userStats?.total ?? 0;
-  const acknowledgedCount = acknowledgments?.length || 0;
+  const totalUsers = report?.total_targeted ?? 0;
+  const acknowledgedCount = report?.acknowledged?.length || 0;
   const percentage = totalUsers > 0 ? Math.round((acknowledgedCount / totalUsers) * 100) : 0;
 
   if (isLoading) return <TableSkeleton rows={4} columns={3} />;
+
+  const acknowledgments = report?.acknowledged || [];
+  const pending = report?.pending || [];
+
+  const allUsers = [
+    ...acknowledgments.map(a => ({ _id: a._id, user: a.user, acknowledged_at: a.acknowledged_at, status: 'Acknowledged' as const })),
+    ...pending.map(p => ({ _id: p._id, user: p.user, acknowledged_at: null, status: 'Pending' as const }))
+  ];
 
   return (
     <div className="space-y-4">
@@ -1027,12 +1232,12 @@ function PolicyAcknowledgmentsView({ policyId }: { policyId: string }) {
         )}
       </div>
 
-      {/* Acknowledged Users List */}
+      {/* Users List */}
       <div>
         <h4 className="text-sm font-semibold text-ink mb-2">
-          Acknowledged By
+          Targeted Users
         </h4>
-        {acknowledgments && acknowledgments.length > 0 ? (
+        {allUsers.length > 0 ? (
           <div className="border border-line rounded-md overflow-hidden max-h-64 overflow-y-auto">
             <table className="w-full">
               <thead className="bg-surface-base border-b border-line">
@@ -1041,18 +1246,32 @@ function PolicyAcknowledgmentsView({ policyId }: { policyId: string }) {
                     User
                   </th>
                   <th className="text-[11px] font-semibold text-ink-secondary uppercase tracking-wider h-10 px-4 text-left">
+                    Status
+                  </th>
+                  <th className="text-[11px] font-semibold text-ink-secondary uppercase tracking-wider h-10 px-4 text-left">
                     Acknowledged At
                   </th>
                 </tr>
               </thead>
               <tbody>
-                {acknowledgments.map((ack) => (
-                  <tr key={ack._id} className="border-b border-line last:border-0">
+                {allUsers.map((item) => (
+                  <tr key={item._id} className="border-b border-line last:border-0">
                     <td className="h-10 px-4 text-sm text-ink">
-                      {ack.user.full_name}
+                      {item.user.full_name}
+                    </td>
+                    <td className="h-10 px-4">
+                      {item.status === 'Acknowledged' ? (
+                        <span className="inline-flex items-center gap-1 text-[11px] font-semibold text-emerald-700 bg-emerald-50 border border-emerald-200 rounded-full px-2.5 py-0.5">
+                          Acknowledged
+                        </span>
+                      ) : (
+                        <span className="inline-flex items-center gap-1 text-[11px] font-semibold text-amber-700 bg-amber-50 border border-amber-200 rounded-full px-2.5 py-0.5">
+                          Pending
+                        </span>
+                      )}
                     </td>
                     <td className="h-10 px-4 text-sm text-ink-secondary">
-                      {formatDate(ack.acknowledged_at)}
+                      {item.acknowledged_at ? formatDate(item.acknowledged_at) : '—'}
                     </td>
                   </tr>
                 ))}
@@ -1063,7 +1282,7 @@ function PolicyAcknowledgmentsView({ policyId }: { policyId: string }) {
           <div className="p-8 text-center border border-line rounded-md">
             <Users className="w-8 h-8 text-ink-muted mx-auto mb-2" />
             <p className="text-sm text-ink-secondary">
-              No acknowledgments yet
+              No users are targeted by this policy yet
             </p>
           </div>
         )}
@@ -1081,7 +1300,6 @@ interface PolicyTargetingViewProps {
 function PolicyTargetingView({ policyId }: PolicyTargetingViewProps) {
   const [isTargetingModalOpen, setIsTargetingModalOpen] = useState(false);
   const assignmentMutation = useSaveAssignmentRules(policyId);
-  const { data: conflicts } = usePolicyConflictCheck(policyId);
   const { data: assignments, isLoading } = usePolicyAssignments(policyId);
 
   return (
@@ -1098,23 +1316,6 @@ function PolicyTargetingView({ policyId }: PolicyTargetingViewProps) {
           Edit Targeting
         </button>
       </div>
-
-      {/* Conflict Warning */}
-      {conflicts?.has_conflicts && (
-        <div className="p-4 bg-error-light border border-error-border rounded-md flex items-start gap-3">
-          <AlertTriangle className="w-5 h-5 text-error flex-shrink-0 mt-0.5" />
-          <div>
-            <p className="text-sm font-semibold text-error">
-              RULE-08: Conflicting Policies Detected
-            </p>
-            <ul className="mt-1 text-xs text-ink-secondary space-y-0.5">
-              {conflicts.conflicting_policies.map((c, i) => (
-                <li key={i}>• {c.conflict_reason}</li>
-              ))}
-            </ul>
-          </div>
-        </div>
-      )}
 
       {/* Current Assignment Rules */}
       {isLoading ? (
@@ -1170,6 +1371,7 @@ function PolicyTargetingView({ policyId }: PolicyTargetingViewProps) {
       {isTargetingModalOpen && (
         <TargetingModal
           isOpen={isTargetingModalOpen}
+          policyId={policyId}
           onClose={() => setIsTargetingModalOpen(false)}
           saveMutation={assignmentMutation}
           onSaved={() => setIsTargetingModalOpen(false)}
@@ -1183,17 +1385,31 @@ function PolicyTargetingView({ policyId }: PolicyTargetingViewProps) {
 
 interface TargetingModalProps {
   isOpen: boolean;
+  policyId: string;
   onClose: () => void;
   saveMutation: ReturnType<typeof useSaveAssignmentRules>;
   onSaved: () => void;
 }
 
-function TargetingModal({ isOpen, onClose, saveMutation, onSaved }: TargetingModalProps) {
+function TargetingModal({ isOpen, policyId, onClose, saveMutation, onSaved }: TargetingModalProps) {
   const { data: departments } = useDepartments();
   const { data: roles } = useRoles();
+  const { data: groups } = useGroups();
+  const { data: users } = useUsers();
+  const conflictCheckMutation = usePolicyConflictCheck(policyId);
+  const simulateMutation = useSimulatePolicy();
+  const [conflicts, setConflicts] = useState<{
+    has_conflicts: boolean;
+    conflicting_policies: Array<{ conflict_reason: string }>;
+  } | null>(null);
   const [rules, setRules] = useState<Array<{ target_type: PolicyTargetType; target_id: string }>>([
     { target_type: 'all', target_id: 'all' },
   ]);
+  const [simulationResult, setSimulationResult] = useState<{
+    affected_users: any[];
+    affected_groups: string[];
+    expected_changes: string[];
+  } | null>(null);
 
   const addRule = () => {
     setRules([...rules, { target_type: 'department', target_id: '' }]);
@@ -1203,15 +1419,26 @@ function TargetingModal({ isOpen, onClose, saveMutation, onSaved }: TargetingMod
     setRules(rules.filter((_, i) => i !== index));
   };
 
-  const updateRule = (index: number, field: string, value: string) => {
-    const updated = [...rules];
-    updated[index] = { ...updated[index], [field]: value };
-    setRules(updated);
+  const updateRule = (index: number, updates: Partial<{ target_type: PolicyTargetType; target_id: string }>) => {
+    setRules((prevRules) => {
+      const updated = [...prevRules];
+      updated[index] = { ...updated[index], ...updates };
+      return updated;
+    });
   };
 
   const handleSave = () => {
     const validRules = rules.filter((r) => r.target_id && r.target_id !== '');
-    saveMutation.mutate(validRules, { onSuccess: onSaved });
+    setConflicts(null);
+    conflictCheckMutation.mutate(validRules, {
+      onSuccess: (data) => {
+        if (data.has_conflicts) {
+          setConflicts(data);
+        } else {
+          saveMutation.mutate(validRules, { onSuccess: onSaved });
+        }
+      }
+    });
   };
 
   // Render target-specific selector based on target_type
@@ -1221,7 +1448,7 @@ function TargetingModal({ isOpen, onClose, saveMutation, onSaved }: TargetingMod
         <input
           type="hidden"
           value="all"
-          onChange={() => updateRule(index, 'target_id', 'all')}
+          onChange={() => updateRule(index, { target_id: 'all' })}
         />
       );
     }
@@ -1230,7 +1457,7 @@ function TargetingModal({ isOpen, onClose, saveMutation, onSaved }: TargetingMod
       return (
         <select
           value={rule.target_id}
-          onChange={(e) => updateRule(index, 'target_id', e.target.value)}
+          onChange={(e) => updateRule(index, { target_id: e.target.value })}
           className="flex-1 h-9 px-3 text-sm rounded-md border border-line bg-white text-ink focus:outline-none focus:ring-2 focus:ring-primary/30 focus:border-primary transition-all duration-150"
           aria-label="Select department"
         >
@@ -1248,7 +1475,7 @@ function TargetingModal({ isOpen, onClose, saveMutation, onSaved }: TargetingMod
       return (
         <select
           value={rule.target_id}
-          onChange={(e) => updateRule(index, 'target_id', e.target.value)}
+          onChange={(e) => updateRule(index, { target_id: e.target.value })}
           className="flex-1 h-9 px-3 text-sm rounded-md border border-line bg-white text-ink focus:outline-none focus:ring-2 focus:ring-primary/30 focus:border-primary transition-all duration-150"
           aria-label="Select role"
         >
@@ -1262,16 +1489,43 @@ function TargetingModal({ isOpen, onClose, saveMutation, onSaved }: TargetingMod
       );
     }
 
-    // For 'user' and 'group', fall back to text input (these would need dedicated selectors in production)
-    return (
-      <input
-        type="text"
-        value={rule.target_id}
-        onChange={(e) => updateRule(index, 'target_id', e.target.value)}
-        placeholder={`Enter ${rule.target_type} ID...`}
-        className="flex-1 h-9 px-3 text-sm rounded-md border border-line bg-white text-ink placeholder:text-ink-muted focus:outline-none focus:ring-2 focus:ring-primary/30 focus:border-primary transition-all duration-150"
-      />
-    );
+    if (rule.target_type === 'group') {
+      return (
+        <select
+          value={rule.target_id}
+          onChange={(e) => updateRule(index, { target_id: e.target.value })}
+          className="flex-1 h-9 px-3 text-sm rounded-md border border-line bg-white text-ink focus:outline-none focus:ring-2 focus:ring-primary/30 focus:border-primary transition-all duration-150"
+          aria-label="Select group"
+        >
+          <option value="">Select group...</option>
+          {groups?.map((group) => (
+            <option key={group._id} value={group._id}>
+              {group.name}
+            </option>
+          ))}
+        </select>
+      );
+    }
+
+    if (rule.target_type === 'user') {
+      return (
+        <select
+          value={rule.target_id}
+          onChange={(e) => updateRule(index, { target_id: e.target.value })}
+          className="flex-1 h-9 px-3 text-sm rounded-md border border-line bg-white text-ink focus:outline-none focus:ring-2 focus:ring-primary/30 focus:border-primary transition-all duration-150"
+          aria-label="Select user"
+        >
+          <option value="">Select user...</option>
+          {users?.map((user) => (
+            <option key={user._id} value={user._id}>
+              {user.full_name}
+            </option>
+          ))}
+        </select>
+      );
+    }
+
+    return null;
   };
 
   return (
@@ -1284,6 +1538,19 @@ function TargetingModal({ isOpen, onClose, saveMutation, onSaved }: TargetingMod
       footer={
         <>
           <button
+            onClick={() => {
+              const validRules = rules.filter((r) => r.target_id && r.target_id !== '');
+              simulateMutation.mutate(validRules, {
+                onSuccess: (data) => setSimulationResult(data)
+              });
+            }}
+            disabled={simulateMutation.isPending || rules.every((r) => !r.target_id)}
+            className="h-9 px-4 text-sm font-medium rounded-md border border-line bg-white text-ink hover:bg-surface-alt transition-colors disabled:opacity-50 disabled:cursor-not-allowed mr-auto flex items-center gap-2"
+          >
+            <Eye className="w-4 h-4" />
+            {simulateMutation.isPending ? 'Simulating...' : 'Preview Impact'}
+          </button>
+          <button
             onClick={onClose}
             disabled={saveMutation.isPending}
             className="h-9 px-4 text-sm font-medium rounded-md border border-line bg-white text-ink hover:bg-surface-alt transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
@@ -1292,11 +1559,11 @@ function TargetingModal({ isOpen, onClose, saveMutation, onSaved }: TargetingMod
           </button>
           <button
             onClick={handleSave}
-            disabled={saveMutation.isPending || rules.every((r) => !r.target_id)}
+            disabled={saveMutation.isPending || conflictCheckMutation.isPending || rules.every((r) => !r.target_id)}
             className="h-9 px-4 text-sm font-medium rounded-md bg-primary hover:bg-primary-hover text-white transition-colors disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2"
           >
             <Save className="w-4 h-4" />
-            {saveMutation.isPending ? 'Saving...' : 'Save Rules'}
+            {saveMutation.isPending || conflictCheckMutation.isPending ? 'Saving...' : 'Save Rules'}
           </button>
         </>
       }
@@ -1308,9 +1575,10 @@ function TargetingModal({ isOpen, onClose, saveMutation, onSaved }: TargetingMod
               value={rule.target_type}
               onChange={(e) => {
                 const newType = e.target.value as PolicyTargetType;
-                updateRule(index, 'target_type', newType);
-                // Reset target_id when type changes
-                updateRule(index, 'target_id', newType === 'all' ? 'all' : '');
+                updateRule(index, { 
+                  target_type: newType, 
+                  target_id: newType === 'all' ? 'all' : '' 
+                });
               }}
               className="h-9 px-3 text-sm rounded-md border border-line bg-white text-ink focus:outline-none focus:ring-2 focus:ring-primary/30 focus:border-primary transition-all duration-150 w-40"
               aria-label="Select target type"
@@ -1342,11 +1610,79 @@ function TargetingModal({ isOpen, onClose, saveMutation, onSaved }: TargetingMod
           Add Target Rule
         </button>
 
+        {conflicts?.has_conflicts && (
+          <div className="p-4 bg-error-light border border-error-border rounded-md mt-4">
+            <div className="flex items-start gap-2">
+              <AlertTriangle className="w-4 h-4 text-error flex-shrink-0 mt-0.5" />
+              <div>
+                <p className="text-sm font-semibold text-error mb-1">
+                  Conflict Detected
+                </p>
+                <ul className="text-xs text-error space-y-1 pl-4 list-disc">
+                  {conflicts.conflicting_policies.map((c, i) => (
+                    <li key={i}>{c.conflict_reason}</li>
+                  ))}
+                </ul>
+                <p className="text-xs text-error mt-2 font-medium">
+                  You must resolve these conflicts by modifying the target rules or archiving conflicting policies before saving.
+                </p>
+              </div>
+            </div>
+          </div>
+        )}
+
         <div className="p-3 bg-info-light border border-info-border rounded-md mt-4">
           <p className="text-xs text-info">
-            <strong>RULE-08:</strong> After saving, the system will automatically check for conflicting policies targeting the same user population.
+            <strong>RULE-08:</strong> Before saving, the system will automatically check for conflicting policies targeting the same user population.
           </p>
         </div>
+
+        {simulationResult && (
+          <div className="mt-6 p-4 bg-surface-alt border border-line rounded-md">
+            <h4 className="text-sm font-semibold text-ink mb-3 flex items-center gap-2">
+              <Eye className="w-4 h-4 text-primary" />
+              Simulation Results
+            </h4>
+            
+            <div className="space-y-4">
+              <div>
+                <p className="text-xs font-semibold text-ink-secondary mb-1">Affected Users ({simulationResult.affected_users.length})</p>
+                <div className="max-h-32 overflow-y-auto border border-line rounded bg-white text-xs text-ink divide-y divide-line">
+                  {simulationResult.affected_users.length > 0 ? (
+                    simulationResult.affected_users.map((u) => (
+                      <div key={u._id} className="p-2 flex justify-between">
+                        <span>{u.full_name}</span>
+                        <span className="text-ink-muted">{u.email}</span>
+                      </div>
+                    ))
+                  ) : (
+                    <div className="p-2 text-ink-muted">No users affected</div>
+                  )}
+                </div>
+              </div>
+
+              {simulationResult.affected_groups.length > 0 && (
+                <div>
+                  <p className="text-xs font-semibold text-ink-secondary mb-1">Affected Groups/Roles</p>
+                  <ul className="list-disc list-inside text-xs text-ink pl-1">
+                    {simulationResult.affected_groups.map((g, i) => (
+                      <li key={i}>{g}</li>
+                    ))}
+                  </ul>
+                </div>
+              )}
+
+              <div>
+                <p className="text-xs font-semibold text-ink-secondary mb-1">Expected Changes</p>
+                <ul className="list-disc list-inside text-xs text-ink pl-1">
+                  {simulationResult.expected_changes.map((c, i) => (
+                    <li key={i}>{c}</li>
+                  ))}
+                </ul>
+              </div>
+            </div>
+          </div>
+        )}
       </div>
     </Modal>
   );

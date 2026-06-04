@@ -23,6 +23,10 @@ import { PERMISSION_GROUPS, ROLES } from '../constants/roles';
 import { NotificationTemplate } from '../models/NotificationTemplate.model';
 import { AuditEvent } from '../models/AuditEvent.model';
 import { resolveUserPermissions } from '../lib/rbac';
+import { App } from '../models/App.model';
+import { AppAssignment } from '../models/AppAssignment.model';
+import { Group } from '../models/Group.model';
+import { GroupMember } from '../models/GroupMember.model';
 
 
 // ── Types & Interfaces ───────────────────────────────────────────────────────
@@ -741,6 +745,87 @@ export const getUserHistory = asyncHandler(async (req: Request, res: Response) =
     .sort({ created_at: -1 });
 
   res.status(200).json({ success: true, data: history });
+});
+
+/**
+ * GET /people/:id/app-history
+ * Returns the app access history for a specific user.
+ */
+export const getUserAppAccessHistory = asyncHandler(async (req: Request, res: Response) => {
+  const userId = getRouteId(req.params.id);
+  const companyId = req.user.company_id;
+
+  const user = await User.findOne({ _id: userId, company_id: companyId }).lean();
+  if (!user) {
+    throw new AppError('User not found', 404, 'NOT_FOUND');
+  }
+
+  const userRoles = await UserRole.find({ user_id: userId, company_id: companyId }).lean();
+  const roleIds = userRoles.map(ur => ur.role_id);
+
+  const userGroups = await GroupMember.find({ user_id: userId }).lean();
+  const groupIds = userGroups.map(gm => gm.group_id);
+
+  const attributeAssignments = await AppAssignment.find({
+    company_id: companyId,
+    target_type: 'attribute',
+  }).lean();
+
+  const matchedAttributeIds = attributeAssignments
+    .filter(a => {
+       const userVal = String((user as any)[a.attribute_name as string] || (user as any).custom_fields?.[a.attribute_name as string]);
+       return userVal === String(a.attribute_value);
+    })
+    .map(a => a._id);
+
+  const assignments = await AppAssignment.find({
+    company_id: companyId,
+    $or: [
+      { target_type: 'user', target_id: userId },
+      { target_type: 'role', target_id: { $in: roleIds } },
+      { target_type: 'group', target_id: { $in: groupIds } },
+      ...(user.department_id ? [{ target_type: 'department', target_id: user.department_id }] : []),
+      ...(matchedAttributeIds.length > 0 ? [{ _id: { $in: matchedAttributeIds } }] : []),
+    ]
+  })
+    .sort({ granted_at: -1 })
+    .lean();
+
+  const enrichedAssignments = await Promise.all(
+    assignments.map(async (assignment) => {
+      const app = await App.findById(assignment.app_id).select('name icon_url slug').lean();
+      
+      const grantedBy = await User.findById(assignment.granted_by).select('full_name email').lean();
+      let revokedBy = null;
+      if (assignment.revoked_by) {
+        revokedBy = await User.findById(assignment.revoked_by).select('full_name email').lean();
+      }
+      
+      let target_name = user.full_name;
+      if (assignment.target_type === 'role') {
+        const role = await Role.findById(assignment.target_id).select('name').lean();
+        target_name = role?.name || 'Unknown Role';
+      } else if (assignment.target_type === 'department') {
+        const dept = await Department.findById(assignment.target_id).select('name').lean();
+        target_name = dept?.name || 'Unknown Department';
+      } else if (assignment.target_type === 'group') {
+        const group = await Group.findById(assignment.target_id).select('name').lean();
+        target_name = group?.name || 'Unknown Group';
+      } else if (assignment.target_type === 'attribute') {
+        target_name = `${assignment.attribute_name} = ${assignment.attribute_value}`;
+      }
+
+      return {
+        ...assignment,
+        app_info: app,
+        target_name,
+        granted_by_info: grantedBy,
+        revoked_by_info: revokedBy,
+      };
+    })
+  );
+
+  res.status(200).json({ success: true, data: enrichedAssignments });
 });
 
 

@@ -22,9 +22,9 @@ async function seedFirstUser() {
     });
     console.log('Connected successfully.');
 
-    const email = 'tsaleem@abidisolutions.com';
-    const password = 'Mtayyab595*';
-    const fullName = 'Tayyab Saleem';
+    const email = 'admin@example.com';
+    const password = 'password123';
+    const fullName = 'Admin Bhai';
 
     // 1. Find or create Company
     let company = await Company.findOne({ name: 'Abidi Solutions LLC' });
@@ -44,7 +44,7 @@ async function seedFirstUser() {
 
     // 2. Seed Database (Permissions, Roles, Security Policy)
     console.log('Seeding database for company...');
-    await seedDatabase(company._id as string);
+    await seedDatabase(company._id.toString());
 
     // 3. Find the Super Admin Role (created by seedDatabase)
     const role = await Role.findOne({ company_id: company._id, name: ROLES.SUPER_ADMIN });

@@ -122,6 +122,32 @@ export const useUpdatePolicyDraft = (policyId: string) => {
 };
 
 /**
+ * Creates a new draft policy version.
+ * Produces audit event: policy.draft_created
+ * Used on: PoliciesPage (publish modal, save draft button)
+ */
+export const useCreateDraftPolicy = () => {
+  const queryClient = useQueryClient();
+
+  return useMutation<PolicyVersion, Error, PublishPolicyInput>({
+    mutationFn: async (input: PublishPolicyInput) => {
+      const { data } = await apiClient.post('/policies/draft', input);
+      return data.data;
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: QUERY_KEYS.POLICIES });
+      toast.success('Draft created successfully');
+    },
+    onError: (error: unknown) => {
+      const err = error as { response?: { data?: { error?: string } } };
+      const message = err?.response?.data?.error || 'Failed to create draft';
+      toast.error(message);
+    },
+  });
+};
+
+
+/**
  * Archives a published policy version (soft delete, keeps history accessible).
  * Produces audit event: policy.archived
  * Used on: PoliciesPage (version actions)
@@ -142,6 +168,56 @@ export const useArchivePolicy = () => {
     onError: (error: unknown) => {
       const err = error as { response?: { data?: { error?: string } } };
       const message = err?.response?.data?.error || 'Failed to archive policy';
+      toast.error(message);
+    },
+  });
+};
+
+/**
+ * Hard deletes a draft or archived policy version.
+ * Produces audit event: policy.deleted
+ * Used on: PoliciesPage (version actions)
+ */
+export const useDeletePolicy = () => {
+  const queryClient = useQueryClient();
+
+  return useMutation<void, Error, { policy_id: string }>({
+    mutationFn: async ({ policy_id }: { policy_id: string }) => {
+      await apiClient.delete(`/policies/${policy_id}`);
+    },
+    onSuccess: (_, vars) => {
+      queryClient.invalidateQueries({ queryKey: QUERY_KEYS.POLICIES });
+      toast.success('Policy deleted successfully');
+    },
+    onError: (error: unknown) => {
+      const err = error as { response?: { data?: { error?: string } } };
+      const message = err?.response?.data?.error || 'Failed to delete policy';
+      toast.error(message);
+    },
+  });
+};
+
+/**
+ * Rolls back to a specific policy version.
+ * Produces audit event: policy.rolled_back
+ * Used on: PoliciesPage (version actions)
+ */
+export const useRollbackPolicy = () => {
+  const queryClient = useQueryClient();
+
+  return useMutation<PolicyVersion, Error, { policy_id: string }>({
+    mutationFn: async ({ policy_id }: { policy_id: string }) => {
+      const { data } = await apiClient.post(`/policies/${policy_id}/rollback`);
+      return data.data;
+    },
+    onSuccess: (_, vars) => {
+      queryClient.invalidateQueries({ queryKey: QUERY_KEYS.POLICIES });
+      queryClient.invalidateQueries({ queryKey: QUERY_KEYS.POLICY_DETAIL(vars.policy_id) });
+      toast.success('Policy rolled back successfully');
+    },
+    onError: (error: unknown) => {
+      const err = error as { response?: { data?: { error?: string } } };
+      const message = err?.response?.data?.error || 'Failed to rollback policy';
       toast.error(message);
     },
   });
@@ -173,12 +249,18 @@ export const useAcknowledgePolicy = (policyId: string) => {
   });
 };
 
+export interface PolicyAcknowledgmentReport {
+  acknowledged: PolicyAcknowledgment[];
+  pending: Array<{ _id: string; user: any }>;
+  total_targeted: number;
+}
+
 /**
- * Fetches all acknowledgments for a specific policy version.
+ * Fetches all acknowledgments and pending users for a specific policy version.
  * Used on: PoliciesPage (acknowledgments list)
  */
 export const usePolicyAcknowledgments = (policyId: string) => {
-  return useQuery<PolicyAcknowledgment[]>({
+  return useQuery<PolicyAcknowledgmentReport>({
     queryKey: QUERY_KEYS.POLICY_ACKNOWLEDGMENTS(policyId),
     queryFn: async () => {
       const { data } = await apiClient.get(`/policies/${policyId}/acknowledgments`);
@@ -240,18 +322,18 @@ export const useSaveAssignmentRules = (policyId: string) => {
 
 /**
  * Checks for conflicting policies on the same user population (RULE-08).
- * Used on: PoliciesPage (after saving assignment rules)
+ * Used on: PoliciesPage (before saving assignment rules)
  */
 export const usePolicyConflictCheck = (policyId: string) => {
-  return useQuery<PolicyConflictCheck>({
-    queryKey: ['policy', policyId, 'conflicts'] as const,
-    queryFn: async () => {
-      const { data } = await apiClient.get(`/policies/${policyId}/conflict-check`);
+  return useMutation<
+    PolicyConflictCheck,
+    Error,
+    Array<{ target_type: PolicyTargetType; target_id: string }>
+  >({
+    mutationFn: async (rules) => {
+      const { data } = await apiClient.post(`/policies/${policyId}/conflict-check`, { rules });
       return data.data;
     },
-    enabled: !!policyId,
-    staleTime: 1000 * 60 * 1,
-    retry: 1,
   });
 };
 
@@ -284,10 +366,6 @@ export const usePolicyVersionDiff = (policyKey: string, versionA: string, versio
   });
 };
 
-/**
- * Fetches all assignment rules for a specific policy version.
- * Used on: PoliciesPage (targeting view)
- */
 export const usePolicyAssignments = (policyId: string) => {
   return useQuery<PolicyAssignmentRule[]>({
     queryKey: QUERY_KEYS.POLICY_ASSIGNMENTS(policyId),
@@ -300,3 +378,20 @@ export const usePolicyAssignments = (policyId: string) => {
     retry: 2,
   });
 };
+
+/**
+ * Simulates policy application based on assignment rules.
+ */
+export const useSimulatePolicy = () => {
+  return useMutation<{
+    affected_users: any[];
+    affected_groups: string[];
+    expected_changes: string[];
+  }, Error, Array<{ target_type: string; target_id: string }>>({
+    mutationFn: async (assignment_rules) => {
+      const { data } = await apiClient.post(`/policies/simulate`, { assignment_rules });
+      return data.data;
+    },
+  });
+};
+

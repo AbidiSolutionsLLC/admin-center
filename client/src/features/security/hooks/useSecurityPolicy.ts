@@ -12,8 +12,8 @@ export const useSecurityPolicy = () => {
   return useQuery<SecurityPolicy>({
     queryKey: QUERY_KEYS.SECURITY_POLICY,
     queryFn: async () => {
-      const { data } = await apiClient.get('/security/policy');
-      return data.data;
+      const { data } = await apiClient.get('/security/policies');
+      return data.data[0];
     },
     staleTime: 1000 * 60 * 5,
     retry: 2,

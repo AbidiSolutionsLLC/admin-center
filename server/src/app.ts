@@ -10,12 +10,12 @@ import routes from './routes';
 const app = express();
 
 app.set('trust proxy', 1); // Trust first proxy (e.g. Nginx, Azure) if deploying behind one
-app.use(cors({
+app.use(cors({ 
   origin: [
-    process.env.CLIENT_URL as string,
+    process.env.CLIENT_URL as string, 
     'http://localhost:5174'
-  ],
-  credentials: true
+  ], 
+  credentials: true 
 }));
 app.use(helmet());
 app.use(express.json());

@@ -41,6 +41,9 @@ export * from './WorkflowRun.model';
 
 // Policy models
 export * from './PolicyAssignment.model';
+export * from './AccessControlPolicy.model';
+export * from './DataGovernancePolicy.model';
+export * from './PolicyTemplate.model';
 
 // Group models
 export * from './Group.model';
