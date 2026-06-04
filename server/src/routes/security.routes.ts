@@ -4,8 +4,10 @@ import { requireAuth } from '../middleware/auth';
 import { requireRole } from '../middleware/requireRole';
 import { PERMISSION_GROUPS } from '../constants/roles';
 import {
-  getSecurityPolicy,
+  getSecurityPolicies,
+  createSecurityPolicy,
   updateSecurityPolicy,
+  deleteSecurityPolicy,
   getSecurityEvents,
   forceLogoutUser,
 } from '../controllers/security.controller';
@@ -16,8 +18,10 @@ const router = Router();
 router.use(requireAuth);
 
 // Policy routes
-router.get('/policy', getSecurityPolicy);
-router.put('/policy', requireRole(PERMISSION_GROUPS.IT_ADMINS), updateSecurityPolicy);
+router.get('/policies', getSecurityPolicies);
+router.post('/policies', requireRole(PERMISSION_GROUPS.IT_ADMINS), createSecurityPolicy);
+router.put('/policies/:id', requireRole(PERMISSION_GROUPS.IT_ADMINS), updateSecurityPolicy);
+router.delete('/policies/:id', requireRole(PERMISSION_GROUPS.IT_ADMINS), deleteSecurityPolicy);
 
 // Events / access log routes
 router.get('/events', getSecurityEvents);

@@ -12,6 +12,10 @@ import { Insight } from '../models/Insight.model';
 import { auditLogger } from '../lib/auditLogger';
 import { AppError } from '../utils/AppError';
 import { Types } from 'mongoose';
+import { Group } from '../models/Group.model';
+import { Department } from '../models/Department.model';
+import { Role } from '../models/Role.model';
+import { escapeRegExp } from '../utils/regex';
 
 // ── Zod Schemas ──────────────────────────────────────────────────────────────
 
@@ -22,6 +26,9 @@ const PublishPolicySchema = z.object({
   effective_date: z.string().trim().refine((val) => !isNaN(Date.parse(val)), {
     message: 'Invalid date format',
   }),
+  expiry_date: z.string().trim().refine((val) => !isNaN(Date.parse(val)), {
+    message: 'Invalid date format',
+  }).optional(),
   summary: z.string().trim().optional(),
   assignment_rules: z
     .array(
@@ -41,12 +48,14 @@ const UpdateDraftPolicySchema = z.object({
     .string().trim()
     .refine((val) => !isNaN(Date.parse(val)), { message: 'Invalid date format' })
     .optional(),
+  expiry_date: z
+    .string().trim()
+    .refine((val) => !isNaN(Date.parse(val)), { message: 'Invalid date format' })
+    .optional(),
   summary: z.string().trim().optional(),
 });
 
-const AcknowledgePolicySchema = z.object({
-  policy_version_id: z.string().min(1, 'Policy version ID is required'),
-});
+// AcknowledgePolicySchema removed
 
 const AssignmentRulesSchema = z.object({
   rules: z.array(
@@ -58,6 +67,15 @@ const AssignmentRulesSchema = z.object({
 });
 
 // ── Label resolvers for assignment targets ───────────────────────────────────
+
+const SimulatePolicySchema = z.object({
+  assignment_rules: z.array(
+    z.object({
+      target_type: z.enum(['all', 'role', 'department', 'group', 'user']),
+      target_id: z.string().trim().min(1, 'Target ID is required'),
+    })
+  ).min(1, 'At least one assignment rule is required'),
+});
 
 const TARGET_LABELS: Record<string, string> = {
   all: 'All Users',
@@ -74,29 +92,25 @@ async function resolveTargetLabel(
 ): Promise<string> {
   if (targetType === 'all') return TARGET_LABELS.all;
 
-  try {
-    if (targetType === 'user') {
-      const { User } = await import('../models/User.model');
-      const user = await User.findById(targetId).select('full_name');
-      if (user) return user.full_name;
-    } else if (targetType === 'role') {
-      const { Role } = await import('../models/Role.model');
-      const role = await Role.findById(targetId).select('name');
-      if (role) return role.name;
-    } else if (targetType === 'department') {
-      const { Department } = await import('../models/Department.model');
-      const dept = await Department.findById(targetId).select('name');
-      if (dept) return dept.name;
-    } else if (targetType === 'group') {
-      const { Group } = await import('../models/Group.model');
-      const group = await Group.findById(targetId).select('name');
-      if (group) return group.name;
-    }
-  } catch (err) {
-    console.error(`Failed to resolve target label for ${targetType} ${targetId}`, err);
+  if (targetType === 'user') {
+    const { User } = await import('../models/User.model');
+    const user = await User.findOne({ _id: targetId, company_id: new Types.ObjectId(companyId) }).select('full_name');
+    if (user) return user.full_name;
+  } else if (targetType === 'role') {
+    const { Role } = await import('../models/Role.model');
+    const role = await Role.findOne({ _id: targetId, company_id: new Types.ObjectId(companyId) }).select('name');
+    if (role) return role.name;
+  } else if (targetType === 'department') {
+    const { Department } = await import('../models/Department.model');
+    const dept = await Department.findOne({ _id: targetId, company_id: new Types.ObjectId(companyId) }).select('name');
+    if (dept) return dept.name;
+  } else if (targetType === 'group') {
+    const { Group } = await import('../models/Group.model');
+    const group = await Group.findOne({ _id: targetId, company_id: new Types.ObjectId(companyId) }).select('name');
+    if (group) return group.name;
   }
 
-  return `${TARGET_LABELS[targetType] || 'Target'} (${targetId})`;
+  throw new AppError(`Target ${targetType} with ID ${targetId} not found`, 404, 'TARGET_NOT_FOUND');
 }
 
 // ── Helper Functions ─────────────────────────────────────────────────────────
@@ -155,7 +169,8 @@ async function resolveTargetedUsers(
         break;
 
       default:
-        console.warn(`[resolveTargetedUsers] Unknown target type: ${rule.target_type}`);
+        // Ignore unknown target types
+        break;
     }
   }
 
@@ -166,12 +181,70 @@ async function resolveTargetedUsers(
 // ── Controllers ──────────────────────────────────────────────────────────────
 
 /**
+ * POST /policies/simulate
+ * Simulates applying assignment rules and returns affected users and groups.
+ * Does NOT save anything to the database.
+ */
+export const simulatePolicyApplication = asyncHandler(async (req: Request, res: Response) => {
+  const input = SimulatePolicySchema.parse(req.body);
+
+  // 1. Resolve affected users
+  const affectedUsers = await resolveTargetedUsers(
+    req.user.company_id,
+    input.assignment_rules
+  );
+
+  // 2. Resolve affected groups/departments/roles from rules
+  const affectedGroups: string[] = [];
+  for (const rule of input.assignment_rules) {
+    if (rule.target_type !== 'user') {
+      try {
+        const label = await resolveTargetLabel(rule.target_type, rule.target_id, req.user.company_id);
+        affectedGroups.push(`${TARGET_LABELS[rule.target_type] || rule.target_type}: ${label}`);
+      } catch (err) {
+        // Ignore if not found during simulation
+      }
+    }
+  }
+
+  // 3. Format response
+  res.status(200).json({
+    success: true,
+    data: {
+      affected_users: affectedUsers.map((u) => ({
+        _id: u._id,
+        full_name: u.full_name,
+        email: u.email,
+        lifecycle_state: u.lifecycle_state,
+      })),
+      affected_groups: Array.from(new Set(affectedGroups)),
+      expected_changes: [
+        `Policy will be assigned to ${affectedUsers.length} user(s).`,
+        `Acknowledgment will be required from all targeted users.`,
+        `In-app notifications and emails will be triggered upon publish.`
+      ],
+    },
+  });
+});
+
+/**
  * GET /policies
  * Returns all policy keys with their latest version for the current company.
  * Groups by policy_key and returns only the most recent version per key.
  */
 export const getPolicies = asyncHandler(async (req: Request, res: Response) => {
   const { category, status } = req.query;
+
+  // Validate allowed enum values to prevent NoSQL injection via unvalidated query params
+  const ALLOWED_CATEGORIES = ['hr', 'it', 'security', 'compliance', 'operations', 'other'];
+  const ALLOWED_STATUSES = ['draft', 'published', 'archived'];
+
+  if (category && !ALLOWED_CATEGORIES.includes(String(category))) {
+    throw new AppError(`Invalid category filter. Allowed: ${ALLOWED_CATEGORIES.join(', ')}`, 400, 'INVALID_FILTER');
+  }
+  if (status && !ALLOWED_STATUSES.includes(String(status))) {
+    throw new AppError(`Invalid status filter. Allowed: ${ALLOWED_STATUSES.join(', ')}`, 400, 'INVALID_FILTER');
+  }
 
   // Build filter query
   const filter: Record<string, unknown> = {
@@ -276,15 +349,24 @@ export const publishPolicy = asyncHandler(async (req: Request, res: Response) =>
   })
     .sort({ version_number: -1 });
 
-  // Duplicate check using case-insensitive regex
+  // Duplicate check using case-insensitive regex — escape title to prevent ReDoS
   if (!latestVersion) {
     const existing = await PolicyVersion.findOne({
-      title: { $regex: `^${input.title}$`, $options: 'i' },
+      title: { $regex: `^${escapeRegExp(input.title)}$`, $options: 'i' },
       company_id: new Types.ObjectId(req.user.company_id),
     });
 
     if (existing) {
       throw new AppError('A policy with this name already exists', 400, 'DUPLICATE_NAME');
+    }
+  }
+
+  // Pre-validate all assignment rule targets BEFORE creating the PolicyVersion.
+  // This prevents orphaned PolicyVersion records when a target is invalid.
+  if (input.assignment_rules && input.assignment_rules.length > 0) {
+    for (const rule of input.assignment_rules) {
+      // resolveTargetLabel will throw AppError if target not found
+      await resolveTargetLabel(rule.target_type, rule.target_id, req.user.company_id);
     }
   }
 
@@ -301,15 +383,23 @@ export const publishPolicy = asyncHandler(async (req: Request, res: Response) =>
     status: 'published',
     category: input.category,
     effective_date: new Date(input.effective_date),
+    expiry_date: input.expiry_date ? new Date(input.expiry_date) : undefined,
     published_by: new Types.ObjectId(req.user.userId),
     published_at: new Date(),
     summary: input.summary,
-    is_active: true,
+    is_active: false,
   });
 
   // Save assignment rules if provided
   if (input.assignment_rules && input.assignment_rules.length > 0) {
+    // Deduplicate input rules to prevent E11000 crashes
+    const uniqueRules = new Map<string, typeof input.assignment_rules[0]>();
     for (const rule of input.assignment_rules) {
+      uniqueRules.set(`${rule.target_type}-${rule.target_id}`, rule);
+    }
+    const deduplicatedRules = Array.from(uniqueRules.values());
+
+    for (const rule of deduplicatedRules) {
       const label = await resolveTargetLabel(rule.target_type, rule.target_id, req.user.company_id);
       await PolicyAssignment.findOneAndUpdate(
         {
@@ -346,6 +436,7 @@ export const publishPolicy = asyncHandler(async (req: Request, res: Response) =>
       status: policyVersion.status,
       category: policyVersion.category,
       effective_date: policyVersion.effective_date,
+      expiry_date: policyVersion.expiry_date,
       published_by: req.user.userId,
       published_at: policyVersion.published_at,
       summary: policyVersion.summary,
@@ -391,7 +482,6 @@ export const publishPolicy = asyncHandler(async (req: Request, res: Response) =>
 
         notificationCount++;
       } catch (notifError) {
-        console.error(`[Policy Notification] Failed to notify user ${user._id}:`, notifError);
         // Don't fail the entire publish if notification fails
       }
     }
@@ -422,6 +512,27 @@ export const acknowledgePolicy = asyncHandler(async (req: Request, res: Response
 
   if (!policyVersion) {
     throw new AppError('Policy version not found', 404, 'POLICY_VERSION_NOT_FOUND');
+  }
+
+  if (policyVersion.status !== 'published') {
+    throw new AppError('Cannot acknowledge an unpublished policy', 400, 'POLICY_NOT_PUBLISHED');
+  }
+
+  // Check if user is actually targeted by this policy
+  const assignments = await PolicyAssignment.find({
+    company_id: new Types.ObjectId(req.user.company_id),
+    policy_version_id: policyVersion._id,
+  });
+
+  if (assignments.length > 0) {
+    const targetedUsers = await resolveTargetedUsers(
+      req.user.company_id,
+      assignments.map((a) => ({ target_type: a.target_type, target_id: a.target_id }))
+    );
+    const isTargeted = targetedUsers.some((u) => u._id.toString() === req.user.userId);
+    if (!isTargeted) {
+      throw new AppError('You are not targeted by this policy', 403, 'NOT_TARGETED');
+    }
   }
 
   // Check if user already acknowledged this version
@@ -496,7 +607,7 @@ export const getPolicyAcknowledgments = asyncHandler(async (req: Request, res: R
     policy_version_id: policyVersion._id,
   });
 
-  let targetedUsers: Array<any> = [];
+  let targetedUsers: Array<typeof User.prototype> = [];
   if (assignments.length > 0) {
     targetedUsers = await resolveTargetedUsers(
       req.user.company_id,
@@ -508,7 +619,15 @@ export const getPolicyAcknowledgments = asyncHandler(async (req: Request, res: R
     // Publish schema makes assignment_rules optional, but without it no one is notified.
   }
 
-  const pending: Array<any> = [];
+  const pending: Array<{
+    _id: string;
+    user: {
+      _id: string;
+      full_name: string;
+      email: string;
+      avatar_url?: string;
+    };
+  }> = [];
   
   targetedUsers.forEach(user => {
     if (!acknowledgedUsersMap.has(user._id.toString())) {
@@ -601,6 +720,7 @@ export const updatePolicyDraft = asyncHandler(async (req: Request, res: Response
     content: policyVersion.content,
     category: policyVersion.category,
     effective_date: policyVersion.effective_date,
+    expiry_date: policyVersion.expiry_date,
     summary: policyVersion.summary,
   };
 
@@ -622,6 +742,7 @@ export const updatePolicyDraft = asyncHandler(async (req: Request, res: Response
       content: policyVersion.content,
       category: policyVersion.category,
       effective_date: policyVersion.effective_date,
+      expiry_date: policyVersion.expiry_date,
       summary: policyVersion.summary,
     },
   });
@@ -632,6 +753,63 @@ export const updatePolicyDraft = asyncHandler(async (req: Request, res: Response
   );
 
   res.status(200).json({ success: true, data: populatedPolicy });
+});
+
+/**
+ * POST /policies/draft
+ * Creates a new draft policy (saves without publishing).
+ * Produces audit event: policy.draft_created
+ */
+export const createDraftPolicy = asyncHandler(async (req: Request, res: Response) => {
+  const input = PublishPolicySchema.parse(req.body);
+
+  const policyKey = input.title
+    .toLowerCase()
+    .replace(/\s+/g, '-')
+    .replace(/[^a-z0-9-]/g, '');
+
+  const existing = await PolicyVersion.findOne({
+    title: { $regex: `^${escapeRegExp(input.title)}$`, $options: 'i' },
+    company_id: new Types.ObjectId(req.user.company_id),
+  });
+
+  if (existing) {
+    throw new AppError('A policy with this name already exists', 400, 'DUPLICATE_NAME');
+  }
+
+  const policyVersion = await PolicyVersion.create({
+    company_id: new Types.ObjectId(req.user.company_id),
+    policy_key: policyKey,
+    title: input.title,
+    content: input.content,
+    version_number: 1,
+    status: 'draft',
+    category: input.category,
+    effective_date: new Date(input.effective_date),
+    expiry_date: input.expiry_date ? new Date(input.expiry_date) : undefined,
+    summary: input.summary,
+    is_active: false,
+  });
+
+  await auditLogger.log({
+    req,
+    action: 'policy.draft_created',
+    module: 'policies',
+    object_type: 'PolicyVersion',
+    object_id: policyVersion._id.toString(),
+    object_label: `${policyVersion.title} (draft)`,
+    before_state: null,
+    after_state: {
+      policy_key: policyVersion.policy_key,
+      title: policyVersion.title,
+      status: policyVersion.status,
+    },
+  });
+
+  res.status(201).json({
+    success: true,
+    data: policyVersion,
+  });
 });
 
 /**
@@ -761,10 +939,11 @@ export const rollbackPolicy = asyncHandler(async (req: Request, res: Response) =
     status: 'published',
     category: oldVersion.category,
     effective_date: new Date(),
+    expiry_date: oldVersion.expiry_date,
     published_by: new Types.ObjectId(req.user.userId),
     published_at: new Date(),
     summary: `Rolled back to version ${oldVersion.version_number}`,
-    is_active: true,
+    is_active: false,
   });
 
   // Copy assignment rules from old version
@@ -773,7 +952,20 @@ export const rollbackPolicy = asyncHandler(async (req: Request, res: Response) =
     policy_version_id: oldVersion._id,
   });
 
+  // Check conflicts before rollback
   if (oldAssignments && oldAssignments.length > 0) {
+    const rulesToCheck = oldAssignments.map(a => ({ target_type: a.target_type, target_id: a.target_id }));
+    const conflicts = await checkPolicyConflicts(req.user.company_id, policyVersion._id.toString(), rulesToCheck);
+    if (conflicts.has_conflicts) {
+      // Cleanup the orphaned version; wrap in try/catch to ensure AppError still propagates
+      try {
+        await PolicyVersion.deleteOne({ _id: policyVersion._id });
+      } catch (cleanupErr) {
+        // Ignore cleanup errors
+      }
+      throw new AppError('Cannot rollback: Assignment rules from the old version conflict with currently active policies.', 400, 'POLICY_CONFLICT');
+    }
+
     for (const rule of oldAssignments) {
       await PolicyAssignment.create({
         company_id: new Types.ObjectId(req.user.company_id),
@@ -837,6 +1029,21 @@ export const saveAssignmentRules = asyncHandler(async (req: Request, res: Respon
     throw new AppError('Policy version not found', 404, 'POLICY_VERSION_NOT_FOUND');
   }
 
+  // RULE-08: Check for conflicting policies on the same user population BEFORE saving
+  const conflicts = await checkPolicyConflicts(
+    req.user.company_id,
+    policyVersion._id.toString(),
+    input.rules
+  );
+
+  if (conflicts.has_conflicts) {
+    throw new AppError(
+      'Cannot apply policy: Conflict detected with existing policies. Please resolve conflicts first.',
+      400,
+      'POLICY_CONFLICT'
+    );
+  }
+
   // Capture existing rules before deletion (for audit trail)
   const existingRules = await PolicyAssignment.find({
     company_id: new Types.ObjectId(req.user.company_id),
@@ -849,9 +1056,16 @@ export const saveAssignmentRules = asyncHandler(async (req: Request, res: Respon
     policy_version_id: policyVersion._id,
   });
 
+  // Deduplicate input rules
+  const uniqueRules = new Map<string, typeof input.rules[0]>();
+  for (const rule of input.rules) {
+    uniqueRules.set(`${rule.target_type}-${rule.target_id}`, rule);
+  }
+  const deduplicatedRules = Array.from(uniqueRules.values());
+
   // Create new assignment rules
   const createdRules: typeof PolicyAssignment.prototype[] = [];
-  for (const rule of input.rules) {
+  for (const rule of deduplicatedRules) {
     const label = await resolveTargetLabel(rule.target_type, rule.target_id, req.user.company_id);
     const assignment = await PolicyAssignment.create({
       company_id: new Types.ObjectId(req.user.company_id),
@@ -883,32 +1097,6 @@ export const saveAssignmentRules = asyncHandler(async (req: Request, res: Respon
     },
   });
 
-  // RULE-08: Check for conflicting policies on the same user population
-  const conflicts = await checkPolicyConflicts(
-    req.user.company_id,
-    policyVersion._id.toString(),
-    input.rules
-  );
-
-  // Create intelligence insight if conflicts are detected
-  if (conflicts.has_conflicts) {
-    await Insight.create({
-      company_id: new Types.ObjectId(req.user.company_id),
-      category: 'misconfiguration',
-      severity: 'warning',
-      title: `Conflicting policies detected: "${policyVersion.title}"`,
-      description: `Policy "${policyVersion.title}" has assignment rules that conflict with other published policies in the same category.`,
-      reasoning: `The following policies target the same user population: ${conflicts.conflicting_policies.map(c => `"${c.title}"`).join(', ')}. This may cause confusion about which policy applies.`,
-      affected_object_type: 'PolicyVersion',
-      affected_object_id: policyVersion._id.toString(),
-      affected_object_label: policyVersion.title,
-      remediation_url: `/policies/${policyVersion._id}`,
-      remediation_action: 'Review and resolve conflicting policy assignments',
-      is_resolved: false,
-      detected_at: new Date(),
-    });
-  }
-
   const populatedRules = createdRules.map((r) => ({
     _id: r._id,
     policy_version_id: r.policy_version_id,
@@ -921,7 +1109,6 @@ export const saveAssignmentRules = asyncHandler(async (req: Request, res: Respon
   res.status(200).json({
     success: true,
     data: populatedRules,
-    meta: conflicts.has_conflicts ? { conflicts } : undefined,
   });
 });
 
@@ -972,22 +1159,27 @@ export const checkPolicyConflicts = async (
 
   // For each other policy, check if it targets any of the same entities
   const otherPolicyIds = otherPolicies.map((p) => p._id);
+  
+  const rulesIncludeAll = rules.some(r => r.target_type === 'all');
+  
+  const queryConditions = rulesIncludeAll 
+    ? [{}] // If our new policy targets 'all', it overlaps with EVERYTHING in this category
+    : [
+        { target_type: 'all' }, // If another policy targets 'all', it overlaps with our new policy
+        ...rules.map((rule) => ({
+          target_type: rule.target_type,
+          target_id: rule.target_id,
+        }))
+      ];
+
   const overlappingAssignments = await PolicyAssignment.find({
     company_id: new Types.ObjectId(companyId),
     policy_version_id: { $in: otherPolicyIds },
-    $or: rules.map((rule) => ({
-      target_type: rule.target_type,
-      target_id: rule.target_id,
-    })),
-  }).populate('policy_version_id', 'title policy_key version_number category');
+    $or: queryConditions,
+  }).populate<{ policy_version_id: { title: string; policy_key: string; version_number: number; category: string } }>('policy_version_id', 'title policy_key version_number category');
 
   const conflicts = overlappingAssignments.map((assignment) => {
-    const policy = assignment.policy_version_id as unknown as {
-      title: string;
-      policy_key: string;
-      version_number: number;
-      category: string;
-    };
+    const policy = assignment.policy_version_id;
     return {
       policy_key: policy.policy_key,
       title: policy.title,
@@ -1083,8 +1275,14 @@ export const getPolicyVersionDiff = asyncHandler(async (req: Request, res: Respo
   });
 });
 
-// Export the conflict check as a standalone controller for the route
+/**
+ * POST /policies/:id/conflict-check
+ * Checks RULE-08: Are there conflicting policies targeting the same user population?
+ * Accepts prospective rules in the request body.
+ */
 export const conflictCheckHandler = asyncHandler(async (req: Request, res: Response) => {
+  const input = AssignmentRulesSchema.parse(req.body);
+
   const policyVersion = await PolicyVersion.findOne({
     _id: req.params.id,
     company_id: new Types.ObjectId(req.user.company_id),
@@ -1094,21 +1292,10 @@ export const conflictCheckHandler = asyncHandler(async (req: Request, res: Respo
     throw new AppError('Policy version not found', 404, 'POLICY_VERSION_NOT_FOUND');
   }
 
-  // Get current assignment rules for this policy
-  const currentAssignments = await PolicyAssignment.find({
-    company_id: new Types.ObjectId(req.user.company_id),
-    policy_version_id: policyVersion._id,
-  });
-
-  const rules = currentAssignments.map((a) => ({
-    target_type: a.target_type,
-    target_id: a.target_id,
-  }));
-
   const conflicts = await checkPolicyConflicts(
     req.user.company_id,
     policyVersion._id.toString(),
-    rules
+    input.rules
   );
 
   res.status(200).json({ success: true, data: conflicts });

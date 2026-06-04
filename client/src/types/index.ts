@@ -754,6 +754,7 @@ export interface PolicyVersion {
   status: PolicyStatus;
   category: PolicyCategory;
   effective_date: string;
+  expiry_date?: string;
   published_by?: {
     _id: string;
     full_name: string;
@@ -790,6 +791,7 @@ export interface PublishPolicyInput {
   content: string;
   category: PolicyCategory;
   effective_date: string;
+  expiry_date?: string;
   summary?: string;
   assignment_rules?: Array<{
     target_type: PolicyTargetType;
@@ -802,6 +804,7 @@ export interface UpdatePolicyDraftInput {
   content?: string;
   category?: PolicyCategory;
   effective_date?: string;
+  expiry_date?: string;
   summary?: string;
 }
 
@@ -1064,4 +1067,62 @@ export interface TestTemplateResult {
 
 export interface UnreadCount {
   count: number;
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Advanced Policies
+// ─────────────────────────────────────────────────────────────────────────────
+
+export interface PolicyCondition {
+  attribute: string;
+  operator: 'equals' | 'not_equals' | 'in' | 'not_in' | 'contains' | 'greater_than' | 'less_than';
+  value: string | string[] | number;
+}
+
+export interface AccessControlPolicy {
+  _id: string;
+  company_id: string;
+  name: string;
+  description?: string;
+  target_type: 'role' | 'department' | 'user' | 'group' | 'all';
+  target_id?: string;
+  conditions: PolicyCondition[];
+  permissions: Array<{
+    module: string;
+    action: string;
+    data_scope: string;
+  }>;
+  is_active: boolean;
+  priority: number;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface DataGovernancePolicy {
+  _id: string;
+  company_id: string;
+  name: string;
+  description?: string;
+  target_role_ids: string[];
+  field_name: string;
+  masking_type: 'full' | 'partial' | 'hash';
+  condition_logic?: string;
+  is_active: boolean;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface PolicyTemplate {
+  _id: string;
+  name: string;
+  description: string;
+  category: string;
+  content_template: string;
+  default_rules: Array<{
+    target_type: string;
+    target_id: string;
+  }>;
+  variables: string[];
+  created_at: string;
+  updated_at: string;
 }

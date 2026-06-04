@@ -80,7 +80,8 @@ export function SecurityPolicyForm() {
   }, [policy, reset]);
 
   const onSubmit = async (data: PolicyFormValues) => {
-    await updateMutation.mutateAsync(data);
+    if (!policy) return;
+    await updateMutation.mutateAsync({ ...data, _id: policy._id } as any);
     setIsEditing(false);
   };
 

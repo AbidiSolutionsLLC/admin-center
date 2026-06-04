@@ -176,7 +176,18 @@ export const exportAuditLogCSV = asyncHandler(async (req: Request, res: Response
     }
   }
 
-  // Fetch all events (no pagination limit for export)
+  // Hard cap to prevent OOM on large datasets (DoS prevention)
+  const EXPORT_HARD_LIMIT = 50_000;
+  const exportCount = await AuditEvent.countDocuments(filter);
+  if (exportCount > EXPORT_HARD_LIMIT) {
+    throw new AppError(
+      `Export exceeds the maximum allowed size of ${EXPORT_HARD_LIMIT.toLocaleString()} rows. Please narrow your filters (date range, module, etc.) and try again.`,
+      413,
+      'EXPORT_TOO_LARGE'
+    );
+  }
+
+  // Fetch all events matching the filter (within the cap)
   const events = await AuditEvent.find(filter)
     .populate('actor_id', 'full_name email')
     .sort({ created_at: -1 })

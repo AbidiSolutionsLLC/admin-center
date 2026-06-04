@@ -122,6 +122,32 @@ export const useUpdatePolicyDraft = (policyId: string) => {
 };
 
 /**
+ * Creates a new draft policy version.
+ * Produces audit event: policy.draft_created
+ * Used on: PoliciesPage (publish modal, save draft button)
+ */
+export const useCreateDraftPolicy = () => {
+  const queryClient = useQueryClient();
+
+  return useMutation<PolicyVersion, Error, PublishPolicyInput>({
+    mutationFn: async (input: PublishPolicyInput) => {
+      const { data } = await apiClient.post('/policies/draft', input);
+      return data.data;
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: QUERY_KEYS.POLICIES });
+      toast.success('Draft created successfully');
+    },
+    onError: (error: unknown) => {
+      const err = error as { response?: { data?: { error?: string } } };
+      const message = err?.response?.data?.error || 'Failed to create draft';
+      toast.error(message);
+    },
+  });
+};
+
+
+/**
  * Archives a published policy version (soft delete, keeps history accessible).
  * Produces audit event: policy.archived
  * Used on: PoliciesPage (version actions)
@@ -296,18 +322,18 @@ export const useSaveAssignmentRules = (policyId: string) => {
 
 /**
  * Checks for conflicting policies on the same user population (RULE-08).
- * Used on: PoliciesPage (after saving assignment rules)
+ * Used on: PoliciesPage (before saving assignment rules)
  */
 export const usePolicyConflictCheck = (policyId: string) => {
-  return useQuery<PolicyConflictCheck>({
-    queryKey: ['policy', policyId, 'conflicts'] as const,
-    queryFn: async () => {
-      const { data } = await apiClient.get(`/policies/${policyId}/conflict-check`);
+  return useMutation<
+    PolicyConflictCheck,
+    Error,
+    Array<{ target_type: PolicyTargetType; target_id: string }>
+  >({
+    mutationFn: async (rules) => {
+      const { data } = await apiClient.post(`/policies/${policyId}/conflict-check`, { rules });
       return data.data;
     },
-    enabled: !!policyId,
-    staleTime: 1000 * 60 * 1,
-    retry: 1,
   });
 };
 
@@ -340,10 +366,6 @@ export const usePolicyVersionDiff = (policyKey: string, versionA: string, versio
   });
 };
 
-/**
- * Fetches all assignment rules for a specific policy version.
- * Used on: PoliciesPage (targeting view)
- */
 export const usePolicyAssignments = (policyId: string) => {
   return useQuery<PolicyAssignmentRule[]>({
     queryKey: QUERY_KEYS.POLICY_ASSIGNMENTS(policyId),
@@ -356,3 +378,20 @@ export const usePolicyAssignments = (policyId: string) => {
     retry: 2,
   });
 };
+
+/**
+ * Simulates policy application based on assignment rules.
+ */
+export const useSimulatePolicy = () => {
+  return useMutation<{
+    affected_users: any[];
+    affected_groups: string[];
+    expected_changes: string[];
+  }, Error, Array<{ target_type: string; target_id: string }>>({
+    mutationFn: async (assignment_rules) => {
+      const { data } = await apiClient.post(`/policies/simulate`, { assignment_rules });
+      return data.data;
+    },
+  });
+};
+

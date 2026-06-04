@@ -1186,3 +1186,308 @@ interface DepartmentFilter {
 const filter: DepartmentFilter = { company_id: req.user.company_id, is_active: true };
 await Department.find(filter); // no cast needed
 
+
+Tickets: SOWAYE - 28
+
+Review Date: 2026-05-14
+
+Severity Legend
+
+Icon
+
+Level
+
+🔴
+
+Critical — Security risk or broken behavior
+
+🟠
+
+High — Must fix before production
+
+🟡
+
+Medium — Fix before v1.0
+
+🔵
+
+Low — Standards / professionalism
+
+SOWAYE-28 — Create & Manage Roles
+
+Files: server/src/controllers/roles.controller.ts
+
+🟠 SOWAYE-28 | Violation of Edit Restriction on Assigned Roles
+
+Path: sserver/src/controllers/roles.controller.ts
+
+
+
+export const updateRole = asyncHandler(async (req: Request, res: Response) => {
+...
+Object.assign(role, validated);
+await role.save();
+Problem: SOWAYE-28 Acceptance Criteria states: "Edit/Delete allowed ONLY if no users assigned". While deletion is correctly blocked, `updateRole` allows modification of role properties (including name) even when users are assigned, violating the requirement for role immutability during active assignment.
+
+Fix:
+
+
+
+const assignedUsersCount = await UserRole.countDocuments({
+    role_id: roleId,
+    company_id: new Types.ObjectId(companyId),
+  });
+  if (assignedUsersCount > 0) {
+    throw new AppError(
+      `Cannot edit role: ${assignedUsersCount} user(s) still assigned`,
+      400,
+      'HAS_DEPENDENTS'
+    );
+  }
+  Object.assign(role, validated);
+  await role.save();
+
+  Tickets: SOWAYE - 34
+
+Review Date: 2026-05-14
+
+Severity Legend
+
+Icon
+
+Level
+
+🔴
+
+Critical — Security risk or broken behavior
+
+🟠
+
+High — Must fix before production
+
+🟡
+
+Medium — Fix before v1.0
+
+🔵
+
+Low — Standards / professionalism
+
+SOWAYE-34 — Visualize Access Relationships
+
+Files: client/src/features/roles/AccessMapView.tsx
+
+🟠 SOWAYE-34 | Fixed Height Container Breaking Layout
+
+Path: client/src/features/roles/AccessMapView.tsx
+
+
+
+<div className="bg-[#F7F8FA] rounded-lg border border-line shadow-card overflow-hidden flex flex-col h-[700px] relative">
+Problem: The Access Map uses a hardcoded `h-[700px]` which overflows on mobile viewports and smaller laptops. This violates SOWAYE-34's requirement for a usable "Interactive Access Map" across all supported devices (linking to SOWAYE-177).
+
+Fix:
+
+
+
+<div className="bg-[#F7F8FA] rounded-lg border border-line shadow-card overflow-hidden fl
+
+Tickets: SOWAYE - 27a, 27b
+
+Review Date: 2026-05-14
+
+Severity Legend
+
+Icon
+
+Level
+
+🔴
+
+Critical — Security risk or broken behavior
+
+🟠
+
+High — Must fix before production
+
+🟡
+
+Medium — Fix before v1.0
+
+🔵
+
+Low — Standards / professionalism
+
+SOWAYE-27 — Audit Role & Permission Changes
+
+Files: 
+
+server/src/routes/auditLogs.routes.ts, 
+
+server/src/controllers/auditLogs.controller.ts
+
+🔴 SOWAYE-27-A | Unauthorized Access to Sensitive Audit Logs
+
+Path: server/src/routes/auditLogs.routes.ts
+
+
+
+ router.use(requireAuth);
+// Get audit events with pagination and filters
+router.get('/', getAuditEvents);
+Problem: Audit logs contain critical security evidence. These routes lack role-based guards, allowing any authenticated user to view and export the entire company's audit history, violating the security standards for SOWAYE-38.
+
+Fix:
+
+
+
+router.use(requireAuth);
+router.use(requireRole(['super_admin', 'it_admin']));
+router.get('/', getAuditEvents);
+ 
+
+ 
+
+🔴 SOWAYE-27-B | ReDoS Vulnerability in Audit Log Search
+
+Path: erver/src/controllers/auditLogs.controller.ts
+
+
+
+filter.actor_email = new RegExp(req.query.actor_email as string, 'i');
+...
+ const searchRegex = new RegExp(req.query.search as string, 'i');
+Problem: User-provided search strings are passed directly into `new RegExp()`. An attacker can provide a catastrophic backtracking pattern to freeze the server.
+
+Fix:
+
+
+
+const sanitize = (s: string) => s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+if (req.query.search) {
+  const searchRegex = new RegExp(sanitize(req.query.search as string), 'i');
+  // ...
+}
+ 
+
+ Tickets: SOWAYE - 40
+
+Review Date: 2026-05-14
+
+Severity Legend
+
+Icon
+
+Level
+
+🔴
+
+Critical — Security risk or broken behavior
+
+🟠
+
+High — Must fix before production
+
+🟡
+
+Medium — Fix before v1.0
+
+🔵
+
+Low — Standards / professionalism
+
+SOWAYE-40 — Enable or Disable Applications
+
+Files: 
+
+server/src/controllers/apps.controller.ts
+
+🔴 SOWAYE-40 | ReDoS Vulnerability in App Catalog Search
+
+Path: server/src/controllers/apps.controller.ts
+
+
+
+{ name: { $regex: search, $options: 'i' } },
+Problem: The application catalog search does not sanitize the `search` string before passing it to MongoDB's `$regex`. This allows for a Denial of Service attack via regex injection.
+
+Fix:
+
+
+
+const sanitizedSearch = search.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+query.$and = [
+  { $or: [ { name: { $regex: sanitizedSearch, $options: 'i' } }, ... ] }
+];
+
+
+Tickets: SOWAYE - 177
+
+Review Date: 2026-05-14
+
+Severity Legend
+
+Icon
+
+Level
+
+🔴
+
+Critical — Security risk or broken behavior
+
+🟠
+
+High — Must fix before production
+
+🟡
+
+Medium — Fix before v1.0
+
+🔵
+
+Low — Standards / professionalism
+
+SOWAYE-177 — Mobile Responsiveness Fix
+
+Files: client/src/features/roles/PermissionMatrix.tsx
+
+🟡 SOWAYE-177 | Missing Horizontal Scroll on Permission Matrix
+
+Path: client/src/features/roles/PermissionMatrix.tsx
+ 
+
+
+<table className="w-full border-collapse">
+Problem: Large tables in the permission matrix lack an `overflow-x-auto` wrapper, causing the UI to break on viewports $\le 768px$, failing SOWAYE-177 compliance.
+
+Fix:
+
+
+
+<div className="overflow-x-auto">
+  <table className="w-full border-collapse">
+    ...
+  </table>
+</div>
+ 
+
+Related content
+
+Files: server/src/routes/workflows.routes.ts, server/src/routes/policies.routes.ts
+
+🟠 SEC-GEN-01 | Missing Role Guards on Mutation Endpoints
+
+Path: server/src/routes/policies.routes.ts, server/src/routes/workflows.routes.ts
+
+
+
+// policies.routes.ts
+router.put('/:id/draft', updatePolicyDraft);
+router.post('/:id/archive', archivePolicy);
+// workflows.routes.ts
+router.post('/', createWorkflow);
+Problem: Multiple mutation endpoints allow non-privileged users to modify system state (Policies/Workflows) because they lack explicit `requireRole` guards.
+
+ 
+
+Fix: Apply `requireRole(['super_admin', 'ops_admin'])` to all identified mutation routes.

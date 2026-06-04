@@ -16,6 +16,19 @@ import { Group } from '../models/Group.model';
 import { GroupMember } from '../models/GroupMember.model';
 import { Types } from 'mongoose';
 
+/**
+ * Whitelist of allowed attribute names for attribute-based app assignments.
+ * Prevents prototype pollution and NoSQL operator injection via dynamic keys.
+ */
+const ALLOWED_ATTRIBUTE_NAMES = [
+  'department_id',
+  'lifecycle_state',
+  'domain',
+  'job_title',
+  'employment_type',
+  'location_id',
+] as const;
+
 const getUserAccessibleAppIds = async (userId: string, companyId: string): Promise<Types.ObjectId[]> => {
   const user = await User.findById(userId).lean();
   if (!user) return [];
@@ -231,29 +244,26 @@ export const getApps = asyncHandler(async (req: Request, res: Response) => {
     .limit(limit)
     .lean();
 
-  // Enrich with assignment counts and owner info
-  const appsWithCounts = await Promise.all(
-    apps.map(async (app) => {
-      const assignmentCount = await AppAssignment.countDocuments({
-        company_id: companyId,
-        app_id: app._id,
-        is_active: true,
-      });
+  // Batch-fetch assignment counts in a single aggregation (prevents N+1)
+  const appIds = apps.map((a) => a._id);
+  const countAgg = await AppAssignment.aggregate([
+    { $match: { company_id: new Types.ObjectId(companyId), app_id: { $in: appIds }, is_active: true } },
+    { $group: { _id: '$app_id', count: { $sum: 1 } } },
+  ]);
+  const countMap = new Map(countAgg.map((c) => [c._id.toString(), c.count as number]));
 
-      let owner_info = null;
-      if (app.owner_id) {
-        owner_info = await User.findById(app.owner_id)
-          .select('full_name email')
-          .lean();
-      }
+  // Batch-fetch owner info for apps that have an owner_id
+  const ownerIds = apps.filter((a) => a.owner_id).map((a) => a.owner_id!);
+  const owners = ownerIds.length > 0
+    ? await User.find({ _id: { $in: ownerIds } }).select('full_name email').lean()
+    : [];
+  const ownerMap = new Map(owners.map((o) => [o._id.toString(), o]));
 
-      return {
-        ...app,
-        assignment_count: assignmentCount,
-        owner_info,
-      };
-    })
-  );
+  const appsWithCounts = apps.map((app) => ({
+    ...app,
+    assignment_count: countMap.get(app._id.toString()) ?? 0,
+    owner_info: app.owner_id ? (ownerMap.get(app.owner_id.toString()) ?? null) : null,
+  }));
 
   res.status(200).json({
     success: true,
@@ -377,7 +387,7 @@ export const createApp = asyncHandler(async (req: Request, res: Response) => {
     is_active: true,
   });
 
-  // Audit log
+  // Audit log — only include non-sensitive, non-internal fields
   await auditLogger.log({
     req,
     action: 'apps.created',
@@ -385,7 +395,14 @@ export const createApp = asyncHandler(async (req: Request, res: Response) => {
     object_type: 'App',
     object_id: app._id.toString(),
     object_label: app.name,
-    after_state: app,
+    after_state: {
+      name: app.name,
+      slug: app.slug,
+      category: app.category,
+      provider: app.provider,
+      status: app.status,
+      is_active: app.is_active,
+    },
   });
 
   res.status(201).json({
@@ -568,12 +585,14 @@ export const assignApp = asyncHandler(async (req: Request, res: Response) => {
       throw new AppError('Target department not found', 404, 'TARGET_NOT_FOUND');
     }
   } else if (validated.target_type === 'user') {
+    // Bug fix (similar to SOWAYE-7-C): also enforce is_active so terminated users cannot receive new assignments
     const user = await User.findOne({
       _id: new Types.ObjectId(validated.target_id),
       company_id: companyId,
+      is_active: true,
     });
     if (!user) {
-      throw new AppError('Target user not found', 404, 'TARGET_NOT_FOUND');
+      throw new AppError('Target user not found or account is inactive', 404, 'TARGET_NOT_FOUND');
     }
   } else if (validated.target_type === 'group') {
     const group = await Group.findOne({
@@ -584,7 +603,14 @@ export const assignApp = asyncHandler(async (req: Request, res: Response) => {
       throw new AppError('Target group not found', 404, 'TARGET_NOT_FOUND');
     }
   } else if (validated.target_type === 'attribute') {
-    // Attributes are valid by definition as long as name/value are provided (enforced by schema)
+    // Bug fix: whitelist attribute_name to prevent prototype pollution / NoSQL operator injection
+    if (!ALLOWED_ATTRIBUTE_NAMES.includes(validated.attribute_name as any)) {
+      throw new AppError(
+        `Invalid attribute_name "${validated.attribute_name}". Allowed values: ${ALLOWED_ATTRIBUTE_NAMES.join(', ')}`,
+        400,
+        'INVALID_ATTRIBUTE_NAME'
+      );
+    }
   }
 
   // Check for duplicate active assignment
@@ -856,27 +882,21 @@ export const getAppAssignmentTimeline = asyncHandler(async (req: Request, res: R
     app_id: appId,
   });
 
-  // Enrich with grantor/revoker info
-  const enrichedAssignments = await Promise.all(
-    assignments.map(async (assignment) => {
-      const grantedBy = await User.findById(assignment.granted_by)
-        .select('full_name email')
-        .lean();
+  // Batch-fetch grantor and revoker info to eliminate N+1 queries
+  const grantorIds = assignments.map((a) => a.granted_by).filter(Boolean);
+  const revokerIds = assignments.map((a) => a.revoked_by).filter(Boolean) as Types.ObjectId[];
+  const allUserIds = [...new Set([...grantorIds.map(String), ...revokerIds.map(String)])];
 
-      let revokedBy = null;
-      if (assignment.revoked_by) {
-        revokedBy = await User.findById(assignment.revoked_by)
-          .select('full_name email')
-          .lean();
-      }
+  const allUsers = allUserIds.length > 0
+    ? await User.find({ _id: { $in: allUserIds } }).select('full_name email').lean()
+    : [];
+  const userInfoMap = new Map(allUsers.map((u) => [u._id.toString(), u]));
 
-      return {
-        ...assignment,
-        granted_by_info: grantedBy,
-        revoked_by_info: revokedBy,
-      };
-    })
-  );
+  const enrichedAssignments = assignments.map((assignment) => ({
+    ...assignment,
+    granted_by_info: assignment.granted_by ? (userInfoMap.get(assignment.granted_by.toString()) ?? null) : null,
+    revoked_by_info: assignment.revoked_by ? (userInfoMap.get(assignment.revoked_by.toString()) ?? null) : null,
+  }));
 
   res.status(200).json({
     success: true,
@@ -932,9 +952,9 @@ export const checkAppDependencies = asyncHandler(async (req: Request, res: Respo
     });
   }
 
-  // Get dependency apps
+  // Get dependency apps — include system apps (no company_id) to avoid false "missing dependency" results
   const dependencyApps = await App.find({
-    company_id: companyId,
+    $or: [{ company_id: companyId }, { company_id: { $exists: false } }],
     slug: { $in: app.dependencies },
   }).lean();
 
@@ -1033,19 +1053,25 @@ export const getAppAssignmentsByTarget = asyncHandler(async (req: Request, res: 
     is_active: true,
   }).lean();
 
-  const enrichedAssignments = await Promise.all(
-    assignments.map(async (assignment) => {
-      const app = await App.findById(assignment.app_id).select('name icon_url slug status is_active category').lean();
-      
-      const grantedBy = await User.findById(assignment.granted_by).select('full_name email').lean();
-      
-      return {
-        ...assignment,
-        app_info: app,
-        granted_by_info: grantedBy,
-      };
-    })
-  );
+  // Batch-fetch app and user info to eliminate N+1 queries
+  const assignedAppIds = assignments.map((a) => a.app_id);
+  const grantorUserIds = assignments.map((a) => a.granted_by).filter(Boolean);
+
+  const [appsList, grantorsList] = await Promise.all([
+    App.find({ _id: { $in: assignedAppIds } }).select('name icon_url slug status is_active category').lean(),
+    grantorUserIds.length > 0
+      ? User.find({ _id: { $in: grantorUserIds } }).select('full_name email').lean()
+      : Promise.resolve([]),
+  ]);
+
+  const appMap = new Map(appsList.map((a) => [a._id.toString(), a]));
+  const grantorMap = new Map(grantorsList.map((u) => [u._id.toString(), u]));
+
+  const enrichedAssignments = assignments.map((assignment) => ({
+    ...assignment,
+    app_info: appMap.get(assignment.app_id.toString()) ?? null,
+    granted_by_info: assignment.granted_by ? (grantorMap.get(assignment.granted_by.toString()) ?? null) : null,
+  }));
 
   res.status(200).json({
     success: true,
@@ -1070,7 +1096,7 @@ export const getAppUsers = asyncHandler(async (req: Request, res: Response) => {
 
   const userIds = new Set<string>();
 
-  // Collect user IDs from assignments
+  // Collect user IDs from assignments — bug fix: added missing 'group' case
   for (const assignment of assignments) {
     if (assignment.target_type === 'user') {
       userIds.add(assignment.target_id.toString());
@@ -1086,6 +1112,10 @@ export const getAppUsers = asyncHandler(async (req: Request, res: Response) => {
         .select('_id')
         .lean();
       users.forEach((u) => userIds.add(u._id.toString()));
+    } else if (assignment.target_type === 'group') {
+      // Bug fix: group-based assignments were silently ignored, leaving group members without coverage
+      const groupMembers = await GroupMember.find({ group_id: assignment.target_id }).lean();
+      groupMembers.forEach((gm) => userIds.add(gm.user_id.toString()));
     }
   }
 

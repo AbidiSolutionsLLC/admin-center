@@ -13,8 +13,8 @@ export const useUpdateSecurityPolicy = () => {
   const queryClient = useQueryClient();
 
   return useMutation<SecurityPolicy, Error, UpdateSecurityPolicyInput>({
-    mutationFn: async (input) => {
-      const { data } = await apiClient.put('/security/policy', input);
+    mutationFn: async (input: UpdateSecurityPolicyInput & { _id: string }) => {
+      const { data } = await apiClient.put(`/security/policies/${input._id}`, input);
       return data.data;
     },
     onSuccess: () => {

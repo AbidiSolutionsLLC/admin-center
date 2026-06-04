@@ -19,6 +19,8 @@ import {
   getPolicyAssignments,
   deletePolicy,
   rollbackPolicy,
+  simulatePolicyApplication,
+  createDraftPolicy,
 } from '../controllers/policies.controller';
 
 const router = Router();
@@ -58,11 +60,25 @@ router.get('/versions', getPolicyVersions);
 router.get('/versions/diff', getPolicyVersionDiff);
 
 /**
+ * POST /policies/draft
+ * Create a new draft policy (saves without publishing)
+ * Requires ops_admin role
+ */
+router.post('/draft', requireRole(PERMISSION_GROUPS.OPS_ADMINS), createDraftPolicy);
+
+/**
  * POST /policies/publish
  * Publish a new policy version (increments version number)
  * Requires super_admin or ops_admin role
  */
 router.post('/publish', requireRole(PERMISSION_GROUPS.OPS_ADMINS), publishPolicy);
+
+/**
+ * POST /policies/simulate
+ * Simulates applying assignment rules and returns affected users and groups.
+ * Requires ops_admin role
+ */
+router.post('/simulate', requireRole(PERMISSION_GROUPS.OPS_ADMINS), simulatePolicyApplication);
 
 /**
  * GET /policies/:id
@@ -127,9 +143,9 @@ router.post('/:id/assignments', requireRole(PERMISSION_GROUPS.OPS_ADMINS), saveA
 router.get('/:id/assignments', getPolicyAssignments);
 
 /**
- * GET /policies/:id/conflict-check
- * Check RULE-08: conflicting policies on same user population
+ * POST /policies/:id/conflict-check
+ * Check RULE-08: conflicting policies on same user population using prospective rules
  */
-router.get('/:id/conflict-check', conflictCheckHandler);
+router.post('/:id/conflict-check', requireRole(PERMISSION_GROUPS.OPS_ADMINS), conflictCheckHandler);
 
 export default router;

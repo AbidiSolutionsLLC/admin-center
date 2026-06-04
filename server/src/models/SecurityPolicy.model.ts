@@ -1,11 +1,16 @@
 // server/src/models/SecurityPolicy.model.ts
 import { Schema, model, Document, Types } from 'mongoose';
 
+export type SecurityPolicyTargetType = 'all' | 'role' | 'department' | 'group' | 'user';
+
 export interface ISecurityPolicy extends Document {
   company_id: Types.ObjectId;
   policy_name: string;
   description: string;
   is_enabled: boolean;
+  target_type: SecurityPolicyTargetType;
+  target_id: string; // ID of the role, department, group, user, or 'all'
+  target_label: string; // Denormalized name for display
   settings: {
     max_failed_login_attempts: number;
     lockout_duration_minutes: number;
@@ -25,10 +30,17 @@ export interface ISecurityPolicy extends Document {
 }
 
 const SecurityPolicySchema = new Schema<ISecurityPolicy>({
-  company_id: { type: Schema.Types.ObjectId, ref: 'Company', required: true },
+  company_id: { type: Schema.Types.ObjectId, ref: 'Company', required: true, index: true },
   policy_name: { type: String, required: true },
   description: String,
   is_enabled: { type: Boolean, default: true },
+  target_type: { 
+    type: String, 
+    enum: ['all', 'role', 'department', 'group', 'user'], 
+    default: 'all' 
+  },
+  target_id: { type: String, default: 'all' },
+  target_label: { type: String, default: 'All Users' },
   settings: {
     max_failed_login_attempts: { type: Number, default: 5 },
     lockout_duration_minutes: { type: Number, default: 30 },
@@ -45,7 +57,10 @@ const SecurityPolicySchema = new Schema<ISecurityPolicy>({
   },
 }, { timestamps: { createdAt: 'created_at', updatedAt: 'updated_at' } });
 
-// Ensure one policy per company
-SecurityPolicySchema.index({ company_id: 1 }, { unique: true });
+// Compound unique index to prevent duplicate policies with the same name
+SecurityPolicySchema.index({ company_id: 1, policy_name: 1 }, { unique: true });
+
+// Prevent multiple policies targeting the exact same target
+SecurityPolicySchema.index({ company_id: 1, target_type: 1, target_id: 1 }, { unique: true });
 
 export const SecurityPolicy = model<ISecurityPolicy>('SecurityPolicy', SecurityPolicySchema);
