@@ -784,6 +784,7 @@ export interface PolicyAcknowledgment {
 export interface AcknowledgmentStatus {
   acknowledged: boolean;
   acknowledged_at: string | null;
+  targeted?: boolean;
 }
 
 export interface PublishPolicyInput {

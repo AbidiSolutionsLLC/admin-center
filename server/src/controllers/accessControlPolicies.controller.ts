@@ -13,9 +13,9 @@ const CreateAccessControlPolicySchema = z.object({
     roles: z.array(z.string()).optional(),
     departments: z.array(z.string()).optional(),
   }).optional(),
-  resources: z.array(z.string()),
+  resources: z.array(z.string()).refine(val => new Set(val).size === val.length, 'Duplicate resources are not allowed'),
   actions: z.array(z.string()),
-  conditions: z.record(z.any()).optional(),
+  conditions: z.record(z.any()).nullable().optional(),
   priority: z.number().optional()
 });
 
@@ -28,6 +28,14 @@ export const createPolicy = asyncHandler(async (req: Request, res: Response) => 
   const exists = await AccessControlPolicy.findOne({ company_id, name: input.name });
   if (exists) {
     throw new AppError('Policy with this name already exists', 400);
+  }
+
+  const conflictingResource = await AccessControlPolicy.findOne({ 
+    company_id, 
+    resources: { $in: input.resources } 
+  });
+  if (conflictingResource) {
+    throw new AppError('A policy for one of these resources already exists', 400);
   }
 
   const policy = await AccessControlPolicy.create({
@@ -62,6 +70,17 @@ export const updatePolicy = asyncHandler(async (req: Request, res: Response) => 
   const company_id = req.user.company_id;
   const input = UpdateAccessControlPolicySchema.parse(req.body);
 
+  if (input.resources) {
+    const conflictingResource = await AccessControlPolicy.findOne({ 
+      _id: { $ne: id },
+      company_id, 
+      resources: { $in: input.resources } 
+    });
+    if (conflictingResource) {
+      throw new AppError('A policy for one of these resources already exists', 400);
+    }
+  }
+
   const policy = await AccessControlPolicy.findOneAndUpdate(
     { _id: id, company_id },
     { $set: input },
@@ -79,10 +98,20 @@ export const deletePolicy = asyncHandler(async (req: Request, res: Response) => 
   const { id } = req.params;
   const company_id = req.user.company_id;
 
-  const policy = await AccessControlPolicy.findOneAndDelete({ _id: id, company_id });
+  const policy = await AccessControlPolicy.findOne({ _id: id, company_id });
   if (!policy) {
     throw new AppError('Policy not found', 404);
   }
+
+  if (
+    (policy.subjects?.users && policy.subjects.users.length > 0) ||
+    (policy.subjects?.roles && policy.subjects.roles.length > 0) ||
+    (policy.subjects?.departments && policy.subjects.departments.length > 0)
+  ) {
+    throw new AppError('Cannot delete: Policy is actively assigned to subjects', 400, 'HAS_DEPENDENTS');
+  }
+
+  await AccessControlPolicy.deleteOne({ _id: id });
 
   res.status(200).json({ success: true, message: 'Policy deleted' });
 });

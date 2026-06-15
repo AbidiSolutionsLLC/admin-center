@@ -54,6 +54,7 @@ function App() {
               <Route path={ROUTES.SECURITY} element={<SecurityPage />} />
               <Route path={ROUTES.AUDIT_LOGS} element={<AuditLogsPage />} />
               <Route path={ROUTES.POLICIES} element={<PoliciesPage />} />
+              <Route path="/policies/:id" element={<PoliciesPage />} />
               <Route path={ROUTES.LOCATIONS} element={<LocationsPage />} />
               <Route path={ROUTES.DATA_FIELDS} element={<DataFieldsPage />} />
               <Route path={ROUTES.INTEGRATIONS} element={<IntegrationsPage />} />

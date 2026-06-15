@@ -1,15 +1,16 @@
-// src/pages/policies/PoliciesPage.tsx
-import { useState, useMemo } from 'react';
+import React, { useState, useMemo, useEffect } from 'react';
+import { useParams } from 'react-router-dom';
 import {
   FileText, Plus, Eye, Users, Clock, Search, X, ChevronDown,
   GitCompare, Archive, Target, AlertTriangle, CheckCircle, History,
-  Save,
+  Save, Edit,
 } from 'lucide-react';
 import {
   usePolicies,
   usePublishPolicy,
   useArchivePolicy,
   useAcknowledgmentStatus,
+  useAcknowledgePolicy,
   usePolicyAcknowledgments,
   usePolicyVersions,
   usePolicyVersionDiff,
@@ -19,6 +20,7 @@ import {
   useDeletePolicy,
   useSimulatePolicy,
   useCreateDraftPolicy,
+  useUpdatePolicyDraft,
   useRollbackPolicy,
 } from '@/features/policies/hooks/usePolicies';
 import { useUserStats } from '@/features/people/hooks/useUserStats';
@@ -108,9 +110,24 @@ export default function PoliciesPage() {
   const [activeDetailTab, setActiveDetailTab] = useState<'content' | 'versions' | 'acknowledgments' | 'targeting'>('content');
   const [policyToDelete, setPolicyToDelete] = useState<string | null>(null);
   const [policyToArchive, setPolicyToArchive] = useState<string | null>(null);
+  const [draftToEdit, setDraftToEdit] = useState<PolicyVersion | null>(null);
+
+  const updateDraftMutation = useUpdatePolicyDraft(draftToEdit?._id || '');
 
   // ── Main Page Tabs ────────────────────────────────────────────────────
   const [activePolicyType, setActivePolicyType] = useState<'general' | 'access' | 'governance' | 'templates'>('general');
+
+  const { id } = useParams<{ id: string }>();
+
+  useEffect(() => {
+    if (id && policies && !selectedPolicy) {
+      const policy = policies.find((p) => p._id === id);
+      if (policy) {
+        setSelectedPolicy(policy);
+        setActiveDetailTab('content');
+      }
+    }
+  }, [id, policies, selectedPolicy]);
 
   // ── Filters ──────────────────────────────────────────────────────────
   const [search, setSearch] = useState('');
@@ -129,6 +146,23 @@ export default function PoliciesPage() {
       return matchesSearch && matchesCategory && matchesStatus;
     });
   }, [policies, search, categoryFilter, statusFilter]);
+
+  // ── Pagination ────────────────────────────────────────────────────────
+  const [currentPage, setCurrentPage] = useState(1);
+  const pageSize = 10;
+  
+  const paginatedPolicies = useMemo(() => {
+    if (!filteredPolicies) return [];
+    const startIndex = (currentPage - 1) * pageSize;
+    return filteredPolicies.slice(startIndex, startIndex + pageSize);
+  }, [filteredPolicies, currentPage]);
+
+  const totalPages = filteredPolicies ? Math.ceil(filteredPolicies.length / pageSize) : 0;
+
+  // Reset to first page when filters change
+  useEffect(() => {
+    setCurrentPage(1);
+  }, [search, categoryFilter, statusFilter]);
 
   // ── Render: Loading ────────────────────────────────────────────────
   if (isLoading) {
@@ -267,8 +301,9 @@ export default function PoliciesPage() {
             </div>
           ) : (
             <div className="bg-white rounded-lg border border-line shadow-card overflow-hidden">
-              <table className="w-full">
-                <thead className="bg-surface-base border-b border-line">
+              <div className="overflow-x-auto">
+                <table className="min-w-full">
+                  <thead className="bg-surface-base border-b border-line">
                   <tr>
                     <th className="text-[11px] font-semibold text-ink-secondary uppercase tracking-wider h-10 px-4 text-left">
                       Policy
@@ -291,7 +326,7 @@ export default function PoliciesPage() {
                   </tr>
                 </thead>
                 <tbody>
-                  {filteredPolicies?.map((policy) => (
+                  {paginatedPolicies?.map((policy) => (
                     <PolicyRow
                       key={policy._id}
                       policy={policy}
@@ -299,12 +334,75 @@ export default function PoliciesPage() {
                         setSelectedPolicy(policy);
                         setActiveDetailTab('content');
                       }}
+                      onEdit={() => {
+                        setDraftToEdit(policy);
+                        setIsPublishModalOpen(true);
+                      }}
                       onArchive={() => setPolicyToArchive(policy._id)}
                       onDelete={() => setPolicyToDelete(policy._id)}
                     />
                   ))}
                 </tbody>
-              </table>
+                </table>
+              </div>
+              {/* Pagination Controls */}
+              {totalPages > 1 && (
+                <div className="flex items-center justify-between px-4 py-3 border-t border-line bg-surface-base sm:px-6">
+                  <div className="flex flex-1 justify-between sm:hidden">
+                    <button
+                      onClick={() => setCurrentPage(p => Math.max(1, p - 1))}
+                      disabled={currentPage === 1}
+                      className="relative inline-flex items-center rounded-md border border-line bg-white px-4 py-2 text-sm font-medium text-ink hover:bg-surface-alt disabled:opacity-50"
+                    >
+                      Previous
+                    </button>
+                    <button
+                      onClick={() => setCurrentPage(p => Math.min(totalPages, p + 1))}
+                      disabled={currentPage === totalPages}
+                      className="relative ml-3 inline-flex items-center rounded-md border border-line bg-white px-4 py-2 text-sm font-medium text-ink hover:bg-surface-alt disabled:opacity-50"
+                    >
+                      Next
+                    </button>
+                  </div>
+                  <div className="hidden sm:flex sm:flex-1 sm:items-center sm:justify-between">
+                    <div>
+                      <p className="text-sm text-ink-secondary">
+                        Showing <span className="font-medium">{((currentPage - 1) * pageSize) + 1}</span> to <span className="font-medium">{Math.min(currentPage * pageSize, filteredPolicies?.length || 0)}</span> of <span className="font-medium">{filteredPolicies?.length}</span> results
+                      </p>
+                    </div>
+                    <div>
+                      <nav className="isolate inline-flex -space-x-px rounded-md shadow-sm" aria-label="Pagination">
+                        <button
+                          onClick={() => setCurrentPage(p => Math.max(1, p - 1))}
+                          disabled={currentPage === 1}
+                          className="relative inline-flex items-center rounded-l-md px-2 py-2 text-ink-secondary ring-1 ring-inset ring-line hover:bg-surface-alt focus:z-20 focus:outline-offset-0 disabled:opacity-50"
+                        >
+                          <span className="sr-only">Previous</span>
+                          <span className="h-5 w-5 flex items-center justify-center">←</span>
+                        </button>
+                        {[...Array(totalPages)].map((_, i) => (
+                          <button
+                            key={i}
+                            onClick={() => setCurrentPage(i + 1)}
+                            aria-current={currentPage === i + 1 ? 'page' : undefined}
+                            className={`relative inline-flex items-center px-4 py-2 text-sm font-semibold ${currentPage === i + 1 ? 'z-10 bg-primary text-white focus:z-20 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary' : 'text-ink ring-1 ring-inset ring-line hover:bg-surface-alt focus:z-20 focus:outline-offset-0'}`}
+                          >
+                            {i + 1}
+                          </button>
+                        ))}
+                        <button
+                          onClick={() => setCurrentPage(p => Math.min(totalPages, p + 1))}
+                          disabled={currentPage === totalPages}
+                          className="relative inline-flex items-center rounded-r-md px-2 py-2 text-ink-secondary ring-1 ring-inset ring-line hover:bg-surface-alt focus:z-20 focus:outline-offset-0 disabled:opacity-50"
+                        >
+                          <span className="sr-only">Next</span>
+                          <span className="h-5 w-5 flex items-center justify-center">→</span>
+                        </button>
+                      </nav>
+                    </div>
+                  </div>
+                </div>
+              )}
             </div>
           )}
         </>
@@ -313,9 +411,14 @@ export default function PoliciesPage() {
       {/* ── Publish Policy Modal ── */}
       <PublishPolicyModal
         isOpen={isPublishModalOpen}
-        onClose={() => setIsPublishModalOpen(false)}
+        onClose={() => {
+          setIsPublishModalOpen(false);
+          setDraftToEdit(null);
+        }}
         publishMutation={publishMutation}
         draftMutation={draftMutation}
+        updateDraftMutation={updateDraftMutation}
+        initialData={draftToEdit}
       />
 
       {/* ── Policy Detail Modal ── */}
@@ -498,11 +601,12 @@ function FilterBar({
 interface PolicyRowProps {
   policy: PolicyVersion;
   onView: () => void;
+  onEdit: () => void;
   onArchive: () => void;
   onDelete: () => void;
 }
 
-function PolicyRow({ policy, onView, onArchive, onDelete }: PolicyRowProps) {
+function PolicyRow({ policy, onView, onEdit, onArchive, onDelete }: PolicyRowProps) {
   const { data: ackStatus } = useAcknowledgmentStatus(policy._id);
 
   return (
@@ -568,6 +672,15 @@ function PolicyRow({ policy, onView, onArchive, onDelete }: PolicyRowProps) {
           )}
           {policy.status !== 'published' && (
             <button
+              onClick={onEdit}
+              className="h-7 px-3 text-xs font-medium rounded-md border border-line bg-white text-ink hover:bg-surface-alt transition-colors inline-flex items-center gap-1.5"
+              title="Edit draft policy"
+            >
+              <Edit className="w-3.5 h-3.5" />
+            </button>
+          )}
+          {policy.status !== 'published' && (
+            <button
               onClick={onDelete}
               className="h-7 px-3 text-xs font-medium rounded-md border border-line bg-white text-ink-secondary hover:text-error hover:border-error/30 hover:bg-error-light transition-colors inline-flex items-center gap-1.5"
               title="Delete this policy"
@@ -594,6 +707,8 @@ interface PublishPolicyModalProps {
   onClose: () => void;
   publishMutation: ReturnType<typeof usePublishPolicy>;
   draftMutation: ReturnType<typeof useCreateDraftPolicy>;
+  updateDraftMutation?: ReturnType<typeof useUpdatePolicyDraft>;
+  initialData?: PolicyVersion | null;
 }
 
 function PublishPolicyModal({
@@ -601,15 +716,39 @@ function PublishPolicyModal({
   onClose,
   publishMutation,
   draftMutation,
+  updateDraftMutation,
+  initialData,
 }: PublishPolicyModalProps) {
   const [formData, setFormData] = useState({
-    title: '',
-    content: '',
-    category: 'hr' as PolicyCategory,
-    effective_date: new Date().toISOString().split('T')[0],
-    expiry_date: '',
-    summary: '',
+    title: initialData?.title || '',
+    content: initialData?.content || '',
+    category: initialData?.category || ('hr' as PolicyCategory),
+    effective_date: initialData?.effective_date ? new Date(initialData.effective_date).toISOString().split('T')[0] : new Date().toISOString().split('T')[0],
+    expiry_date: initialData?.expiry_date ? new Date(initialData.expiry_date).toISOString().split('T')[0] : '',
+    summary: initialData?.summary || '',
   });
+
+  useEffect(() => {
+    if (initialData) {
+      setFormData({
+        title: initialData.title,
+        content: initialData.content,
+        category: initialData.category,
+        effective_date: initialData.effective_date ? new Date(initialData.effective_date).toISOString().split('T')[0] : new Date().toISOString().split('T')[0],
+        expiry_date: initialData.expiry_date ? new Date(initialData.expiry_date).toISOString().split('T')[0] : '',
+        summary: initialData.summary || '',
+      });
+    } else {
+      setFormData({
+        title: '',
+        content: '',
+        category: 'hr' as PolicyCategory,
+        effective_date: new Date().toISOString().split('T')[0],
+        expiry_date: '',
+        summary: '',
+      });
+    }
+  }, [initialData, isOpen]);
 
   const handleSubmit = () => {
     publishMutation.mutate(
@@ -638,29 +777,28 @@ function PublishPolicyModal({
   };
 
   const handleSaveDraft = () => {
-    draftMutation.mutate(
-      {
-        title: formData.title,
-        content: formData.content,
-        category: formData.category,
-        effective_date: formData.effective_date,
-        expiry_date: formData.expiry_date || undefined,
-        summary: formData.summary || undefined,
-      },
-      {
+    const payload = {
+      title: formData.title,
+      content: formData.content,
+      category: formData.category,
+      effective_date: formData.effective_date,
+      expiry_date: formData.expiry_date || undefined,
+      summary: formData.summary || undefined,
+    };
+    
+    if (initialData && updateDraftMutation) {
+      updateDraftMutation.mutate(payload, {
         onSuccess: () => {
           onClose();
-          setFormData({
-            title: '',
-            content: '',
-            category: 'hr',
-            effective_date: new Date().toISOString().split('T')[0],
-            expiry_date: '',
-            summary: '',
-          });
         },
-      }
-    );
+      });
+    } else {
+      draftMutation.mutate(payload, {
+        onSuccess: () => {
+          onClose();
+        },
+      });
+    }
   };
 
   return (
@@ -682,24 +820,26 @@ function PublishPolicyModal({
           <button
             onClick={handleSaveDraft}
             disabled={
-              draftMutation.isPending ||
-              publishMutation.isPending ||
+              publishMutation.isPending || draftMutation.isPending ||
               !formData.title ||
               !formData.content ||
-              !formData.effective_date
+              !formData.effective_date ||
+              (!!formData.expiry_date && (new Date(formData.expiry_date) < new Date(new Date().setHours(0,0,0,0)) || new Date(formData.expiry_date) <= new Date(formData.effective_date)))
             }
             className="h-9 px-4 text-sm font-medium rounded-md border border-line bg-white text-ink hover:bg-surface-alt transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
           >
-            {draftMutation.isPending ? 'Saving...' : 'Save as Draft'}
+            {draftMutation.isPending || updateDraftMutation?.isPending ? 'Saving...' : 'Save as Draft'}
           </button>
           <button
             onClick={handleSubmit}
             disabled={
               publishMutation.isPending ||
               draftMutation.isPending ||
+              updateDraftMutation?.isPending ||
               !formData.title ||
               !formData.content ||
-              !formData.effective_date
+              !formData.effective_date ||
+              (!!formData.expiry_date && (new Date(formData.expiry_date) < new Date(new Date().setHours(0,0,0,0)) || new Date(formData.expiry_date) <= new Date(formData.effective_date)))
             }
             className="h-9 px-4 text-sm font-medium rounded-md bg-primary hover:bg-primary-hover text-white transition-colors disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2"
           >
@@ -749,7 +889,7 @@ function PublishPolicyModal({
           </div>
         </div>
 
-        <div className="grid grid-cols-2 gap-4">
+        <div className="grid grid-cols-3 gap-4">
           <div>
             <label className="text-sm font-medium text-ink block mb-1.5">
               Effective Date <span className="text-error">*</span>
@@ -776,6 +916,20 @@ function PublishPolicyModal({
               }
               placeholder="Brief description of changes"
               className="w-full h-9 px-3 text-sm rounded-md border border-line bg-white text-ink placeholder:text-ink-muted focus:outline-none focus:ring-2 focus:ring-primary/30 focus:border-primary transition-all duration-150"
+            />
+          </div>
+
+          <div>
+            <label className="text-sm font-medium text-ink block mb-1.5">
+              Expiry Date (optional)
+            </label>
+            <input
+              type="date"
+              value={formData.expiry_date}
+              onChange={(e) =>
+                setFormData({ ...formData, expiry_date: e.target.value })
+              }
+              className="w-full h-9 px-3 text-sm rounded-md border border-line bg-white text-ink focus:outline-none focus:ring-2 focus:ring-primary/30 focus:border-primary transition-all duration-150"
             />
           </div>
         </div>
@@ -819,6 +973,12 @@ function PolicyDetailModal({
   onTabChange,
 }: PolicyDetailModalProps) {
   const [selectedVersions, setSelectedVersions] = useState<string[]>([]);
+  const { data: ackStatus } = useAcknowledgmentStatus(policy._id);
+  const ackMutation = useAcknowledgePolicy(policy._id);
+
+  const handleAcknowledge = () => {
+    ackMutation.mutate({ policy_version_id: policy._id });
+  };
 
   return (
     <Modal
@@ -831,8 +991,23 @@ function PolicyDetailModal({
       description={`Published ${policy.published_at ? formatDate(policy.published_at) : 'N/A'}`}
       size="xl"
       footer={
-        <div className="flex items-center gap-2">
-          {policy.status === 'published' && (
+        <div className="flex items-center gap-2 w-full">
+          {policy.status === 'published' && ackStatus?.targeted && !ackStatus.acknowledged && (
+            <button
+              onClick={handleAcknowledge}
+              disabled={ackMutation.isPending}
+              className="h-9 px-4 text-sm font-medium rounded-md bg-emerald-600 hover:bg-emerald-700 text-white transition-colors disabled:opacity-50"
+            >
+              {ackMutation.isPending ? 'Acknowledging...' : 'Acknowledge Policy'}
+            </button>
+          )}
+          {policy.status === 'published' && ackStatus?.targeted && ackStatus.acknowledged && (
+            <span className="text-xs text-ink-secondary flex items-center gap-1">
+              <CheckCircle className="w-3.5 h-3.5 text-emerald-500" />
+              Acknowledged on {ackStatus.acknowledged_at ? formatDate(ackStatus.acknowledged_at) : 'N/A'}
+            </span>
+          )}
+          {(!ackStatus?.targeted || policy.status !== 'published') && policy.status === 'published' && (
             <span className="text-xs text-ink-secondary flex items-center gap-1">
               <CheckCircle className="w-3.5 h-3.5 text-emerald-500" />
               Published — create a new version to make changes
@@ -1396,6 +1571,7 @@ function TargetingModal({ isOpen, policyId, onClose, saveMutation, onSaved }: Ta
   const { data: roles } = useRoles();
   const { data: groups } = useGroups();
   const { data: users } = useUsers();
+  const { data: assignments } = usePolicyAssignments(policyId);
   const conflictCheckMutation = usePolicyConflictCheck(policyId);
   const simulateMutation = useSimulatePolicy();
   const [conflicts, setConflicts] = useState<{
@@ -1410,6 +1586,15 @@ function TargetingModal({ isOpen, policyId, onClose, saveMutation, onSaved }: Ta
     affected_groups: string[];
     expected_changes: string[];
   } | null>(null);
+  const [simulationError, setSimulationError] = useState<string | null>(null);
+
+  React.useEffect(() => {
+    if (assignments && assignments.length > 0) {
+      setRules(assignments.map(a => ({ target_type: a.target_type, target_id: a.target_id })));
+    } else if (assignments?.length === 0) {
+      setRules([{ target_type: 'all', target_id: 'all' }]);
+    }
+  }, [assignments]);
 
   const addRule = () => {
     setRules([...rules, { target_type: 'department', target_id: '' }]);
@@ -1539,9 +1724,14 @@ function TargetingModal({ isOpen, policyId, onClose, saveMutation, onSaved }: Ta
         <>
           <button
             onClick={() => {
+              setSimulationError(null);
               const validRules = rules.filter((r) => r.target_id && r.target_id !== '');
               simulateMutation.mutate(validRules, {
-                onSuccess: (data) => setSimulationResult(data)
+                onSuccess: (data) => setSimulationResult(data),
+                onError: (err) => {
+                  setSimulationError('Preview failed: Unable to connect to the server or simulation error occurred.');
+                  setSimulationResult(null);
+                }
               });
             }}
             disabled={simulateMutation.isPending || rules.every((r) => !r.target_id)}
@@ -1636,6 +1826,15 @@ function TargetingModal({ isOpen, policyId, onClose, saveMutation, onSaved }: Ta
             <strong>RULE-08:</strong> Before saving, the system will automatically check for conflicting policies targeting the same user population.
           </p>
         </div>
+
+        {simulationError && (
+          <div className="p-3 bg-error-light border border-error-border rounded-md mt-4">
+            <p className="text-xs text-error flex items-center gap-2">
+              <AlertTriangle className="w-4 h-4" />
+              {simulationError}
+            </p>
+          </div>
+        )}
 
         {simulationResult && (
           <div className="mt-6 p-4 bg-surface-alt border border-line rounded-md">

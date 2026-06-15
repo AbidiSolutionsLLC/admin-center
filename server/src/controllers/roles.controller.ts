@@ -347,6 +347,22 @@ export const deleteRole = asyncHandler(async (req: Request, res: Response) => {
     );
   }
 
+  // Check if any policies are targeting this role
+  const { PolicyAssignment } = await import('../models/PolicyAssignment.model');
+  const policyAssignmentsCount = await PolicyAssignment.countDocuments({
+    company_id: companyObjectId,
+    target_type: 'role',
+    target_id: roleId,
+  });
+
+  if (policyAssignmentsCount > 0) {
+    throw new AppError(
+      `Cannot delete role: Assigned to ${policyAssignmentsCount} active policy/policies`,
+      400,
+      'HAS_DEPENDENTS'
+    );
+  }
+
   const beforeState = role.toObject();
 
   // Delete all role permissions associated with this role

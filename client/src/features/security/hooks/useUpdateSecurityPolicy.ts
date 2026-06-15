@@ -21,9 +21,9 @@ export const useUpdateSecurityPolicy = () => {
       queryClient.invalidateQueries({ queryKey: QUERY_KEYS.SECURITY_POLICY });
       toast.success('Security policy updated successfully');
     },
-    onError: (error) => {
+    onError: (error: any) => {
       console.error('Failed to update security policy', error);
-      toast.error('Failed to update security policy. Please try again.');
+      toast.error(error?.response?.data?.message || error?.message || 'Failed to update security policy. Please try again.');
     },
   });
 };

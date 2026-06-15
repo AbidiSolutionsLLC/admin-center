@@ -281,8 +281,58 @@ export const sendPasswordResetEmail = async (
   await sendEmailInternal({ to: email, subject: 'Password Reset Request', html });
 };
 
+export interface PolicyEmailParams {
+  email: string;
+  full_name: string;
+  policy_title: string;
+  company_name: string;
+  policy_link: string;
+}
+
+export const sendPolicyNotificationEmail = async (params: PolicyEmailParams): Promise<void> => {
+  const { email, full_name, policy_title, company_name, policy_link } = params;
+
+  const html = `
+    <!DOCTYPE html>
+    <html>
+      <head>
+        <style>
+          body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; line-height: 1.6; color: #333; }
+          .container { max-width: 600px; margin: 0 auto; padding: 20px; }
+          .content { background-color: #f7f8fa; padding: 30px; border-radius: 8px; }
+          .button { display: inline-block; background-color: #E8870A; color: white; padding: 12px 30px; text-decoration: none; border-radius: 6px; margin: 20px 0; }
+        </style>
+      </head>
+      <body>
+        <div class="container">
+          <div class="content">
+            <p>Hi ${full_name},</p>
+            <p>A new policy "<strong>${policy_title}</strong>" has been published at ${company_name}.</p>
+            <p>Please review and acknowledge the policy by clicking the button below:</p>
+            <a href="${policy_link}" class="button">View Policy</a>
+            <p>Best regards,<br>${company_name} Team</p>
+          </div>
+        </div>
+      </body>
+    </html>
+  `;
+
+  const text = `
+Hi ${full_name},
+
+A new policy "${policy_title}" has been published at ${company_name}.
+Please review and acknowledge it here: ${policy_link}
+
+Best regards,
+${company_name} Team
+  `.trim();
+
+  await sendEmailInternal({ to: email, subject: `Action Required: New Policy Published - ${policy_title}`, html, text });
+};
+
 export const emailService = {
   sendWelcomeEmail,
   sendBulkWelcomeEmails,
   sendPasswordResetEmail,
+  sendPolicyNotificationEmail,
 };
