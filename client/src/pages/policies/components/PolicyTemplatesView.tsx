@@ -154,9 +154,9 @@ export const PolicyTemplatesView = () => {
           setDeleteId(null);
         }}
         title="Delete Template"
-        message="Are you sure you want to delete this template?"
-        confirmText="Delete"
-        isDestructive
+        description="Are you sure you want to delete this template?"
+        confirmLabel="Delete"
+        variant="danger"
       />
     </div>
   );

@@ -25,15 +25,32 @@ export const EmptyState: React.FC<EmptyStateProps> = ({
   action,
 }) => {
   return (
-    <div className="flex flex-col items-center justify-center py-16 px-4 text-center bg-white rounded-lg border border-line shadow-card">
-      {/* Icon container — amber tinted */}
-      <div className="w-12 h-12 rounded-xl bg-primary-light flex items-center justify-center mb-4">
+    <div style={{
+      background: 'linear-gradient(145deg, rgba(255,255,255,0.04) 0%, rgba(255,255,255,0.02) 100%)',
+      backdropFilter: 'blur(12px)',
+      border: '1px solid rgba(255,255,255,0.08)',
+      borderRadius: 20,
+      padding: '64px 24px',
+      textAlign: 'center',
+      display: 'flex',
+      flexDirection: 'column',
+      alignItems: 'center',
+      justifyContent: 'center',
+    }}>
+      {/* Icon container */}
+      <div style={{
+        width: 54, height: 54, borderRadius: 14,
+        background: 'rgba(245,176,42,0.10)',
+        border: '1px solid rgba(245,176,42,0.20)',
+        display: 'flex', alignItems: 'center', justifyContent: 'center',
+        margin: '0 auto 20px',
+      }}>
         <Icon className="w-6 h-6 text-primary" />
       </div>
-      <h3 className="text-sm font-semibold text-ink mb-1">{title}</h3>
-      <p className="text-sm text-ink-secondary mb-5 max-w-xs">{description}</p>
+      <h3 className="text-sm font-semibold text-slate-200 mb-1">{title}</h3>
+      <p className="text-sm text-slate-400 mb-5 max-w-xs">{description}</p>
       {action && (
-        <Button variant="default" onClick={action.onClick} className="bg-primary hover:bg-primary-hover">
+        <Button variant="default" onClick={action.onClick} className="btn-primary-glow border-0">
           {action.label}
         </Button>
       )}

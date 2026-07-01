@@ -1498,7 +1498,7 @@ function PolicyTargetingView({ policyId }: PolicyTargetingViewProps) {
       ) : assignments && assignments.length > 0 ? (
         <div className="border border-line rounded-md overflow-hidden">
           <table className="w-full">
-            <thead className="bg-[#F7F8FA] border-b border-line">
+            <thead className="bg-white/5 border-b border-line">
               <tr>
                 <th className="text-[11px] font-semibold text-ink-secondary uppercase tracking-wider h-10 px-4 text-left">
                   Target Type
@@ -1886,3 +1886,4 @@ function TargetingModal({ isOpen, policyId, onClose, saveMutation, onSaved }: Ta
     </Modal>
   );
 }
+

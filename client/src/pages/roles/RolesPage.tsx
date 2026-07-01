@@ -213,7 +213,7 @@ export default function RolesPage() {
       cell: ({ row }) => (
         <span className={cn(
           "inline-flex items-center px-2 py-0.5 rounded text-[11px] font-semibold uppercase tracking-wider",
-          row.original.type === 'system' ? "bg-amber-100 text-amber-700" : "bg-blue-100 text-blue-700"
+          row.original.type === 'system' ? "bg-amber-500/20 text-amber-400 border border-amber-500/30" : "bg-blue-500/20 text-blue-400 border border-blue-500/30"
         )}>
           {row.original.type}
         </span>

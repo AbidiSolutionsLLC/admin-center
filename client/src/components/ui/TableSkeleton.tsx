@@ -12,30 +12,43 @@ interface TableSkeletonProps {
  */
 export const TableSkeleton: React.FC<TableSkeletonProps> = ({ rows = 8, columns = 5 }) => {
   return (
-    <div className="bg-white rounded-lg border border-line shadow-card overflow-hidden">
-      {/* Fake header */}
-      <div className="h-10 px-4 border-b border-line bg-surface-base flex items-center gap-6">
+    <div style={{
+      background: 'linear-gradient(145deg, rgba(255,255,255,0.04) 0%, rgba(255,255,255,0.02) 100%)',
+      backdropFilter: 'blur(12px)',
+      border: '1px solid rgba(255,255,255,0.08)',
+      borderRadius: 20,
+      overflow: 'hidden',
+    }}>
+      {/* Header */}
+      <div style={{
+        height: 44, padding: '0 20px',
+        borderBottom: '1px solid rgba(255,255,255,0.06)',
+        background: 'rgba(255,255,255,0.02)',
+        display: 'flex', alignItems: 'center', gap: 32,
+      }}>
         {Array.from({ length: columns }).map((_, i) => (
-          <div
-            key={i}
-            className="h-3 bg-skeleton rounded animate-pulse"
-            style={{ width: `${60 + i * 20}px` }}
-          />
+          <div key={i} style={{
+            height: 10, width: 60 + i * 20,
+            background: 'rgba(255,255,255,0.08)',
+            borderRadius: 4,
+            animation: 'pulse 1.5s ease-in-out infinite',
+          }} />
         ))}
       </div>
-      {/* Fake rows */}
+
+      {/* Rows */}
       {Array.from({ length: rows }).map((_, i) => (
-        <div
-          key={i}
-          className="h-14 px-4 border-b border-line last:border-0 flex items-center gap-6"
-        >
-          <div className="w-8 h-8 rounded-full bg-skeleton animate-pulse flex-shrink-0" />
-          <div className="flex-1 space-y-1.5">
-            <div className="h-3 bg-skeleton rounded animate-pulse w-1/3" />
-            <div className="h-2.5 bg-skeleton rounded animate-pulse w-1/4" />
+        <div key={i} style={{
+          height: 60, padding: '0 20px',
+          borderBottom: '1px solid rgba(255,255,255,0.05)',
+          display: 'flex', alignItems: 'center', gap: 20,
+        }}>
+          <div style={{ width: 34, height: 34, borderRadius: '50%', background: 'rgba(255,255,255,0.07)', flexShrink: 0, animation: 'pulse 1.5s ease-in-out infinite' }} />
+          <div style={{ flex: 1, display: 'flex', flexDirection: 'column', gap: 6 }}>
+            <div style={{ height: 11, width: '30%', background: 'rgba(255,255,255,0.07)', borderRadius: 4, animation: 'pulse 1.5s ease-in-out infinite' }} />
+            <div style={{ height: 9, width: '20%', background: 'rgba(255,255,255,0.05)', borderRadius: 4, animation: 'pulse 1.5s ease-in-out infinite' }} />
           </div>
-          <div className="h-3 bg-skeleton rounded animate-pulse w-20" />
-          <div className="h-5 bg-skeleton rounded-full animate-pulse w-16" />
+          <div style={{ height: 20, width: 60, borderRadius: 9999, background: 'rgba(255,255,255,0.06)', animation: 'pulse 1.5s ease-in-out infinite' }} />
         </div>
       ))}
     </div>

@@ -15,6 +15,7 @@ export const ROUTES = {
   POLICIES: '/policies',
   POLICY_DETAIL: (id: string) => `/policies/${id}`,
   WORKFLOWS: '/workflows',
+  APPROVALS: '/approvals',
   LOCATIONS: '/locations',
   SECURITY: '/security',
   DATA_FIELDS: '/data-fields',

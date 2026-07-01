@@ -19,9 +19,13 @@ import {
   useWorkflowRuns,
   useTestWorkflow,
 } from '@/features/workflows/hooks/useWorkflows';
+import { ROLES } from '@/constants/roles';
+import { MultiUserSelect } from '@/components/ui/MultiUserSelect';
 import { TableSkeleton } from '@/components/ui/TableSkeleton';
 import { ErrorState } from '@/components/ui/ErrorState';
 import { EmptyState } from '@/components/ui/EmptyState';
+import { UserSelect } from '@/components/ui/UserSelect';
+import { useUsers } from '@/features/people/hooks/useUsers';
 import { Modal } from '@/components/ui/Modal';
 import { cn } from '@/utils/cn';
 import { formatDate } from '@/utils/formatDate';
@@ -54,7 +58,8 @@ const ACTION_TYPE_LABELS: Record<WorkflowActionType, string> = {
   notify_manager: 'Notify Manager',
   update_field: 'Update Field',
   create_task: 'Create Task',
-  webhook: 'Webhook',
+  webhook: 'Trigger Webhook',
+  require_approval: 'Require Approval',
 };
 
 const LIFECYCLE_STATES = [
@@ -183,7 +188,7 @@ export default function WorkflowsPage() {
           ) : (
             <div className="bg-white rounded-lg border border-line shadow-card overflow-hidden">
               <table className="w-full">
-                <thead className="bg-[#F7F8FA] border-b border-line">
+                <thead className="bg-white/5 border-b border-line">
                   <tr>
                     <th className="text-[11px] font-semibold text-ink-secondary uppercase tracking-wider h-10 px-4 text-left">
                       Workflow
@@ -361,7 +366,7 @@ function WorkflowRow({ workflow, onView, onDelete }: WorkflowRowProps) {
   const disableMutation = useDisableWorkflow(workflow._id);
 
   return (
-    <tr className="border-b border-line last:border-0 hover:bg-[#F7F8FA] transition-colors duration-100">
+    <tr className="border-b border-line last:border-0 hover:bg-white/5 transition-colors duration-100">
       <td className="h-14 px-4">
         <div>
           <p className="text-sm font-medium text-ink">{workflow.name}</p>
@@ -756,52 +761,84 @@ function WorkflowStepsView({ workflowId, status }: { workflowId: string; status:
           )}
         </div>
       ) : (
-        <div className="space-y-2">
-          {steps.map((step, index) => (
-            <div
-              key={step._id}
-              draggable={isEditable}
-              onDragStart={isEditable ? () => handleDragStart(index) : undefined}
-              onDragOver={isEditable ? handleDragOver : undefined}
-              onDrop={isEditable ? () => handleDrop(index) : undefined}
-              className={cn(
-                'flex items-center gap-3 p-3 bg-white border border-line rounded-md transition-colors',
-                isEditable ? 'cursor-grab hover:bg-surface-alt' : 'cursor-default'
-              )}
-            >
-              {/* Drag handle */}
-              {isEditable && (
-                <div className="text-ink-muted flex-shrink-0">
-                  <GripVertical className="w-4 h-4" />
-                </div>
-              )}
-
-              {/* Step order badge */}
-              <span className="h-6 w-6 flex items-center justify-center rounded-full bg-surface-alt text-xs font-semibold text-ink-secondary flex-shrink-0 border border-line">
-                {index + 1}
-              </span>
-
-              {/* Step info */}
-              <div className="flex-1 min-w-0">
-                <p className="text-sm font-medium text-ink">{step.name}</p>
-                <p className="text-xs text-ink-secondary">
-                  {ACTION_TYPE_LABELS[step.action_type]}
-                  {step.description && ` — ${step.description}`}
-                </p>
-              </div>
-
-              {/* Delete button (editable only) */}
-              {isEditable && (
-                <button
-                  onClick={() => deleteStepMutation.mutate({ step_id: step._id })}
-                  className="h-7 w-7 flex items-center justify-center rounded text-ink-secondary hover:text-error hover:bg-error-light transition-colors flex-shrink-0"
-                  aria-label="Delete step"
-                >
-                  <X className="w-3.5 h-3.5" />
-                </button>
-              )}
+        <div className="flex flex-col relative">
+          {/* Start Node */}
+          <div className="flex items-center gap-3 p-3 bg-surface-alt border border-line rounded-md border-dashed opacity-80">
+            {isEditable && <div className="w-4 flex-shrink-0" />}
+            <span className="h-6 w-6 flex items-center justify-center rounded-full bg-emerald-50 text-emerald-700 text-xs font-semibold flex-shrink-0 border border-emerald-200">
+              S
+            </span>
+            <div className="flex-1 min-w-0">
+              <p className="text-sm font-medium text-ink">Start: {workflowData?.trigger}</p>
+              <p className="text-xs text-ink-secondary">Workflow is triggered</p>
             </div>
-          ))}
+          </div>
+
+          {/* Connective Line */}
+          <div className="w-0.5 h-3 bg-line ml-[3.25rem]" />
+
+          <div className="space-y-2">
+            {steps.map((step, index) => (
+              <div
+                key={step._id}
+                draggable={isEditable}
+                onDragStart={isEditable ? () => handleDragStart(index) : undefined}
+                onDragOver={isEditable ? handleDragOver : undefined}
+                onDrop={isEditable ? () => handleDrop(index) : undefined}
+                className={cn(
+                  'flex items-center gap-3 p-3 bg-white border border-line rounded-md transition-colors',
+                  isEditable ? 'cursor-grab hover:bg-surface-alt' : 'cursor-default'
+                )}
+              >
+                {/* Drag handle */}
+                {isEditable && (
+                  <div className="text-ink-muted flex-shrink-0">
+                    <GripVertical className="w-4 h-4" />
+                  </div>
+                )}
+
+                {/* Step order badge */}
+                <span className="h-6 w-6 flex items-center justify-center rounded-full bg-surface-alt text-xs font-semibold text-ink-secondary flex-shrink-0 border border-line">
+                  {index + 1}
+                </span>
+
+                {/* Step info */}
+                <div className="flex-1 min-w-0">
+                  <p className="text-sm font-medium text-ink">{step.name}</p>
+                  <p className="text-xs text-ink-secondary">
+                    {ACTION_TYPE_LABELS[step.action_type]}
+                    {step.description && ` — ${step.description}`}
+                  </p>
+                </div>
+
+                {/* Delete button (editable only) */}
+                {isEditable && (
+                  <button
+                    onClick={() => deleteStepMutation.mutate({ step_id: step._id })}
+                    className="h-7 w-7 flex items-center justify-center rounded text-ink-secondary hover:text-error hover:bg-error-light transition-colors flex-shrink-0"
+                    aria-label="Delete step"
+                  >
+                    <X className="w-3.5 h-3.5" />
+                  </button>
+                )}
+              </div>
+            ))}
+          </div>
+
+          {/* Connective Line */}
+          <div className="w-0.5 h-3 bg-line ml-[3.25rem]" />
+
+          {/* End Node */}
+          <div className="flex items-center gap-3 p-3 bg-surface-alt border border-line rounded-md border-dashed opacity-80">
+            {isEditable && <div className="w-4 flex-shrink-0" />}
+            <span className="h-6 w-6 flex items-center justify-center rounded-full bg-error-light text-error text-xs font-semibold flex-shrink-0 border border-error/30">
+              E
+            </span>
+            <div className="flex-1 min-w-0">
+              <p className="text-sm font-medium text-ink">End</p>
+              <p className="text-xs text-ink-secondary">Workflow execution completes</p>
+            </div>
+          </div>
         </div>
       )}
 
@@ -837,10 +874,12 @@ interface AddStepModalProps {
 }
 
 function AddStepModal({ isOpen, onClose, addMutation, currentStepCount }: AddStepModalProps) {
+
   const [formData, setFormData] = useState({
     name: '',
     description: '',
     action_type: 'send_email' as WorkflowActionType,
+    approver_user_ids: [] as string[],
   });
 
   const handleSubmit = () => {
@@ -849,7 +888,11 @@ function AddStepModal({ isOpen, onClose, addMutation, currentStepCount }: AddSte
         name: formData.name,
         description: formData.description || undefined,
         action_type: formData.action_type,
-        action_config: {},
+        action_config: formData.action_type === 'require_approval' 
+          ? { 
+              approver_user_ids: formData.approver_user_ids,
+            } 
+          : {},
         step_order: currentStepCount,
       },
       { onSuccess: onClose }
@@ -933,6 +976,25 @@ function AddStepModal({ isOpen, onClose, addMutation, currentStepCount }: AddSte
             ))}
           </select>
         </div>
+
+        {formData.action_type === 'require_approval' && (
+          <div className="space-y-4">
+            <div>
+              <label className="text-sm font-medium text-ink block mb-1.5">
+                Approvers <span className="text-error">*</span>
+              </label>
+              <MultiUserSelect
+                value={formData.approver_user_ids}
+                onChange={(values) => setFormData({ ...formData, approver_user_ids: values })}
+                placeholder="Select specific users..."
+                onlyActive={true}
+              />
+              <p className="text-xs text-ink-muted mt-1">
+                Select individual users who can approve this step. The workflow will proceed when any assigned user approves.
+              </p>
+            </div>
+          </div>
+        )}
       </div>
     </Modal>
   );
@@ -954,6 +1016,27 @@ function TestWorkflowModal({ isOpen, onClose, testMutation }: TestWorkflowModalP
     lifecycle_from: 'active',
     lifecycle_to: 'terminated',
   });
+
+  const { data: users } = useUsers();
+
+  const handleUserChange = (userId: string) => {
+    const user = users?.find(u => u._id === userId);
+    if (user) {
+      setFormData({
+        ...formData,
+        user_id: userId,
+        user_name: user.full_name,
+        user_email: user.email,
+      });
+    } else {
+      setFormData({
+        ...formData,
+        user_id: '',
+        user_name: '',
+        user_email: '',
+      });
+    }
+  };
 
   const handleSubmit = () => {
     testMutation.mutate(formData, { onSuccess: onClose });
@@ -995,16 +1078,12 @@ function TestWorkflowModal({ isOpen, onClose, testMutation }: TestWorkflowModalP
         <div className="grid grid-cols-2 gap-4">
           <div>
             <label className="text-sm font-medium text-ink block mb-1.5">
-              User ID <span className="text-error">*</span>
+              Select User <span className="text-error">*</span>
             </label>
-            <input
-              type="text"
+            <UserSelect
               value={formData.user_id}
-              onChange={(e) =>
-                setFormData({ ...formData, user_id: e.target.value })
-              }
-              placeholder="e.g., 64f1a2b3c4d5e6f7a8b9c0d1"
-              className="w-full h-9 px-3 text-sm rounded-md border border-line bg-white text-ink placeholder:text-ink-muted focus:outline-none focus:ring-2 focus:ring-primary/30 focus:border-primary transition-all duration-150"
+              onChange={handleUserChange}
+              placeholder="Select a mock user..."
             />
           </div>
           <div>
@@ -1018,7 +1097,8 @@ function TestWorkflowModal({ isOpen, onClose, testMutation }: TestWorkflowModalP
                 setFormData({ ...formData, user_name: e.target.value })
               }
               placeholder="e.g., John Doe"
-              className="w-full h-9 px-3 text-sm rounded-md border border-line bg-white text-ink placeholder:text-ink-muted focus:outline-none focus:ring-2 focus:ring-primary/30 focus:border-primary transition-all duration-150"
+              readOnly
+              className="w-full h-9 px-3 text-sm rounded-md border border-line bg-black/5 text-ink-muted placeholder:text-ink-muted focus:outline-none cursor-not-allowed"
             />
           </div>
         </div>
@@ -1034,7 +1114,8 @@ function TestWorkflowModal({ isOpen, onClose, testMutation }: TestWorkflowModalP
               setFormData({ ...formData, user_email: e.target.value })
             }
             placeholder="john@example.com"
-            className="w-full h-9 px-3 text-sm rounded-md border border-line bg-white text-ink placeholder:text-ink-muted focus:outline-none focus:ring-2 focus:ring-primary/30 focus:border-primary transition-all duration-150"
+            readOnly
+            className="w-full h-9 px-3 text-sm rounded-md border border-line bg-black/5 text-ink-muted placeholder:text-ink-muted focus:outline-none cursor-not-allowed"
           />
         </div>
 
@@ -1093,7 +1174,7 @@ function WorkflowRunsView({ workflowId }: { workflowId: string }) {
       {runs && runs.length > 0 ? (
         <div className="border border-line rounded-md overflow-hidden">
           <table className="w-full">
-            <thead className="bg-[#F7F8FA] border-b border-line">
+            <thead className="bg-white/5 border-b border-line">
               <tr>
                 <th className="text-[11px] font-semibold text-ink-secondary uppercase tracking-wider h-10 px-4 text-left">
                   Status
@@ -1248,3 +1329,4 @@ function WorkflowConfigView({ workflow }: { workflow: Workflow }) {
     </div>
   );
 }
+

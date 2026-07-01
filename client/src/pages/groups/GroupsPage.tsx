@@ -142,8 +142,8 @@ export default function GroupsPage() {
       header: 'Group Name',
       cell: ({ row }) => (
         <div className="flex items-center gap-3">
-          <div className="w-8 h-8 rounded-lg bg-indigo-100 flex items-center justify-center">
-            <Users className="h-4 w-4 text-indigo-600" />
+          <div className="w-8 h-8 rounded-lg bg-indigo-500/20 flex items-center justify-center">
+            <Users className="h-4 w-4 text-indigo-400" />
           </div>
           <span className="text-sm font-medium text-ink">{row.original.name}</span>
         </div>
@@ -155,7 +155,7 @@ export default function GroupsPage() {
       cell: ({ row }) => (
         <span className={cn(
           "inline-flex items-center px-2 py-0.5 rounded text-[11px] font-semibold uppercase tracking-wider",
-          row.original.type === 'dynamic' ? "bg-purple-100 text-purple-700" : "bg-slate-100 text-slate-700"
+          row.original.type === 'dynamic' ? "bg-purple-500/20 text-purple-400" : "bg-slate-500/20 text-slate-400"
         )}>
           {row.original.type}
         </span>
@@ -456,7 +456,7 @@ export default function GroupsPage() {
                   if (!user) return null;
                   return (
                     <div key={user._id} className="flex items-center gap-3 px-4 py-3 group">
-                      <div className="w-8 h-8 rounded-full bg-indigo-100 flex items-center justify-center text-xs font-semibold text-indigo-600">
+                      <div className="w-8 h-8 rounded-full bg-indigo-500/20 flex items-center justify-center text-xs font-semibold text-indigo-400">
                         {user.full_name?.charAt(0) || '?'}
                       </div>
                       <div className="flex-1 min-w-0">

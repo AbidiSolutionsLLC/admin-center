@@ -85,7 +85,7 @@ export const OrgHistoryTab: React.FC = () => {
           <select
             value={objectType}
             onChange={(e) => setObjectType(e.target.value)}
-            className="h-9 pl-3 pr-8 text-sm rounded-md border border-line bg-white text-ink focus:outline-none focus:ring-2 focus:ring-primary/30 focus:border-primary"
+            className="h-9 pl-3 pr-8 text-sm rounded-md border border-line bg-surface text-ink focus:outline-none focus:ring-2 focus:ring-primary/30 focus:border-primary"
           >
             {OBJECT_TYPE_OPTIONS.map((opt) => (
               <option key={opt.value} value={opt.value}>
@@ -99,7 +99,7 @@ export const OrgHistoryTab: React.FC = () => {
           type="date"
           value={dateFrom}
           onChange={(e) => setDateFrom(e.target.value)}
-          className="h-9 px-3 text-sm rounded-md border border-line bg-white text-ink focus:outline-none focus:ring-2 focus:ring-primary/30 focus:border-primary"
+          className="h-9 px-3 text-sm rounded-md border border-line bg-surface text-ink focus:outline-none focus:ring-2 focus:ring-primary/30 focus:border-primary"
           placeholder="From"
         />
 
@@ -107,7 +107,7 @@ export const OrgHistoryTab: React.FC = () => {
           type="date"
           value={dateTo}
           onChange={(e) => setDateTo(e.target.value)}
-          className="h-9 px-3 text-sm rounded-md border border-line bg-white text-ink focus:outline-none focus:ring-2 focus:ring-primary/30 focus:border-primary"
+          className="h-9 px-3 text-sm rounded-md border border-line bg-surface text-ink focus:outline-none focus:ring-2 focus:ring-primary/30 focus:border-primary"
           placeholder="To"
         />
 

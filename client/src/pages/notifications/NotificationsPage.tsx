@@ -177,7 +177,7 @@ export default function NotificationsPage() {
               ) : (
                 <div className="bg-white rounded-lg border border-line shadow-card overflow-hidden">
                   <table className="w-full">
-                    <thead className="bg-[#F7F8FA] border-b border-line">
+                    <thead className="bg-white/5 border-b border-line">
                       <tr>
                         <th className="text-[11px] font-semibold text-ink-secondary uppercase tracking-wider h-10 px-4 text-left">
                           Template
@@ -371,7 +371,7 @@ function TemplateRow({ template, onEdit, onDelete }: TemplateRowProps) {
 
   return (
     <>
-      <tr className="border-b border-line last:border-0 hover:bg-[#F7F8FA] transition-colors duration-100">
+      <tr className="border-b border-line last:border-0 hover:bg-white/5 transition-colors duration-100">
         <td className="h-14 px-4">
           <div>
             <p className="text-sm font-medium text-ink">{template.name}</p>
@@ -662,7 +662,7 @@ function DeliveryLogView() {
     <div className="bg-white rounded-lg border border-line shadow-card overflow-hidden">
       {events && events.length > 0 ? (
         <table className="w-full">
-          <thead className="bg-[#F7F8FA] border-b border-line">
+          <thead className="bg-white/5 border-b border-line">
             <tr>
               <th className="text-[11px] font-semibold text-ink-secondary uppercase tracking-wider h-10 px-4 text-left">Status</th>
               <th className="text-[11px] font-semibold text-ink-secondary uppercase tracking-wider h-10 px-4 text-left">Template</th>
@@ -714,3 +714,4 @@ function DeliveryLogView() {
     </div>
   );
 }
+

@@ -22,9 +22,9 @@ async function seedFirstUser() {
     });
     console.log('Connected successfully.');
 
-    const email = 'admin@example.com';
-    const password = 'password123';
-    const fullName = 'Admin Bhai';
+    const email = 'tsaleem@abidisolutions.com';
+    const password = 'Mtayyab696';
+    const fullName = 'Tayyab Saleem';
 
     // 1. Find or create Company
     let company = await Company.findOne({ name: 'Abidi Solutions LLC' });

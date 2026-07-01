@@ -55,7 +55,7 @@ export default function OnboardingPage() {
 
   if (isSuccess) {
     return (
-      <div className="flex h-screen w-full items-center justify-center bg-[#F7F8FA] p-4 text-ink font-sans">
+      <div className="flex h-screen w-full items-center justify-center bg-white/5 p-4 text-ink font-sans">
         <Card className="w-full max-w-md border-line shadow-card text-center">
           <CardHeader className="space-y-4 pb-8">
             <div className="mx-auto w-12 h-12 rounded-full bg-emerald-50 flex items-center justify-center">
@@ -85,13 +85,13 @@ export default function OnboardingPage() {
   }
 
   return (
-    <div className="flex h-screen w-full items-center justify-center bg-[#F7F8FA] p-4 text-ink font-sans">
+    <div className="flex h-screen w-full items-center justify-center bg-white/5 p-4 text-ink font-sans">
       <Card className="w-full max-w-md border-line shadow-card">
         <CardHeader className="space-y-2 text-center pb-6">
           <div className="mx-auto w-10 h-10 rounded-xl bg-primary-light flex items-center justify-center mb-2">
             <CheckCircle2 className="w-5 h-5 text-primary" />
           </div>
-          <CardTitle className="text-2xl font-semibold tracking-tight">Welcome to Admin Center</CardTitle>
+          <CardTitle className="text-2xl font-semibold tracking-tight">Welcome to Sowaye</CardTitle>
           <CardDescription className="text-ink-muted">
             Let's get your account ready by setting up your password.
           </CardDescription>
@@ -172,3 +172,4 @@ export default function OnboardingPage() {
     </div>
   );
 }
+

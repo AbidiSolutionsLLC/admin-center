@@ -1,39 +1,136 @@
 @import "tailwindcss";
 @config "../tailwind.config.ts";
 
-@layer base {
-  :root {
-    --background: 220 20% 97%; /* #F7F8FA */
-    --foreground: 224 71.4% 4.1%;
-    --card: 0 0% 100%;
-    --card-foreground: 224 71.4% 4.1%;
-    --popover: 0 0% 100%;
-    --popover-foreground: 224 71.4% 4.1%;
-    --primary: 33 93% 47%; /* #E8870A */
-    --primary-foreground: 210 40% 98%;
-    --secondary: 210 40% 96.1%;
-    --secondary-foreground: 222.2 47.4% 11.2%;
-    --muted: 210 40% 96.1%;
-    --muted-foreground: 215.4 16.3% 46.9%;
-    --accent: 228 78% 60%; /* #4F46E5 */
-    --accent-foreground: 222.2 47.4% 11.2%;
-    --destructive: 0 84.2% 60.2%;
-    --destructive-foreground: 210 40% 98%;
-    --border: 214.3 31.8% 91.4%;
-    --input: 214.3 31.8% 91.4%;
-    --ring: 33 93% 47%;
-    --radius: 0.5rem;
-  }
+/* === DESIGN SYSTEM: DARK GLASS === */
+:root {
+  --bg-color: #0b0f19;
+  --primary: #f5b02a;
+  --primary-rgb: 245, 176, 42;
+  --primary-glow: rgba(245, 176, 42, 0.4);
+  --brand-gradient: linear-gradient(135deg, #f5b02a, #fcd34d);
+  --glass-bg: rgba(255, 255, 255, 0.03);
+  --glass-border: rgba(255, 255, 255, 0.08);
+  --glass-hover: rgba(255, 255, 255, 0.06);
+  --glass-shadow: 0 8px 32px 0 rgba(0, 0, 0, 0.37);
+  --text-main: #f8fafc;
+  --text-muted: #94a3b8;
+  --danger: #ef4444;
+  --success: #10b981;
 }
 
-@layer base {
-  * {
-    border-color: #E2E6ED;
-  }
-  body {
-    background-color: #F7F8FA;
-    color: #0F1629;
-  }
+/* Page background with ambient radial glows */
+body {
+  background-color: var(--bg-color);
+  background-image:
+    radial-gradient(circle at 15% 50%, rgba(var(--primary-rgb), 0.07) 0%, transparent 50%),
+    radial-gradient(circle at 85% 30%, rgba(59, 130, 246, 0.07) 0%, transparent 50%);
+  color: var(--text-main);
+  min-height: 100vh;
+}
+
+/* Glass utility classes */
+.glass-panel {
+  background: var(--glass-bg);
+  backdrop-filter: blur(16px);
+  -webkit-backdrop-filter: blur(16px);
+  border: 1px solid var(--glass-border);
+  box-shadow: var(--glass-shadow);
+}
+
+.glass-card {
+  background: linear-gradient(145deg, rgba(255,255,255,0.05) 0%, rgba(255,255,255,0.02) 100%);
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
+  border: 1px solid var(--glass-border);
+  transition: transform 0.3s cubic-bezier(0.175, 0.885, 0.32, 1.275), 
+              box-shadow 0.3s ease, 
+              border-color 0.3s ease;
+  position: relative;
+  overflow: hidden;
+}
+
+.glass-card::before {
+  content: '';
+  position: absolute;
+  top: 0; left: 0; right: 0;
+  height: 1px;
+  background: linear-gradient(90deg, transparent, rgba(255,255,255,0.15), transparent);
+  opacity: 0;
+  transition: opacity 0.3s ease;
+}
+
+.glass-card:hover::before { opacity: 1; }
+
+.glass-card:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 12px 40px rgba(0,0,0,0.4);
+  border-color: rgba(var(--primary-rgb), 0.25);
+}
+
+/* Primary glow button */
+.btn-primary-glow {
+  background: var(--brand-gradient);
+  color: #000;
+  box-shadow: 0 4px 15px var(--primary-glow);
+  transition: box-shadow 0.3s ease, transform 0.2s ease;
+}
+
+.btn-primary-glow:hover {
+  box-shadow: 0 6px 20px var(--primary-glow);
+  transform: translateY(-1px);
+}
+
+/* Scrollbar hide utility */
+.scrollbar-hide::-webkit-scrollbar { display: none; }
+.scrollbar-hide { -ms-overflow-style: none; scrollbar-width: none; }
+
+/* Section header with gradient line */
+.section-header-line {
+  height: 1px;
+  flex: 1;
+  background: linear-gradient(90deg, rgba(var(--primary-rgb), 0.4), transparent);
+}
+
+/* Page entrance animation */
+.page-enter {
+  animation: fadeInUp 0.5s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+}
+
+@keyframes fadeInUp {
+  from { opacity: 0; transform: translateY(16px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+/* Premium table */
+.glass-table {
+  width: 100%;
+  border-collapse: separate;
+  border-spacing: 0 3px;
+}
+
+.glass-table th {
+  padding: 14px 20px;
+  font-weight: 800;
+  font-size: 10px;
+  text-transform: uppercase;
+  letter-spacing: 0.18em;
+  color: var(--text-muted);
+  text-align: left;
+}
+
+.glass-table tbody tr {
+  cursor: pointer;
+  transition: background 0.15s ease, transform 0.15s ease;
+}
+
+.glass-table tbody tr:hover {
+  background: rgba(255,255,255,0.03);
+  transform: translateY(-1px);
+}
+
+.glass-table td {
+  padding: 18px 20px;
+  border-bottom: 1px solid var(--glass-border);
 }
 
 /* Tiptap Editor Content Styles */
@@ -48,33 +145,33 @@
     & h1 {
       font-size: 1.5rem;
       font-weight: 600;
-      color: #0F1629;
+      color: var(--text-main);
       margin-top: 1.5rem;
       margin-bottom: 0.75rem;
     }
     & h2 {
       font-size: 1.25rem;
       font-weight: 600;
-      color: #0F1629;
+      color: var(--text-main);
       margin-top: 1.25rem;
       margin-bottom: 0.5rem;
     }
     & h3 {
       font-size: 1rem;
       font-weight: 600;
-      color: #0F1629;
+      color: var(--text-main);
       margin-top: 1rem;
       margin-bottom: 0.5rem;
     }
     & p {
       font-size: 0.875rem;
-      color: #0F1629;
+      color: var(--text-main);
       margin-top: 0.5rem;
       margin-bottom: 0.5rem;
     }
     & strong {
       font-weight: 600;
-      color: #0F1629;
+      color: var(--text-main);
     }
     & em {
       font-style: italic;
@@ -85,7 +182,7 @@
     & ul, & ol {
       padding-left: 1.5rem;
       font-size: 0.875rem;
-      color: #0F1629;
+      color: var(--text-main);
       margin-top: 0.5rem;
       margin-bottom: 0.5rem;
     }
@@ -95,21 +192,21 @@
     }
     & blockquote {
       border-left: 4px solid #E8870A;
-      background-color: #FEF3E2;
+      background-color: rgba(245,176,42,0.1);
       padding: 0.5rem 1rem;
       font-style: italic;
       margin-top: 0.75rem;
       margin-bottom: 0.75rem;
     }
     & code {
-      background-color: #F1F3F7;
+      background-color: rgba(255,255,255,0.05);
       padding: 0.125rem 0.375rem;
       border-radius: 4px;
       font-size: 0.75rem;
       font-family: 'JetBrains Mono', monospace;
     }
     & pre {
-      background-color: #F1F3F7;
+      background-color: rgba(255,255,255,0.05);
       padding: 1rem;
       border-radius: 6px;
       font-size: 0.75rem;
@@ -124,7 +221,7 @@
       border-radius: 0;
     }
     & hr {
-      border-color: #E2E6ED;
+      border-color: rgba(255,255,255,0.1);
       margin-top: 1.5rem;
       margin-bottom: 1.5rem;
     }
@@ -135,4 +232,440 @@
       list-style-type: decimal;
     }
   }
+}
+
+
+/* ═══════════════════════════════════════════════════════
+   DARK GLASS SYSTEM — GLOBAL OVERRIDES
+═══════════════════════════════════════════════════════ */
+
+/* 1. Native HTML inputs, selects, textareas */
+input:not([type="checkbox"]):not([type="radio"]):not([type="range"]),
+textarea,
+select {
+  background: rgba(255,255,255,0.04) !important;
+  backdrop-filter: blur(8px);
+  -webkit-backdrop-filter: blur(8px);
+  border: 1px solid rgba(255,255,255,0.08) !important;
+  border-radius: 12px !important;
+  height: auto !important;
+  font-size: 14px !important;
+  color: #f8fafc !important;
+  outline: none !important;
+  transition: all 0.25s ease !important;
+  -webkit-appearance: none;
+  appearance: none;
+}
+
+/* Custom Calendar Theme for Dark Mode */
+input[type="date"]::-webkit-calendar-picker-indicator {
+  filter: invert(1) opacity(0.6);
+  cursor: pointer;
+  transition: opacity 0.2s ease, transform 0.2s ease;
+}
+
+input[type="date"]::-webkit-calendar-picker-indicator:hover {
+  filter: invert(1) opacity(1);
+  transform: scale(1.1);
+}
+
+select {
+  padding-top: 8px !important;
+  padding-bottom: 8px !important;
+  padding-right: 32px !important;
+}
+
+input:not([type="checkbox"]):not([type="radio"]):not([type="range"]),
+textarea {
+  padding-top: 8px;
+  padding-bottom: 8px;
+}
+
+input::placeholder,
+textarea::placeholder {
+  color: rgba(148,163,184,0.45) !important;
+}
+
+input:focus,
+textarea:focus,
+select:focus {
+  background: rgba(255,255,255,0.07) !important;
+  border-color: rgba(245,176,42,0.35) !important;
+  box-shadow: 0 0 0 3px rgba(245,176,42,0.06), 0 0 24px rgba(245,176,42,0.06) !important;
+}
+
+input:disabled,
+textarea:disabled,
+select:disabled {
+  opacity: 0.4 !important;
+  cursor: not-allowed !important;
+}
+
+/* 2. Native select options */
+select option {
+  background: #141925 !important;
+  color: #f8fafc !important;
+}
+
+/* 3. Form labels */
+label:not([class*="switch"]):not([class*="checkbox"]):not([class*="radio"]) {
+  display: block;
+  font-size: 10px !important;
+  font-weight: 800 !important;
+  text-transform: uppercase !important;
+  letter-spacing: 0.14em !important;
+  color: #94a3b8 !important;
+  margin-bottom: 8px !important;
+}
+
+/* 4. Radix / shadcn — Popovers & Dropdowns */
+[data-radix-popper-content-wrapper] > div,
+[data-radix-select-content],
+[data-radix-dropdown-menu-content],
+[data-radix-context-menu-content],
+[data-radix-popover-content],
+[data-radix-tooltip-content],
+[role="dialog"][data-state],
+[role="listbox"] {
+  background: linear-gradient(145deg, rgba(20,25,35,0.97) 0%, rgba(15,20,30,0.99) 100%) !important;
+  backdrop-filter: blur(20px) !important;
+  -webkit-backdrop-filter: blur(20px) !important;
+  border: 1px solid rgba(255,255,255,0.09) !important;
+  border-radius: 16px !important;
+  box-shadow: 0 8px 32px rgba(0,0,0,0.5) !important;
+  color: #f8fafc !important;
+}
+
+/* 5. Radix Select / Dropdown items */
+[data-radix-select-item],
+[data-radix-dropdown-menu-item],
+[role="option"] {
+  color: #94a3b8 !important;
+  border-radius: 8px !important;
+  font-size: 13px !important;
+}
+
+[data-radix-select-item][data-highlighted],
+[data-radix-dropdown-menu-item][data-highlighted],
+[role="option"]:hover,
+[role="option"][aria-selected="true"] {
+  background: rgba(245,176,42,0.10) !important;
+  color: #f5b02a !important;
+  outline: none !important;
+}
+
+[data-radix-select-item][data-state="checked"] {
+  color: #f5b02a !important;
+}
+
+/* 6. shadcn Select trigger */
+[role="combobox"],
+button[aria-haspopup="listbox"] {
+  background: rgba(255,255,255,0.04) !important;
+  border: 1px solid rgba(255,255,255,0.08) !important;
+  border-radius: 12px !important;
+  color: #f8fafc !important;
+  transition: all 0.2s ease !important;
+}
+
+[role="combobox"]:hover,
+button[aria-haspopup="listbox"]:hover {
+  background: rgba(255,255,255,0.07) !important;
+  border-color: rgba(255,255,255,0.14) !important;
+}
+
+/* 7. Dialog / Sheet panel */
+[data-radix-dialog-content],
+[data-radix-sheet-content] {
+  background: linear-gradient(160deg, rgba(22,28,48,0.97) 0%, rgba(11,15,28,0.99) 100%) !important;
+  backdrop-filter: blur(32px) !important;
+  -webkit-backdrop-filter: blur(32px) !important;
+  border: 1px solid rgba(255,255,255,0.09) !important;
+  border-radius: 24px !important;
+  box-shadow: 0 20px 60px rgba(0,0,0,0.6) !important;
+  color: #f8fafc !important;
+}
+
+[data-radix-sheet-content][data-side="right"] {
+  border-radius: 28px 0 0 28px !important;
+  box-shadow: -12px 0 60px rgba(0,0,0,0.6) !important;
+}
+
+[data-radix-dialog-overlay],
+[data-radix-sheet-overlay] {
+  background: rgba(6,8,13,0.78) !important;
+  backdrop-filter: blur(6px) !important;
+  -webkit-backdrop-filter: blur(6px) !important;
+}
+
+/* 8. Command palette */
+[cmdk-root],
+[cmdk-dialog] {
+  background: linear-gradient(145deg, rgba(20,25,35,0.97) 0%, rgba(15,20,30,0.99) 100%) !important;
+  border: 1px solid rgba(255,255,255,0.09) !important;
+  border-radius: 20px !important;
+  backdrop-filter: blur(24px) !important;
+}
+
+[cmdk-input] {
+  background: transparent !important;
+  border: none !important;
+  border-bottom: 1px solid rgba(255,255,255,0.06) !important;
+  border-radius: 0 !important;
+  color: #f8fafc !important;
+  padding: 16px 20px !important;
+}
+
+[cmdk-item] {
+  color: #94a3b8 !important;
+  border-radius: 8px !important;
+  padding: 10px 14px !important;
+  font-size: 13px !important;
+}
+
+[cmdk-item][aria-selected="true"],
+[cmdk-item]:hover {
+  background: rgba(245,176,42,0.10) !important;
+  color: #f5b02a !important;
+}
+
+[cmdk-group-heading] {
+  color: rgba(148,163,184,0.5) !important;
+  font-size: 10px !important;
+  font-weight: 900 !important;
+  text-transform: uppercase !important;
+  letter-spacing: 0.16em !important;
+}
+
+/* 9. React Day Picker / shadcn Calendar */
+.rdp,
+.rdp-root,
+[class*="rdp"] {
+  background: linear-gradient(145deg, rgba(20,25,35,0.97) 0%, rgba(15,20,30,0.99) 100%) !important;
+  border: 1px solid rgba(255,255,255,0.09) !important;
+  border-radius: 16px !important;
+  padding: 16px !important;
+  color: #f8fafc !important;
+}
+
+.rdp-button:hover:not(.rdp-day_selected),
+.rdp-nav_button:hover {
+  background: rgba(255,255,255,0.08) !important;
+}
+
+.rdp-day_selected,
+.rdp-day_selected:hover {
+  background: #f5b02a !important;
+  color: #000 !important;
+  font-weight: 700 !important;
+}
+
+.rdp-day_today:not(.rdp-day_selected) {
+  border: 1px solid rgba(255,255,255,0.15) !important;
+  background: rgba(255,255,255,0.05) !important;
+}
+
+.rdp-head_cell {
+  color: rgba(148,163,184,0.5) !important;
+  font-size: 10px !important;
+  font-weight: 900 !important;
+  text-transform: uppercase !important;
+}
+
+/* 10. shadcn Tabs */
+[role="tablist"] {
+  background: rgba(255,255,255,0.04) !important;
+  border: 1px solid rgba(255,255,255,0.07) !important;
+  border-radius: 12px !important;
+  padding: 4px !important;
+}
+
+[role="tab"] {
+  color: #94a3b8 !important;
+  border-radius: 9px !important;
+  font-weight: 600 !important;
+  font-size: 13px !important;
+  transition: all 0.2s ease !important;
+}
+
+[role="tab"][data-state="active"],
+[role="tab"][aria-selected="true"] {
+  background: rgba(245,176,42,0.12) !important;
+  color: #f5b02a !important;
+  box-shadow: none !important;
+}
+
+/* 11. shadcn Checkbox & Native Checkbox */
+[role="checkbox"],
+button[role="checkbox"],
+input[type="checkbox"] {
+  appearance: none;
+  background: rgba(255,255,255,0.05) !important;
+  border: 1px solid rgba(255,255,255,0.15) !important;
+  border-radius: 4px !important;
+  transition: all 0.2s ease !important;
+  width: 16px !important;
+  height: 16px !important;
+  display: inline-block;
+  position: relative;
+  cursor: pointer;
+}
+
+[role="checkbox"][data-state="checked"],
+button[role="checkbox"][aria-checked="true"],
+input[type="checkbox"]:checked {
+  background: #f5b02a !important;
+  border-color: #f5b02a !important;
+  color: #000 !important;
+}
+
+input[type="checkbox"]:checked::after {
+  content: '';
+  position: absolute;
+  top: 45%; left: 50%;
+  transform: translate(-50%, -50%) rotate(45deg);
+  width: 4px; height: 8px;
+  border-right: 2px solid #000;
+  border-bottom: 2px solid #000;
+}
+
+/* 12. shadcn Switch */
+[role="switch"],
+button[role="switch"] {
+  background: rgba(255,255,255,0.10) !important;
+  border: 1px solid rgba(255,255,255,0.06) !important;
+  transition: all 0.25s ease !important;
+}
+
+[role="switch"][data-state="checked"],
+button[role="switch"][aria-checked="true"] {
+  background: #f5b02a !important;
+  border-color: rgba(245,176,42,0.5) !important;
+  box-shadow: 0 0 12px rgba(245,176,42,0.3) !important;
+}
+
+[role="switch"] span { background: rgba(255,255,255,0.7) !important; }
+[role="switch"][data-state="checked"] span { background: #000 !important; }
+
+/* 13. Badge color overrides (replace Tailwind bg-X-50) */
+.bg-emerald-50  { background: rgba(16,185,129,0.12) !important; }
+.text-emerald-700, .text-emerald-600 { color: #34d399 !important; }
+.border-emerald-200 { border-color: rgba(16,185,129,0.25) !important; }
+
+.bg-amber-50, .bg-yellow-50 { background: rgba(245,176,42,0.12) !important; }
+.text-amber-700, .text-amber-600 { color: #fbbf24 !important; }
+.border-amber-200 { border-color: rgba(245,176,42,0.25) !important; }
+
+.bg-red-50 { background: rgba(239,68,68,0.12) !important; }
+.text-red-700, .text-red-600 { color: #f87171 !important; }
+.border-red-200 { border-color: rgba(239,68,68,0.25) !important; }
+
+.bg-sky-50, .bg-blue-50 { background: rgba(59,130,246,0.12) !important; }
+.text-sky-700, .text-blue-700 { color: #60a5fa !important; }
+.border-sky-200, .border-blue-200 { border-color: rgba(59,130,246,0.25) !important; }
+
+.bg-violet-50, .bg-purple-50 { background: rgba(168,85,247,0.12) !important; }
+.text-violet-700 { color: #c084fc !important; }
+.border-violet-200 { border-color: rgba(168,85,247,0.25) !important; }
+
+.bg-gray-50, .bg-slate-50 { background: rgba(255,255,255,0.05) !important; }
+.text-gray-500, .text-slate-500 { color: #94a3b8 !important; }
+.border-gray-200, .border-slate-200 { border-color: rgba(255,255,255,0.08) !important; }
+
+/* 14. Separator / HR */
+[role="separator"], hr, .separator {
+  background: rgba(255,255,255,0.07) !important;
+  border: none !important;
+  height: 1px !important;
+}
+
+/* 15. Skeleton pulse */
+div.animate-pulse, span.animate-pulse {
+  background: rgba(255,255,255,0.06) !important;
+}
+
+/* 16. Scrollbars */
+* {
+  scrollbar-width: thin;
+  scrollbar-color: rgba(255,255,255,0.12) transparent;
+}
+*::-webkit-scrollbar { width: 6px; height: 6px; }
+*::-webkit-scrollbar-track { background: transparent; }
+*::-webkit-scrollbar-thumb {
+  background: rgba(255,255,255,0.10);
+  border-radius: 10px;
+}
+*::-webkit-scrollbar-thumb:hover {
+  background: rgba(245,176,42,0.35);
+}
+
+/* 17. Sonner Toasts */
+[data-sonner-toaster] [data-sonner-toast] {
+  background: linear-gradient(145deg, rgba(20,25,35,0.97) 0%, rgba(15,20,30,0.99) 100%) !important;
+  backdrop-filter: blur(12px) !important;
+  border: 1px solid rgba(255,255,255,0.09) !important;
+  border-radius: 14px !important;
+  color: #f8fafc !important;
+  box-shadow: 0 8px 32px rgba(0,0,0,0.5) !important;
+}
+[data-sonner-toast][data-type="success"] { border-left: 3px solid #34d399 !important; }
+[data-sonner-toast][data-type="error"]   { border-left: 3px solid #f87171 !important; }
+[data-sonner-toast][data-type="warning"] { border-left: 3px solid #fbbf24 !important; }
+
+/* 18. Tooltip */
+[data-radix-tooltip-content] {
+  background: rgba(22,28,48,0.97) !important;
+  border: 1px solid rgba(255,255,255,0.10) !important;
+  border-radius: 10px !important;
+  color: #f8fafc !important;
+  font-size: 12px !important;
+  padding: 7px 12px !important;
+}
+
+/* 19. Progress bar */
+[data-radix-progress-root], [role="progressbar"] {
+  background: rgba(255,255,255,0.08) !important;
+  border-radius: 9999px !important;
+}
+[data-radix-progress-indicator] {
+  background: linear-gradient(90deg, #f5b02a, #fcd34d) !important;
+  border-radius: 9999px !important;
+}
+
+/* 20. AlertDialog */
+[role="alertdialog"] > div {
+  background: linear-gradient(160deg, rgba(22,28,48,0.97) 0%, rgba(11,15,28,0.99) 100%) !important;
+  border: 1px solid rgba(255,255,255,0.09) !important;
+  border-radius: 20px !important;
+  backdrop-filter: blur(24px) !important;
+}
+
+/* 21. Accordion */
+[data-radix-accordion-content],
+[data-radix-accordion-trigger] {
+  background: transparent !important;
+  color: #f8fafc !important;
+  border-bottom: 1px solid rgba(255,255,255,0.07) !important;
+}
+[data-radix-accordion-trigger]:hover {
+  background: rgba(255,255,255,0.03) !important;
+}
+
+/* 22. Remaining white/light bg patterns */
+.bg-white { background: rgba(255,255,255,0.03) !important; }
+.bg-gray-50, .bg-slate-50, .bg-neutral-50 { background: rgba(255,255,255,0.03) !important; }
+.bg-gray-100, .bg-slate-100 { background: rgba(255,255,255,0.05) !important; }
+.bg-\[#F7F8FA\], .bg-\[#F1F3F7\] { background: rgba(255,255,255,0.02) !important; }
+.text-gray-900, .text-slate-900 { color: #f8fafc !important; }
+.text-gray-700, .text-slate-700 { color: #f8fafc !important; }
+.text-gray-600, .text-slate-600 { color: #94a3b8 !important; }
+.text-gray-500, .text-slate-500 { color: #94a3b8 !important; }
+.text-gray-400, .text-slate-400 { color: rgba(148,163,184,0.6) !important; }
+.border-gray-200, .border-slate-200 { border-color: rgba(255,255,255,0.08) !important; }
+.divide-gray-200 > * + * { border-color: rgba(255,255,255,0.07) !important; }
+
+/* 23. Focus ring */
+:focus-visible {
+  outline: none !important;
+  box-shadow: 0 0 0 2px rgba(245,176,42,0.35) !important;
 }

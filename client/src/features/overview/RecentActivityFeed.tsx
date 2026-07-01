@@ -17,7 +17,7 @@ export const RecentActivityFeed: React.FC<RecentActivityFeedProps> = ({
 }) => {
   if (isLoading) {
     return (
-      <div className="bg-surface border border-line rounded-lg shadow-card p-5">
+      <div className="relative overflow-hidden bg-surface backdrop-blur-glass border border-line rounded-2xl p-6 shadow-card">
         <h3 className="text-sm font-semibold text-ink mb-3">Recent Activity</h3>
         <div className="space-y-3">
           {[1, 2, 3, 4, 5].map((i) => (
@@ -36,7 +36,7 @@ export const RecentActivityFeed: React.FC<RecentActivityFeedProps> = ({
 
   if (!events || events.length === 0) {
     return (
-      <div className="bg-surface border border-line rounded-lg shadow-card p-5">
+      <div className="relative overflow-hidden bg-surface backdrop-blur-glass border border-line rounded-2xl p-6 shadow-card">
         <h3 className="text-sm font-semibold text-ink mb-3">Recent Activity</h3>
         <div className="flex flex-col items-center justify-center py-8 text-center">
           <Clock className="h-12 w-12 text-ink-muted mb-2" />
@@ -91,7 +91,7 @@ export const RecentActivityFeed: React.FC<RecentActivityFeedProps> = ({
   };
 
   return (
-    <div className="bg-surface border border-line rounded-lg shadow-card p-5">
+    <div className="relative overflow-hidden bg-surface backdrop-blur-glass border border-line rounded-2xl p-6 shadow-card transition-all duration-300 hover:shadow-card-hover hover:border-primary/20">
       <h3 className="text-sm font-semibold text-ink mb-3">Recent Activity</h3>
       <div className="space-y-2 max-h-96 overflow-y-auto">
         {events.map((event) => {

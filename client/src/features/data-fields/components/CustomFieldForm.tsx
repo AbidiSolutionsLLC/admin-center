@@ -47,11 +47,13 @@ const VISIBILITY_OPTIONS: { value: 'all' | 'admin_only' | 'role_specific'; label
 
 const inputClass = (hasError?: boolean) =>
   cn(
-    'w-full h-9 px-3 text-sm rounded-md border bg-white text-ink',
-    'placeholder:text-ink-muted transition-all duration-150',
-    'focus:outline-none focus:ring-2 focus:border-primary focus:ring-primary/30',
-    'disabled:bg-surface-alt disabled:text-ink-muted disabled:cursor-not-allowed',
-    hasError ? 'border-red-400 focus:border-red-400 focus:ring-red-300/30' : 'border-line'
+    'w-full h-10 px-3 text-sm rounded-md border bg-white/5 text-slate-200 border-white/10',
+    'placeholder:text-slate-500 transition-all duration-150',
+    'focus:outline-none focus:ring-1 focus:border-primary/50 focus:ring-primary/50',
+    'disabled:bg-black/20 disabled:text-slate-500 disabled:cursor-not-allowed',
+    hasError
+      ? 'border-error focus:border-error focus:ring-error/50'
+      : 'hover:border-white/20'
   );
 
 /**

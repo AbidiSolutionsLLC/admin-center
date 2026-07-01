@@ -76,7 +76,7 @@ export default function OverviewPage() {
             Overview
           </h1>
           <p className="mt-0.5 text-sm text-ink-secondary">
-            Welcome to the Admin Center Dashboard.
+            Welcome to the Sowaye Dashboard.
           </p>
         </div>
       </div>

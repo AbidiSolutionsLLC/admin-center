@@ -12,7 +12,7 @@ export function TargetAppAccessPanel({ targetType, targetId }: TargetAppAccessPa
 
   if (isLoading) {
     return (
-      <div className="bg-white rounded-lg border border-line p-6 space-y-3">
+      <div className="bg-surface rounded-lg border border-line p-6 space-y-3">
         {[1, 2, 3].map((i) => (
           <div key={i} className="flex gap-3 animate-pulse">
             <div className="h-8 w-8 bg-surface-alt rounded" />
@@ -28,13 +28,13 @@ export function TargetAppAccessPanel({ targetType, targetId }: TargetAppAccessPa
 
   if (isError) {
     return (
-      <div className="bg-white rounded-lg border border-line p-6 text-center">
+      <div className="bg-surface rounded-lg border border-line p-6 text-center">
         <AlertCircle className="w-8 h-8 text-error mx-auto mb-2" />
         <h3 className="text-sm font-semibold text-ink mb-1">Failed to load apps</h3>
         <p className="text-sm text-ink-secondary mb-3">Something went wrong. Please try again.</p>
         <button
           onClick={() => refetch()}
-          className="h-8 px-3 text-xs font-medium rounded-md border border-line bg-white text-ink hover:bg-surface-alt transition-colors"
+          className="h-8 px-3 text-xs font-medium rounded-md border border-line bg-surface text-ink hover:bg-surface-alt transition-colors"
         >
           Retry
         </button>
@@ -44,7 +44,7 @@ export function TargetAppAccessPanel({ targetType, targetId }: TargetAppAccessPa
 
   if (!assignments || assignments.length === 0) {
     return (
-      <div className="bg-white rounded-lg border border-line p-8 text-center">
+      <div className="bg-surface rounded-lg border border-line p-8 text-center">
         <Monitor className="w-8 h-8 text-ink-muted mx-auto mb-2" />
         <p className="text-sm text-ink-muted">No apps are assigned directly to this {targetType}.</p>
       </div>
@@ -58,12 +58,12 @@ export function TargetAppAccessPanel({ targetType, targetId }: TargetAppAccessPa
   };
 
   return (
-    <div className="bg-white rounded-lg border border-line overflow-hidden">
+    <div className="bg-surface rounded-lg border border-line overflow-hidden">
       <div className="max-h-96 overflow-y-auto divide-y divide-line">
         {assignments.map((assignment) => (
-          <div key={assignment._id} className="p-4 bg-white hover:bg-surface-alt transition-colors">
+          <div key={assignment._id} className="p-4 bg-surface hover:bg-surface-alt transition-colors">
             <div className="flex items-start gap-3">
-              <div className="mt-0.5 h-8 w-8 rounded-full flex items-center justify-center flex-shrink-0 bg-emerald-50 text-emerald-600">
+              <div className="mt-0.5 h-8 w-8 rounded-full flex items-center justify-center flex-shrink-0 bg-emerald-500/20 text-emerald-400">
                 <ArrowDownLeft className="h-4 w-4" />
               </div>
               <div className="flex-1 min-w-0">
@@ -71,7 +71,7 @@ export function TargetAppAccessPanel({ targetType, targetId }: TargetAppAccessPa
                   <span className="text-sm font-semibold text-ink">
                     {assignment.app_info?.name || 'Unknown App'}
                   </span>
-                  <span className="text-[10px] font-bold uppercase tracking-wider px-2 py-0.5 rounded-full border bg-emerald-50 text-emerald-600 border-emerald-200">
+                  <span className="text-[10px] font-bold uppercase tracking-wider px-2 py-0.5 rounded-full border bg-emerald-500/20 text-emerald-400 border-emerald-500/30">
                     Active
                   </span>
                 </div>

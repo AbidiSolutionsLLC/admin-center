@@ -16,6 +16,7 @@ import { WorkflowRun, WorkflowRunStatus } from '../models/WorkflowRun.model';
 import { Insight } from '../models/Insight.model';
 import { User } from '../models/User.model';
 import { Company } from '../models/Company.model';
+import { ApprovalRequest } from '../models/ApprovalRequest.model';
 import { deliverNotification, sendWorkflowFailureNotification } from './notificationEngine';
 import { Types } from 'mongoose';
 
@@ -168,13 +169,10 @@ async function executeStep(
   }
 }
 
-/**
- * Execute a workflow for a given lifecycle event.
- * Returns a WorkflowExecutionResult with step-by-step results.
- */
 export async function executeWorkflow(
   workflow: typeof Workflow.prototype,
-  event: LifecycleEvent
+  event: LifecycleEvent,
+  existingRunId?: string
 ): Promise<WorkflowExecutionResult> {
   const startTime = Date.now();
   const stepResults: StepExecutionResult[] = [];
@@ -182,8 +180,32 @@ export async function executeWorkflow(
   let stepsSucceeded = 0;
   let stepsFailed = 0;
   let errorMessage: string | undefined;
+  let status: WorkflowRunStatus = 'success';
+  let run: typeof WorkflowRun.prototype | null = null;
 
   try {
+    if (existingRunId) {
+      run = await WorkflowRun.findById(existingRunId);
+      if (!run) throw new Error('WorkflowRun not found');
+      stepsExecuted = run.steps_executed;
+      stepsSucceeded = run.steps_succeeded;
+      stepsFailed = run.steps_failed;
+    } else {
+      run = await WorkflowRun.create({
+        company_id: new Types.ObjectId(event.companyId),
+        workflow_id: workflow._id,
+        triggered_by: event.lifecycleTo ? 'user.lifecycle_changed' : 'test',
+        triggered_by_object_id: event.userId,
+        triggered_by_label: event.userName,
+        status: 'success',
+        steps_executed: 0,
+        steps_succeeded: 0,
+        steps_failed: 0,
+        event_payload: event,
+        execution_time_ms: 0,
+      });
+    }
+
     // Fetch steps ordered by step_order
     const steps = await WorkflowStep.find({
       company_id: new Types.ObjectId(event.companyId),
@@ -192,7 +214,22 @@ export async function executeWorkflow(
     }).sort({ step_order: 1 });
 
     // Execute steps sequentially
-    for (const step of steps) {
+    for (let i = stepsExecuted; i < steps.length; i++) {
+      const step = steps[i];
+      
+      if (step.action_type === 'require_approval') {
+        // Pause here
+        await ApprovalRequest.create({
+          company_id: step.company_id,
+          workflow_run_id: run._id,
+          workflow_step_id: step._id,
+          approver_user_ids: step.action_config.approver_user_ids || [],
+          status: 'pending'
+        });
+        status = 'pending_approval';
+        break;
+      }
+
       stepsExecuted++;
       const result = await executeStep(step, event);
       stepResults.push(result);
@@ -201,44 +238,42 @@ export async function executeWorkflow(
         stepsSucceeded++;
       } else {
         stepsFailed++;
-      }
-
-      // Fail fast: stop on first failure
-      if (!result.success) {
         errorMessage = `Step "${step.name}" failed: ${result.error}`;
-        break;
+        status = 'failure';
+        break; // Fail fast: stop on first failure
       }
     }
   } catch (error) {
     errorMessage = error instanceof Error ? error.message : 'Unknown execution error';
+    status = 'failure';
   }
 
   const executionTimeMs = Date.now() - startTime;
-  const status: WorkflowRunStatus =
-    stepsFailed > 0 && stepsSucceeded > 0
+  
+  if (status !== 'pending_approval') {
+    status = stepsFailed > 0 && stepsSucceeded > 0
       ? 'partial'
       : stepsFailed > 0
         ? 'failure'
         : 'success';
+  }
 
-  // Log the workflow run
-  const run = await WorkflowRun.create({
-    company_id: new Types.ObjectId(event.companyId),
-    workflow_id: workflow._id,
-    triggered_by: event.lifecycleTo ? 'user.lifecycle_changed' : 'test',
-    triggered_by_object_id: event.userId,
-    triggered_by_label: event.userName,
-    status,
-    steps_executed: stepsExecuted,
-    steps_succeeded: stepsSucceeded,
-    steps_failed: stepsFailed,
-    error_message: errorMessage,
-    error_details: errorMessage ? { last_failed_step: stepResults.find((r) => !r.success) } : undefined,
-    execution_time_ms: executionTimeMs,
-  });
+  // Update the workflow run
+  if (run) {
+    run.status = status;
+    run.steps_executed = stepsExecuted;
+    run.steps_succeeded = stepsSucceeded;
+    run.steps_failed = stepsFailed;
+    run.error_message = errorMessage;
+    if (errorMessage) {
+      run.error_details = { last_failed_step: stepResults.find((r) => !r.success) };
+    }
+    run.execution_time_ms = (run.execution_time_ms || 0) + executionTimeMs;
+    await run.save();
+  }
 
   // Create intelligence insight on failure
-  if (status === 'failure') {
+  if (status === 'failure' && run) {
     await Insight.create({
       company_id: new Types.ObjectId(event.companyId),
       category: 'health',
@@ -269,7 +304,7 @@ export async function executeWorkflow(
   }
 
   return {
-    runId: run._id.toString(),
+    runId: run ? run._id.toString() : '',
     status,
     stepsExecuted,
     stepsSucceeded,
@@ -278,6 +313,50 @@ export async function executeWorkflow(
     executionTimeMs,
     errorMessage,
   };
+}
+
+/**
+ * Resumes a paused workflow (pending approval)
+ */
+export async function resumeWorkflow(runId: string, approved: boolean, decidedBy: string): Promise<void> {
+  const run = await WorkflowRun.findById(runId);
+  if (!run) throw new Error('Run not found');
+  const workflow = await Workflow.findById(run.workflow_id);
+  if (!workflow) throw new Error('Workflow not found');
+
+  if (!approved) {
+    run.status = 'failure';
+    run.error_message = 'Workflow execution was rejected by an approver.';
+    await run.save();
+    
+    // Log failure
+    await Insight.create({
+      company_id: run.company_id,
+      category: 'health',
+      severity: 'warning',
+      title: `Workflow "${workflow.name}" rejected`,
+      description: `Workflow execution was rejected for user ${run.triggered_by_label}.`,
+      reasoning: run.error_message,
+      affected_object_type: 'Workflow',
+      affected_object_id: workflow._id.toString(),
+      affected_object_label: workflow.name,
+      remediation_url: `/workflows/${workflow._id}`,
+      remediation_action: 'review_rejection',
+      is_resolved: false,
+      detected_at: new Date(),
+    });
+    return;
+  }
+
+  const event = run.event_payload as LifecycleEvent;
+  if (!event) throw new Error('Event payload missing from WorkflowRun, cannot resume');
+
+  // Increment stepsExecuted because the approval step was successful.
+  run.steps_executed += 1;
+  run.steps_succeeded += 1;
+  await run.save();
+
+  await executeWorkflow(workflow, event, run._id.toString());
 }
 
 /**

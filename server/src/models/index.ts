@@ -38,6 +38,7 @@ export * from './InAppNotification.model';
 export * from './Workflow.model';
 export * from './WorkflowStep.model';
 export * from './WorkflowRun.model';
+export * from './ApprovalRequest.model';
 
 // Policy models
 export * from './PolicyAssignment.model';

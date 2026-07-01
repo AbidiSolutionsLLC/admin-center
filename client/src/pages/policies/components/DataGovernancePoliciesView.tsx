@@ -60,7 +60,7 @@ export const DataGovernancePoliciesView = () => {
       ) : (
         <div className="bg-white rounded-lg border border-line shadow-card overflow-hidden">
           <table className="w-full text-left">
-            <thead className="bg-[#F7F8FA] border-b border-line">
+            <thead className="bg-white/5 border-b border-line">
               <tr>
                 <th className="h-10 px-4 text-[11px] font-semibold text-ink-secondary uppercase tracking-wider">Rule Name</th>
                 <th className="h-10 px-4 text-[11px] font-semibold text-ink-secondary uppercase tracking-wider">Field Name</th>
@@ -71,7 +71,7 @@ export const DataGovernancePoliciesView = () => {
             </thead>
             <tbody>
               {policies.map((p) => (
-                <tr key={p._id} className="border-b border-line last:border-0 hover:bg-[#F7F8FA] transition-colors duration-100">
+                <tr key={p._id} className="border-b border-line last:border-0 hover:bg-white/5 transition-colors duration-100">
                   <td className="h-14 px-4">
                     <div className="text-sm font-medium text-ink">{p.name}</div>
                     <div className="text-xs text-ink-secondary mt-0.5">{p.description}</div>
@@ -167,10 +167,11 @@ export const DataGovernancePoliciesView = () => {
           setDeleteId(null);
         }}
         title="Delete Data Governance Rule"
-        message="Are you sure you want to delete this masking rule? Sensitive data may become exposed."
-        confirmText="Delete"
-        isDestructive
+        description="Are you sure you want to delete this masking rule? Sensitive data may become exposed."
+        confirmLabel="Delete"
+        variant="danger"
       />
     </div>
   );
 };
+
