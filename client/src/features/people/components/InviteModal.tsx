@@ -39,10 +39,11 @@ const ROLE_OPTIONS: { value: UserRole; label: string }[] = [
 
 const inputClass = (hasError?: boolean) =>
   cn(
-    'w-full h-9 px-3 text-sm rounded-md border bg-white text-ink',
-    'placeholder:text-ink-muted transition-all duration-150',
-    'focus:outline-none focus:ring-2 focus:border-primary focus:ring-primary/30',
-    hasError ? 'border-red-400 focus:border-red-400 focus:ring-red-300/30' : 'border-line'
+    'w-full h-10 px-3 text-sm rounded-md border bg-white/5 text-slate-200 border-white/10',
+    'placeholder:text-slate-500 transition-all duration-150',
+    'focus:outline-none focus:ring-1 focus:border-primary/50 focus:ring-primary/50',
+    'disabled:bg-black/20 disabled:text-slate-500 disabled:cursor-not-allowed',
+    hasError ? 'border-error focus:border-error focus:ring-error/50' : 'hover:border-white/20'
   );
 
 /**
@@ -286,7 +287,13 @@ export const InviteModal: React.FC<InviteModalProps> = ({ isOpen, onClose, depar
               value={singleForm.full_name || ''}
               onChange={(e) => setSingleForm({ ...singleForm, full_name: e.target.value })}
               placeholder="e.g. John Doe"
-              className={inputClass(!!singleError.full_name)}
+              style={{
+  width: '100%', background: 'rgba(255,255,255,0.04)', backdropFilter: 'blur(8px)',
+  border: !!singleError.full_name ? '1px solid rgba(239,68,68,0.5)' : '1px solid rgba(255,255,255,0.08)',
+  borderRadius: 12, padding: '12px 16px', fontSize: 14, color: '#f8fafc', outline: 'none', transition: 'all 0.25s ease'
+}}
+onFocus={(e) => { e.currentTarget.style.background = 'rgba(255,255,255,0.07)'; e.currentTarget.style.borderColor = !!singleError.full_name ? 'rgba(239,68,68,0.5)' : 'rgba(245,176,42,0.35)'; e.currentTarget.style.boxShadow = !!singleError.full_name ? '0 0 0 3px rgba(239,68,68,0.1)' : '0 0 0 3px rgba(245,176,42,0.06)'; }}
+onBlur={(e) => { e.currentTarget.style.background = 'rgba(255,255,255,0.04)'; e.currentTarget.style.borderColor = !!singleError.full_name ? 'rgba(239,68,68,0.5)' : 'rgba(255,255,255,0.08)'; e.currentTarget.style.boxShadow = 'none'; }}
             />
             {singleError.full_name && (
               <p className="text-xs text-red-500">{singleError.full_name}</p>
@@ -303,7 +310,13 @@ export const InviteModal: React.FC<InviteModalProps> = ({ isOpen, onClose, depar
               value={singleForm.email || ''}
               onChange={(e) => setSingleForm({ ...singleForm, email: e.target.value })}
               placeholder="e.g. john@example.com"
-              className={inputClass(!!singleError.email)}
+              style={{
+  width: '100%', background: 'rgba(255,255,255,0.04)', backdropFilter: 'blur(8px)',
+  border: !!singleError.email ? '1px solid rgba(239,68,68,0.5)' : '1px solid rgba(255,255,255,0.08)',
+  borderRadius: 12, padding: '12px 16px', fontSize: 14, color: '#f8fafc', outline: 'none', transition: 'all 0.25s ease'
+}}
+onFocus={(e) => { e.currentTarget.style.background = 'rgba(255,255,255,0.07)'; e.currentTarget.style.borderColor = !!singleError.email ? 'rgba(239,68,68,0.5)' : 'rgba(245,176,42,0.35)'; e.currentTarget.style.boxShadow = !!singleError.email ? '0 0 0 3px rgba(239,68,68,0.1)' : '0 0 0 3px rgba(245,176,42,0.06)'; }}
+onBlur={(e) => { e.currentTarget.style.background = 'rgba(255,255,255,0.04)'; e.currentTarget.style.borderColor = !!singleError.email ? 'rgba(239,68,68,0.5)' : 'rgba(255,255,255,0.08)'; e.currentTarget.style.boxShadow = 'none'; }}
             />
             {singleError.email && <p className="text-xs text-red-500">{singleError.email}</p>}
           </div>
@@ -320,7 +333,13 @@ export const InviteModal: React.FC<InviteModalProps> = ({ isOpen, onClose, depar
                 setSingleForm({ ...singleForm, phone: val });
               }}
               placeholder="e.g. 1234567890"
-              className={inputClass(!!singleError.phone)}
+              style={{
+  width: '100%', background: 'rgba(255,255,255,0.04)', backdropFilter: 'blur(8px)',
+  border: !!singleError.phone ? '1px solid rgba(239,68,68,0.5)' : '1px solid rgba(255,255,255,0.08)',
+  borderRadius: 12, padding: '12px 16px', fontSize: 14, color: '#f8fafc', outline: 'none', transition: 'all 0.25s ease'
+}}
+onFocus={(e) => { e.currentTarget.style.background = 'rgba(255,255,255,0.07)'; e.currentTarget.style.borderColor = !!singleError.phone ? 'rgba(239,68,68,0.5)' : 'rgba(245,176,42,0.35)'; e.currentTarget.style.boxShadow = !!singleError.phone ? '0 0 0 3px rgba(239,68,68,0.1)' : '0 0 0 3px rgba(245,176,42,0.06)'; }}
+onBlur={(e) => { e.currentTarget.style.background = 'rgba(255,255,255,0.04)'; e.currentTarget.style.borderColor = !!singleError.phone ? 'rgba(239,68,68,0.5)' : 'rgba(255,255,255,0.08)'; e.currentTarget.style.boxShadow = 'none'; }}
             />
             {singleError.phone && (
               <p className="text-xs text-red-500">{singleError.phone}</p>
@@ -335,7 +354,13 @@ export const InviteModal: React.FC<InviteModalProps> = ({ isOpen, onClose, depar
               id="invite-dept"
               value={singleForm.department_id || ''}
               onChange={(e) => setSingleForm({ ...singleForm, department_id: e.target.value || null })}
-              className={inputClass(!!singleError.department_id)}
+              style={{
+  width: '100%', background: 'rgba(255,255,255,0.04)', backdropFilter: 'blur(8px)',
+  border: !!singleError.department_id ? '1px solid rgba(239,68,68,0.5)' : '1px solid rgba(255,255,255,0.08)',
+  borderRadius: 12, padding: '12px 16px', fontSize: 14, color: '#f8fafc', outline: 'none', transition: 'all 0.25s ease'
+}}
+onFocus={(e) => { e.currentTarget.style.background = 'rgba(255,255,255,0.07)'; e.currentTarget.style.borderColor = !!singleError.department_id ? 'rgba(239,68,68,0.5)' : 'rgba(245,176,42,0.35)'; e.currentTarget.style.boxShadow = !!singleError.department_id ? '0 0 0 3px rgba(239,68,68,0.1)' : '0 0 0 3px rgba(245,176,42,0.06)'; }}
+onBlur={(e) => { e.currentTarget.style.background = 'rgba(255,255,255,0.04)'; e.currentTarget.style.borderColor = !!singleError.department_id ? 'rgba(239,68,68,0.5)' : 'rgba(255,255,255,0.08)'; e.currentTarget.style.boxShadow = 'none'; }}
             >
               <option value="">No department</option>
               {departments.map((d) => (
@@ -401,7 +426,13 @@ export const InviteModal: React.FC<InviteModalProps> = ({ isOpen, onClose, depar
               onChange={(e) =>
                 setSingleForm({ ...singleForm, employment_type: e.target.value as EmploymentType })
               }
-              className={inputClass(!!singleError.employment_type)}
+              style={{
+  width: '100%', background: 'rgba(255,255,255,0.04)', backdropFilter: 'blur(8px)',
+  border: !!singleError.employment_type ? '1px solid rgba(239,68,68,0.5)' : '1px solid rgba(255,255,255,0.08)',
+  borderRadius: 12, padding: '12px 16px', fontSize: 14, color: '#f8fafc', outline: 'none', transition: 'all 0.25s ease'
+}}
+onFocus={(e) => { e.currentTarget.style.background = 'rgba(255,255,255,0.07)'; e.currentTarget.style.borderColor = !!singleError.employment_type ? 'rgba(239,68,68,0.5)' : 'rgba(245,176,42,0.35)'; e.currentTarget.style.boxShadow = !!singleError.employment_type ? '0 0 0 3px rgba(239,68,68,0.1)' : '0 0 0 3px rgba(245,176,42,0.06)'; }}
+onBlur={(e) => { e.currentTarget.style.background = 'rgba(255,255,255,0.04)'; e.currentTarget.style.borderColor = !!singleError.employment_type ? 'rgba(239,68,68,0.5)' : 'rgba(255,255,255,0.08)'; e.currentTarget.style.boxShadow = 'none'; }}
             >
               {EMPLOYMENT_TYPE_OPTIONS.map((opt) => (
                 <option key={opt.value} value={opt.value}>
@@ -422,7 +453,13 @@ export const InviteModal: React.FC<InviteModalProps> = ({ isOpen, onClose, depar
               id="invite-location"
               value={singleForm.location_id || ''}
               onChange={(e) => setSingleForm({ ...singleForm, location_id: e.target.value || null })}
-              className={inputClass(!!singleError.location_id)}
+              style={{
+  width: '100%', background: 'rgba(255,255,255,0.04)', backdropFilter: 'blur(8px)',
+  border: !!singleError.location_id ? '1px solid rgba(239,68,68,0.5)' : '1px solid rgba(255,255,255,0.08)',
+  borderRadius: 12, padding: '12px 16px', fontSize: 14, color: '#f8fafc', outline: 'none', transition: 'all 0.25s ease'
+}}
+onFocus={(e) => { e.currentTarget.style.background = 'rgba(255,255,255,0.07)'; e.currentTarget.style.borderColor = !!singleError.location_id ? 'rgba(239,68,68,0.5)' : 'rgba(245,176,42,0.35)'; e.currentTarget.style.boxShadow = !!singleError.location_id ? '0 0 0 3px rgba(239,68,68,0.1)' : '0 0 0 3px rgba(245,176,42,0.06)'; }}
+onBlur={(e) => { e.currentTarget.style.background = 'rgba(255,255,255,0.04)'; e.currentTarget.style.borderColor = !!singleError.location_id ? 'rgba(239,68,68,0.5)' : 'rgba(255,255,255,0.08)'; e.currentTarget.style.boxShadow = 'none'; }}
             >
               <option value="">No location</option>
               {locations.map((loc) => (
@@ -445,7 +482,13 @@ export const InviteModal: React.FC<InviteModalProps> = ({ isOpen, onClose, depar
               type="date"
               value={singleForm.hire_date || ''}
               onChange={(e) => setSingleForm({ ...singleForm, hire_date: e.target.value })}
-              className={inputClass(!!singleError.hire_date)}
+              style={{
+  width: '100%', background: 'rgba(255,255,255,0.04)', backdropFilter: 'blur(8px)',
+  border: !!singleError.hire_date ? '1px solid rgba(239,68,68,0.5)' : '1px solid rgba(255,255,255,0.08)',
+  borderRadius: 12, padding: '12px 16px', fontSize: 14, color: '#f8fafc', outline: 'none', transition: 'all 0.25s ease'
+}}
+onFocus={(e) => { e.currentTarget.style.background = 'rgba(255,255,255,0.07)'; e.currentTarget.style.borderColor = !!singleError.hire_date ? 'rgba(239,68,68,0.5)' : 'rgba(245,176,42,0.35)'; e.currentTarget.style.boxShadow = !!singleError.hire_date ? '0 0 0 3px rgba(239,68,68,0.1)' : '0 0 0 3px rgba(245,176,42,0.06)'; }}
+onBlur={(e) => { e.currentTarget.style.background = 'rgba(255,255,255,0.04)'; e.currentTarget.style.borderColor = !!singleError.hire_date ? 'rgba(239,68,68,0.5)' : 'rgba(255,255,255,0.08)'; e.currentTarget.style.boxShadow = 'none'; }}
             />
             {singleError.hire_date && (
               <p className="text-xs text-red-500">{singleError.hire_date}</p>
@@ -538,3 +581,4 @@ export const InviteModal: React.FC<InviteModalProps> = ({ isOpen, onClose, depar
     </Modal>
   );
 };
+

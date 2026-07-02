@@ -103,7 +103,7 @@ export const InsightCard: React.FC<InsightCardProps> = ({
   };
 
   return (
-    <div className={`p-4 rounded-lg border ${config.bg} ${config.border}`}>
+    <div className={`relative overflow-hidden p-5 rounded-2xl border ${config.bg} ${config.border} backdrop-blur-glass transition-all duration-300 hover:shadow-card-hover hover:-translate-y-0.5 hover:border-primary/20`}>
       <div className="flex items-start gap-3">
         {/* Severity Icon */}
         <div className={`h-8 w-8 rounded-full ${config.bg} flex items-center justify-center flex-shrink-0`}>

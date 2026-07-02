@@ -35,23 +35,23 @@ export const ConfirmDialog: React.FC<ConfirmDialogProps> = ({
 }) => {
   const confirmBtnClass =
     variant === 'danger'
-      ? 'bg-red-600 hover:bg-red-700 text-white'
-      : 'bg-primary hover:bg-primary-hover text-white';
+      ? 'bg-error hover:bg-red-500 text-white shadow-[0_4px_15px_rgba(239,68,68,0.4)]'
+      : 'btn-primary-glow border-0 text-black';
 
   const iconBgClass =
-    variant === 'danger' ? 'bg-red-50' : 'bg-amber-50';
+    variant === 'danger' ? 'bg-error/10 border border-error/20' : 'bg-warning/10 border border-warning/20';
 
   const iconColorClass =
-    variant === 'danger' ? 'text-red-500' : 'text-amber-500';
+    variant === 'danger' ? 'text-error' : 'text-warning';
 
   return (
     <Dialog.Root open={isOpen} onOpenChange={(val) => !val && onClose()}>
       <Dialog.Portal>
-        <Dialog.Overlay className="fixed inset-0 bg-black/50 backdrop-blur-[2px] z-50 transition-all duration-200" />
+        <Dialog.Overlay className="fixed inset-0 bg-black/60 backdrop-blur-sm z-50 transition-all duration-200" />
         <Dialog.Content
           className={cn(
             'fixed left-[50%] top-[50%] translate-x-[-50%] translate-y-[-50%] w-[95%] max-w-md',
-            'bg-white rounded-xl shadow-modal p-0 overflow-hidden z-50 flex flex-col focus:outline-none',
+            'bg-[#161c30]/95 backdrop-blur-xl border border-white/10 rounded-2xl shadow-modal p-0 overflow-hidden z-50 flex flex-col focus:outline-none',
             'animate-in fade-in-0 zoom-in-95 duration-200'
           )}
         >
@@ -67,10 +67,10 @@ export const ConfirmDialog: React.FC<ConfirmDialogProps> = ({
                 <AlertTriangle className={cn('w-5 h-5', iconColorClass)} />
               </div>
               <div className="flex-1 min-w-0">
-                <Dialog.Title className="text-[15px] font-semibold text-ink">
+                <Dialog.Title className="text-[15px] font-semibold text-slate-200">
                   {title}
                 </Dialog.Title>
-                <Dialog.Description className="mt-1.5 text-sm text-ink-secondary">
+                <Dialog.Description className="mt-1.5 text-sm text-slate-400">
                   {description}
                 </Dialog.Description>
               </div>
@@ -78,11 +78,11 @@ export const ConfirmDialog: React.FC<ConfirmDialogProps> = ({
           </div>
 
           {/* Footer */}
-          <div className="px-6 py-4 border-t border-line bg-surface-base flex justify-end gap-2 flex-shrink-0">
+          <div className="px-6 py-4 border-t border-white/10 bg-black/20 flex justify-end gap-2 flex-shrink-0">
             <button
               onClick={onClose}
               disabled={isLoading}
-              className="h-9 px-4 text-sm font-medium rounded-md border border-line bg-white text-ink hover:bg-surface-alt transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+              className="h-9 px-4 text-sm font-medium rounded-md border border-white/10 bg-white/5 text-slate-200 hover:bg-white/10 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
             >
               {cancelLabel}
             </button>

@@ -13,9 +13,9 @@ interface OrgHealthTabProps {
 }
 
 const severityConfig = {
-  critical: { icon: AlertTriangle, bg: 'bg-errorLight', border: 'border-errorBorder', text: 'text-error', badge: 'bg-error text-white', label: 'Critical' },
-  warning: { icon: AlertCircle, bg: 'bg-warningLight', border: 'border-warningBorder', text: 'text-warning', badge: 'bg-warning text-white', label: 'Warning' },
-  info: { icon: Info, bg: 'bg-infoLight', border: 'border-infoBorder', text: 'text-info', badge: 'bg-info text-white', label: 'Info' },
+  critical: { icon: AlertTriangle, bg: 'bg-error/10', border: 'border-error/30', text: 'text-error', badge: 'bg-error/20 text-error border border-error/30', label: 'Critical' },
+  warning: { icon: AlertCircle, bg: 'bg-warning/10', border: 'border-warning/30', text: 'text-warning', badge: 'bg-warning/20 text-warning border border-warning/30', label: 'Warning' },
+  info: { icon: Info, bg: 'bg-info/10', border: 'border-info/30', text: 'text-info', badge: 'bg-info/20 text-info border border-info/30', label: 'Info' },
 };
 
 /**
@@ -64,16 +64,18 @@ export const OrgHealthTab: React.FC<OrgHealthTabProps> = ({ onNavigateToRecord }
       <div
         key={insight._id}
         className={cn(
-          'flex items-start gap-3 p-4 rounded-lg border',
+          'group relative overflow-hidden flex items-start gap-4 p-5 rounded-2xl border backdrop-blur-glass transition-all duration-300 hover:shadow-card-hover hover:-translate-y-0.5',
           config.bg,
           config.border
         )}
       >
-        <config.icon className={cn('w-5 h-5 flex-shrink-0 mt-0.5', config.text)} />
+        <div className={cn('h-10 w-10 rounded-full flex items-center justify-center flex-shrink-0', config.bg, config.border)}>
+          <config.icon className={cn('w-5 h-5 transition-transform duration-300 group-hover:scale-110', config.text)} strokeWidth={2} />
+        </div>
         <div className="flex-1 min-w-0">
           <div className="flex items-center justify-between gap-2">
-            <h4 className="text-sm font-semibold text-ink">{insight.title}</h4>
-            <span className={cn('text-[10px] font-bold uppercase tracking-wide rounded-full px-2 py-0.5', config.badge)}>
+            <h4 className="text-sm font-semibold text-ink group-hover:text-primary transition-colors">{insight.title}</h4>
+            <span className={cn('text-[10px] font-bold uppercase tracking-widest rounded-full px-2.5 py-0.5', config.badge)}>
               {config.label}
             </span>
           </div>
@@ -110,12 +112,24 @@ export const OrgHealthTab: React.FC<OrgHealthTabProps> = ({ onNavigateToRecord }
           const config = severityConfig[severity];
           const count = data.counts[severity];
           return (
-            <div key={severity} className={cn('p-4 rounded-lg border', config.bg, config.border)}>
-              <div className="flex items-center gap-2">
-                <config.icon className={cn('w-5 h-5', config.text)} />
-                <span className="text-sm font-medium text-ink-secondary">{config.label}</span>
+            <div key={severity} className={cn(
+              'group relative overflow-hidden backdrop-blur-glass p-6 rounded-2xl border transition-all duration-300 hover:-translate-y-1 hover:shadow-card-hover cursor-pointer',
+              config.bg, config.border
+            )}>
+              {/* Subtle top border gradient glow on hover */}
+              <div className={cn("absolute top-0 left-0 right-0 h-[2px] bg-gradient-to-r from-transparent to-transparent transition-all duration-500", 
+                 severity === 'critical' ? 'group-hover:via-error/50' : severity === 'warning' ? 'group-hover:via-warning/50' : 'group-hover:via-info/50'
+              )} />
+              
+              <div className="relative z-10 flex items-start justify-between">
+                 <div>
+                   <p className="text-xs font-bold text-ink-secondary tracking-widest uppercase mb-2">{config.label}</p>
+                   <p className="text-4xl font-extrabold text-ink tracking-tight drop-shadow-sm">{count}</p>
+                 </div>
+                 <div className={cn("h-14 w-14 rounded-xl border flex items-center justify-center transition-transform duration-300 group-hover:scale-110", config.bg, config.border)}>
+                   <config.icon className={cn('h-7 w-7 transition-transform duration-300 group-hover:rotate-[-5deg]', config.text)} strokeWidth={1.5} />
+                 </div>
               </div>
-              <p className="text-2xl font-bold text-ink mt-2">{count}</p>
             </div>
           );
         })}

@@ -13,8 +13,8 @@ import { executeWorkflow, handleLifecycleEvent } from '../lib/workflowEngine';
 // ── Zod Schemas ──────────────────────────────────────────────────────────────
 
 const CreateWorkflowSchema = z.object({
-  name: z.string().min(1, 'Name is required').max(200),
-  description: z.string().max(1000).optional(),
+  name: z.string().trim().min(1, 'Name is required').max(200),
+  description: z.string().trim().max(1000).optional(),
   trigger: z.enum(['user.lifecycle_changed']),
   trigger_config: z.object({
     lifecycle_from: z.array(z.string()).min(1, 'At least one source state required'),
@@ -23,8 +23,8 @@ const CreateWorkflowSchema = z.object({
 });
 
 const UpdateWorkflowSchema = z.object({
-  name: z.string().min(1).max(200).optional(),
-  description: z.string().max(1000).optional(),
+  name: z.string().trim().min(1).max(200).optional(),
+  description: z.string().trim().max(1000).optional(),
   trigger_config: z
     .object({
       lifecycle_from: z.array(z.string()).min(1),
@@ -34,8 +34,8 @@ const UpdateWorkflowSchema = z.object({
 });
 
 const CreateStepSchema = z.object({
-  name: z.string().min(1).max(200),
-  description: z.string().max(500).optional(),
+  name: z.string().trim().min(1).max(200),
+  description: z.string().trim().max(500).optional(),
   action_type: z.enum([
     'send_email',
     'assign_role',
@@ -44,6 +44,7 @@ const CreateStepSchema = z.object({
     'update_field',
     'create_task',
     'webhook',
+    'require_approval'
   ]),
   action_config: z.record(z.string(), z.unknown()).default({}),
   step_order: z.number().int().min(0),
@@ -122,6 +123,15 @@ export const getWorkflowById = asyncHandler(async (req: Request, res: Response) 
 export const createWorkflow = asyncHandler(async (req: Request, res: Response) => {
   const input = CreateWorkflowSchema.parse(req.body);
 
+  const existing = await Workflow.findOne({
+    name: { $regex: `^${input.name}$`, $options: 'i' },
+    company_id: new Types.ObjectId(req.user.company_id),
+  });
+
+  if (existing) {
+    throw new AppError('Workflow with this name already exists', 400, 'DUPLICATE_NAME');
+  }
+
   const workflow = await Workflow.create({
     ...input,
     company_id: new Types.ObjectId(req.user.company_id),
@@ -163,6 +173,16 @@ export const createWorkflow = asyncHandler(async (req: Request, res: Response) =
  */
 export const updateWorkflow = asyncHandler(async (req: Request, res: Response) => {
   const input = UpdateWorkflowSchema.parse(req.body);
+
+  if (input.name) {
+    const existing = await Workflow.findOne({
+      name: { $regex: `^${input.name}$`, $options: 'i' },
+      company_id: new Types.ObjectId(req.user.company_id),
+    });
+    if (existing && existing._id.toString() !== req.params.id) {
+      throw new AppError('Workflow with this name already exists', 400, 'DUPLICATE_NAME');
+    }
+  }
 
   const workflow = await Workflow.findOne({
     _id: req.params.id,
@@ -306,6 +326,15 @@ export const deleteWorkflow = asyncHandler(async (req: Request, res: Response) =
 
   if (workflow.status !== 'draft') {
     throw new AppError('Can only delete draft workflows. Disable first.', 400, 'CANNOT_DELETE_ENABLED');
+  }
+
+  const runsCount = await WorkflowRun.countDocuments({
+    company_id: new Types.ObjectId(req.user.company_id),
+    workflow_id: workflow._id,
+  });
+
+  if (runsCount > 0) {
+    throw new AppError('Cannot delete: Workflow still assigned to runs', 400, 'HAS_DEPENDENTS');
   }
 
   // Delete all associated steps

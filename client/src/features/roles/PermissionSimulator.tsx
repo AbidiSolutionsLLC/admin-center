@@ -296,7 +296,7 @@ export function PermissionSimulator({ isOpen, onClose }: SimulatorProps) {
         </div>
       </div>
 
-      <div className="px-6 py-4 border-t border-line bg-[#F7F8FA] flex justify-end">
+      <div className="px-6 py-4 border-t border-line bg-white/5 flex justify-end">
         <button onClick={handleClose} className="h-9 px-4 text-sm font-medium rounded-md border border-line bg-white text-ink hover:bg-surface-alt transition-colors">
           Close Simulator
         </button>
@@ -304,3 +304,4 @@ export function PermissionSimulator({ isOpen, onClose }: SimulatorProps) {
     </Modal>
   );
 }
+

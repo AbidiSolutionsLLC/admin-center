@@ -381,7 +381,7 @@ export default function OrganizationPage() {
               {/* ── Org Chart View ── */}
               <Tabs.Content
                 value="chart"
-                className="focus:outline-none bg-white rounded-lg border border-line shadow-card min-h-[600px] overflow-hidden"
+                className="focus:outline-none bg-surface rounded-lg border border-line shadow-card min-h-[600px] overflow-hidden"
               >
                 {isTreeLoading ? (
                   <div className="flex items-center justify-center h-[600px]">

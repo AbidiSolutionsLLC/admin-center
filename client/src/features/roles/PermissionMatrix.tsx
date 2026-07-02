@@ -124,80 +124,92 @@ export const PermissionMatrix: React.FC<PermissionMatrixProps> = ({
   const renderCell = (module: string, action: string, scope: string) => {
     const state = getEffectiveState(module, action, scope);
 
-    const bgColor = state === true
-      ? 'bg-primary-50 text-primary-700'
-      : state === false
-      ? 'bg-ink-red/10 text-error'
-      : 'bg-surface';
+    const baseStyle = {
+      height: 32, width: 32, display: 'flex', alignItems: 'center', justifyContent: 'center',
+      borderRadius: 8, transition: 'all 0.2s ease', cursor: 'pointer'
+    };
+
+    let styleObj: React.CSSProperties = { ...baseStyle };
+
+    if (state === true) {
+      styleObj = { ...styleObj, background: 'rgba(245,176,42,0.12)', border: '1px solid rgba(245,176,42,0.25)', color: '#f5b02a' };
+    } else if (state === false) {
+      styleObj = { ...styleObj, background: 'rgba(239,68,68,0.12)', border: '1px solid rgba(239,68,68,0.25)', color: '#ef4444' };
+    } else {
+      styleObj = { ...styleObj, background: 'rgba(255,255,255,0.05)', border: '1px solid rgba(255,255,255,0.15)', color: 'rgba(148,163,184,0.5)' };
+    }
 
     return (
       <button
         key={`${module}:${action}:${scope}`}
         onClick={() => handleCellClick(module, action, scope)}
-        className={`
-          h-8 w-8 flex items-center justify-center rounded-md border transition-all
-          ${state !== null ? bgColor : 'border-line'}
-          hover:scale-110 hover:shadow-sm
-        `}
+        style={styleObj}
+        className="hover:scale-110 hover:shadow-[0_0_12px_rgba(245,176,42,0.15)] mx-auto"
         aria-label={`${module} ${action} ${scope}: ${state === null ? 'not set' : state ? 'granted' : 'denied'}`}
       >
         {state === true && <Check className="h-4 w-4" />}
         {state === false && <X className="h-4 w-4" />}
-        {state === null && <Minus className="h-3 w-3 text-ink-muted" />}
+        {state === null && <Minus className="h-3 w-3" />}
       </button>
     );
   };
 
   return (
     <div className="space-y-4">
-      <div className="overflow-x-auto rounded-lg border border-line bg-surface">
+      <div className="overflow-x-auto" style={{
+        borderRadius: 16,
+        border: '1px solid rgba(255,255,255,0.08)',
+        background: 'linear-gradient(145deg, rgba(255,255,255,0.04) 0%, rgba(255,255,255,0.02) 100%)',
+        backdropFilter: 'blur(12px)',
+        overflow: 'hidden',
+      }}>
         <table className="w-full border-collapse">
           <thead>
-            <tr className="border-b border-line bg-surface-alt">
-              <th className="sticky left-0 z-10 bg-surface-alt p-3 text-left text-xs font-semibold text-ink-secondary uppercase tracking-wider">
+            <tr style={{ background: 'rgba(255,255,255,0.03)', borderBottom: '1px solid rgba(255,255,255,0.07)' }}>
+              <th className="sticky left-0 z-10" style={{ fontSize: 10, fontWeight: 900, textTransform: 'uppercase', letterSpacing: '0.16em', color: 'rgba(148,163,184,0.5)', textAlign: 'left', padding: '12px 8px', background: 'rgba(255,255,255,0.03)' }}>
                 Module
               </th>
               {actions.map((action) => (
                 <th
                   key={action}
                   colSpan={3}
-                  className="p-3 text-center text-xs font-semibold text-ink-secondary uppercase tracking-wider border-l border-line"
+                  className="border-l border-white/5"
+                  style={{ fontSize: 10, fontWeight: 900, textTransform: 'uppercase', letterSpacing: '0.16em', color: 'rgba(148,163,184,0.5)', textAlign: 'center', padding: '12px 8px' }}
                 >
                   {action}
                 </th>
               ))}
-              <th className="p-3 text-center text-xs font-semibold text-ink-secondary uppercase tracking-wider border-l border-line">
+              <th className="border-l border-white/5" style={{ fontSize: 10, fontWeight: 900, textTransform: 'uppercase', letterSpacing: '0.16em', color: 'rgba(148,163,184,0.5)', textAlign: 'center', padding: '12px 8px' }}>
                 Actions
               </th>
             </tr>
-            <tr className="border-b border-line bg-surface-alt/50">
-              <th className="sticky left-0 z-10 bg-surface-alt/50 p-2 text-xs text-ink-muted">
+            <tr style={{ background: 'rgba(255,255,255,0.02)', borderBottom: '1px solid rgba(255,255,255,0.07)' }}>
+              <th className="sticky left-0 z-10" style={{ fontSize: 10, fontWeight: 900, textTransform: 'uppercase', letterSpacing: '0.16em', color: 'rgba(148,163,184,0.5)', textAlign: 'left', padding: '12px 8px', background: 'rgba(255,255,255,0.02)' }}>
                 Data Scope →
               </th>
               {actions.map((action) =>
                 dataScopes.map((scope, idx) => (
                   <th
                     key={`${action}:${scope}`}
-                    className={`p-2 text-xs text-ink-muted text-center border-l ${
-                      idx % 3 === 0 ? 'border-line' : 'border-line/50'
-                    }`}
+                    className={`border-l ${idx % 3 === 0 ? 'border-white/10' : 'border-white/5'}`}
+                    style={{ fontSize: 10, fontWeight: 900, textTransform: 'uppercase', letterSpacing: '0.16em', color: 'rgba(148,163,184,0.5)', textAlign: 'center', padding: '12px 8px' }}
                   >
                     {scope}
                   </th>
                 ))
               )}
-              <th className="border-l border-line"></th>
+              <th className="border-l border-white/5"></th>
             </tr>
           </thead>
           <tbody>
             {modules.map((module, moduleIdx) => (
               <tr
                 key={module}
-                className={`border-b border-line hover:bg-surface-alt/30 transition-colors ${
-                  moduleIdx % 2 === 0 ? 'bg-surface' : 'bg-surface-alt/20'
-                }`}
+                style={{ borderBottom: '1px solid rgba(255,255,255,0.06)', transition: 'background 0.15s ease', background: 'transparent' }}
+                onMouseEnter={e => e.currentTarget.style.background = 'rgba(255,255,255,0.02)'}
+                onMouseLeave={e => e.currentTarget.style.background = 'transparent'}
               >
-                <td className="sticky left-0 z-10 p-3 text-sm font-medium text-ink border-r border-line bg-inherit">
+                <td className="sticky left-0 z-10 border-r border-white/5" style={{ fontSize: 13, fontWeight: 600, color: '#f8fafc', padding: '14px 20px', background: 'rgba(255,255,255,0.02)' }}>
                   <span className="capitalize">{module.replace('_', ' ')}</span>
                 </td>
                 {actions.map((action) =>
@@ -205,24 +217,26 @@ export const PermissionMatrix: React.FC<PermissionMatrixProps> = ({
                     <td
                       key={`${module}:${action}:${scope}`}
                       className={`p-2 text-center border-l ${
-                        idx % 3 === 0 ? 'border-line' : 'border-line/50'
+                        idx % 3 === 0 ? 'border-white/10' : 'border-white/5'
                       }`}
                     >
                       {renderCell(module, action, scope)}
                     </td>
                   ))
                 )}
-                <td className="p-2 text-center border-l border-line">
-                  <div className="flex gap-1 justify-center">
+                <td className="p-2 text-center border-l border-white/5">
+                  <div className="flex gap-3 justify-center">
                     <button
                       onClick={() => handleGrantAll(module)}
-                      className="px-2 py-1 text-xs font-medium text-primary-700 hover:bg-primary-50 rounded transition-colors"
+                      style={{ fontSize: 11, fontWeight: 700, color: '#f5b02a', cursor: 'pointer', background: 'transparent', border: 'none' }}
+                      className="hover:text-white transition-colors"
                     >
                       Grant All
                     </button>
                     <button
                       onClick={() => handleClearAll(module)}
-                      className="px-2 py-1 text-xs font-medium text-ink-muted hover:bg-surface-alt rounded transition-colors"
+                      style={{ fontSize: 11, fontWeight: 700, color: '#ef4444', cursor: 'pointer', background: 'transparent', border: 'none' }}
+                      className="hover:text-white transition-colors"
                     >
                       Clear
                     </button>

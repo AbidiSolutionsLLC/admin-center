@@ -34,7 +34,7 @@ export const OrgChartView: React.FC<OrgChartViewProps> = ({
   }
 
   return (
-    <div className="space-y-4 pt-4">
+    <div className="space-y-4 p-4">
       {/* View Toggle */}
       <div className="flex items-center justify-between">
         <div className="flex items-center bg-surface-alt p-1 rounded-lg gap-1 border border-line">

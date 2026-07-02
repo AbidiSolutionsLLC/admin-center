@@ -80,6 +80,12 @@ router.delete('/:id', requireRole(PERMISSION_GROUPS.OPS_ADMINS), deleteWorkflow)
 router.post('/:id/steps', requireRole(PERMISSION_GROUPS.OPS_ADMINS), addWorkflowStep);
 
 /**
+ * POST /workflows/:id/steps/reorder
+ * Reorder steps via drag-and-drop
+ */
+router.post('/:id/steps/reorder', requireRole(PERMISSION_GROUPS.OPS_ADMINS), reorderWorkflowSteps);
+
+/**
  * PUT /workflows/:id/steps/:stepId
  * Update an existing step
  */
@@ -90,12 +96,6 @@ router.put('/:id/steps/:stepId', requireRole(PERMISSION_GROUPS.OPS_ADMINS), upda
  * Delete a step
  */
 router.delete('/:id/steps/:stepId', requireRole(PERMISSION_GROUPS.OPS_ADMINS), deleteWorkflowStep);
-
-/**
- * POST /workflows/:id/steps/reorder
- * Reorder steps via drag-and-drop
- */
-router.post('/:id/steps/reorder', requireRole(PERMISSION_GROUPS.OPS_ADMINS), reorderWorkflowSteps);
 
 /**
  * GET /workflows/:id/runs

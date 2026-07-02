@@ -93,13 +93,13 @@ const EMPLOYMENT_TYPE_OPTIONS: { value: EmploymentType; label: string }[] = [
 
 const inputClass = (hasError?: boolean) =>
   cn(
-    'w-full h-9 px-3 text-sm rounded-md border bg-white text-ink',
-    'placeholder:text-ink-muted transition-all duration-150',
-    'focus:outline-none focus:ring-2 focus:border-primary focus:ring-primary/30',
-    'disabled:bg-surface-alt disabled:text-ink-muted disabled:cursor-not-allowed',
+    'w-full h-10 px-3 text-sm rounded-md border bg-white/5 text-slate-200 border-white/10',
+    'placeholder:text-slate-500 transition-all duration-150',
+    'focus:outline-none focus:ring-1 focus:border-primary/50 focus:ring-primary/50',
+    'disabled:bg-black/20 disabled:text-slate-500 disabled:cursor-not-allowed',
     hasError
-      ? 'border-red-400 focus:border-red-400 focus:ring-red-300/30'
-      : 'border-line'
+      ? 'border-error focus:border-error focus:ring-error/50'
+      : 'hover:border-white/20'
   );
 
 /**
@@ -220,7 +220,13 @@ export const UserForm: React.FC<UserFormProps> = ({
           {...register('full_name')}
           placeholder="e.g. John Doe"
           disabled={isSubmitting}
-          className={inputClass(!!errors.full_name)}
+          style={{
+  width: '100%', background: 'rgba(255,255,255,0.04)', backdropFilter: 'blur(8px)',
+  border: !!errors.full_name ? '1px solid rgba(239,68,68,0.5)' : '1px solid rgba(255,255,255,0.08)',
+  borderRadius: 12, padding: '12px 16px', fontSize: 14, color: '#f8fafc', outline: 'none', transition: 'all 0.25s ease'
+}}
+onFocus={(e) => { e.currentTarget.style.background = 'rgba(255,255,255,0.07)'; e.currentTarget.style.borderColor = !!errors.full_name ? 'rgba(239,68,68,0.5)' : 'rgba(245,176,42,0.35)'; e.currentTarget.style.boxShadow = !!errors.full_name ? '0 0 0 3px rgba(239,68,68,0.1)' : '0 0 0 3px rgba(245,176,42,0.06)'; }}
+onBlur={(e) => { e.currentTarget.style.background = 'rgba(255,255,255,0.04)'; e.currentTarget.style.borderColor = !!errors.full_name ? 'rgba(239,68,68,0.5)' : 'rgba(255,255,255,0.08)'; e.currentTarget.style.boxShadow = 'none'; }}
         />
         {errors.full_name && (
           <p className="text-xs text-red-500">{errors.full_name.message}</p>
@@ -237,7 +243,13 @@ export const UserForm: React.FC<UserFormProps> = ({
           {...register('phone')}
           placeholder="e.g. 1234567890"
           disabled={isSubmitting}
-          className={inputClass(!!errors.phone)}
+          style={{
+  width: '100%', background: 'rgba(255,255,255,0.04)', backdropFilter: 'blur(8px)',
+  border: !!errors.phone ? '1px solid rgba(239,68,68,0.5)' : '1px solid rgba(255,255,255,0.08)',
+  borderRadius: 12, padding: '12px 16px', fontSize: 14, color: '#f8fafc', outline: 'none', transition: 'all 0.25s ease'
+}}
+onFocus={(e) => { e.currentTarget.style.background = 'rgba(255,255,255,0.07)'; e.currentTarget.style.borderColor = !!errors.phone ? 'rgba(239,68,68,0.5)' : 'rgba(245,176,42,0.35)'; e.currentTarget.style.boxShadow = !!errors.phone ? '0 0 0 3px rgba(239,68,68,0.1)' : '0 0 0 3px rgba(245,176,42,0.06)'; }}
+onBlur={(e) => { e.currentTarget.style.background = 'rgba(255,255,255,0.04)'; e.currentTarget.style.borderColor = !!errors.phone ? 'rgba(239,68,68,0.5)' : 'rgba(255,255,255,0.08)'; e.currentTarget.style.boxShadow = 'none'; }}
           onChange={(e) => {
             const val = e.target.value.replace(/\D/g, '');
             e.target.value = val;
@@ -258,7 +270,13 @@ export const UserForm: React.FC<UserFormProps> = ({
           id="user-dept"
           {...register('department_id')}
           disabled={isSubmitting}
-          className={inputClass(!!errors.department_id)}
+          style={{
+  width: '100%', background: 'rgba(255,255,255,0.04)', backdropFilter: 'blur(8px)',
+  border: !!errors.department_id ? '1px solid rgba(239,68,68,0.5)' : '1px solid rgba(255,255,255,0.08)',
+  borderRadius: 12, padding: '12px 16px', fontSize: 14, color: '#f8fafc', outline: 'none', transition: 'all 0.25s ease'
+}}
+onFocus={(e) => { e.currentTarget.style.background = 'rgba(255,255,255,0.07)'; e.currentTarget.style.borderColor = !!errors.department_id ? 'rgba(239,68,68,0.5)' : 'rgba(245,176,42,0.35)'; e.currentTarget.style.boxShadow = !!errors.department_id ? '0 0 0 3px rgba(239,68,68,0.1)' : '0 0 0 3px rgba(245,176,42,0.06)'; }}
+onBlur={(e) => { e.currentTarget.style.background = 'rgba(255,255,255,0.04)'; e.currentTarget.style.borderColor = !!errors.department_id ? 'rgba(239,68,68,0.5)' : 'rgba(255,255,255,0.08)'; e.currentTarget.style.boxShadow = 'none'; }}
         >
           <option value="">No department</option>
           {departments.map((d) => (
@@ -308,7 +326,13 @@ export const UserForm: React.FC<UserFormProps> = ({
           id="user-location"
           {...register('location_id')}
           disabled={isSubmitting}
-          className={inputClass(!!errors.location_id)}
+          style={{
+  width: '100%', background: 'rgba(255,255,255,0.04)', backdropFilter: 'blur(8px)',
+  border: !!errors.location_id ? '1px solid rgba(239,68,68,0.5)' : '1px solid rgba(255,255,255,0.08)',
+  borderRadius: 12, padding: '12px 16px', fontSize: 14, color: '#f8fafc', outline: 'none', transition: 'all 0.25s ease'
+}}
+onFocus={(e) => { e.currentTarget.style.background = 'rgba(255,255,255,0.07)'; e.currentTarget.style.borderColor = !!errors.location_id ? 'rgba(239,68,68,0.5)' : 'rgba(245,176,42,0.35)'; e.currentTarget.style.boxShadow = !!errors.location_id ? '0 0 0 3px rgba(239,68,68,0.1)' : '0 0 0 3px rgba(245,176,42,0.06)'; }}
+onBlur={(e) => { e.currentTarget.style.background = 'rgba(255,255,255,0.04)'; e.currentTarget.style.borderColor = !!errors.location_id ? 'rgba(239,68,68,0.5)' : 'rgba(255,255,255,0.08)'; e.currentTarget.style.boxShadow = 'none'; }}
         >
           <option value="">No location</option>
           {locations.map((loc) => (
@@ -388,7 +412,13 @@ export const UserForm: React.FC<UserFormProps> = ({
           id="user-emp-type"
           {...register('employment_type')}
           disabled={isSubmitting}
-          className={inputClass(!!errors.employment_type)}
+          style={{
+  width: '100%', background: 'rgba(255,255,255,0.04)', backdropFilter: 'blur(8px)',
+  border: !!errors.employment_type ? '1px solid rgba(239,68,68,0.5)' : '1px solid rgba(255,255,255,0.08)',
+  borderRadius: 12, padding: '12px 16px', fontSize: 14, color: '#f8fafc', outline: 'none', transition: 'all 0.25s ease'
+}}
+onFocus={(e) => { e.currentTarget.style.background = 'rgba(255,255,255,0.07)'; e.currentTarget.style.borderColor = !!errors.employment_type ? 'rgba(239,68,68,0.5)' : 'rgba(245,176,42,0.35)'; e.currentTarget.style.boxShadow = !!errors.employment_type ? '0 0 0 3px rgba(239,68,68,0.1)' : '0 0 0 3px rgba(245,176,42,0.06)'; }}
+onBlur={(e) => { e.currentTarget.style.background = 'rgba(255,255,255,0.04)'; e.currentTarget.style.borderColor = !!errors.employment_type ? 'rgba(239,68,68,0.5)' : 'rgba(255,255,255,0.08)'; e.currentTarget.style.boxShadow = 'none'; }}
         >
           {EMPLOYMENT_TYPE_OPTIONS.map((opt) => (
             <option key={opt.value} value={opt.value}>
@@ -414,7 +444,13 @@ export const UserForm: React.FC<UserFormProps> = ({
           type="date"
           {...register('hire_date')}
           disabled={isSubmitting}
-          className={inputClass(!!errors.hire_date)}
+          style={{
+  width: '100%', background: 'rgba(255,255,255,0.04)', backdropFilter: 'blur(8px)',
+  border: !!errors.hire_date ? '1px solid rgba(239,68,68,0.5)' : '1px solid rgba(255,255,255,0.08)',
+  borderRadius: 12, padding: '12px 16px', fontSize: 14, color: '#f8fafc', outline: 'none', transition: 'all 0.25s ease'
+}}
+onFocus={(e) => { e.currentTarget.style.background = 'rgba(255,255,255,0.07)'; e.currentTarget.style.borderColor = !!errors.hire_date ? 'rgba(239,68,68,0.5)' : 'rgba(245,176,42,0.35)'; e.currentTarget.style.boxShadow = !!errors.hire_date ? '0 0 0 3px rgba(239,68,68,0.1)' : '0 0 0 3px rgba(245,176,42,0.06)'; }}
+onBlur={(e) => { e.currentTarget.style.background = 'rgba(255,255,255,0.04)'; e.currentTarget.style.borderColor = !!errors.hire_date ? 'rgba(239,68,68,0.5)' : 'rgba(255,255,255,0.08)'; e.currentTarget.style.boxShadow = 'none'; }}
         />
         <p className="text-[11px] text-ink-muted">
           Official joining date.
@@ -438,3 +474,4 @@ export const UserForm: React.FC<UserFormProps> = ({
     </form>
   );
 };
+

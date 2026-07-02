@@ -37,7 +37,31 @@ const PublishPolicySchema = z.object({
         target_id: z.string().min(1, 'Target ID is required'),
       })
     )
-    .optional(),
+    .min(1, 'At least one assignment rule is required'),
+}).superRefine((data, ctx) => {
+  if (data.expiry_date && data.effective_date) {
+    const effective = new Date(data.effective_date);
+    const expiry = new Date(data.expiry_date);
+    
+    if (!isNaN(expiry.getTime()) && !isNaN(effective.getTime())) {
+      const now = new Date();
+      now.setHours(0,0,0,0);
+      
+      if (expiry < now) {
+        ctx.addIssue({
+          code: z.ZodIssueCode.custom,
+          message: 'Expiry date must be in the future',
+          path: ['expiry_date'],
+        });
+      } else if (expiry <= effective) {
+        ctx.addIssue({
+          code: z.ZodIssueCode.custom,
+          message: 'Expiry date must be after the effective date',
+          path: ['expiry_date'],
+        });
+      }
+    }
+  }
 });
 
 const UpdateDraftPolicySchema = z.object({
@@ -53,6 +77,30 @@ const UpdateDraftPolicySchema = z.object({
     .refine((val) => !isNaN(Date.parse(val)), { message: 'Invalid date format' })
     .optional(),
   summary: z.string().trim().optional(),
+}).superRefine((data, ctx) => {
+  if (data.expiry_date && data.effective_date) {
+    const effective = new Date(data.effective_date);
+    const expiry = new Date(data.expiry_date);
+    
+    if (!isNaN(expiry.getTime()) && !isNaN(effective.getTime())) {
+      const now = new Date();
+      now.setHours(0,0,0,0);
+      
+      if (expiry < now) {
+        ctx.addIssue({
+          code: z.ZodIssueCode.custom,
+          message: 'Expiry date must be in the future',
+          path: ['expiry_date'],
+        });
+      } else if (expiry <= effective) {
+        ctx.addIssue({
+          code: z.ZodIssueCode.custom,
+          message: 'Expiry date must be after the effective date',
+          path: ['expiry_date'],
+        });
+      }
+    }
+  }
 });
 
 // AcknowledgePolicySchema removed
@@ -349,6 +397,11 @@ export const publishPolicy = asyncHandler(async (req: Request, res: Response) =>
   })
     .sort({ version_number: -1 });
 
+  // TC-006: Prevent policy key collision merging policies with different titles
+  if (latestVersion && latestVersion.title.trim().toLowerCase() !== input.title.trim().toLowerCase()) {
+    throw new AppError('A policy with a similar title already exists.', 400, 'DUPLICATE_NAME');
+  }
+
   // Duplicate check using case-insensitive regex — escape title to prevent ReDoS
   if (!latestVersion) {
     const existing = await PolicyVersion.findOne({
@@ -368,7 +421,29 @@ export const publishPolicy = asyncHandler(async (req: Request, res: Response) =>
       // resolveTargetLabel will throw AppError if target not found
       await resolveTargetLabel(rule.target_type, rule.target_id, req.user.company_id);
     }
+
+    // Check conflicts before creating the version
+    const conflicts = await checkPolicyConflicts(
+      req.user.company_id,
+      policyKey,
+      input.category,
+      input.assignment_rules
+    );
+
+    if (conflicts.has_conflicts) {
+      throw new AppError(
+        'Cannot apply policy: Conflict detected with existing policies. Please resolve conflicts first.',
+        400,
+        'POLICY_CONFLICT'
+      );
+    }
   }
+
+  // Set previous versions to inactive
+  await PolicyVersion.updateMany(
+    { company_id: new Types.ObjectId(req.user.company_id), policy_key: policyKey, status: 'published' },
+    { $set: { is_active: false } }
+  );
 
   // Determine next version number
   const versionNumber = latestVersion ? latestVersion.version_number + 1 : 1;
@@ -387,7 +462,7 @@ export const publishPolicy = asyncHandler(async (req: Request, res: Response) =>
     published_by: new Types.ObjectId(req.user.userId),
     published_at: new Date(),
     summary: input.summary,
-    is_active: false,
+    is_active: true,
   });
 
   // Save assignment rules if provided
@@ -463,6 +538,16 @@ export const publishPolicy = asyncHandler(async (req: Request, res: Response) =>
           severity: 'warning',
           status: 'unread',
           link_url: `/policies/${policyVersion._id}`,
+        });
+
+        const APP_URL = process.env.APP_URL || 'http://localhost:5173';
+        const { emailService } = await import('../lib/emailService');
+        await emailService.sendPolicyNotificationEmail({
+          email: user.email,
+          full_name: user.full_name,
+          policy_title: policyVersion.title,
+          company_name: 'Your Company',
+          policy_link: `${APP_URL}/policies/${policyVersion._id}`,
         });
 
         // Log delivery event
@@ -673,6 +758,20 @@ export const getAcknowledgmentStatus = asyncHandler(async (req: Request, res: Re
     throw new AppError('Policy version not found', 404, 'POLICY_VERSION_NOT_FOUND');
   }
 
+  let targeted = false;
+  const assignments = await PolicyAssignment.find({
+    company_id: new Types.ObjectId(req.user.company_id),
+    policy_version_id: policyVersion._id,
+  });
+
+  if (assignments.length > 0) {
+    const targetedUsers = await resolveTargetedUsers(
+      req.user.company_id,
+      assignments.map((a) => ({ target_type: a.target_type, target_id: a.target_id }))
+    );
+    targeted = targetedUsers.some((u) => u._id.toString() === req.user.userId);
+  }
+
   const acknowledgment = await PolicyAcknowledgment.findOne({
     company_id: new Types.ObjectId(req.user.company_id),
     user_id: new Types.ObjectId(req.user.userId),
@@ -684,6 +783,7 @@ export const getAcknowledgmentStatus = asyncHandler(async (req: Request, res: Re
     data: {
       acknowledged: !!acknowledgment,
       acknowledged_at: acknowledgment?.acknowledged_at || null,
+      targeted,
     },
   });
 });
@@ -775,6 +875,16 @@ export const createDraftPolicy = asyncHandler(async (req: Request, res: Response
 
   if (existing) {
     throw new AppError('A policy with this name already exists', 400, 'DUPLICATE_NAME');
+  }
+
+  // TC-006: Prevent policy key collision
+  const existingKey = await PolicyVersion.findOne({
+    company_id: new Types.ObjectId(req.user.company_id),
+    policy_key: policyKey,
+  });
+
+  if (existingKey) {
+    throw new AppError('A policy with a similar title already exists.', 400, 'DUPLICATE_NAME');
   }
 
   const policyVersion = await PolicyVersion.create({
@@ -929,6 +1039,12 @@ export const rollbackPolicy = asyncHandler(async (req: Request, res: Response) =
 
   const versionNumber = latestVersion ? latestVersion.version_number + 1 : 1;
 
+  // Set previous versions to inactive
+  await PolicyVersion.updateMany(
+    { company_id: new Types.ObjectId(req.user.company_id), policy_key: oldVersion.policy_key, status: 'published' },
+    { $set: { is_active: false } }
+  );
+
   // Create new published policy version
   const policyVersion = await PolicyVersion.create({
     company_id: new Types.ObjectId(req.user.company_id),
@@ -943,7 +1059,7 @@ export const rollbackPolicy = asyncHandler(async (req: Request, res: Response) =
     published_by: new Types.ObjectId(req.user.userId),
     published_at: new Date(),
     summary: `Rolled back to version ${oldVersion.version_number}`,
-    is_active: false,
+    is_active: true,
   });
 
   // Copy assignment rules from old version
@@ -955,7 +1071,7 @@ export const rollbackPolicy = asyncHandler(async (req: Request, res: Response) =
   // Check conflicts before rollback
   if (oldAssignments && oldAssignments.length > 0) {
     const rulesToCheck = oldAssignments.map(a => ({ target_type: a.target_type, target_id: a.target_id }));
-    const conflicts = await checkPolicyConflicts(req.user.company_id, policyVersion._id.toString(), rulesToCheck);
+    const conflicts = await checkPolicyConflicts(req.user.company_id, policyVersion.policy_key, policyVersion.category, rulesToCheck);
     if (conflicts.has_conflicts) {
       // Cleanup the orphaned version; wrap in try/catch to ensure AppError still propagates
       try {
@@ -1032,7 +1148,8 @@ export const saveAssignmentRules = asyncHandler(async (req: Request, res: Respon
   // RULE-08: Check for conflicting policies on the same user population BEFORE saving
   const conflicts = await checkPolicyConflicts(
     req.user.company_id,
-    policyVersion._id.toString(),
+    policyVersion.policy_key,
+    policyVersion.category,
     input.rules
   );
 
@@ -1050,12 +1167,6 @@ export const saveAssignmentRules = asyncHandler(async (req: Request, res: Respon
     policy_version_id: policyVersion._id,
   }).select('target_type target_id target_label');
 
-  // Delete existing assignment rules for this version
-  await PolicyAssignment.deleteMany({
-    company_id: new Types.ObjectId(req.user.company_id),
-    policy_version_id: policyVersion._id,
-  });
-
   // Deduplicate input rules
   const uniqueRules = new Map<string, typeof input.rules[0]>();
   for (const rule of input.rules) {
@@ -1063,10 +1174,23 @@ export const saveAssignmentRules = asyncHandler(async (req: Request, res: Respon
   }
   const deduplicatedRules = Array.from(uniqueRules.values());
 
+  // TC-010: Pre-validate all target IDs to prevent partial failure losing existing rules
+  const resolvedLabels = new Map<string, string>();
+  for (const rule of deduplicatedRules) {
+    const label = await resolveTargetLabel(rule.target_type, rule.target_id, req.user.company_id);
+    resolvedLabels.set(`${rule.target_type}-${rule.target_id}`, label);
+  }
+
+  // Now it's safe to delete existing assignment rules for this version
+  await PolicyAssignment.deleteMany({
+    company_id: new Types.ObjectId(req.user.company_id),
+    policy_version_id: policyVersion._id,
+  });
+
   // Create new assignment rules
   const createdRules: typeof PolicyAssignment.prototype[] = [];
   for (const rule of deduplicatedRules) {
-    const label = await resolveTargetLabel(rule.target_type, rule.target_id, req.user.company_id);
+    const label = resolvedLabels.get(`${rule.target_type}-${rule.target_id}`)!;
     const assignment = await PolicyAssignment.create({
       company_id: new Types.ObjectId(req.user.company_id),
       policy_version_id: policyVersion._id,
@@ -1118,7 +1242,8 @@ export const saveAssignmentRules = asyncHandler(async (req: Request, res: Respon
  */
 export const checkPolicyConflicts = async (
   companyId: string,
-  policyVersionId: string,
+  policyKey: string,
+  category: string,
   rules: Array<{ target_type: string; target_id: string }>
 ): Promise<{
   has_conflicts: boolean;
@@ -1133,23 +1258,12 @@ export const checkPolicyConflicts = async (
     return { has_conflicts: false, conflicting_policies: [] };
   }
 
-  // Find all published policies in the same category that target the same entities
-  // A conflict is: two policies of same category targeting the same user population
-  const currentPolicy = await PolicyVersion.findOne({
-    _id: new Types.ObjectId(policyVersionId),
-    company_id: new Types.ObjectId(companyId),
-  });
-
-  if (!currentPolicy) {
-    return { has_conflicts: false, conflicting_policies: [] };
-  }
-
   // Find other published policies in the same category
   const otherPolicies = await PolicyVersion.find({
     company_id: new Types.ObjectId(companyId),
-    policy_key: { $ne: currentPolicy.policy_key }, // Different policy keys
+    policy_key: { $ne: policyKey }, // Different policy keys
     status: 'published',
-    category: currentPolicy.category,
+    category: category,
     is_active: true,
   });
 
@@ -1157,36 +1271,44 @@ export const checkPolicyConflicts = async (
     return { has_conflicts: false, conflicting_policies: [] };
   }
 
-  // For each other policy, check if it targets any of the same entities
-  const otherPolicyIds = otherPolicies.map((p) => p._id);
-  
-  const rulesIncludeAll = rules.some(r => r.target_type === 'all');
-  
-  const queryConditions = rulesIncludeAll 
-    ? [{}] // If our new policy targets 'all', it overlaps with EVERYTHING in this category
-    : [
-        { target_type: 'all' }, // If another policy targets 'all', it overlaps with our new policy
-        ...rules.map((rule) => ({
-          target_type: rule.target_type,
-          target_id: rule.target_id,
-        }))
-      ];
+  // Resolve users targeted by the new policy
+  const newTargetedUsers = await resolveTargetedUsers(companyId, rules);
+  if (newTargetedUsers.length === 0) {
+    return { has_conflicts: false, conflicting_policies: [] };
+  }
+  const newUserIds = new Set(newTargetedUsers.map(u => u._id.toString()));
 
-  const overlappingAssignments = await PolicyAssignment.find({
-    company_id: new Types.ObjectId(companyId),
-    policy_version_id: { $in: otherPolicyIds },
-    $or: queryConditions,
-  }).populate<{ policy_version_id: { title: string; policy_key: string; version_number: number; category: string } }>('policy_version_id', 'title policy_key version_number category');
+  const conflicts: Array<{
+    policy_key: string;
+    title: string;
+    version_number: number;
+    conflict_reason: string;
+  }> = [];
 
-  const conflicts = overlappingAssignments.map((assignment) => {
-    const policy = assignment.policy_version_id;
-    return {
-      policy_key: policy.policy_key,
-      title: policy.title,
-      version_number: policy.version_number,
-      conflict_reason: `Conflicting ${currentPolicy.category} policy "${policy.title}" v${policy.version_number} targets the same ${assignment.target_type}: ${assignment.target_label}`,
-    };
-  });
+  for (const otherPolicy of otherPolicies) {
+    const otherAssignments = await PolicyAssignment.find({
+      company_id: new Types.ObjectId(companyId),
+      policy_version_id: otherPolicy._id,
+    });
+
+    if (otherAssignments.length === 0) continue;
+
+    const otherTargetedUsers = await resolveTargetedUsers(
+      companyId,
+      otherAssignments.map(a => ({ target_type: a.target_type, target_id: a.target_id }))
+    );
+
+    // Check intersection
+    const overlappingUser = otherTargetedUsers.find(u => newUserIds.has(u._id.toString()));
+    if (overlappingUser) {
+      conflicts.push({
+        policy_key: otherPolicy.policy_key,
+        title: otherPolicy.title,
+        version_number: otherPolicy.version_number,
+        conflict_reason: `Conflicting ${category} policy "${otherPolicy.title}" v${otherPolicy.version_number} targets the same user(s) (e.g., ${overlappingUser.full_name}).`,
+      });
+    }
+  }
 
   return {
     has_conflicts: conflicts.length > 0,
@@ -1294,7 +1416,8 @@ export const conflictCheckHandler = asyncHandler(async (req: Request, res: Respo
 
   const conflicts = await checkPolicyConflicts(
     req.user.company_id,
-    policyVersion._id.toString(),
+    policyVersion.policy_key,
+    policyVersion.category,
     input.rules
   );
 

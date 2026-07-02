@@ -10,13 +10,13 @@ interface StatusBadgeProps {
 }
 
 const variantStyles: Record<BadgeVariant, string> = {
-  success: 'bg-emerald-50 text-emerald-700 border-emerald-200',
-  warning: 'bg-amber-50 text-amber-700 border-amber-200',
-  error: 'bg-red-50 text-red-700 border-red-200',
-  info: 'bg-sky-50 text-sky-700 border-sky-200',
-  neutral: 'bg-surface-alt text-ink-muted border-line',
-  primary: 'bg-primary-light text-amber-700 border-amber-200',
-  accent: 'bg-accent-light text-accent border-indigo-200',
+  success: 'bg-success/10 text-success border-success/20',
+  warning: 'bg-warning/10 text-warning border-warning/20',
+  error: 'bg-error/10 text-error border-error/20',
+  info: 'bg-info/10 text-info border-info/20',
+  neutral: 'bg-surface-alt text-ink-secondary border-line',
+  primary: 'bg-primary/10 text-primary border-primary/20',
+  accent: 'bg-accent/10 text-accent border-accent/20',
 };
 
 /**

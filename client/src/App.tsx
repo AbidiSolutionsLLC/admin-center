@@ -26,6 +26,7 @@ import LocationsPage from './pages/locations/LocationsPage';
 import DataFieldsPage from './pages/data-fields/DataFieldsPage';
 import IntegrationsPage from './pages/integrations/IntegrationsPage';
 import WorkflowsPage from './pages/workflows/WorkflowsPage';
+import ApprovalsPage from './pages/workflows/ApprovalsPage';
 import NotificationsPage from './pages/notifications/NotificationsPage';
 
 function App() {
@@ -54,10 +55,12 @@ function App() {
               <Route path={ROUTES.SECURITY} element={<SecurityPage />} />
               <Route path={ROUTES.AUDIT_LOGS} element={<AuditLogsPage />} />
               <Route path={ROUTES.POLICIES} element={<PoliciesPage />} />
+              <Route path="/policies/:id" element={<PoliciesPage />} />
               <Route path={ROUTES.LOCATIONS} element={<LocationsPage />} />
               <Route path={ROUTES.DATA_FIELDS} element={<DataFieldsPage />} />
               <Route path={ROUTES.INTEGRATIONS} element={<IntegrationsPage />} />
               <Route path={ROUTES.WORKFLOWS} element={<WorkflowsPage />} />
+              <Route path={ROUTES.APPROVALS} element={<ApprovalsPage />} />
               <Route path={ROUTES.NOTIFICATIONS} element={<NotificationsPage />} />
             </Route>
           </Route>

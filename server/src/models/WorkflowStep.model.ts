@@ -8,7 +8,8 @@ export type WorkflowActionType =
   | 'notify_manager'
   | 'update_field'
   | 'create_task'
-  | 'webhook';
+  | 'webhook'
+  | 'require_approval';
 
 export interface IWorkflowStep extends Document {
   company_id: Types.ObjectId;
@@ -30,7 +31,7 @@ const WorkflowStepSchema = new Schema<IWorkflowStep>({
   description: { type: String, maxlength: 500 },
   action_type: {
     type: String,
-    enum: ['send_email', 'assign_role', 'revoke_access', 'notify_manager', 'update_field', 'create_task', 'webhook'],
+    enum: ['send_email', 'assign_role', 'revoke_access', 'notify_manager', 'update_field', 'create_task', 'webhook', 'require_approval'],
     required: true,
   },
   action_config: { type: Schema.Types.Mixed, default: {} },

@@ -19,14 +19,31 @@ export const ErrorState: React.FC<ErrorStateProps> = ({
   onRetry,
 }) => {
   return (
-    <div className="flex flex-col items-center justify-center py-16 px-4 text-center bg-white rounded-lg border border-line shadow-card">
-      <div className="w-12 h-12 rounded-xl bg-red-50 flex items-center justify-center mb-4">
+    <div style={{
+      background: 'linear-gradient(145deg, rgba(255,255,255,0.04) 0%, rgba(255,255,255,0.02) 100%)',
+      backdropFilter: 'blur(12px)',
+      border: '1px solid rgba(255,255,255,0.08)',
+      borderRadius: 20,
+      padding: '64px 24px',
+      textAlign: 'center',
+      display: 'flex',
+      flexDirection: 'column',
+      alignItems: 'center',
+      justifyContent: 'center',
+    }}>
+      <div style={{
+        width: 54, height: 54, borderRadius: 14,
+        background: 'rgba(239,68,68,0.12)',
+        border: '1px solid rgba(239,68,68,0.25)',
+        display: 'flex', alignItems: 'center', justifyContent: 'center',
+        margin: '0 auto 20px',
+      }}>
         <AlertTriangle className="w-6 h-6 text-error" />
       </div>
-      <h3 className="text-sm font-semibold text-ink mb-1">{title}</h3>
-      <p className="text-sm text-ink-secondary mb-5">{description}</p>
+      <h3 className="text-sm font-semibold text-slate-200 mb-1">{title}</h3>
+      <p className="text-sm text-slate-400 mb-5">{description}</p>
       {onRetry && (
-        <Button variant="outline" onClick={onRetry}>
+        <Button variant="outline" onClick={onRetry} className="bg-white/5 border-white/10 text-slate-200 hover:bg-white/10">
           Retry
         </Button>
       )}

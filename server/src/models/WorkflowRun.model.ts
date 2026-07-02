@@ -1,7 +1,7 @@
 // server/src/models/WorkflowRun.model.ts
 import { Schema, model, Document, Types } from 'mongoose';
 
-export type WorkflowRunStatus = 'success' | 'failure' | 'partial';
+export type WorkflowRunStatus = 'success' | 'failure' | 'partial' | 'pending_approval';
 
 export interface IWorkflowRun extends Document {
   company_id: Types.ObjectId;
@@ -15,6 +15,7 @@ export interface IWorkflowRun extends Document {
   steps_failed: number;
   error_message?: string;
   error_details?: Record<string, unknown>;
+  event_payload?: Record<string, unknown>;
   execution_time_ms: number;
   created_at: Date;
 }
@@ -25,12 +26,13 @@ const WorkflowRunSchema = new Schema<IWorkflowRun>({
   triggered_by: { type: String, required: true },
   triggered_by_object_id: { type: String, required: true },
   triggered_by_label: { type: String, required: true },
-  status: { type: String, enum: ['success', 'failure', 'partial'], required: true },
+  status: { type: String, enum: ['success', 'failure', 'partial', 'pending_approval'], required: true },
   steps_executed: { type: Number, default: 0 },
   steps_succeeded: { type: Number, default: 0 },
   steps_failed: { type: Number, default: 0 },
   error_message: { type: String },
   error_details: { type: Schema.Types.Mixed },
+  event_payload: { type: Schema.Types.Mixed },
   execution_time_ms: { type: Number, required: true },
 }, { timestamps: { createdAt: 'created_at', updatedAt: false } });
 

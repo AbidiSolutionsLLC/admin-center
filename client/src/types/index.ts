@@ -784,6 +784,7 @@ export interface PolicyAcknowledgment {
 export interface AcknowledgmentStatus {
   acknowledged: boolean;
   acknowledged_at: string | null;
+  targeted?: boolean;
 }
 
 export interface PublishPolicyInput {
@@ -839,7 +840,8 @@ export type WorkflowActionType =
   | 'notify_manager'
   | 'update_field'
   | 'create_task'
-  | 'webhook';
+  | 'webhook'
+  | 'require_approval';
 
 export interface WorkflowTriggerConfig {
   lifecycle_from: string[];
@@ -884,7 +886,7 @@ export interface WorkflowStep {
   updated_at: string;
 }
 
-export type WorkflowRunStatus = 'success' | 'failure' | 'partial';
+export type WorkflowRunStatus = 'success' | 'failure' | 'partial' | 'pending_approval';
 
 export interface WorkflowRun {
   _id: string;
@@ -933,6 +935,31 @@ export interface TestWorkflowInput {
   user_email: string;
   lifecycle_from: string;
   lifecycle_to: string;
+}
+
+export interface WorkflowRunDetails extends WorkflowRun {
+  steps: WorkflowRunStep[];
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Approvals
+// ─────────────────────────────────────────────────────────────────────────────
+
+export type ApprovalStatus = 'pending' | 'approved' | 'rejected';
+
+export interface ApprovalRequest {
+  _id: string;
+  company_id: string;
+  workflow_run_id: string | WorkflowRun;
+  workflow_step_id: string | WorkflowStep;
+  approver_roles: string[];
+  approver_user_ids: string[];
+  status: ApprovalStatus;
+  decided_by?: string;
+  decided_at?: string;
+  comments?: string;
+  created_at: string;
+  updated_at: string;
 }
 
 export interface WorkflowTestResult {

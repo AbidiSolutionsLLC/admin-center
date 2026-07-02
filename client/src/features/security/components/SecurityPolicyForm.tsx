@@ -5,6 +5,8 @@ import { zodResolver } from '@hookform/resolvers/zod';
 import { z } from 'zod';
 import { useSecurityPolicy } from '../hooks/useSecurityPolicy';
 import { useUpdateSecurityPolicy } from '../hooks/useUpdateSecurityPolicy';
+import { useAuthStore } from '@/store/useAuthStore';
+import { PERMISSION_GROUPS } from '@/constants/roles';
 
 const policyFormSchema = z.object({
   policy_name: z.string().min(1, 'Policy name is required'),
@@ -44,6 +46,7 @@ export function SecurityPolicyForm() {
     formState: { errors, isSubmitting },
     reset,
     watch,
+    setValue,
   } = useForm<PolicyFormValues>({
     resolver: zodResolver(policyFormSchema),
     defaultValues: {
@@ -85,6 +88,9 @@ export function SecurityPolicyForm() {
     setIsEditing(false);
   };
 
+  const userRole = useAuthStore((state) => state.userRole);
+  const canEdit = userRole ? PERMISSION_GROUPS.IT_ADMINS.includes(userRole as any) : false;
+
   if (isLoading) {
     return (
       <div className="bg-white rounded-lg border border-line shadow-card p-5 space-y-4">
@@ -118,15 +124,16 @@ export function SecurityPolicyForm() {
             Configure session timeout, MFA, and password requirements
           </p>
         </div>
-        {!isEditing ? (
-          <button
-            type="button"
-            onClick={() => setIsEditing(true)}
-            className="h-9 px-4 text-sm font-medium rounded-md bg-primary hover:bg-primary-hover text-white transition-colors"
-          >
-            Edit Policy
-          </button>
-        ) : (
+        {canEdit && (
+          !isEditing ? (
+            <button
+              type="button"
+              onClick={() => setIsEditing(true)}
+              className="h-9 px-4 text-sm font-medium rounded-md bg-primary hover:bg-primary-hover text-white transition-colors"
+            >
+              Edit Policy
+            </button>
+          ) : (
           <div className="flex items-center gap-2">
             <button
               type="button"
@@ -155,6 +162,7 @@ export function SecurityPolicyForm() {
               {isSubmitting ? 'Saving...' : 'Save Changes'}
             </button>
           </div>
+          )
         )}
       </div>
 
@@ -376,16 +384,11 @@ export function SecurityPolicyForm() {
                 className="w-full h-9 px-3 text-sm rounded-md border border-line bg-white text-ink
                            placeholder:text-ink-muted
                            focus:outline-none focus:ring-2 focus:ring-primary/30 focus:border-primary
-                           disabled:bg-surface-alt disabled:text-ink-muted disabled:cursor-not-allowed
-                           transition-all duration-150"
+                           disabled:bg-surface-alt disabled:text-ink-muted disabled:cursor-not-allowed"
+                value={watch('settings.ip_whitelist').join(', ')}
                 onChange={(e) => {
                   const ips = e.target.value.split(',').map((ip) => ip.trim()).filter(Boolean);
-                  reset({
-                    settings: {
-                      ...watch(),
-                      ip_whitelist: ips,
-                    } as any,
-                  });
+                  setValue('settings.ip_whitelist', ips, { shouldDirty: true });
                 }}
               />
             </div>

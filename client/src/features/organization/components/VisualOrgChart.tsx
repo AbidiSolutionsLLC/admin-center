@@ -65,10 +65,28 @@ const OrgNode: React.FC<{
       {/* THE CARD */}
       <div className="relative flex flex-col items-center z-10 group w-64">
         <div
-          className={cn(
-            "relative flex flex-col items-center w-full bg-white rounded-xl shadow-sm border border-line hover:shadow-md transition-all duration-300 overflow-hidden",
-            "hover:-translate-y-0.5"
-          )}
+          style={{
+            minWidth: 200,
+            borderRadius: 14,
+            border: '1px solid rgba(255,255,255,0.09)',
+            background: 'linear-gradient(145deg, rgba(255,255,255,0.05) 0%, rgba(255,255,255,0.02) 100%)',
+            backdropFilter: 'blur(12px)',
+            WebkitBackdropFilter: 'blur(12px)',
+            boxShadow: '0 8px 32px rgba(0,0,0,0.37)',
+            cursor: 'pointer',
+            transition: 'all 0.2s ease',
+            position: 'relative',
+            overflow: 'hidden',
+          }}
+          onMouseEnter={e => {
+            e.currentTarget.style.borderColor = 'rgba(255,255,255,0.16)';
+            e.currentTarget.style.transform = 'translateY(-2px)';
+          }}
+          onMouseLeave={e => {
+            e.currentTarget.style.borderColor = 'rgba(255,255,255,0.09)';
+            e.currentTarget.style.transform = 'translateY(0)';
+          }}
+          className="relative flex flex-col items-center w-full z-10 group"
         >
           {/* Decorative Top Bar */}
           <div className={cn("h-1.5 w-full", getTopBarColor(node.type))}></div>
@@ -95,15 +113,26 @@ const OrgNode: React.FC<{
 
                 <DropdownMenu.Portal>
                   <DropdownMenu.Content 
-                    className="z-[100] min-w-[140px] bg-white rounded-lg border border-line shadow-lg p-1 animate-in fade-in zoom-in-95 duration-100"
                     align="end"
                     sideOffset={5}
+                    className="border-0 animate-in fade-in zoom-in-95 duration-100 z-[100]"
+                    style={{
+                      background: 'linear-gradient(145deg, rgba(20,25,35,0.97) 0%, rgba(15,20,30,0.99) 100%)',
+                      backdropFilter: 'blur(20px)',
+                      WebkitBackdropFilter: 'blur(20px)',
+                      border: '1px solid rgba(255,255,255,0.09)',
+                      borderRadius: 14,
+                      boxShadow: '0 8px 32px rgba(0,0,0,0.5)',
+                      minWidth: 180,
+                      padding: '6px',
+                    }}
                   >
                     <DropdownMenu.Item 
-                      className="flex items-center gap-2 px-3 py-2 text-sm text-ink rounded-md hover:bg-surface-alt outline-none cursor-pointer"
                       onClick={() => onNodeClick?.(node)}
+                      style={{ borderRadius: 8, padding: '9px 14px', fontSize: 13, fontWeight: 500, color: '#94a3b8', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '8px' }}
+                      className="focus:bg-[rgba(245,176,42,0.10)] focus:text-[#f5b02a] hover:bg-[rgba(245,176,42,0.10)] hover:text-[#f5b02a] outline-none"
                     >
-                      <Edit2 className="w-3.5 h-3.5 text-ink-secondary" />
+                      <Edit2 className="w-3.5 h-3.5" />
                       Edit Department
                     </DropdownMenu.Item>
                   </DropdownMenu.Content>
@@ -160,7 +189,7 @@ const OrgNode: React.FC<{
 
         {/* Vertical Line DOWN from Card (Only if children exist and expanded) */}
         {hasChildren && isExpanded && (
-          <div className="w-px h-8 bg-line"></div>
+          <div className="w-px h-8 bg-white/10"></div>
         )}
       </div>
 
@@ -177,14 +206,14 @@ const OrgNode: React.FC<{
                 {/* --- CONNECTORS --- */}
                 {/* 1. Horizontal Bus Line */}
                 {!isSole && !isFirst && (
-                  <div className="absolute top-0 left-0 w-[calc(50%+2px)] h-px bg-line"></div>
+                  <div className="absolute top-0 left-0 w-[calc(50%+2px)] h-px bg-white/10"></div>
                 )}
                 {!isSole && !isLast && (
-                  <div className="absolute top-0 right-0 w-[calc(50%+2px)] h-px bg-line"></div>
+                  <div className="absolute top-0 right-0 w-[calc(50%+2px)] h-px bg-white/10"></div>
                 )}
 
                 {/* 2. Vertical Line UP (From Bus to Card) */}
-                <div className="w-px h-8 bg-line"></div>
+                <div className="w-px h-8 bg-white/10"></div>
 
                 {/* Recursive Node */}
                 <OrgNode 

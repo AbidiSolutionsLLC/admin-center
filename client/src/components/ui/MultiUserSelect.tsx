@@ -67,10 +67,10 @@ export const MultiUserSelect: React.FC<MultiUserSelectProps> = ({
       <div
         onClick={() => !disabled && setIsOpen(!isOpen)}
         className={cn(
-          'min-h-[38px] w-full px-3 py-1.5 text-sm rounded-md border bg-white cursor-pointer transition-all duration-150 flex flex-wrap gap-1.5 items-center',
-          isOpen ? 'ring-2 border-primary ring-primary/30' : 'border-line hover:border-primary/50',
-          hasError && 'border-red-400 ring-red-300/30',
-          disabled && 'bg-surface-alt cursor-not-allowed opacity-60'
+          'min-h-[40px] w-full px-3 py-1.5 text-sm rounded-md border bg-white/5 border-white/10 text-slate-200 cursor-pointer transition-all duration-150 flex flex-wrap gap-1.5 items-center',
+          isOpen ? 'ring-1 border-primary/50 ring-primary/50' : 'hover:border-white/20',
+          hasError && 'border-error ring-error/50',
+          disabled && 'bg-black/20 text-slate-500 cursor-not-allowed opacity-60'
         )}
       >
         {selectedUsers.length > 0 ? (
@@ -90,22 +90,22 @@ export const MultiUserSelect: React.FC<MultiUserSelectProps> = ({
             </span>
           ))
         ) : (
-          <span className="text-ink-muted">{isLoading ? 'Loading users...' : placeholder}</span>
+          <span className="text-slate-500">{isLoading ? 'Loading users...' : placeholder}</span>
         )}
         <div className="ml-auto flex items-center gap-1.5 pl-2">
           {isLoading && <div className="w-3 h-3 rounded-full border-2 border-primary border-t-transparent animate-spin" />}
-          <ChevronDown className={cn('w-4 h-4 text-ink-muted transition-transform duration-200', isOpen && 'rotate-180')} />
+          <ChevronDown className={cn('w-4 h-4 text-slate-500 transition-transform duration-200', isOpen && 'rotate-180')} />
         </div>
       </div>
 
       {isOpen && (
-        <div className="absolute z-50 mt-2 w-full max-h-60 overflow-hidden bg-white border border-line rounded-lg shadow-xl animate-in fade-in slide-in-from-top-2 duration-200">
-          <div className="p-2 border-b border-line bg-surface-alt/30">
+        <div className="absolute z-50 mt-2 w-full max-h-60 overflow-hidden bg-[#161c30]/95 backdrop-blur-xl border border-white/10 rounded-lg shadow-modal animate-in fade-in slide-in-from-top-2 duration-200">
+          <div className="p-2 border-b border-white/10 bg-black/20">
             <div className="relative">
-              <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-ink-muted" />
+              <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-slate-400" />
               <input
                 autoFocus
-                className="w-full h-8 pl-8 pr-3 text-xs bg-white border border-line rounded-md focus:outline-none focus:ring-1 focus:ring-primary"
+                className="w-full h-8 pl-8 pr-3 text-xs bg-white/5 border border-white/10 text-slate-200 rounded-md focus:outline-none focus:border-primary/50 focus:ring-1 focus:ring-primary/50 placeholder:text-slate-500"
                 placeholder="Search users..."
                 value={search}
                 onChange={(e) => setSearch(e.target.value)}
@@ -122,12 +122,12 @@ export const MultiUserSelect: React.FC<MultiUserSelectProps> = ({
                     onClick={() => toggleUser(user._id)}
                     className={cn(
                       'flex items-center gap-3 px-3 py-2 rounded-md cursor-pointer transition-colors mb-0.5',
-                      isSelected ? 'bg-primary/5 text-primary' : 'hover:bg-surface-alt'
+                      isSelected ? 'bg-primary/10 text-primary' : 'text-slate-200 hover:bg-white/5'
                     )}
                   >
                     <div className={cn(
                       'flex-shrink-0 w-8 h-8 rounded-full flex items-center justify-center text-xs font-bold',
-                      isSelected ? 'bg-primary text-white' : 'bg-surface-alt text-ink-muted'
+                      isSelected ? 'bg-primary text-white' : 'bg-white/5 text-slate-400'
                     )}>
                       {user.avatar_url ? (
                         <img src={user.avatar_url} className="w-full h-full rounded-full object-cover" />
@@ -137,14 +137,14 @@ export const MultiUserSelect: React.FC<MultiUserSelectProps> = ({
                     </div>
                     <div className="flex-1 min-w-0">
                       <p className="text-xs font-semibold truncate">{user.full_name}</p>
-                      <p className="text-[10px] text-ink-muted truncate">{user.email}</p>
+                      <p className="text-[10px] text-slate-400 truncate">{user.email}</p>
                     </div>
                     {isSelected && <Check className="w-4 h-4 text-primary" />}
                   </div>
                 );
               })
             ) : (
-              <div className="py-8 text-center text-xs text-ink-muted">No users found</div>
+              <div className="py-8 text-center text-xs text-slate-500">No users found</div>
             )}
           </div>
         </div>

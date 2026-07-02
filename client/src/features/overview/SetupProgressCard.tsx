@@ -17,7 +17,7 @@ export const SetupProgressCard: React.FC<SetupProgressCardProps> = ({
 }) => {
   if (isLoading) {
     return (
-      <div className="bg-surface border border-line rounded-lg shadow-card p-5">
+      <div className="relative overflow-hidden bg-surface backdrop-blur-glass border border-line rounded-2xl p-6 shadow-card">
         <div className="h-4 bg-surface-alt animate-pulse rounded w-32 mb-3" />
         <div className="h-2 bg-surface-alt animate-pulse rounded w-full mb-2" />
         <div className="space-y-2 mt-4">
@@ -36,7 +36,7 @@ export const SetupProgressCard: React.FC<SetupProgressCardProps> = ({
   };
 
   return (
-    <div className="bg-surface border border-line rounded-lg shadow-card p-5">
+    <div className="relative overflow-hidden bg-surface backdrop-blur-glass border border-line rounded-2xl p-6 shadow-card transition-all duration-300 hover:shadow-card-hover hover:border-primary/20">
       <div className="flex items-center justify-between mb-3">
         <h3 className="text-sm font-semibold text-ink">Setup Progress</h3>
         <span className="text-xs font-medium text-ink-secondary">

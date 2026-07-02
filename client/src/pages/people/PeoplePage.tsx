@@ -505,13 +505,21 @@ function StatsRow({ stats, isLoading }: StatsRowProps) {
       {statItems.map((item) => (
         <div
           key={item.label}
-          className="bg-white rounded-lg border border-line shadow-card p-4"
+          className="group relative overflow-hidden bg-surface backdrop-blur-glass border border-line rounded-2xl p-5 transition-all duration-300 ease-out hover:bg-surface-alt hover:border-primary/30 hover:-translate-y-1 hover:shadow-[0_12px_40px_rgba(245,176,42,0.12)] cursor-pointer"
         >
-          <div className="flex items-center justify-between mb-2">
-            <span className="text-sm font-medium text-ink-secondary">{item.label}</span>
-            <item.icon className={cn('w-4 h-4', item.color)} />
+          {/* Subtle top border gradient glow on hover */}
+          <div className="absolute top-0 left-0 right-0 h-[2px] bg-gradient-to-r from-transparent via-primary/0 to-transparent group-hover:via-primary/50 transition-all duration-500" />
+          
+          {/* Ambient background glow */}
+          <div className="absolute -top-20 -right-20 w-40 h-40 bg-primary/10 rounded-full blur-[48px] opacity-0 group-hover:opacity-100 transition-opacity duration-700 pointer-events-none" />
+
+          <div className="relative z-10 flex items-center justify-between mb-3">
+            <span className="text-xs font-bold text-ink-secondary tracking-widest uppercase">{item.label}</span>
+            <div className="h-10 w-10 rounded-xl bg-surface-alt border border-line flex items-center justify-center transition-transform duration-300 group-hover:scale-110 group-hover:bg-[rgba(245,176,42,0.1)] group-hover:border-[rgba(245,176,42,0.2)]">
+              <item.icon className={cn('w-5 h-5 transition-colors duration-300 group-hover:rotate-[-5deg]', item.color)} strokeWidth={1.5} />
+            </div>
           </div>
-          <div className={cn('text-[28px] font-bold tracking-tight leading-none', item.color)}>
+          <div className={cn('relative z-10 text-3xl font-extrabold tracking-tight leading-none drop-shadow-sm', item.color)}>
             {item.value}
           </div>
         </div>
@@ -526,13 +534,13 @@ function StatsSkeleton() {
       {Array.from({ length: 5 }).map((_, i) => (
         <div
           key={i}
-          className="bg-white rounded-lg border border-line shadow-card p-4"
+          className="bg-surface rounded-2xl border border-line p-5"
         >
-          <div className="flex items-center justify-between mb-2">
-            <div className="h-3 bg-skeleton rounded animate-pulse w-16" />
-            <div className="w-4 h-4 bg-skeleton rounded animate-pulse" />
+          <div className="flex items-center justify-between mb-3">
+            <div className="h-3 bg-surface-alt rounded animate-pulse w-16" />
+            <div className="w-10 h-10 bg-surface-alt rounded-xl animate-pulse" />
           </div>
-          <div className="h-8 bg-skeleton rounded animate-pulse w-12" />
+          <div className="h-8 bg-surface-alt rounded animate-pulse w-12" />
         </div>
       ))}
     </div>
@@ -660,7 +668,7 @@ function FilterBar({
       </div>
 
       {/* Incomplete data filter */}
-      <label className="flex items-center gap-2 cursor-pointer">
+      <label className="flex items-center gap-2 cursor-pointer checkbox-label">
         <Checkbox
           checked={filters.incomplete_data}
           onCheckedChange={(checked) =>

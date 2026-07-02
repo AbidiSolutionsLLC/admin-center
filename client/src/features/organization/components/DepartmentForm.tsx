@@ -54,13 +54,13 @@ const DEPT_TYPE_OPTIONS: { value: 'business_unit' | 'division' | 'department' | 
 
 const inputClass = (hasError?: boolean) =>
   cn(
-    'w-full h-9 px-3 text-sm rounded-md border bg-white text-ink',
-    'placeholder:text-ink-muted transition-all duration-150',
-    'focus:outline-none focus:ring-2 focus:border-primary focus:ring-primary/30',
-    'disabled:bg-surface-alt disabled:text-ink-muted disabled:cursor-not-allowed',
+    'w-full h-10 px-3 text-sm rounded-md border bg-white/5 text-slate-200 border-white/10',
+    'placeholder:text-slate-500 transition-all duration-150',
+    'focus:outline-none focus:ring-1 focus:border-primary/50 focus:ring-primary/50',
+    'disabled:bg-black/20 disabled:text-slate-500 disabled:cursor-not-allowed',
     hasError
-      ? 'border-red-400 focus:border-red-400 focus:ring-red-300/30'
-      : 'border-line'
+      ? 'border-error focus:border-error focus:ring-error/50'
+      : 'hover:border-white/20'
   );
 
 /**
@@ -170,7 +170,13 @@ export const DepartmentForm: React.FC<DepartmentFormProps> = ({
             placeholder="e.g. Engineering"
             disabled={isSubmitting}
             maxLength={100}
-            className={inputClass(!!errors.name)}
+            style={{
+  width: '100%', background: 'rgba(255,255,255,0.04)', backdropFilter: 'blur(8px)',
+  border: !!errors.name ? '1px solid rgba(239,68,68,0.5)' : '1px solid rgba(255,255,255,0.08)',
+  borderRadius: 12, padding: '12px 16px', fontSize: 14, color: '#f8fafc', outline: 'none', transition: 'all 0.25s ease'
+}}
+onFocus={(e) => { e.currentTarget.style.background = 'rgba(255,255,255,0.07)'; e.currentTarget.style.borderColor = !!errors.name ? 'rgba(239,68,68,0.5)' : 'rgba(245,176,42,0.35)'; e.currentTarget.style.boxShadow = !!errors.name ? '0 0 0 3px rgba(239,68,68,0.1)' : '0 0 0 3px rgba(245,176,42,0.06)'; }}
+onBlur={(e) => { e.currentTarget.style.background = 'rgba(255,255,255,0.04)'; e.currentTarget.style.borderColor = !!errors.name ? 'rgba(239,68,68,0.5)' : 'rgba(255,255,255,0.08)'; e.currentTarget.style.boxShadow = 'none'; }}
           />
           <div className="absolute right-2 top-1/2 -translate-y-1/2 text-[10px] text-ink-muted bg-white px-1">
             {watch('name')?.length || 0}/100
@@ -190,7 +196,13 @@ export const DepartmentForm: React.FC<DepartmentFormProps> = ({
           id="dept-type"
           {...register('type')}
           disabled={isSubmitting}
-          className={inputClass(!!errors.type)}
+          style={{
+  width: '100%', background: 'rgba(255,255,255,0.04)', backdropFilter: 'blur(8px)',
+  border: !!errors.type ? '1px solid rgba(239,68,68,0.5)' : '1px solid rgba(255,255,255,0.08)',
+  borderRadius: 12, padding: '12px 16px', fontSize: 14, color: '#f8fafc', outline: 'none', transition: 'all 0.25s ease'
+}}
+onFocus={(e) => { e.currentTarget.style.background = 'rgba(255,255,255,0.07)'; e.currentTarget.style.borderColor = !!errors.type ? 'rgba(239,68,68,0.5)' : 'rgba(245,176,42,0.35)'; e.currentTarget.style.boxShadow = !!errors.type ? '0 0 0 3px rgba(239,68,68,0.1)' : '0 0 0 3px rgba(245,176,42,0.06)'; }}
+onBlur={(e) => { e.currentTarget.style.background = 'rgba(255,255,255,0.04)'; e.currentTarget.style.borderColor = !!errors.type ? 'rgba(239,68,68,0.5)' : 'rgba(255,255,255,0.08)'; e.currentTarget.style.boxShadow = 'none'; }}
         >
           {DEPT_TYPE_OPTIONS.filter(opt => !allowedTypes || allowedTypes.includes(opt.value)).map((opt) => (
             <option key={opt.value} value={opt.value}>
@@ -212,7 +224,13 @@ export const DepartmentForm: React.FC<DepartmentFormProps> = ({
           id="dept-parent"
           {...register('parent_id')}
           disabled={isSubmitting}
-          className={inputClass(!!errors.parent_id)}
+          style={{
+  width: '100%', background: 'rgba(255,255,255,0.04)', backdropFilter: 'blur(8px)',
+  border: !!errors.parent_id ? '1px solid rgba(239,68,68,0.5)' : '1px solid rgba(255,255,255,0.08)',
+  borderRadius: 12, padding: '12px 16px', fontSize: 14, color: '#f8fafc', outline: 'none', transition: 'all 0.25s ease'
+}}
+onFocus={(e) => { e.currentTarget.style.background = 'rgba(255,255,255,0.07)'; e.currentTarget.style.borderColor = !!errors.parent_id ? 'rgba(239,68,68,0.5)' : 'rgba(245,176,42,0.35)'; e.currentTarget.style.boxShadow = !!errors.parent_id ? '0 0 0 3px rgba(239,68,68,0.1)' : '0 0 0 3px rgba(245,176,42,0.06)'; }}
+onBlur={(e) => { e.currentTarget.style.background = 'rgba(255,255,255,0.04)'; e.currentTarget.style.borderColor = !!errors.parent_id ? 'rgba(239,68,68,0.5)' : 'rgba(255,255,255,0.08)'; e.currentTarget.style.boxShadow = 'none'; }}
         >
           {selectedType === 'business_unit' && <option value="">None (Top Level)</option>}
           <option value="" disabled={selectedType !== 'business_unit'}>
@@ -303,3 +321,4 @@ export const DepartmentForm: React.FC<DepartmentFormProps> = ({
     </form>
   );
 };
+

@@ -31,22 +31,19 @@ export function DataTable<TData, TValue>({
   });
 
   return (
-    <div className="bg-white rounded-lg border border-line shadow-card overflow-x-auto">
-      <table className="w-full">
+    <div className="glass-card overflow-x-auto" style={{ borderRadius: 20 }}>
+      <table className="glass-table">
         <thead>
           {table.getHeaderGroups().map((headerGroup) => (
-            <tr key={headerGroup.id} className="bg-surface-base border-b border-line">
+            <tr key={headerGroup.id} style={{ background: 'rgba(255,255,255,0.02)' }}>
                 {headerGroup.headers.map((header) => {
                   const meta = header.column.columnDef.meta as { align?: 'left' | 'center' | 'right' } | undefined;
-                  const alignmentClass = meta?.align === 'right' ? 'text-right' : meta?.align === 'center' ? 'text-center' : 'text-left';
+                  const alignmentClass = meta?.align === 'right' ? 'text-right' : meta?.align === 'center' ? 'text-center' : '';
                   
                   return (
                     <th
                       key={header.id}
-                      className={cn(
-                        'h-10 px-4 text-[11px] font-semibold text-ink-secondary uppercase tracking-wider',
-                        alignmentClass
-                      )}
+                      className={alignmentClass}
                     >
                       {header.isPlaceholder
                         ? null
@@ -63,7 +60,6 @@ export function DataTable<TData, TValue>({
               <tr
                 key={row.id}
                 className={cn(
-                  'border-b border-line last:border-0 hover:bg-surface-base transition-colors duration-100',
                   onRowClick && 'cursor-pointer',
                   getRowClassName?.(row.original)
                 )}
@@ -71,10 +67,10 @@ export function DataTable<TData, TValue>({
               >
                 {row.getVisibleCells().map((cell) => {
                   const meta = cell.column.columnDef.meta as { align?: 'left' | 'center' | 'right' } | undefined;
-                  const alignmentClass = meta?.align === 'right' ? 'text-right' : meta?.align === 'center' ? 'text-center' : 'text-left';
+                  const alignmentClass = meta?.align === 'right' ? 'text-right' : meta?.align === 'center' ? 'text-center' : '';
                   
                   return (
-                    <td key={cell.id} className={cn('h-14 px-4 text-sm text-ink', alignmentClass)}>
+                    <td key={cell.id} className={cn('text-sm text-ink', alignmentClass)}>
                       {flexRender(cell.column.columnDef.cell, cell.getContext())}
                     </td>
                   );
