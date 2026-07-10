@@ -1,6 +1,7 @@
 // src/features/people/components/UserForm.tsx
 import React, { useState, useEffect, useCallback } from 'react';
-import { useForm, Controller } from 'react-hook-form';
+import { useForm, Controller, useFieldArray } from 'react-hook-form';
+import { Plus, X } from 'lucide-react';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { z } from 'zod';
 import { UserSelect } from '@/components/ui/UserSelect';
@@ -32,6 +33,11 @@ const createSchema = (requiredFields: string[], editingUserId?: string) => z.obj
   employment_type: z.enum(['full_time', 'part_time', 'contractor', 'intern']),
   hire_date: z.string().optional().nullable(),
   location_id: z.string().optional().nullable(),
+  delegates: z.array(z.object({
+    user_id: z.string().min(1, 'User is required'),
+    start_date: z.string().min(1, 'Start date is required'),
+    end_date: z.string().min(1, 'End date is required'),
+  })).optional().default([]),
 }).superRefine((data, ctx) => {
   // Check for required fields from company settings
   // Note: We exclude 'email' here because it's not editable in this form
@@ -139,7 +145,17 @@ export const UserForm: React.FC<UserFormProps> = ({
       employment_type: initialData?.employment_type || 'full_time',
       hire_date: initialData?.hire_date ? new Date(initialData.hire_date).toISOString().split('T')[0] : '',
       location_id: (typeof initialData?.location_id === 'object' && initialData?.location_id !== null) ? (initialData.location_id as any)._id : (initialData?.location_id as string ?? ''),
+      delegates: initialData?.delegates?.map(d => ({
+        user_id: typeof d.user_id === 'object' && d.user_id !== null ? (d.user_id as any)._id : d.user_id,
+        start_date: new Date(d.start_date).toISOString().split('T')[0],
+        end_date: new Date(d.end_date).toISOString().split('T')[0],
+      })) || [],
     },
+  });
+
+  const { fields: delegateFields, append: appendDelegate, remove: removeDelegate } = useFieldArray({
+    control,
+    name: 'delegates',
   });
 
   // ── Custom fields ──────────────────────────────────────────────────────
@@ -163,6 +179,11 @@ export const UserForm: React.FC<UserFormProps> = ({
         employment_type: initialData.employment_type || 'full_time',
         hire_date: initialData.hire_date ? new Date(initialData.hire_date).toISOString().split('T')[0] : '',
         location_id: (typeof initialData.location_id === 'object' && initialData.location_id !== null) ? (initialData.location_id as any)._id : (initialData.location_id as string ?? ''),
+        delegates: initialData.delegates?.map(d => ({
+          user_id: typeof d.user_id === 'object' && d.user_id !== null ? (d.user_id as any)._id : d.user_id,
+          start_date: new Date(d.start_date).toISOString().split('T')[0],
+          end_date: new Date(d.end_date).toISOString().split('T')[0],
+        })) || [],
       });
       setCustomFieldValues(initialData.custom_fields ?? {});
     }
@@ -460,7 +481,6 @@ onBlur={(e) => { e.currentTarget.style.background = 'rgba(255,255,255,0.04)'; e.
         )}
       </div>
 
-      {/* ── Custom Fields ── */}
       <DynamicCustomFields
         fields={customFields}
         values={customFieldValues}
@@ -468,6 +488,91 @@ onBlur={(e) => { e.currentTarget.style.background = 'rgba(255,255,255,0.04)'; e.
         errors={customFieldErrors}
         disabled={isSubmitting}
       />
+
+      {/* ── Delegation ── */}
+      <div className="pt-4 border-t border-line space-y-4">
+        <div className="flex items-center justify-between">
+          <label className="text-sm font-medium text-ink">Delegation (Out of Office)</label>
+          <button
+            type="button"
+            onClick={() => appendDelegate({ user_id: '', start_date: '', end_date: '' })}
+            className="flex items-center gap-1.5 px-2 py-1 text-xs font-medium bg-primary-light text-primary hover:bg-primary/20 rounded-md transition-colors"
+          >
+            <Plus className="w-3.5 h-3.5" />
+            Add Delegate
+          </button>
+        </div>
+        <p className="text-[11px] text-ink-muted -mt-2">
+          Assign other users to handle approvals on behalf of this user.
+        </p>
+        
+        {delegateFields.length > 0 ? (
+          <div className="space-y-3">
+            {delegateFields.map((field, index) => (
+              <div key={field.id} className="p-3 bg-surface-alt border border-line rounded-md relative flex flex-col gap-3">
+                <button
+                  type="button"
+                  onClick={() => removeDelegate(index)}
+                  className="absolute top-2 right-2 text-ink-muted hover:text-error transition-colors"
+                  aria-label="Remove delegate"
+                >
+                  <X className="w-4 h-4" />
+                </button>
+                
+                <div>
+                  <label className="block text-xs font-medium text-ink mb-1">Delegate User</label>
+                  <Controller
+                    name={`delegates.${index}.user_id`}
+                    control={control}
+                    render={({ field: { value, onChange } }) => (
+                      <UserSelect
+                        value={value}
+                        onChange={onChange}
+                        disabled={isSubmitting}
+                        placeholder="Select delegate..."
+                        onlyActive={true}
+                        hasError={!!errors.delegates?.[index]?.user_id}
+                      />
+                    )}
+                  />
+                  {errors.delegates?.[index]?.user_id && (
+                    <p className="text-[10px] text-error mt-1">{errors.delegates[index]?.user_id?.message}</p>
+                  )}
+                </div>
+
+                <div className="grid grid-cols-2 gap-3">
+                  <div>
+                    <label className="block text-xs font-medium text-ink mb-1">Start Date</label>
+                    <input
+                      type="date"
+                      {...register(`delegates.${index}.start_date`)}
+                      className="w-full h-8 px-2 text-xs rounded-md border border-line bg-white text-ink"
+                    />
+                    {errors.delegates?.[index]?.start_date && (
+                      <p className="text-[10px] text-error mt-1">{errors.delegates[index]?.start_date?.message}</p>
+                    )}
+                  </div>
+                  <div>
+                    <label className="block text-xs font-medium text-ink mb-1">End Date</label>
+                    <input
+                      type="date"
+                      {...register(`delegates.${index}.end_date`)}
+                      className="w-full h-8 px-2 text-xs rounded-md border border-line bg-white text-ink"
+                    />
+                    {errors.delegates?.[index]?.end_date && (
+                      <p className="text-[10px] text-error mt-1">{errors.delegates[index]?.end_date?.message}</p>
+                    )}
+                  </div>
+                </div>
+              </div>
+            ))}
+          </div>
+        ) : (
+          <div className="p-4 text-center border border-dashed border-line rounded-md text-ink-muted text-xs bg-surface-alt">
+            No delegates configured
+          </div>
+        )}
+      </div>
 
       {/* Hidden submit — triggered by modal footer */}
       <button type="submit" className="hidden" aria-hidden="true" />
