@@ -5,12 +5,14 @@ import { requireRole } from '../middleware/requireRole';
 import { PERMISSION_GROUPS } from '../constants/roles';
 import {
   getWorkflows,
-  getWorkflowById,
+  getWorkflowVersions,
   createWorkflow,
   updateWorkflow,
-  enableWorkflow,
-  disableWorkflow,
+  publishWorkflow,
+  archiveWorkflow,
   deleteWorkflow,
+  createDraftWorkflow,
+  rollbackWorkflow,
   addWorkflowStep,
   updateWorkflowStep,
   deleteWorkflowStep,
@@ -18,6 +20,8 @@ import {
   getWorkflowRuns,
   testWorkflow,
   handleLifecycleTrigger,
+  simulateWorkflowHandler,
+  getWorkflowById,
 } from '../controllers/workflows.controller';
 
 const router = Router();
@@ -32,6 +36,18 @@ router.use(requireAuth);
 router.get('/', getWorkflows);
 
 /**
+ * GET /workflows/versions
+ * List all versions of a specific workflow
+ */
+router.get('/versions', getWorkflowVersions);
+
+/**
+ * GET /workflows/:id
+ * Get a workflow with its steps
+ */
+router.get('/:id', getWorkflowById);
+
+/**
  * POST /workflows
  * Create a new workflow (draft)
  */
@@ -43,11 +59,7 @@ router.post('/', requireRole(PERMISSION_GROUPS.OPS_ADMINS), createWorkflow);
  */
 router.post('/trigger/lifecycle_changed', handleLifecycleTrigger);
 
-/**
- * GET /workflows/:id
- * Get a workflow with its steps
- */
-router.get('/:id', getWorkflowById);
+
 
 /**
  * PUT /workflows/:id
@@ -56,16 +68,28 @@ router.get('/:id', getWorkflowById);
 router.put('/:id', requireRole(PERMISSION_GROUPS.OPS_ADMINS), updateWorkflow);
 
 /**
- * POST /workflows/:id/enable
- * Enable a draft workflow
+ * POST /workflows/:id/publish
+ * Publish a draft workflow
  */
-router.post('/:id/enable', requireRole(PERMISSION_GROUPS.OPS_ADMINS), enableWorkflow);
+router.post('/:id/publish', requireRole(PERMISSION_GROUPS.OPS_ADMINS), publishWorkflow);
 
 /**
- * POST /workflows/:id/disable
- * Disable an enabled workflow
+ * POST /workflows/:id/archive
+ * Archive a published workflow
  */
-router.post('/:id/disable', requireRole(PERMISSION_GROUPS.OPS_ADMINS), disableWorkflow);
+router.post('/:id/archive', requireRole(PERMISSION_GROUPS.OPS_ADMINS), archiveWorkflow);
+
+/**
+ * POST /workflows/:id/draft
+ * Create a new draft from an existing version
+ */
+router.post('/:id/draft', requireRole(PERMISSION_GROUPS.OPS_ADMINS), createDraftWorkflow);
+
+/**
+ * POST /workflows/:id/rollback
+ * Rollback to a previous version
+ */
+router.post('/:id/rollback', requireRole(PERMISSION_GROUPS.OPS_ADMINS), rollbackWorkflow);
 
 /**
  * DELETE /workflows/:id
@@ -108,5 +132,11 @@ router.get('/:id/runs', getWorkflowRuns);
  * Test workflow with mock payload
  */
 router.post('/:id/test', requireRole(PERMISSION_GROUPS.OPS_ADMINS), testWorkflow);
+
+/**
+ * POST /workflows/:id/simulate
+ * Simulates a workflow without executing side effects
+ */
+router.post('/:id/simulate', requireRole(PERMISSION_GROUPS.OPS_ADMINS), simulateWorkflowHandler);
 
 export default router;

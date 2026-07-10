@@ -66,6 +66,11 @@ const InviteUserSchema = z.object({
   hire_date: z.string().optional().nullable(),
   location_id: z.string().optional().nullable(),
   custom_fields: z.record(z.string(), z.any()).optional(),
+  delegates: z.array(z.object({
+    user_id: z.string(),
+    start_date: z.string(),
+    end_date: z.string()
+  })).optional(),
 });
 
 const UpdateUserSchema = z.object({
@@ -83,6 +88,11 @@ const UpdateUserSchema = z.object({
   termination_date: z.string().optional().nullable(),
   location_id: z.string().optional().nullable(),
   custom_fields: z.record(z.string(), z.any()).optional(),
+  delegates: z.array(z.object({
+    user_id: z.string(),
+    start_date: z.string(),
+    end_date: z.string()
+  })).optional(),
 });
 
 const UpdateLifecycleSchema = z.object({
@@ -144,7 +154,7 @@ async function validateRequiredFields(
   const requiredFields = company.settings?.required_user_fields || ['email', 'full_name'];
   const missingFields: string[] = [];
 
-  const getNestedValue = (obj: any, path: string) => path.split('.').reduce((acc, part) => acc && acc[part], obj);
+  const getNestedValue = (obj: any, path: string) => path.split('.').reduce((acc, part) => acc == null ? undefined : acc[part], obj);
 
   for (const field of requiredFields) {
     const value = getNestedValue(body, field);
@@ -238,7 +248,7 @@ async function checkAndFlagUserDataIntegrity(user: any, companyId: string): Prom
     const requiredFields = company.settings.required_user_fields;
     let isMissingRequiredField = false;
 
-    const getNestedValue = (obj: any, path: string) => path.split('.').reduce((acc, part) => acc && acc[part], obj);
+    const getNestedValue = (obj: any, path: string) => path.split('.').reduce((acc, part) => acc == null ? undefined : acc[part], obj);
 
     for (const field of requiredFields) {
       const value = getNestedValue(user, field);
@@ -692,6 +702,7 @@ export const getUsers = asyncHandler(async (req: Request, res: Response) => {
     .populate('manager_id', 'full_name email avatar_url')
     .populate('secondary_manager_ids', 'full_name email avatar_url')
     .populate('location_id', 'name timezone')
+    .populate('delegates.user_id', 'full_name email avatar_url')
     .sort({ created_at: -1 })
     .lean();
 
@@ -718,7 +729,8 @@ export const getUserById = asyncHandler(async (req: Request, res: Response) => {
     .populate('team_id', 'name slug')
     .populate('manager_id', 'full_name email avatar_url')
     .populate('secondary_manager_ids', 'full_name email avatar_url')
-    .populate('location_id', 'name timezone');
+    .populate('location_id', 'name timezone')
+    .populate('delegates.user_id', 'full_name email avatar_url');
 
   if (!user) {
     throw new AppError('User not found', 404, 'NOT_FOUND');
@@ -900,6 +912,24 @@ export const inviteUser = asyncHandler(async (req: Request, res: Response) => {
     }
   }
 
+  // 4.7 Validate delegates (if provided)
+  if (input.delegates && input.delegates.length > 0) {
+    const delegateUserIds = input.delegates.map(d => d.user_id);
+    const delegates = await User.find({
+      _id: { $in: delegateUserIds },
+      company_id: req.user.company_id,
+      is_active: true,
+    });
+    if (delegates.length !== delegateUserIds.length) {
+      throw new AppError('One or more delegate users not found or inactive', 404, 'NOT_FOUND');
+    }
+    for (const delegate of input.delegates) {
+      if (new Date(delegate.end_date) < new Date(delegate.start_date)) {
+         throw new AppError('Delegate end date cannot be before start date', 400, 'INVALID_DATES');
+      }
+    }
+  }
+
   // 5. Validate location (if provided)
   if (input.location_id) {
     const loc = await Location.findOne({
@@ -1000,6 +1030,15 @@ export const inviteUser = asyncHandler(async (req: Request, res: Response) => {
     after_state: afterState,
   });
 
+  // Trigger user.created workflow
+  handleLifecycleEvent({
+    companyId: req.user.company_id,
+    userId: user._id.toString(),
+    userName: user.full_name,
+    userEmail: user.email,
+    trigger: 'user.created'
+  }).catch(err => console.error('[Workflow Error user.created]', err));
+
   // Return enriched user without sensitive fields
   const [enriched] = await enrichUsers([user.toObject()], req.user.company_id);
   const { password_hash: _ph, refresh_token_hash: _rth, ...safeUser } = enriched;
@@ -1064,7 +1103,7 @@ export const updateUser = asyncHandler(async (req: Request, res: Response) => {
     if (!manager) throw new AppError('Manager not found or inactive', 404, 'NOT_FOUND');
   }
 
-  // 3.5 Validate secondary managers (if changed)
+  // 4.5 Validate secondary managers (if changed)
   if (input.secondary_manager_ids) {
     if (input.secondary_manager_ids.includes(getRouteId(req.params.id))) {
       throw new AppError('User cannot be their own secondary manager', 400, 'SELF_ASSIGNMENT');
@@ -1076,6 +1115,27 @@ export const updateUser = asyncHandler(async (req: Request, res: Response) => {
     });
     if (managers.length !== input.secondary_manager_ids.length) {
       throw new AppError('One or more secondary managers not found or inactive', 404, 'NOT_FOUND');
+    }
+  }
+
+  // 5. Validate delegates (if changed)
+  if (input.delegates) {
+    const delegateUserIds = input.delegates.map(d => d.user_id);
+    if (delegateUserIds.includes(getRouteId(req.params.id))) {
+      throw new AppError('User cannot delegate to themselves', 400, 'SELF_DELEGATION');
+    }
+    const delegates = await User.find({
+      _id: { $in: delegateUserIds },
+      company_id: req.user.company_id,
+      is_active: true,
+    });
+    if (delegates.length !== delegateUserIds.length) {
+      throw new AppError('One or more delegate users not found or inactive', 404, 'NOT_FOUND');
+    }
+    for (const delegate of input.delegates) {
+      if (new Date(delegate.end_date) < new Date(delegate.start_date)) {
+         throw new AppError('Delegate end date cannot be before start date', 400, 'INVALID_DATES');
+      }
     }
   }
 
@@ -1156,6 +1216,15 @@ export const updateUser = asyncHandler(async (req: Request, res: Response) => {
       before_state: null,
       after_state: { role_ids: roleIds },
     });
+
+    handleLifecycleEvent({
+      companyId: req.user.company_id,
+      userId: user._id.toString(),
+      userName: user.full_name,
+      userEmail: user.email,
+      trigger: 'user.role_changed',
+      roleTo: roleIds.join(',')
+    }).catch(err => console.error('[Workflow Error user.role_changed]', err));
   }
 
   // Audit log — location change fires a dedicated event
@@ -1191,6 +1260,18 @@ export const updateUser = asyncHandler(async (req: Request, res: Response) => {
     before_state: sanitizedBefore,
     after_state: afterState,
   });
+
+  if (updates.department_id !== undefined && updates.department_id !== beforeState.department_id) {
+    handleLifecycleEvent({
+      companyId: req.user.company_id,
+      userId: user._id.toString(),
+      userName: user.full_name,
+      userEmail: user.email,
+      trigger: 'user.department_changed',
+      departmentFrom: beforeState.department_id?.toString() || '',
+      departmentTo: updates.department_id?.toString() || ''
+    }).catch(err => console.error('[Workflow Error user.department_changed]', err));
+  }
 
   // Return enriched user without sensitive fields
   const [enriched] = await enrichUsers([user.toObject()], req.user.company_id);
@@ -1447,6 +1528,15 @@ export const bulkInviteUsers = asyncHandler(async (req: Request, res: Response) 
         before_state: null,
         after_state: afterState,
       }));
+
+      // Trigger user.created workflow
+      handleLifecycleEvent({
+        companyId: req.user.company_id,
+        userId: user._id.toString(),
+        userName: user.full_name,
+        userEmail: user.email,
+        trigger: 'user.created'
+      }).catch(err => console.error(`[Bulk Workflow Error user.created] ${user._id}:`, err));
     }
 
     await Promise.all([

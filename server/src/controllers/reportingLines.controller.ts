@@ -80,7 +80,12 @@ export async function wouldCreateCircularChain(
   
   // Check if any user who reports to managerId (directly or indirectly) 
   // has userId as their manager
-  async function getAllDirectReports(managerId: string): Promise<string[]> {
+  async function getAllDirectReports(managerId: string, visited: Set<string> = new Set()): Promise<string[]> {
+    if (visited.has(managerId)) {
+      return [];
+    }
+    visited.add(managerId);
+
     const directReports = await User.find({
       company_id: new Types.ObjectId(companyId),
       $or: [
@@ -94,7 +99,7 @@ export async function wouldCreateCircularChain(
     
     // Recursively get indirect reports
     for (const reportId of reportIds) {
-      const indirectReports = await getAllDirectReports(reportId);
+      const indirectReports = await getAllDirectReports(reportId, visited);
       allReports.push(...indirectReports);
     }
 

@@ -8,18 +8,28 @@ import { WorkflowRun } from '../models/WorkflowRun.model';
 import { auditLogger } from '../lib/auditLogger';
 import { AppError } from '../utils/AppError';
 import { Types } from 'mongoose';
-import { executeWorkflow, handleLifecycleEvent } from '../lib/workflowEngine';
+import { executeWorkflow, handleLifecycleEvent, simulateWorkflow } from '../lib/workflowEngine';
 
 // ── Zod Schemas ──────────────────────────────────────────────────────────────
+
+const SlaConfigSchema = z.object({
+  threshold_minutes: z.number().int().min(1).optional(),
+  notify_on_breach: z.boolean().default(false),
+});
 
 const CreateWorkflowSchema = z.object({
   name: z.string().trim().min(1, 'Name is required').max(200),
   description: z.string().trim().max(1000).optional(),
-  trigger: z.enum(['user.lifecycle_changed']),
+  trigger: z.enum(['user.lifecycle_changed', 'user.created', 'user.role_changed', 'user.department_changed']),
   trigger_config: z.object({
-    lifecycle_from: z.array(z.string()).min(1, 'At least one source state required'),
-    lifecycle_to: z.array(z.string()).min(1, 'At least one target state required'),
-  }),
+    lifecycle_from: z.array(z.string()).optional(),
+    lifecycle_to: z.array(z.string()).optional(),
+    role_from: z.array(z.string()).optional(),
+    role_to: z.array(z.string()).optional(),
+    department_from: z.array(z.string()).optional(),
+    department_to: z.array(z.string()).optional(),
+  }).optional(),
+  sla_config: SlaConfigSchema.optional(),
 });
 
 const UpdateWorkflowSchema = z.object({
@@ -27,10 +37,15 @@ const UpdateWorkflowSchema = z.object({
   description: z.string().trim().max(1000).optional(),
   trigger_config: z
     .object({
-      lifecycle_from: z.array(z.string()).min(1),
-      lifecycle_to: z.array(z.string()).min(1),
+      lifecycle_from: z.array(z.string()).optional(),
+      lifecycle_to: z.array(z.string()).optional(),
+      role_from: z.array(z.string()).optional(),
+      role_to: z.array(z.string()).optional(),
+      department_from: z.array(z.string()).optional(),
+      department_to: z.array(z.string()).optional(),
     })
     .optional(),
+  sla_config: SlaConfigSchema.optional(),
 });
 
 const CreateStepSchema = z.object({
@@ -47,7 +62,13 @@ const CreateStepSchema = z.object({
     'require_approval'
   ]),
   action_config: z.record(z.string(), z.unknown()).default({}),
+  conditions: z.array(z.object({
+    field: z.string(),
+    operator: z.enum(['equals', 'not_equals', 'contains', 'greater_than', 'less_than']),
+    value: z.unknown()
+  })).optional().default([]),
   step_order: z.number().int().min(0),
+  sla_config: SlaConfigSchema.optional(),
 });
 
 const ReorderStepsSchema = z.object({
@@ -63,15 +84,20 @@ const TestWorkflowSchema = z.object({
   user_id: z.string().min(1, 'user_id is required'),
   user_name: z.string().min(1, 'user_name is required'),
   user_email: z.string().email('Invalid email'),
-  lifecycle_from: z.string().min(1, 'lifecycle_from is required'),
-  lifecycle_to: z.string().min(1, 'lifecycle_to is required'),
+  trigger: z.string().min(1, 'trigger is required'),
+  lifecycle_from: z.string().optional(),
+  lifecycle_to: z.string().optional(),
+  role_from: z.string().optional(),
+  role_to: z.string().optional(),
+  department_from: z.string().optional(),
+  department_to: z.string().optional(),
 });
 
 // ── Controllers ──────────────────────────────────────────────────────────────
 
 /**
  * GET /workflows
- * Returns all workflows for the current company with optional status filter.
+ * Returns all workflow keys with their latest version for the current company.
  */
 export const getWorkflows = asyncHandler(async (req: Request, res: Response) => {
   const { status } = req.query;
@@ -85,12 +111,61 @@ export const getWorkflows = asyncHandler(async (req: Request, res: Response) => 
     filter.status = status;
   }
 
-  const workflows = await Workflow.find(filter)
-    .populate('created_by', 'full_name email')
-    .populate('updated_by', 'full_name email')
-    .sort({ created_at: -1 });
+  const workflows = await Workflow.aggregate([
+    { $match: filter },
+    { $sort: { workflow_key: 1, version_number: -1 } },
+    {
+      $group: {
+        _id: '$workflow_key',
+        latest_version: { $first: '$$ROOT' },
+        version_count: { $sum: 1 },
+      },
+    },
+    { $sort: { 'latest_version.created_at': -1 } },
+  ]);
 
-  res.status(200).json({ success: true, data: workflows });
+  // Populate created_by and updated_by using Mongoose populate
+  const populatedWorkflows = await Workflow.populate(
+    workflows.map(w => w.latest_version),
+    [
+      { path: 'created_by', select: 'full_name email' },
+      { path: 'updated_by', select: 'full_name email' }
+    ]
+  );
+
+  res.status(200).json({ 
+    success: true, 
+    data: populatedWorkflows.map((pw, i) => ({
+      ...pw.toObject ? pw.toObject() : pw,
+      version_count: workflows[i].version_count
+    }))
+  });
+});
+
+/**
+ * GET /workflows/versions
+ * Returns all versions of a specific workflow for the current company.
+ */
+export const getWorkflowVersions = asyncHandler(async (req: Request, res: Response) => {
+  const { workflow_key } = req.query;
+
+  if (!workflow_key || typeof workflow_key !== 'string') {
+    throw new AppError('workflow_key query parameter is required', 400, 'MISSING_WORKFLOW_KEY');
+  }
+
+  const versions = await Workflow.find({
+    company_id: new Types.ObjectId(req.user.company_id),
+    workflow_key,
+  })
+    .populate('created_by', 'full_name email avatar_url')
+    .populate('updated_by', 'full_name email avatar_url')
+    .sort({ version_number: -1 });
+
+  if (!versions.length) {
+    throw new AppError('Workflow not found', 404, 'WORKFLOW_NOT_FOUND');
+  }
+
+  res.status(200).json({ success: true, data: versions });
 });
 
 /**
@@ -132,12 +207,20 @@ export const createWorkflow = asyncHandler(async (req: Request, res: Response) =
     throw new AppError('Workflow with this name already exists', 400, 'DUPLICATE_NAME');
   }
 
+  const workflowKey = input.name
+    .toLowerCase()
+    .replace(/\s+/g, '-')
+    .replace(/[^a-z0-9-]/g, '');
+
   const workflow = await Workflow.create({
     ...input,
     company_id: new Types.ObjectId(req.user.company_id),
+    workflow_key: workflowKey,
+    version_number: 1,
     created_by: new Types.ObjectId(req.user.userId),
     status: 'draft',
     is_active: true,
+    sla_config: input.sla_config,
   });
 
   // Audit log
@@ -155,6 +238,7 @@ export const createWorkflow = asyncHandler(async (req: Request, res: Response) =
       trigger: workflow.trigger,
       trigger_config: workflow.trigger_config,
       status: workflow.status,
+      sla_config: workflow.sla_config,
     },
   });
 
@@ -194,13 +278,14 @@ export const updateWorkflow = asyncHandler(async (req: Request, res: Response) =
   }
 
   if (workflow.status !== 'draft') {
-    throw new AppError('Cannot update non-draft workflows. Disable first.', 400, 'CANNOT_MODIFY_ENABLED');
+    throw new AppError('Cannot update non-draft workflows. Create a new draft instead.', 400, 'CANNOT_MODIFY_PUBLISHED');
   }
 
   const beforeState = {
     name: workflow.name,
     description: workflow.description,
     trigger_config: workflow.trigger_config,
+    sla_config: workflow.sla_config,
   };
 
   Object.assign(workflow, input);
@@ -220,6 +305,7 @@ export const updateWorkflow = asyncHandler(async (req: Request, res: Response) =
       name: workflow.name,
       description: workflow.description,
       trigger_config: workflow.trigger_config,
+      sla_config: workflow.sla_config,
     },
   });
 
@@ -232,11 +318,11 @@ export const updateWorkflow = asyncHandler(async (req: Request, res: Response) =
 });
 
 /**
- * POST /workflows/:id/enable
- * Enables a draft workflow.
- * Produces audit event: workflow.enabled
+ * POST /workflows/:id/publish
+ * Publishes a draft workflow and archives the previously published version.
+ * Produces audit event: workflow.published
  */
-export const enableWorkflow = asyncHandler(async (req: Request, res: Response) => {
+export const publishWorkflow = asyncHandler(async (req: Request, res: Response) => {
   const workflow = await Workflow.findOne({
     _id: req.params.id,
     company_id: new Types.ObjectId(req.user.company_id),
@@ -247,35 +333,129 @@ export const enableWorkflow = asyncHandler(async (req: Request, res: Response) =
   }
 
   if (workflow.status !== 'draft') {
-    throw new AppError('Only draft workflows can be enabled', 400, 'INVALID_STATUS');
+    throw new AppError('Only draft workflows can be published', 400, 'INVALID_STATUS');
   }
+
+  // Archive currently published version for this key
+  await Workflow.updateMany(
+    { 
+      company_id: new Types.ObjectId(req.user.company_id),
+      workflow_key: workflow.workflow_key,
+      status: 'published'
+    },
+    { $set: { status: 'archived', is_active: false } }
+  );
 
   const beforeState = { status: workflow.status };
 
-  workflow.status = 'enabled';
+  workflow.status = 'published';
   await workflow.save();
 
   // Audit log
   await auditLogger.log({
     req,
-    action: 'workflow.enabled',
+    action: 'workflow.published',
     module: 'workflows',
     object_type: 'Workflow',
     object_id: workflow._id.toString(),
-    object_label: workflow.name,
+    object_label: `${workflow.name} v${workflow.version_number}`,
     before_state: beforeState,
-    after_state: { status: 'enabled' },
+    after_state: { status: 'published', version_number: workflow.version_number },
   });
 
   res.status(200).json({ success: true, data: workflow });
 });
 
 /**
- * POST /workflows/:id/disable
- * Disables an enabled workflow.
- * Produces audit event: workflow.disabled
+ * POST /workflows/:id/draft
+ * Creates a new draft from an existing published or archived workflow.
+ * Clones all steps.
  */
-export const disableWorkflow = asyncHandler(async (req: Request, res: Response) => {
+export const createDraftWorkflow = asyncHandler(async (req: Request, res: Response) => {
+  const workflow = await Workflow.findOne({
+    _id: req.params.id,
+    company_id: new Types.ObjectId(req.user.company_id),
+  });
+
+  if (!workflow) {
+    throw new AppError('Workflow not found', 404, 'WORKFLOW_NOT_FOUND');
+  }
+
+  // Check if a draft already exists for this workflow key
+  const existingDraft = await Workflow.findOne({
+    company_id: new Types.ObjectId(req.user.company_id),
+    workflow_key: workflow.workflow_key,
+    status: 'draft',
+  });
+
+  if (existingDraft) {
+    throw new AppError('A draft version already exists. Please edit or delete it first.', 400, 'DRAFT_EXISTS');
+  }
+
+  // Find latest version number
+  const latestVersion = await Workflow.findOne({
+    company_id: new Types.ObjectId(req.user.company_id),
+    workflow_key: workflow.workflow_key,
+  }).sort({ version_number: -1 });
+
+  const nextVersion = latestVersion ? latestVersion.version_number + 1 : 1;
+
+  // Create new draft
+  const newDraft = await Workflow.create({
+    company_id: workflow.company_id,
+    workflow_key: workflow.workflow_key,
+    version_number: nextVersion,
+    name: workflow.name,
+    description: workflow.description,
+    trigger: workflow.trigger,
+    trigger_config: workflow.trigger_config,
+    status: 'draft',
+    is_active: true,
+    sla_config: workflow.sla_config,
+    created_by: new Types.ObjectId(req.user.userId),
+  });
+
+  // Clone steps
+  const steps = await WorkflowStep.find({
+    company_id: new Types.ObjectId(req.user.company_id),
+    workflow_id: workflow._id,
+  });
+
+  if (steps.length > 0) {
+    const newSteps = steps.map(s => ({
+      company_id: s.company_id,
+      workflow_id: newDraft._id,
+      name: s.name,
+      description: s.description,
+      action_type: s.action_type,
+      action_config: s.action_config,
+      conditions: s.conditions,
+      step_order: s.step_order,
+      is_active: true,
+      sla_config: s.sla_config,
+    }));
+    await WorkflowStep.insertMany(newSteps);
+  }
+
+  await auditLogger.log({
+    req,
+    action: 'workflow.draft_created',
+    module: 'workflows',
+    object_type: 'Workflow',
+    object_id: newDraft._id.toString(),
+    object_label: `${newDraft.name} v${newDraft.version_number}`,
+    before_state: null,
+    after_state: { version_number: newDraft.version_number, cloned_from: workflow._id.toString() },
+  });
+
+  res.status(201).json({ success: true, data: newDraft });
+});
+
+/**
+ * POST /workflows/:id/rollback
+ * Reverts to a previous version by publishing it (and archiving current).
+ */
+export const rollbackWorkflow = asyncHandler(async (req: Request, res: Response) => {
   const workflow = await Workflow.findOne({
     _id: req.params.id,
     company_id: new Types.ObjectId(req.user.company_id),
@@ -286,24 +466,110 @@ export const disableWorkflow = asyncHandler(async (req: Request, res: Response) 
   }
 
   if (workflow.status === 'draft') {
-    throw new AppError('Draft workflows cannot be disabled. Delete instead.', 400, 'INVALID_STATUS');
+    throw new AppError('Cannot rollback to a draft. Delete the draft instead.', 400, 'INVALID_STATUS');
+  }
+
+  // Find latest version number to create a new version for the rollback
+  const latestVersion = await Workflow.findOne({
+    company_id: new Types.ObjectId(req.user.company_id),
+    workflow_key: workflow.workflow_key,
+  }).sort({ version_number: -1 });
+
+  const nextVersion = latestVersion ? latestVersion.version_number + 1 : 1;
+
+  // Create new published version identical to the target rollback version
+  const newRollbackVersion = await Workflow.create({
+    company_id: workflow.company_id,
+    workflow_key: workflow.workflow_key,
+    version_number: nextVersion,
+    name: workflow.name,
+    description: workflow.description,
+    trigger: workflow.trigger,
+    trigger_config: workflow.trigger_config,
+    status: 'published',
+    is_active: true,
+    sla_config: workflow.sla_config,
+    created_by: new Types.ObjectId(req.user.userId),
+  });
+
+  // Clone steps
+  const steps = await WorkflowStep.find({
+    company_id: new Types.ObjectId(req.user.company_id),
+    workflow_id: workflow._id,
+  });
+
+  if (steps.length > 0) {
+    const newSteps = steps.map(s => ({
+      company_id: s.company_id,
+      workflow_id: newRollbackVersion._id,
+      name: s.name,
+      description: s.description,
+      action_type: s.action_type,
+      action_config: s.action_config,
+      conditions: s.conditions,
+      step_order: s.step_order,
+      is_active: true,
+      sla_config: s.sla_config,
+    }));
+    await WorkflowStep.insertMany(newSteps);
+  }
+
+  // Archive any previously published versions
+  await Workflow.updateMany(
+    { 
+      company_id: new Types.ObjectId(req.user.company_id),
+      workflow_key: workflow.workflow_key,
+      status: 'published',
+      _id: { $ne: newRollbackVersion._id }
+    },
+    { $set: { status: 'archived', is_active: false } }
+  );
+
+  await auditLogger.log({
+    req,
+    action: 'workflow.rolled_back',
+    module: 'workflows',
+    object_type: 'Workflow',
+    object_id: newRollbackVersion._id.toString(),
+    object_label: `${newRollbackVersion.name} v${newRollbackVersion.version_number}`,
+    before_state: null,
+    after_state: { version_number: newRollbackVersion.version_number, rolled_back_from: workflow._id.toString() },
+  });
+
+  res.status(201).json({ success: true, data: newRollbackVersion });
+});
+
+/**
+ * POST /workflows/:id/archive
+ * Archives a workflow.
+ * Produces audit event: workflow.archived
+ */
+export const archiveWorkflow = asyncHandler(async (req: Request, res: Response) => {
+  const workflow = await Workflow.findOne({
+    _id: req.params.id,
+    company_id: new Types.ObjectId(req.user.company_id),
+  });
+
+  if (!workflow) {
+    throw new AppError('Workflow not found', 404, 'WORKFLOW_NOT_FOUND');
   }
 
   const beforeState = { status: workflow.status };
 
-  workflow.status = 'disabled';
+  workflow.status = 'archived';
+  workflow.is_active = false;
   await workflow.save();
 
   // Audit log
   await auditLogger.log({
     req,
-    action: 'workflow.disabled',
+    action: 'workflow.archived',
     module: 'workflows',
     object_type: 'Workflow',
     object_id: workflow._id.toString(),
     object_label: workflow.name,
     before_state: beforeState,
-    after_state: { status: 'disabled' },
+    after_state: { status: 'archived' },
   });
 
   res.status(200).json({ success: true, data: workflow });
@@ -325,7 +591,7 @@ export const deleteWorkflow = asyncHandler(async (req: Request, res: Response) =
   }
 
   if (workflow.status !== 'draft') {
-    throw new AppError('Can only delete draft workflows. Disable first.', 400, 'CANNOT_DELETE_ENABLED');
+    throw new AppError('Can only delete draft workflows. Archive or delete versions via history.', 400, 'CANNOT_DELETE_PUBLISHED');
   }
 
   const runsCount = await WorkflowRun.countDocuments({
@@ -382,14 +648,15 @@ export const addWorkflowStep = asyncHandler(async (req: Request, res: Response) 
     throw new AppError('Workflow not found', 404, 'WORKFLOW_NOT_FOUND');
   }
 
-  if (workflow.status === 'enabled') {
-    throw new AppError('Cannot add steps to an enabled workflow. Disable first.', 400, 'CANNOT_MODIFY_ENABLED');
+  if (workflow.status !== 'draft') {
+    throw new AppError('Cannot add steps to a non-draft workflow. Create a new draft first.', 400, 'CANNOT_MODIFY_PUBLISHED');
   }
 
   const step = await WorkflowStep.create({
     ...input,
     company_id: new Types.ObjectId(req.user.company_id),
     workflow_id: workflow._id,
+    sla_config: input.sla_config,
   });
 
   // Audit log
@@ -405,7 +672,9 @@ export const addWorkflowStep = asyncHandler(async (req: Request, res: Response) 
       workflow_id: workflow._id.toString(),
       name: step.name,
       action_type: step.action_type,
+      conditions: step.conditions,
       step_order: step.step_order,
+      sla_config: step.sla_config,
     },
   });
 
@@ -429,8 +698,8 @@ export const updateWorkflowStep = asyncHandler(async (req: Request, res: Respons
     throw new AppError('Workflow not found', 404, 'WORKFLOW_NOT_FOUND');
   }
 
-  if (workflow.status === 'enabled') {
-    throw new AppError('Cannot update steps of an enabled workflow. Disable first.', 400, 'CANNOT_MODIFY_ENABLED');
+  if (workflow.status !== 'draft') {
+    throw new AppError('Cannot update steps of a non-draft workflow. Create a new draft first.', 400, 'CANNOT_MODIFY_PUBLISHED');
   }
 
   const step = await WorkflowStep.findOne({
@@ -447,7 +716,9 @@ export const updateWorkflowStep = asyncHandler(async (req: Request, res: Respons
     name: step.name,
     action_type: step.action_type,
     action_config: step.action_config,
+    conditions: step.conditions,
     step_order: step.step_order,
+    sla_config: step.sla_config,
   };
 
   Object.assign(step, input);
@@ -466,7 +737,9 @@ export const updateWorkflowStep = asyncHandler(async (req: Request, res: Respons
       name: step.name,
       action_type: step.action_type,
       action_config: step.action_config,
+      conditions: step.conditions,
       step_order: step.step_order,
+      sla_config: step.sla_config,
     },
   });
 
@@ -488,8 +761,8 @@ export const deleteWorkflowStep = asyncHandler(async (req: Request, res: Respons
     throw new AppError('Workflow not found', 404, 'WORKFLOW_NOT_FOUND');
   }
 
-  if (workflow.status === 'enabled') {
-    throw new AppError('Cannot delete steps from an enabled workflow. Disable first.', 400, 'CANNOT_MODIFY_ENABLED');
+  if (workflow.status !== 'draft') {
+    throw new AppError('Cannot delete steps from a non-draft workflow. Create a new draft first.', 400, 'CANNOT_MODIFY_PUBLISHED');
   }
 
   const step = await WorkflowStep.findOne({
@@ -542,8 +815,8 @@ export const reorderWorkflowSteps = asyncHandler(async (req: Request, res: Respo
     throw new AppError('Workflow not found', 404, 'WORKFLOW_NOT_FOUND');
   }
 
-  if (workflow.status === 'enabled') {
-    throw new AppError('Cannot reorder steps of an enabled workflow. Disable first.', 400, 'CANNOT_MODIFY_ENABLED');
+  if (workflow.status !== 'draft') {
+    throw new AppError('Cannot reorder steps of a non-draft workflow. Create a new draft first.', 400, 'CANNOT_MODIFY_PUBLISHED');
   }
 
   // Capture current order before update (for audit trail)
@@ -643,8 +916,13 @@ export const testWorkflow = asyncHandler(async (req: Request, res: Response) => 
     userId: input.user_id,
     userName: input.user_name,
     userEmail: input.user_email,
+    trigger: input.trigger,
     lifecycleFrom: input.lifecycle_from,
     lifecycleTo: input.lifecycle_to,
+    roleFrom: input.role_from,
+    roleTo: input.role_to,
+    departmentFrom: input.department_from,
+    departmentTo: input.department_to,
   };
 
   const result = await executeWorkflow(workflow, event);
@@ -690,6 +968,7 @@ export const handleLifecycleTrigger = asyncHandler(async (req: Request, res: Res
     userId: user_id,
     userName: user_name,
     userEmail: user_email || '',
+    trigger: 'user.lifecycle_changed' as const,
     lifecycleFrom: lifecycle_from,
     lifecycleTo: lifecycle_to,
   };
@@ -718,4 +997,40 @@ export const handleLifecycleTrigger = asyncHandler(async (req: Request, res: Res
   });
 
   res.status(200).json({ success: true, data: results });
+});
+
+/**
+ * POST /workflows/:id/simulate
+ * Simulates a workflow with a mock payload to verify conditions and execution path.
+ * Does NOT affect real data.
+ */
+export const simulateWorkflowHandler = asyncHandler(async (req: Request, res: Response) => {
+  const input = TestWorkflowSchema.parse(req.body);
+
+  const workflow = await Workflow.findOne({
+    _id: req.params.id,
+    company_id: new Types.ObjectId(req.user.company_id),
+  });
+
+  if (!workflow) {
+    throw new AppError('Workflow not found', 404, 'WORKFLOW_NOT_FOUND');
+  }
+
+  const event = {
+    companyId: req.user.company_id,
+    userId: input.user_id,
+    userName: input.user_name,
+    userEmail: input.user_email,
+    trigger: input.trigger,
+    lifecycleFrom: input.lifecycle_from,
+    lifecycleTo: input.lifecycle_to,
+    roleFrom: input.role_from,
+    roleTo: input.role_to,
+    departmentFrom: input.department_from,
+    departmentTo: input.department_to,
+  };
+
+  const result = await simulateWorkflow(workflow, event);
+
+  res.status(200).json({ success: true, data: result });
 });

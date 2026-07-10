@@ -11,15 +11,28 @@ export type WorkflowActionType =
   | 'webhook'
   | 'require_approval';
 
+export type WorkflowConditionOperator = 'equals' | 'not_equals' | 'contains' | 'greater_than' | 'less_than';
+
+export interface IWorkflowCondition {
+  field: string;
+  operator: WorkflowConditionOperator;
+  value: unknown;
+}
+
 export interface IWorkflowStep extends Document {
   company_id: Types.ObjectId;
   workflow_id: Types.ObjectId;
   name: string;
   description?: string;
   action_type: WorkflowActionType;
-  action_config: Record<string, unknown>; // Action-specific settings
+  action_config: Record<string, unknown>; // Action-specific settings (e.g., escalations)
+  conditions: IWorkflowCondition[];
   step_order: number;
   is_active: boolean;
+  sla_config?: {
+    threshold_minutes: number;
+    notify_on_breach: boolean;
+  };
   created_at: Date;
   updated_at: Date;
 }
@@ -35,8 +48,17 @@ const WorkflowStepSchema = new Schema<IWorkflowStep>({
     required: true,
   },
   action_config: { type: Schema.Types.Mixed, default: {} },
+  conditions: [{
+    field: { type: String, required: true },
+    operator: { type: String, enum: ['equals', 'not_equals', 'contains', 'greater_than', 'less_than'], required: true },
+    value: { type: Schema.Types.Mixed }
+  }],
   step_order: { type: Number, required: true, min: 0 },
   is_active: { type: Boolean, default: true },
+  sla_config: {
+    threshold_minutes: { type: Number },
+    notify_on_breach: { type: Boolean, default: false }
+  },
 }, { timestamps: { createdAt: 'created_at', updatedAt: 'updated_at' } });
 
 // Compound unique index for ordering within a workflow
