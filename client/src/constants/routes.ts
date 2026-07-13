@@ -17,6 +17,7 @@ export const ROUTES = {
   WORKFLOWS: '/workflows',
   APPROVALS: '/approvals',
   LOCATIONS: '/locations',
+  LOCATION_DETAIL: (id: string) => `/locations/${id}`,
   SECURITY: '/security',
   DATA_FIELDS: '/data-fields',
   NOTIFICATIONS: '/notifications',
@@ -24,4 +25,7 @@ export const ROUTES = {
   AUDIT_LOGS: '/audit-logs',
   LOGIN: '/login',
   ONBOARDING: '/onboarding',
+  HOLIDAYS: '/holidays',
+  HOLIDAY_CALENDAR_DETAIL: (id: string) => `/holidays/${id}/calendars`,
+  WORK_SCHEDULES: '/work-schedules',
 } as const;

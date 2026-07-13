@@ -1,13 +1,13 @@
 // server/src/models/PolicyAssignment.model.ts
 import { Schema, model, Document, Types } from 'mongoose';
 
-export type PolicyTargetType = 'all' | 'role' | 'department' | 'group' | 'user';
+export type PolicyTargetType = 'all' | 'role' | 'department' | 'group' | 'user' | 'location';
 
 export interface IPolicyAssignment extends Document {
   company_id: Types.ObjectId;
   policy_version_id: Types.ObjectId;
   target_type: PolicyTargetType;
-  target_id: string; // role_id, department_id, group_id, or user_id
+  target_id: string; // role_id, department_id, group_id, user_id, or location_id
   target_label: string; // Denormalized display name
   created_at: Date;
 }
@@ -17,7 +17,7 @@ const PolicyAssignmentSchema = new Schema<IPolicyAssignment>({
   policy_version_id: { type: Schema.Types.ObjectId, ref: 'PolicyVersion', required: true, index: true },
   target_type: {
     type: String,
-    enum: ['all', 'role', 'department', 'group', 'user'],
+    enum: ['all', 'role', 'department', 'group', 'user', 'location'],
     required: true,
   },
   target_id: { type: String, required: true },

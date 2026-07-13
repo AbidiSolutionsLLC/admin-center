@@ -6,6 +6,7 @@ import { useRoles } from '@/features/roles/useRoles';
 import { useDepartments } from '@/features/organization/hooks/useDepartments';
 import { useUsers } from '@/features/people/hooks/useUsers';
 import { useGroups } from '@/features/groups/useGroups';
+import { useLocations } from '@/features/locations/hooks/useLocations';
 import { AppCatalog } from '@/features/apps/AppCatalog';
 import { AccessTimeline } from '@/features/apps/AccessTimeline';
 import { AssignmentRuleBuilder } from '@/features/apps/AssignmentRuleBuilder';
@@ -38,7 +39,7 @@ export default function AppsPage() {
   const [isWarningModalOpen, setIsWarningModalOpen] = useState(false);
 
   // Assignment form state
-  const [assignTargetType, setAssignTargetType] = useState<'role' | 'department' | 'group' | 'user' | 'attribute'>('role');
+  const [assignTargetType, setAssignTargetType] = useState<'role' | 'department' | 'group' | 'user' | 'attribute' | 'location'>('role');
   const [assignTargetId, setAssignTargetId] = useState('');
   const [assignAttributeName, setAssignAttributeName] = useState('department_id');
   const [assignAttributeValue, setAssignAttributeValue] = useState('');
@@ -63,6 +64,7 @@ export default function AppsPage() {
   const { data: departments } = useDepartments();
   const { data: groups } = useGroups();
   const { data: users } = useUsers();
+  const { data: locations } = useLocations();
 
   // Mutations
   const assignAppMutation = useAssignApp();
@@ -430,6 +432,8 @@ export default function AppsPage() {
                               ? 'bg-success/10 text-success'
                               : assignment.target_type === 'group'
                               ? 'bg-warning/10 text-warning'
+                              : assignment.target_type === 'location'
+                              ? 'bg-info/10 text-info'
                               : 'bg-indigo/10 text-indigo'
                           }`}
                         >
@@ -482,8 +486,8 @@ export default function AppsPage() {
               <label className="block text-xs font-bold text-ink-secondary uppercase tracking-wider mb-2">
                 Assign To Target Type
               </label>
-              <div className="grid grid-cols-5 gap-2">
-                {(['role', 'department', 'group', 'user', 'attribute'] as const).map((type) => (
+              <div className="grid grid-cols-6 gap-2">
+                {(['role', 'department', 'group', 'user', 'attribute', 'location'] as const).map((type) => (
                   <button
                     key={type}
                     onClick={() => {
@@ -540,6 +544,12 @@ export default function AppsPage() {
                     users?.filter(u => u.is_active !== false && u.lifecycle_state === 'active').map((user) => (
                       <option key={user._id} value={user._id}>
                         {user.full_name} ({user.email})
+                      </option>
+                    ))}
+                  {assignTargetType === 'location' &&
+                    locations?.filter((l: any) => l.is_deleted !== true).map((loc: any) => (
+                      <option key={loc._id} value={loc._id}>
+                        {loc.name}
                       </option>
                     ))}
                 </select>
@@ -610,6 +620,8 @@ export default function AppsPage() {
                     ? groups?.find((g) => g._id === assignTargetId)?.name ?? ''
                     : assignTargetType === 'user'
                     ? users?.find((u) => u._id === assignTargetId)?.full_name ?? ''
+                    : assignTargetType === 'location'
+                    ? locations?.find((l: any) => l._id === assignTargetId)?.name ?? ''
                     : assignTargetId
                 }
                 onConfirm={handleAssignApp}

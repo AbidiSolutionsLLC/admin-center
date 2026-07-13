@@ -11,8 +11,10 @@ import { useEmployeeIdFormat, useUpdateEmployeeIdFormat } from '@/hooks/useEmplo
 import { useRequiredUserFields, useUpdateRequiredUserFields } from '@/hooks/useRequiredUserFields';
 import { useDomainEnforcement, useUpdateDomainEnforcement } from '@/hooks/useDomainEnforcement';
 import { useResetCompanySettings } from '@/hooks/useResetCompanySettings';
-import { useUpdateCompanyName, useUpdateTimezone, useUpdateLocale } from '@/hooks/useCompanyProfile';
+import { useUpdateCompanyName, useUpdateTimezone, useUpdateLocale, useUpdateDefaultLocation } from '@/hooks/useCompanyProfile';
+import { useLocations } from '@/features/locations/hooks/useLocations';
 import { AVAILABLE_USER_FIELDS } from '@/types';
+import { COMMON_TIMEZONES, formatTimezoneLabel } from '@/constants/timezones';
 import { cn } from '@/utils/cn';
 import { toast } from 'sonner';
 
@@ -30,50 +32,6 @@ const CompanySettingsSchema = z.object({
       message: 'Format must include a {counter:N} token (e.g., {counter:5})',
     }),
 });
-
-// ── Common IANA timezone list (curated subset for the dropdown) ──────────────
-const COMMON_TIMEZONES = [
-  'UTC',
-  'America/New_York',
-  'America/Chicago',
-  'America/Denver',
-  'America/Los_Angeles',
-  'America/Anchorage',
-  'America/Halifax',
-  'America/Sao_Paulo',
-  'America/Bogota',
-  'America/Mexico_City',
-  'America/Toronto',
-  'America/Vancouver',
-  'Europe/London',
-  'Europe/Paris',
-  'Europe/Berlin',
-  'Europe/Madrid',
-  'Europe/Rome',
-  'Europe/Amsterdam',
-  'Europe/Brussels',
-  'Europe/Stockholm',
-  'Europe/Warsaw',
-  'Europe/Istanbul',
-  'Europe/Moscow',
-  'Africa/Cairo',
-  'Africa/Johannesburg',
-  'Africa/Lagos',
-  'Africa/Nairobi',
-  'Asia/Dubai',
-  'Asia/Karachi',
-  'Asia/Kolkata',
-  'Asia/Dhaka',
-  'Asia/Bangkok',
-  'Asia/Singapore',
-  'Asia/Shanghai',
-  'Asia/Tokyo',
-  'Asia/Seoul',
-  'Asia/Hong_Kong',
-  'Australia/Sydney',
-  'Australia/Melbourne',
-  'Pacific/Auckland',
-];
 
 const COMMON_LOCALES = [
   { value: 'en-US', label: 'English (US)' },
@@ -106,16 +64,20 @@ function CompanyProfileSection() {
   const updateName = useUpdateCompanyName();
   const updateTimezone = useUpdateTimezone();
   const updateLocale = useUpdateLocale();
+  const updateDefaultLocation = useUpdateDefaultLocation();
+  const { data: locations } = useLocations();
 
   const [name, setName] = useState('');
   const [timezone, setTimezone] = useState('UTC');
   const [locale, setLocale] = useState('en-US');
+  const [defaultLocationId, setDefaultLocationId] = useState<string>('');
 
   useEffect(() => {
     if (settings) {
       setName(settings.name || '');
       setTimezone(settings.settings?.timezone || 'UTC');
       setLocale(settings.settings?.locale || 'en-US');
+      setDefaultLocationId(settings.settings?.default_location_id ?? '');
     }
   }, [settings]);
 
@@ -183,7 +145,7 @@ function CompanyProfileSection() {
                 className="flex-1 h-10 pl-3 pr-8 text-sm rounded-md border border-line bg-white text-ink focus:outline-none focus:ring-2 focus:ring-primary/30 focus:border-primary transition-all appearance-none"
               >
                 {COMMON_TIMEZONES.map((tz) => (
-                  <option key={tz} value={tz}>{tz.replace(/_/g, ' ')}</option>
+                  <option key={tz} value={tz}>{formatTimezoneLabel(tz)}</option>
                 ))}
               </select>
               <Button
@@ -221,6 +183,35 @@ function CompanyProfileSection() {
             </div>
             <p className="text-xs text-ink-secondary">Controls date, number, and currency formatting.</p>
           </div>
+        </div>
+
+        {/* Default Location */}
+        <div className="space-y-2">
+          <label className="block text-sm font-medium text-ink" htmlFor="company-default-location">
+            Default Location
+          </label>
+          <div className="flex gap-3">
+            <select
+              id="company-default-location"
+              value={defaultLocationId}
+              onChange={(e) => setDefaultLocationId(e.target.value)}
+              className="flex-1 h-10 pl-3 pr-8 text-sm rounded-md border border-line bg-white text-ink focus:outline-none focus:ring-2 focus:ring-primary/30 focus:border-primary transition-all appearance-none"
+            >
+              <option value="">— No default —</option>
+              {locations?.map((loc) => (
+                <option key={loc._id} value={loc._id}>{loc.name}</option>
+              ))}
+            </select>
+            <Button
+              onClick={() => updateDefaultLocation.mutate({ default_location_id: defaultLocationId || null })}
+              disabled={updateDefaultLocation.isPending || defaultLocationId === (settings?.settings?.default_location_id ?? '')}
+            >
+              {updateDefaultLocation.isPending ? 'Saving...' : 'Save'}
+            </Button>
+          </div>
+          <p className="text-xs text-ink-secondary">
+            New users without a location assignment will inherit this location for policies, scheduling, and app access.
+          </p>
         </div>
       </CardContent>
     </Card>

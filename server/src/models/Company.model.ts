@@ -24,6 +24,7 @@ export interface ICompany extends Document {
     is_domain_enforcement_active: boolean; // Whether to enforce domain restrictions
     timezone: string;                 // Company default timezone (e.g. 'America/New_York')
     locale: string;                   // Company locale (e.g. 'en-US')
+    default_location_id?: string;     // Default location for users without location assignment
   };
   plan: 'free' | 'starter' | 'pro';
   is_active: boolean;
@@ -74,6 +75,10 @@ const CompanySchema = new Schema<ICompany>({
     locale: {
       type: String,
       default: 'en-US',
+    },
+    default_location_id: {
+      type: String,
+      default: null,
     },
   },
   plan: { type: String, enum: ['free', 'starter', 'pro'], default: 'free' },

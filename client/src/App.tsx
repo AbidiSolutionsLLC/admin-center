@@ -23,11 +23,13 @@ import SecurityPage from './pages/security/SecurityPage';
 import AuditLogsPage from './pages/audit-logs/AuditLogsPage';
 import PoliciesPage from './pages/policies/PoliciesPage';
 import LocationsPage from './pages/locations/LocationsPage';
+import LocationDetailPage from './pages/locations/LocationDetailPage';
 import DataFieldsPage from './pages/data-fields/DataFieldsPage';
 import IntegrationsPage from './pages/integrations/IntegrationsPage';
 import WorkflowsPage from './pages/workflows/WorkflowsPage';
 import ApprovalsPage from './pages/workflows/ApprovalsPage';
 import NotificationsPage from './pages/notifications/NotificationsPage';
+
 
 function App() {
   return (
@@ -57,6 +59,9 @@ function App() {
               <Route path={ROUTES.POLICIES} element={<PoliciesPage />} />
               <Route path="/policies/:id" element={<PoliciesPage />} />
               <Route path={ROUTES.LOCATIONS} element={<LocationsPage />} />
+              <Route path="/locations/:id" element={<LocationDetailPage />} />
+              <Route path={ROUTES.HOLIDAYS} element={<Navigate to="/locations?tab=holidays" replace />} />
+              <Route path={ROUTES.WORK_SCHEDULES} element={<Navigate to="/locations?tab=work-schedules" replace />} />
               <Route path={ROUTES.DATA_FIELDS} element={<DataFieldsPage />} />
               <Route path={ROUTES.INTEGRATIONS} element={<IntegrationsPage />} />
               <Route path={ROUTES.WORKFLOWS} element={<WorkflowsPage />} />

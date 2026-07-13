@@ -2,7 +2,7 @@
 import React, { useMemo } from 'react';
 import { useNavigate } from 'react-router-dom';
 import type { ColumnDef } from '@tanstack/react-table';
-import { Edit2, MoreVertical, AlertTriangle, Building2, Mail } from 'lucide-react';
+import { Edit2, MoreVertical, AlertTriangle, Building2, Mail, MapPin } from 'lucide-react';
 import type { User, LifecycleState } from '@/types';
 import { DataTable } from '@/components/ui/DataTable';
 import { StatusBadge } from '@/components/ui/StatusBadge';
@@ -13,6 +13,7 @@ interface UserTableProps {
   users: User[];
   onEdit: (user: User) => void;
   onAssignOrg: (user: User) => void;
+  onAssignLocation?: (user: User) => void;
   onChangeState?: (user: User) => void;
   onResendInvite?: (user: User) => void;
   selectedIds?: Set<string>;
@@ -41,7 +42,7 @@ const lifecycleStateConfig: Record<
  * Lifecycle State, Last Login, Actions.
  * Used on: PeoplePage.
  */
-export const UserTable: React.FC<UserTableProps> = ({ users, onEdit, onAssignOrg, onChangeState, onResendInvite, selectedIds, onToggleRow, onToggleAll, isAllSelected }) => {
+export const UserTable: React.FC<UserTableProps> = ({ users, onEdit, onAssignOrg, onAssignLocation, onChangeState, onResendInvite, selectedIds, onToggleRow, onToggleAll, isAllSelected }) => {
   const navigate = useNavigate();
   const hasSelection = !!selectedIds && !!onToggleRow && !!onToggleAll;
 
@@ -261,8 +262,10 @@ export const UserTable: React.FC<UserTableProps> = ({ users, onEdit, onAssignOrg
         {
           id: 'actions',
           header: 'Actions',
+          size: 160,
+          minSize: 160,
           cell: ({ row }) => (
-            <div className="flex items-center gap-1">
+            <div className="flex items-center gap-1 flex-nowrap">
               <button
                 onClick={(e) => {
                   e.stopPropagation();
@@ -285,6 +288,19 @@ export const UserTable: React.FC<UserTableProps> = ({ users, onEdit, onAssignOrg
               >
                 <Building2 className="w-4 h-4" />
               </button>
+              {onAssignLocation && (
+                <button
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    onAssignLocation(row.original);
+                  }}
+                  className="h-8 w-8 flex items-center justify-center rounded-md text-ink-secondary hover:text-ink hover:bg-surface-alt transition-colors"
+                  aria-label={`Assign location for ${row.original.full_name}`}
+                  title="Assign Location"
+                >
+                  <MapPin className="w-4 h-4" />
+                </button>
+              )}
               {row.original.lifecycle_state === 'invited' && onResendInvite && (
                 <button
                   onClick={(e) => {
@@ -318,7 +334,7 @@ export const UserTable: React.FC<UserTableProps> = ({ users, onEdit, onAssignOrg
 
       return cols;
     },
-    [onEdit, onAssignOrg, onChangeState, onResendInvite, hasSelection, selectedIds, onToggleRow, onToggleAll, isAllSelected]
+    [onEdit, onAssignOrg, onAssignLocation, onChangeState, onResendInvite, hasSelection, selectedIds, onToggleRow, onToggleAll, isAllSelected]
   );
 
   const getRowClassName = (user: User) => {

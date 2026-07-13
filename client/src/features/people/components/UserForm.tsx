@@ -8,6 +8,7 @@ import { MultiUserSelect } from '@/components/ui/MultiUserSelect';
 import { MultiRoleSelect } from '@/components/ui/MultiRoleSelect';
 import { DynamicCustomFields } from '@/features/data-fields/components/DynamicCustomFields';
 import { useCustomFields } from '@/features/data-fields/hooks/useCustomFields';
+import { getLocalTime } from '@/lib/timezone';
 import type { User, EmploymentType, Department, CustomField, Location, UserRole } from '@/types';
 import { cn } from '@/utils/cn';
 import { ROLES } from '@/constants/roles';
@@ -79,6 +80,7 @@ interface UserFormProps {
   initialData?: Partial<User>;
   onSubmit: (data: UserFormData & { custom_fields?: Record<string, unknown> }) => void;
   departments?: Department[];
+  teams?: any[];
   locations?: Location[];
   isSubmitting?: boolean;
   requiredFields?: string[];
@@ -138,7 +140,7 @@ export const UserForm: React.FC<UserFormProps> = ({
       role_ids: initialData?.roles?.map(r => r._id) || [],
       employment_type: initialData?.employment_type || 'full_time',
       hire_date: initialData?.hire_date ? new Date(initialData.hire_date).toISOString().split('T')[0] : '',
-      location_id: (typeof initialData?.location_id === 'object' && initialData?.location_id !== null) ? (initialData.location_id as any)._id : (initialData?.location_id as string ?? ''),
+      location_id: (typeof initialData?.location_id === 'object' && initialData?.location_id !== null) ? (initialData.location_id as any)._id.toString() : (initialData?.location_id as string ?? ''),
     },
   });
 
@@ -162,7 +164,7 @@ export const UserForm: React.FC<UserFormProps> = ({
         role_ids: initialData.roles?.map(r => r._id) || [],
         employment_type: initialData.employment_type || 'full_time',
         hire_date: initialData.hire_date ? new Date(initialData.hire_date).toISOString().split('T')[0] : '',
-        location_id: (typeof initialData.location_id === 'object' && initialData.location_id !== null) ? (initialData.location_id as any)._id : (initialData.location_id as string ?? ''),
+        location_id: (typeof initialData.location_id === 'object' && initialData.location_id !== null) ? (initialData.location_id as any)._id.toString() : (initialData.location_id as string ?? ''),
       });
       setCustomFieldValues(initialData.custom_fields ?? {});
     }
@@ -337,7 +339,7 @@ onBlur={(e) => { e.currentTarget.style.background = 'rgba(255,255,255,0.04)'; e.
           <option value="">No location</option>
           {locations.map((loc) => (
             <option key={loc._id} value={loc._id}>
-              {loc.name} ({loc.timezone})
+              {loc.name} ({loc.timezone}) — {getLocalTime(loc.timezone)}
             </option>
           ))}
         </select>

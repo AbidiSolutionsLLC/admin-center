@@ -31,7 +31,7 @@ export const useBulkLifecycleChange = () => {
   return useMutation<
     { total: number; successful: number; skipped: number; results: Array<{ user_id: string; user_name: string; success: boolean; error?: string }> },
     Error,
-    { user_ids: string[]; lifecycle_state: LifecycleState }
+    { user_ids: string[]; lifecycle_state: LifecycleState; reason?: string }
   >({
     mutationFn: async (input) => {
       const { data } = await apiClient.put('/people/bulk-lifecycle', input);
@@ -78,6 +78,32 @@ export const useBulkAssignRole = () => {
     },
     onError: (error: unknown) => {
       console.error('Bulk assign role failed', error);
+    },
+  });
+};
+
+export const useBulkAssignLocation = () => {
+  const queryClient = useQueryClient();
+
+  return useMutation<
+    { total: number; successful: number; skipped: number; results: Array<{ user_id: string; user_name: string; success: boolean; error?: string }> },
+    Error,
+    { user_ids: string[]; location_id: string }
+  >({
+    mutationFn: async (input) => {
+      const { data } = await apiClient.post('/people/bulk-assign-location', input);
+      return data.data;
+    },
+    onSuccess: (result) => {
+      queryClient.invalidateQueries({ queryKey: QUERY_KEYS.USERS });
+      if (result.skipped > 0) {
+        toast.warning(`${result.successful} updated, ${result.skipped} skipped`);
+      } else {
+        toast.success(`Location assigned to ${result.successful} users`);
+      }
+    },
+    onError: (error: unknown) => {
+      console.error('Bulk assign location failed', error);
     },
   });
 };

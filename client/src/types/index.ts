@@ -47,6 +47,7 @@ export interface CompanySettings {
     is_domain_enforcement_active?: boolean;
     timezone?: string;
     locale?: string;
+    default_location_id?: string | null;
   };
 }
 
@@ -115,6 +116,51 @@ export interface UpdateLocationInput extends Partial<CreateLocationInput> {}
 export interface LocationFilters {
   search: string;
   type: LocationType | '';
+}
+
+export interface LocationPolicyView {
+  global_policies: Array<{
+    policy_version_id: string;
+    title: string;
+    version_number: number;
+    category: string;
+    effective_date: string;
+    is_overridden: boolean;
+  }>;
+  location_policies: Array<{
+    policy_version_id: string;
+    title: string;
+    version_number: number;
+    category: string;
+    effective_date: string;
+    assigned_at: string;
+  }>;
+}
+
+export interface UserEffectiveSettings {
+  timezone: string;
+  holiday_calendar: { _id: string; name: string } | null;
+  work_schedule: {
+    _id: string;
+    name: string;
+    working_days: number[];
+    working_hours: { start: string; end: string };
+  } | null;
+  policies: Array<{
+    policy_version_id: string;
+    title: string;
+    version_number: number;
+    category: string;
+    source: 'global' | 'location' | 'direct';
+    effective_date: string;
+  }>;
+}
+
+export interface LocationEffectiveSettings {
+  timezone: string;
+  working_hours?: { start: string; end: string; days: number[] };
+  user_count: number;
+  policies: LocationPolicyView;
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -307,6 +353,168 @@ export interface AddTeamMemberInput {
 export interface UpdateTeamMemberInput {
   user_id?: string;
   role?: TeamMemberRole;
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Work Schedules
+// ─────────────────────────────────────────────────────────────────────────────
+
+export interface WorkSchedule {
+  _id: string;
+  company_id: string;
+  name: string;
+  description?: string;
+  timezone: string;
+  working_days: number[];
+  working_hours: {
+    start: string;
+    end: string;
+  };
+  break_hours?: {
+    start: string;
+    end: string;
+  };
+  is_active: boolean;
+  assignment_count?: number;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface CreateWorkScheduleInput {
+  name: string;
+  description?: string | null;
+  timezone?: string;
+  working_days: number[];
+  working_hours: {
+    start: string;
+    end: string;
+  };
+  break_hours?: {
+    start: string;
+    end: string;
+  } | null;
+  is_active?: boolean;
+}
+
+export interface UpdateWorkScheduleInput extends Partial<Omit<CreateWorkScheduleInput, 'name'>> {}
+
+export interface WorkScheduleAssignment {
+  _id: string;
+  company_id: string;
+  location_id: string | { _id: string; name: string; type: LocationType };
+  work_schedule_id: string | { _id: string; name: string; description?: string; timezone?: string; working_days?: number[]; working_hours?: { start: string; end: string }; is_active?: boolean };
+  is_primary: boolean;
+  effective_date: string;
+  expiry_date?: string;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface CreateWorkScheduleAssignmentInput {
+  location_id: string;
+  work_schedule_id: string;
+  is_primary: boolean;
+  effective_date: string;
+  expiry_date?: string;
+}
+
+export type RecurringType = 'yearly' | 'monthly' | 'quarterly' | 'custom';
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Holiday Calendar
+// ─────────────────────────────────────────────────────────────────────────────
+
+export interface HolidayCalendar {
+  _id: string;
+  company_id: string;
+  name: string;
+  description?: string;
+  is_active: boolean;
+  created_at: string;
+  updated_at: string;
+  assignment_count?: number;
+}
+
+export interface CreateHolidayCalendarInput {
+  name: string;
+  description?: string;
+  is_active?: boolean;
+}
+
+export interface UpdateHolidayCalendarInput extends Partial<Omit<CreateHolidayCalendarInput, 'name'>> {
+  is_active?: boolean;
+}
+
+export interface Holiday {
+  _id: string;
+  name: string;
+  date: string;
+  recurring_type: RecurringType;
+  recurring_details?: {
+    year?: number;
+    month?: number;
+    day?: number;
+    pattern?: string;
+    end_date?: string;
+  };
+  calendar_id: string;
+  holiday_code?: string;
+  is_observed?: boolean;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface CreateHolidayInput {
+  name: string;
+  date: string;
+  recurring_type: RecurringType;
+  recurring_details?: Holiday['recurring_details'];
+  holiday_code?: string;
+  is_observed?: boolean;
+}
+
+export interface UpdateHolidayInput extends Partial<Omit<CreateHolidayInput, 'calendar_id'>> {}
+
+export interface HolidayAssignment {
+  _id: string;
+  company_id: string;
+  location_id: string;
+  calendar_id: string;
+  is_primary: boolean;
+  effective_date: string;
+  expiry_date?: string;
+  created_at: string;
+  updated_at: string;
+  location?: {
+    _id: string;
+    name: string;
+    timezone: string;
+  };
+  holiday_calendar?: {
+    _id: string;
+    name: string;
+  };
+}
+
+export interface AssignCalendarToLocationInput {
+  calendar_id: string;
+  is_primary?: boolean;
+  effective_date?: string;
+  expiry_date?: string;
+}
+
+export interface LocationCalendarAssignment {
+  location_id: string;
+  calendar_id: string;
+  is_primary: boolean;
+  effective_date: string;
+  expiry_date?: string;
+}
+
+export interface HolidayCalendarFilters {
+  search: string;
+  is_active?: boolean;
+  sort?: 'name' | 'created_at' | 'updated_at';
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -518,7 +726,7 @@ export interface AppAssignment {
   _id: string;
   company_id: string;
   app_id: string;
-  target_type: 'role' | 'department' | 'group' | 'user' | 'attribute';
+  target_type: 'role' | 'department' | 'group' | 'user' | 'attribute' | 'location';
   target_id?: string;
   attribute_name?: string;
   attribute_value?: string;
@@ -535,7 +743,7 @@ export interface AppAssignment {
 }
 
 export interface AssignAppInput {
-  target_type: 'role' | 'department' | 'group' | 'user' | 'attribute';
+  target_type: 'role' | 'department' | 'group' | 'user' | 'attribute' | 'location';
   target_id?: string;
   attribute_name?: string;
   attribute_value?: string;
@@ -733,7 +941,7 @@ export interface ChangePrimaryManagerInput {
 export type PolicyCategory = 'hr' | 'it' | 'security' | 'compliance' | 'operations' | 'other';
 export type PolicyStatus = 'draft' | 'published' | 'archived';
 
-export type PolicyTargetType = 'all' | 'role' | 'department' | 'group' | 'user';
+export type PolicyTargetType = 'all' | 'role' | 'department' | 'group' | 'user' | 'location';
 
 export interface PolicyAssignmentRule {
   _id: string;

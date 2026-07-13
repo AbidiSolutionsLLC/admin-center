@@ -1,11 +1,12 @@
 // src/features/locations/components/LocationTable.tsx
 import React, { useState } from 'react';
-import { MapPin, Building2, Globe2, Edit, Trash2, Crown } from 'lucide-react';
+import { MapPin, Building2, Globe2, Pencil, Trash2, Crown, Users } from 'lucide-react';
 import { useDeleteLocation } from '../hooks/useDeleteLocation';
 import { EmptyState } from '@/components/ui/EmptyState';
 import { ErrorState } from '@/components/ui/ErrorState';
 import { TableSkeleton } from '@/components/ui/TableSkeleton';
 import { cn } from '@/utils/cn';
+import { formatTimeInTimezone, getTimezoneOffset } from '@/lib/timezone';
 import type { Location, LocationType } from '@/types';
 
 interface LocationTableProps {
@@ -13,6 +14,7 @@ interface LocationTableProps {
   isLoading: boolean;
   isError: boolean;
   onEdit: (location: Location) => void;
+  onSelect?: (location: Location) => void;
   refetch: () => void;
 }
 
@@ -23,24 +25,32 @@ const TYPE_ICONS: Record<LocationType, typeof MapPin> = {
   office: MapPin,
 };
 
-const TYPE_COLORS: Record<LocationType, string> = {
-  region: 'bg-purple-50 text-purple-700 border-purple-200',
-  country: 'bg-blue-50 text-blue-700 border-blue-200',
-  city: 'bg-emerald-50 text-emerald-700 border-emerald-200',
-  office: 'bg-amber-50 text-amber-700 border-amber-200',
+// Dark-glass-friendly badge colors
+const TYPE_BADGE: Record<LocationType, { bg: string; color: string; border: string }> = {
+  region:  { bg: 'rgba(168,85,247,0.12)',  color: '#c084fc', border: 'rgba(168,85,247,0.25)' },
+  country: { bg: 'rgba(59,130,246,0.12)',  color: '#60a5fa', border: 'rgba(59,130,246,0.25)' },
+  city:    { bg: 'rgba(16,185,129,0.12)',  color: '#34d399', border: 'rgba(16,185,129,0.25)' },
+  office:  { bg: 'rgba(245,176,42,0.12)',  color: '#fbbf24', border: 'rgba(245,176,42,0.25)' },
+};
+
+const TYPE_ICON_COLOR: Record<LocationType, string> = {
+  region:  '#c084fc',
+  country: '#60a5fa',
+  city:    '#34d399',
+  office:  '#fbbf24',
 };
 
 /**
- * LocationTable Component
- * Displays all locations in a tabular format with type badges,
+ * LocationTable Component — dark glass theme.
+ * Displays all locations in a glass-table format with type badges,
  * timezone, user count, and actions (edit/delete).
- * Used on: LocationsPage.
  */
 export const LocationTable: React.FC<LocationTableProps> = ({
   locations,
   isLoading,
   isError,
   onEdit,
+  onSelect,
   refetch,
 }) => {
   const deleteLocation = useDeleteLocation();
@@ -55,91 +65,143 @@ export const LocationTable: React.FC<LocationTableProps> = ({
     }
   };
 
-  if (isLoading) {
-    return <TableSkeleton rows={8} columns={6} />;
-  }
-
-  if (isError) {
-    return <ErrorState onRetry={refetch} />;
-  }
-
+  if (isLoading) return <TableSkeleton rows={8} columns={6} />;
+  if (isError) return <ErrorState onRetry={refetch} />;
   if (!locations?.length) {
     return (
       <EmptyState
-        title="No locations yet"
-        description="Add your first region, country, city, or office to get started."
+        title="No locations found"
+        description="Try adjusting your search or filter."
         icon={MapPin}
       />
     );
   }
 
   return (
-    <div className="bg-white rounded-lg border border-line shadow-card overflow-hidden">
+    <div className="glass-panel rounded-2xl overflow-hidden">
       <div className="overflow-x-auto">
-        <table className="w-full">
+        <table className="glass-table w-full">
           <thead>
-            <tr className="bg-surface-base border-b border-line">
-              <th className="text-[11px] font-semibold text-ink-secondary uppercase tracking-wider px-4 py-2.5 text-left">Location</th>
-              <th className="text-[11px] font-semibold text-ink-secondary uppercase tracking-wider px-4 py-2.5 text-left">Type</th>
-              <th className="text-[11px] font-semibold text-ink-secondary uppercase tracking-wider px-4 py-2.5 text-left">Parent</th>
-              <th className="text-[11px] font-semibold text-ink-secondary uppercase tracking-wider px-4 py-2.5 text-left">Timezone</th>
-              <th className="text-[11px] font-semibold text-ink-secondary uppercase tracking-wider px-4 py-2.5 text-left">Local Time</th>
-              <th className="text-[11px] font-semibold text-ink-secondary uppercase tracking-wider px-4 py-2.5 text-left">Users</th>
-              <th className="text-[11px] font-semibold text-ink-secondary uppercase tracking-wider px-4 py-2.5 text-right">Actions</th>
+            <tr style={{ borderBottom: '1px solid rgba(255,255,255,0.06)' }}>
+              <th className="px-5 py-4 text-left">Location</th>
+              <th className="px-5 py-4 text-left">Type</th>
+              <th className="px-5 py-4 text-left">Parent</th>
+              <th className="px-5 py-4 text-left">Timezone</th>
+              <th className="px-5 py-4 text-left">Local Time</th>
+              <th className="px-5 py-4 text-left">Users</th>
+              <th className="px-5 py-4 text-right">Actions</th>
             </tr>
           </thead>
           <tbody>
             {locations.map((loc) => {
               const TypeIcon = TYPE_ICONS[loc.type];
+              const badge = TYPE_BADGE[loc.type];
+              const iconColor = TYPE_ICON_COLOR[loc.type];
+              const parentName = typeof loc.parent_id === 'object' && loc.parent_id !== null
+                ? (loc.parent_id as any).name
+                : null;
+
               return (
                 <tr
                   key={loc._id}
-                  className="border-b border-line last:border-0 hover:bg-surface-base transition-colors duration-100"
+                  className={onSelect ? 'cursor-pointer' : ''}
+                  style={{ borderBottom: '1px solid rgba(255,255,255,0.04)' }}
+                  onClick={() => onSelect?.(loc)}
                 >
-                  <td className="px-4 py-3 text-sm">
-                    <div className="flex items-center gap-2">
-                      <TypeIcon className="w-4 h-4 text-ink-secondary" />
+                  {/* Name */}
+                  <td className="px-5 py-4">
+                    <div className="flex items-center gap-3">
+                      <div className="w-8 h-8 rounded-lg flex items-center justify-center flex-shrink-0"
+                        style={{ background: badge.bg }}>
+                        <TypeIcon className="w-4 h-4" style={{ color: iconColor }} />
+                      </div>
                       <div>
-                        <span className="font-medium text-ink">{loc.name}</span>
-                        {loc.is_headquarters && (
-                          <span className="ml-2 inline-flex items-center gap-1 text-[11px] font-semibold text-amber-700 bg-amber-50 border border-amber-200 rounded-full px-2 py-0.5">
-                            <Crown className="w-3 h-3" />
-                            HQ
-                          </span>
+                        <div className="flex items-center gap-2">
+                          <span className="text-sm font-semibold" style={{ color: 'var(--text-main)' }}>{loc.name}</span>
+                          {loc.is_headquarters && (
+                            <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-bold"
+                              style={{ background: 'rgba(245,176,42,0.15)', color: '#fbbf24', border: '1px solid rgba(245,176,42,0.3)' }}>
+                              <Crown className="w-2.5 h-2.5" />
+                              HQ
+                            </span>
+                          )}
+                        </div>
+                        {loc.address && (
+                          <span className="text-xs" style={{ color: 'var(--text-muted)' }}>{loc.address}</span>
                         )}
                       </div>
                     </div>
                   </td>
-                  <td className="px-4 py-3">
-                    <span className={cn('inline-flex items-center text-[11px] font-semibold border rounded-full px-2.5 py-0.5', TYPE_COLORS[loc.type])}>
-                      {loc.type.charAt(0).toUpperCase() + loc.type.slice(1)}
+
+                  {/* Type badge */}
+                  <td className="px-5 py-4">
+                    <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-[11px] font-bold capitalize"
+                      style={{ background: badge.bg, color: badge.color, border: `1px solid ${badge.border}` }}>
+                      {loc.type}
                     </span>
                   </td>
-                  <td className="px-4 py-3 text-sm text-ink-secondary">
-                    {typeof loc.parent === 'object' ? loc.parent.name : loc.parent_id || '—'}
+
+                  {/* Parent */}
+                  <td className="px-5 py-4 text-sm" style={{ color: 'var(--text-muted)' }}>
+                    {parentName ?? <span style={{ color: 'rgba(148,163,184,0.4)' }}>—</span>}
                   </td>
-                  <td className="px-4 py-3 text-sm text-ink-secondary font-mono text-xs">
-                    {loc.timezone}
+
+                  {/* Timezone */}
+                  <td className="px-5 py-4">
+                    <div className="flex flex-col gap-0.5">
+                      <span className="text-xs font-mono" style={{ color: 'var(--text-muted)' }}>{loc.timezone}</span>
+                      <span className="text-[10px]" style={{ color: 'rgba(148,163,184,0.5)' }}>{getTimezoneOffset(loc.timezone)}</span>
+                    </div>
                   </td>
-                  <td className="px-4 py-3 text-sm text-ink-secondary text-xs">
-                    {getLocalTime(loc.timezone)}
+
+                  {/* Local time */}
+                  <td className="px-5 py-4">
+                    <span className="text-xs font-mono" style={{ color: 'var(--text-muted)' }}>{formatTimeInTimezone(new Date(), loc.timezone, 'time')}</span>
                   </td>
-                  <td className="px-4 py-3 text-sm">
-                    <span className="text-sm text-ink">{loc.user_count ?? 0}</span>
+
+                  {/* Users */}
+                  <td className="px-5 py-4">
+                    <span className="inline-flex items-center gap-1.5 text-xs font-semibold"
+                      style={{ color: (loc.user_count ?? 0) > 0 ? '#60a5fa' : 'var(--text-muted)' }}>
+                      <Users className="w-3 h-3" />
+                      {loc.user_count ?? 0}
+                    </span>
                   </td>
-                  <td className="px-4 py-3 text-sm text-right">
+
+                  {/* Actions */}
+                  <td className="px-5 py-4">
                     <div className="flex items-center justify-end gap-1">
                       <button
                         onClick={() => onEdit(loc)}
-                        className="h-7 w-7 flex items-center justify-center rounded-md hover:bg-surface-alt text-ink-secondary transition-colors"
+                        className="h-8 w-8 flex items-center justify-center rounded-lg transition-all"
+                        style={{ color: 'var(--text-muted)' }}
+                        onMouseEnter={(e) => {
+                          (e.currentTarget as HTMLElement).style.background = 'rgba(245,176,42,0.1)';
+                          (e.currentTarget as HTMLElement).style.color = '#f5b02a';
+                        }}
+                        onMouseLeave={(e) => {
+                          (e.currentTarget as HTMLElement).style.background = 'transparent';
+                          (e.currentTarget as HTMLElement).style.color = 'var(--text-muted)';
+                        }}
                         title="Edit location"
                       >
-                        <Edit className="w-3.5 h-3.5" />
+                        <Pencil className="w-3.5 h-3.5" />
                       </button>
                       <button
                         onClick={() => handleDelete(loc)}
                         disabled={deletingId === loc._id || (loc.user_count ?? 0) > 0}
-                        className="h-7 w-7 flex items-center justify-center rounded-md hover:bg-red-50 text-error transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
+                        className="h-8 w-8 flex items-center justify-center rounded-lg transition-all disabled:opacity-30 disabled:cursor-not-allowed"
+                        style={{ color: 'var(--text-muted)' }}
+                        onMouseEnter={(e) => {
+                          if (!(e.currentTarget as HTMLButtonElement).disabled) {
+                            (e.currentTarget as HTMLElement).style.background = 'rgba(239,68,68,0.1)';
+                            (e.currentTarget as HTMLElement).style.color = '#f87171';
+                          }
+                        }}
+                        onMouseLeave={(e) => {
+                          (e.currentTarget as HTMLElement).style.background = 'transparent';
+                          (e.currentTarget as HTMLElement).style.color = 'var(--text-muted)';
+                        }}
                         title={loc.user_count && loc.user_count > 0 ? `Cannot delete — ${loc.user_count} users assigned` : 'Delete location'}
                       >
                         <Trash2 className="w-3.5 h-3.5" />
@@ -155,20 +217,3 @@ export const LocationTable: React.FC<LocationTableProps> = ({
     </div>
   );
 };
-
-// ── Helpers ──────────────────────────────────────────────────────────────────
-
-function getLocalTime(timezone: string): string {
-  try {
-    const now = new Date();
-    const formatter = new Intl.DateTimeFormat('en-US', {
-      timeZone: timezone,
-      hour: '2-digit',
-      minute: '2-digit',
-      hour12: true,
-    });
-    return formatter.format(now);
-  } catch {
-    return 'N/A';
-  }
-}

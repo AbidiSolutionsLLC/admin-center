@@ -28,6 +28,7 @@ import { useDepartments } from '@/features/organization/hooks/useDepartments';
 import { useRoles } from '@/features/roles/useRoles';
 import { useGroups } from '@/features/groups/useGroups';
 import { useUsers } from '@/features/people/hooks/useUsers';
+import { useLocations } from '@/features/locations/hooks/useLocations';
 import { TableSkeleton } from '@/components/ui/TableSkeleton';
 import { ErrorState } from '@/components/ui/ErrorState';
 import { EmptyState } from '@/components/ui/EmptyState';
@@ -84,6 +85,7 @@ const TARGET_TYPE_LABELS: Record<PolicyTargetType, string> = {
   department: 'Department',
   group: 'Group',
   user: 'User',
+  location: 'Location',
 };
 
 /**
@@ -1571,6 +1573,7 @@ function TargetingModal({ isOpen, policyId, onClose, saveMutation, onSaved }: Ta
   const { data: roles } = useRoles();
   const { data: groups } = useGroups();
   const { data: users } = useUsers();
+  const { data: locations } = useLocations();
   const { data: assignments } = usePolicyAssignments(policyId);
   const conflictCheckMutation = usePolicyConflictCheck(policyId);
   const simulateMutation = useSimulatePolicy();
@@ -1686,6 +1689,24 @@ function TargetingModal({ isOpen, policyId, onClose, saveMutation, onSaved }: Ta
           {groups?.map((group) => (
             <option key={group._id} value={group._id}>
               {group.name}
+            </option>
+          ))}
+        </select>
+      );
+    }
+
+    if (rule.target_type === 'location') {
+      return (
+        <select
+          value={rule.target_id}
+          onChange={(e) => updateRule(index, { target_id: e.target.value })}
+          className="flex-1 h-9 px-3 text-sm rounded-md border border-line bg-white text-ink focus:outline-none focus:ring-2 focus:ring-primary/30 focus:border-primary transition-all duration-150"
+          aria-label="Select location"
+        >
+          <option value="">Select location...</option>
+          {locations?.map((loc) => (
+            <option key={loc._id} value={loc._id}>
+              {loc.name} ({loc.type})
             </option>
           ))}
         </select>

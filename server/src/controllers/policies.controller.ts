@@ -33,7 +33,7 @@ const PublishPolicySchema = z.object({
   assignment_rules: z
     .array(
       z.object({
-        target_type: z.enum(['all', 'role', 'department', 'group', 'user']),
+        target_type: z.enum(['all', 'role', 'department', 'group', 'user', 'location']),
         target_id: z.string().min(1, 'Target ID is required'),
       })
     )
@@ -42,11 +42,11 @@ const PublishPolicySchema = z.object({
   if (data.expiry_date && data.effective_date) {
     const effective = new Date(data.effective_date);
     const expiry = new Date(data.expiry_date);
-    
+
     if (!isNaN(expiry.getTime()) && !isNaN(effective.getTime())) {
       const now = new Date();
       now.setHours(0,0,0,0);
-      
+
       if (expiry < now) {
         ctx.addIssue({
           code: z.ZodIssueCode.custom,
@@ -81,11 +81,11 @@ const UpdateDraftPolicySchema = z.object({
   if (data.expiry_date && data.effective_date) {
     const effective = new Date(data.effective_date);
     const expiry = new Date(data.expiry_date);
-    
+
     if (!isNaN(expiry.getTime()) && !isNaN(effective.getTime())) {
       const now = new Date();
       now.setHours(0,0,0,0);
-      
+
       if (expiry < now) {
         ctx.addIssue({
           code: z.ZodIssueCode.custom,
@@ -108,7 +108,7 @@ const UpdateDraftPolicySchema = z.object({
 const AssignmentRulesSchema = z.object({
   rules: z.array(
     z.object({
-      target_type: z.enum(['all', 'role', 'department', 'group', 'user']),
+      target_type: z.enum(['all', 'role', 'department', 'group', 'user', 'location']),
       target_id: z.string().trim().min(1, 'Target ID is required'),
     })
   ).min(1, 'At least one assignment rule is required'),
@@ -119,7 +119,7 @@ const AssignmentRulesSchema = z.object({
 const SimulatePolicySchema = z.object({
   assignment_rules: z.array(
     z.object({
-      target_type: z.enum(['all', 'role', 'department', 'group', 'user']),
+      target_type: z.enum(['all', 'role', 'department', 'group', 'user', 'location']),
       target_id: z.string().trim().min(1, 'Target ID is required'),
     })
   ).min(1, 'At least one assignment rule is required'),
@@ -131,6 +131,7 @@ const TARGET_LABELS: Record<string, string> = {
   department: 'Department',
   group: 'Group',
   user: 'User',
+  location: 'Location',
 };
 
 async function resolveTargetLabel(
@@ -156,6 +157,10 @@ async function resolveTargetLabel(
     const { Group } = await import('../models/Group.model');
     const group = await Group.findOne({ _id: targetId, company_id: new Types.ObjectId(companyId) }).select('name');
     if (group) return group.name;
+  } else if (targetType === 'location') {
+    const { Location } = await import('../models/Location.model');
+    const location = await Location.findOne({ _id: targetId, company_id: new Types.ObjectId(companyId) }).select('name');
+    if (location) return location.name;
   }
 
   throw new AppError(`Target ${targetType} with ID ${targetId} not found`, 404, 'TARGET_NOT_FOUND');
@@ -165,7 +170,7 @@ async function resolveTargetLabel(
 
 /**
  * Resolves targeted users based on assignment rules.
- * Handles target types: 'all', 'role', 'department', 'group', 'user'.
+ * Handles target types: 'all', 'role', 'department', 'group', 'user', 'location'.
  */
 async function resolveTargetedUsers(
   companyId: string,
@@ -205,6 +210,20 @@ async function resolveTargetedUsers(
       case 'user':
         // Direct user targeting
         targetedUserIds.add(rule.target_id);
+        break;
+
+      case 'location':
+        // Users in this location
+        const { Location } = await import('../models/Location.model');
+        const location = await Location.findOne({ _id: rule.target_id, company_id: new Types.ObjectId(companyId) });
+        if (location) {
+          const locationUsers = await User.find({
+            location_id: rule.target_id,
+            company_id: new Types.ObjectId(companyId),
+            is_active: true,
+          });
+          locationUsers.forEach((u) => targetedUserIds.add(u._id.toString()));
+        }
         break;
 
       case 'group':

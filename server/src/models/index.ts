@@ -49,3 +49,11 @@ export * from './PolicyTemplate.model';
 // Group models
 export * from './Group.model';
 export * from './GroupMember.model';
+
+// Holiday models
+export * from './HolidayCalendar.model';
+export * from './Holiday.model';
+export * from './HolidayAssignment.model';
+
+// Location models
+export * from './Location.model';

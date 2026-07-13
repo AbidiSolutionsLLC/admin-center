@@ -12,7 +12,8 @@ import {
   Package,
   FileText,
   GitBranch,
-  CheckSquare
+  CheckSquare,
+  MapPin,
 } from 'lucide-react';
 import { useAuthStore } from '@/store/useAuthStore';
 import { useUIStore } from '@/store/useUIStore';
@@ -38,12 +39,14 @@ const navGroups = [
       { label: 'Teams', href: ROUTES.TEAMS, icon: Users },
       { label: 'Roles & Permissions', href: ROUTES.ROLES, icon: Shield },
       { label: 'Groups', href: ROUTES.GROUPS, icon: Users },
+      { label: 'Locations', href: ROUTES.LOCATIONS, icon: MapPin },
       { label: 'Apps', href: ROUTES.APPS, icon: Package },
       { label: 'Policies', href: ROUTES.POLICIES, icon: FileText },
       { label: 'Workflows', href: ROUTES.WORKFLOWS, icon: GitBranch },
       { label: 'Approvals', href: ROUTES.APPROVALS, icon: CheckSquare },
     ],
   },
+
   {
     label: 'People',
     roles: [...PERMISSION_GROUPS.ALL, 'super_admin', 'hr_admin', 'manager', 'employee'],
@@ -65,7 +68,6 @@ export const Sidebar = ({ className }: SidebarProps) => {
   const { closeSidebar } = useUIStore();
   const location = useLocation();
 
-  // Handle user initials
   const userInitials = userName?.charAt(0)?.toUpperCase() || 'U';
   const displayCompanyName = companyName || 'Sowaye';
 
@@ -93,7 +95,6 @@ export const Sidebar = ({ className }: SidebarProps) => {
         backdropFilter: 'blur(16px)',
         zIndex: 10,
       }}>
-        {/* Brand icon — gradient with glow */}
         <Link 
           to={ROUTES.OVERVIEW}
           onClick={closeSidebar}
@@ -129,7 +130,6 @@ export const Sidebar = ({ className }: SidebarProps) => {
           }
           return (
             <div key={idx} style={{ marginBottom: 8 }}>
-              {/* Group label */}
               {group.label && (
                 <p style={{
                   fontSize: 10, fontWeight: 900,
@@ -143,9 +143,12 @@ export const Sidebar = ({ className }: SidebarProps) => {
                 </p>
               )}
 
-              {/* Nav items */}
               {group.items.map(item => {
-                const isActive = location.pathname.startsWith(item.href);
+                const hrefPath = item.href.split('?')[0];
+                const hrefHasTab = item.href.includes('?tab=');
+                const isActive = hrefHasTab
+                  ? (location.pathname + location.search) === item.href
+                  : location.pathname.startsWith(hrefPath) && !location.search.match(/tab=(holidays|work-schedules)/);
                 return (
                   <NavLink
                     key={item.href}
@@ -203,7 +206,6 @@ export const Sidebar = ({ className }: SidebarProps) => {
           onMouseEnter={e => (e.currentTarget.style.background = 'rgba(255,255,255,0.05)')}
           onMouseLeave={e => (e.currentTarget.style.background = 'transparent')}
         >
-          {/* Avatar */}
           <div style={{
             width: 30, height: 30, borderRadius: '50%',
             background: 'rgba(245,176,42,0.15)',
@@ -228,3 +230,5 @@ export const Sidebar = ({ className }: SidebarProps) => {
     </aside>
   );
 };
+
+export default Sidebar;

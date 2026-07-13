@@ -12,6 +12,7 @@ export interface IAccessControlPolicy extends Document {
     users?: Types.ObjectId[];
     roles?: Types.ObjectId[];
     departments?: Types.ObjectId[];
+    locations?: Types.ObjectId[];
   };
   resources: string[]; // e.g., 'Document', 'FinancialReport', 'User'
   actions: string[]; // e.g., 'read', 'write', 'delete'
@@ -30,7 +31,8 @@ const AccessControlPolicySchema = new Schema<IAccessControlPolicy>({
   subjects: {
     users: [{ type: Schema.Types.ObjectId, ref: 'User' }],
     roles: [{ type: Schema.Types.ObjectId, ref: 'Role' }],
-    departments: [{ type: Schema.Types.ObjectId, ref: 'Department' }]
+    departments: [{ type: Schema.Types.ObjectId, ref: 'Department' }],
+    locations: [{ type: Schema.Types.ObjectId, ref: 'Location' }]
   },
   resources: [{ type: String, required: true }],
   actions: [{ type: String, required: true }],

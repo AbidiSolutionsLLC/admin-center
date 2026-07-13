@@ -17,8 +17,10 @@ import { Types } from 'mongoose';
 import { Department } from '../models/Department.model';
 import { Location } from '../models/Location.model';
 import { Team } from '../models/Team.model';
+import { locationSettingsService } from '../services/locationSettings.service';
 import { handleLifecycleEvent } from '../lib/workflowEngine';
 import { deliverNotification } from '../lib/notificationEngine';
+import { contextEngine } from '../services/contextEngine.service';
 import { PERMISSION_GROUPS, ROLES } from '../constants/roles';
 import { NotificationTemplate } from '../models/NotificationTemplate.model';
 import { AuditEvent } from '../models/AuditEvent.model';
@@ -905,7 +907,7 @@ export const inviteUser = asyncHandler(async (req: Request, res: Response) => {
     const loc = await Location.findOne({
       _id: input.location_id,
       company_id: req.user.company_id,
-      is_active: true,
+      is_deleted: { $ne: true },
     });
     if (!loc) throw new AppError('Location not found or inactive', 404, 'NOT_FOUND');
   }
@@ -1084,9 +1086,20 @@ export const updateUser = asyncHandler(async (req: Request, res: Response) => {
     const loc = await Location.findOne({
       _id: input.location_id,
       company_id: req.user.company_id,
-      is_active: true,
+      is_deleted: { $ne: true },
     });
     if (!loc) throw new AppError('Location not found or inactive', 404, 'NOT_FOUND');
+  }
+
+  // Enforce primary location for active users
+  if (input.location_id === null || input.location_id === '') {
+    if (user.lifecycle_state === 'active' || user.is_active) {
+      throw new AppError(
+        'Active users must be assigned to a primary location. Set a location before removing the current one.',
+        400,
+        'LOCATION_REQUIRED'
+      );
+    }
   }
 
   const beforeState = user.toObject();
@@ -1159,7 +1172,7 @@ export const updateUser = asyncHandler(async (req: Request, res: Response) => {
   }
 
   // Audit log — location change fires a dedicated event
-  if (updates.location_id && updates.location_id !== beforeState.location_id) {
+  if (updates.location_id !== undefined && updates.location_id !== beforeState.location_id) {
     await auditLogger.log({
       req,
       action: 'user.location_assigned',
@@ -1169,6 +1182,37 @@ export const updateUser = asyncHandler(async (req: Request, res: Response) => {
       object_label: user.full_name,
       before_state: { location_id: beforeState.location_id?.toString() ?? null },
       after_state: { location_id: updates.location_id },
+    });
+
+    const effectiveSettings = await locationSettingsService.getEffectiveSettingsForUser(
+      user._id.toString(),
+      req.user.company_id
+    );
+    await auditLogger.log({
+      req,
+      action: 'user.location_settings_applied',
+      module: 'people',
+      object_type: 'User',
+      object_id: user._id.toString(),
+      object_label: user.full_name,
+      before_state: null,
+      after_state: {
+        timezone: effectiveSettings.timezone,
+        holiday_calendar: effectiveSettings.holiday_calendar,
+        work_schedule: effectiveSettings.work_schedule,
+        policies_count: effectiveSettings.policies.length,
+      },
+    });
+
+    // Trigger context engine — re-evaluates intelligence rules
+    contextEngine.onLocationChanged({
+      userId: user._id.toString(),
+      companyId: req.user.company_id,
+      previousLocationId: beforeState.location_id?.toString() ?? null,
+      newLocationId: updates.location_id as string | null,
+      changedBy: req.user.userId,
+    }).catch((err) => {
+      console.error(`[ContextEngine] Failed for user ${user._id}:`, err);
     });
   }
 
@@ -1230,6 +1274,15 @@ export const updateUserLifecycle = asyncHandler(async (req: Request, res: Respon
       getTransitionErrorMessage(currentState, targetState),
       400,
       'INVALID_LIFECYCLE_TRANSITION'
+    );
+  }
+
+  // Enforce primary location assignment when activating a user
+  if (targetState === 'active' && !user.location_id) {
+    throw new AppError(
+      'User must be assigned to a primary location before becoming active. Assign a location first.',
+      400,
+      'LOCATION_REQUIRED_FOR_ACTIVE'
     );
   }
 
@@ -1600,6 +1653,11 @@ const BulkAssignRoleSchema = z.object({
   role_id: z.string().min(1, 'Role ID is required'),
 });
 
+const BulkAssignLocationSchema = z.object({
+  user_ids: z.array(z.string()).min(1).max(500),
+  location_id: z.string().min(1, 'Location ID is required'),
+});
+
 /**
  * PUT /people/bulk-lifecycle
  * Bulk lifecycle state change for multiple users.
@@ -1635,6 +1693,18 @@ export const bulkUpdateLifecycle = asyncHandler(async (req: Request, res: Respon
         user_name: user.full_name,
         success: false,
         error: getTransitionErrorMessage(currentState, targetState),
+      });
+      skippedCount++;
+      continue;
+    }
+
+    // Enforce primary location assignment when activating a user
+    if (targetState === 'active' && !user.location_id) {
+      results.push({
+        user_id: userId,
+        user_name: user.full_name,
+        success: false,
+        error: 'User must be assigned to a primary location before becoming active.',
       });
       skippedCount++;
       continue;
@@ -1808,6 +1878,123 @@ export const bulkAssignRole = asyncHandler(async (req: Request, res: Response) =
     after_state: {
       role_id: role._id.toString(),
       role_name: role.name,
+      total: input.user_ids.length,
+      successful: successCount,
+      skipped: skippedCount,
+    },
+  });
+
+  res.status(200).json({
+    success: true,
+    data: {
+      total: input.user_ids.length,
+      successful: successCount,
+      skipped: skippedCount,
+      results,
+    },
+  });
+});
+
+/**
+ * POST /people/bulk-assign-location
+ * Bulk location assignment for multiple users.
+ * Validates location exists before assigning.
+ * Each successful assignment produces an individual audit event.
+ */
+export const bulkAssignLocation = asyncHandler(async (req: Request, res: Response) => {
+  const input = BulkAssignLocationSchema.parse(req.body);
+
+  // Verify location exists and belongs to company
+  const location = await Location.findOne({
+    _id: input.location_id,
+    company_id: req.user.company_id,
+    is_deleted: { $ne: true },
+  });
+
+  if (!location) {
+    throw new AppError('Location not found', 404, 'LOCATION_NOT_FOUND');
+  }
+
+  const results: Array<{ user_id: string; user_name: string; success: boolean; error?: string }> = [];
+  let successCount = 0;
+  let skippedCount = 0;
+
+  for (const userId of input.user_ids) {
+    const user = await User.findOne({
+      _id: userId,
+      company_id: req.user.company_id,
+    });
+
+    if (!user) {
+      results.push({ user_id: userId, user_name: 'Unknown', success: false, error: 'User not found' });
+      skippedCount++;
+      continue;
+    }
+
+    const beforeState = user.toObject();
+    user.location_id = location._id;
+    await user.save();
+
+    // Audit event for each assignment
+    await auditLogger.log({
+      req,
+      action: 'user.location_assigned',
+      module: 'people',
+      object_type: 'User',
+      object_id: user._id.toString(),
+      object_label: user.full_name,
+      before_state: { location_id: beforeState.location_id?.toString() },
+      after_state: { location_id: location._id.toString(), location_name: location.name },
+    });
+
+    // Log effective settings resulting from the location assignment
+    const effectiveSettings = await locationSettingsService.getEffectiveSettingsForUser(
+      user._id.toString(),
+      req.user.company_id
+    );
+    await auditLogger.log({
+      req,
+      action: 'user.location_settings_applied',
+      module: 'people',
+      object_type: 'User',
+      object_id: user._id.toString(),
+      object_label: user.full_name,
+      before_state: null,
+      after_state: {
+        timezone: effectiveSettings.timezone,
+        holiday_calendar: effectiveSettings.holiday_calendar,
+        work_schedule: effectiveSettings.work_schedule,
+        policies_count: effectiveSettings.policies.length,
+      },
+    });
+
+    // Trigger context engine — re-evaluates intelligence rules
+    contextEngine.onLocationChanged({
+      userId: user._id.toString(),
+      companyId: req.user.company_id,
+      previousLocationId: beforeState.location_id?.toString() ?? null,
+      newLocationId: location._id.toString(),
+      changedBy: req.user.userId,
+    }).catch((err) => {
+      console.error(`[ContextEngine] Failed for user ${user._id}:`, err);
+    });
+
+    successCount++;
+    results.push({ user_id: userId, user_name: user.full_name, success: true });
+  }
+
+  // Summary audit event
+  await auditLogger.log({
+    req,
+    action: 'user.bulk_location_assigned',
+    module: 'people',
+    object_type: 'Location',
+    object_id: location._id.toString(),
+    object_label: location.name,
+    before_state: null,
+    after_state: {
+      location_id: location._id.toString(),
+      location_name: location.name,
       total: input.user_ids.length,
       successful: successCount,
       skipped: skippedCount,
@@ -2020,4 +2207,26 @@ export const getEffectivePermissions = asyncHandler(async (req: Request, res: Re
       permissions: permissionsObj,
     },
   });
+});
+
+/**
+ * GET /people/:id/effective-settings
+ * Returns the effective location-based settings for a user (timezone, holiday calendar, work schedule, policies).
+ */
+export const getUserEffectiveSettings = asyncHandler(async (req: Request, res: Response) => {
+  const userId = getRouteId(req.params.id);
+  const user = await User.findOne({
+    _id: userId,
+    company_id: req.user.company_id,
+  });
+  if (!user) {
+    throw new AppError('User not found', 404, 'NOT_FOUND');
+  }
+
+  const settings = await locationSettingsService.getEffectiveSettingsForUser(
+    userId,
+    req.user.company_id
+  );
+
+  res.status(200).json({ success: true, data: settings });
 });

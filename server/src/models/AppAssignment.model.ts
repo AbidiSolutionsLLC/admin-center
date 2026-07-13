@@ -4,8 +4,8 @@ import { Schema, model, Document, Types } from 'mongoose';
 export interface IAppAssignment extends Document {
   company_id: Types.ObjectId;
   app_id: Types.ObjectId;
-  // Assignment target: can be role, department, group, user, or attribute
-  target_type: 'role' | 'department' | 'group' | 'user' | 'attribute';
+  // Assignment target: can be role, department, group, user, attribute, or location
+  target_type: 'role' | 'department' | 'group' | 'user' | 'attribute' | 'location';
   target_id?: Types.ObjectId;
   attribute_name?: string;
   attribute_value?: string;
@@ -25,7 +25,7 @@ const AppAssignmentSchema = new Schema<IAppAssignment>({
   app_id: { type: Schema.Types.ObjectId, ref: 'App', required: true, index: true },
   target_type: {
     type: String,
-    enum: ['role', 'department', 'group', 'user', 'attribute'],
+    enum: ['role', 'department', 'group', 'user', 'attribute', 'location'],
     required: true,
   },
   target_id: { 

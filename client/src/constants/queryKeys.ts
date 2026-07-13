@@ -69,6 +69,11 @@ export const QUERY_KEYS = {
   LOCATIONS: ['locations'] as const,
   LOCATION_TREE: ['locations', 'tree'] as const,
   LOCATION_DETAIL: (id: string) => ['location', id] as const,
+  LOCATION_USERS: (id: string) => ['location', id, 'users'] as const,
+  LOCATION_POLICIES: (id: string) => ['location', id, 'policies'] as const,
+  LOCATION_EFFECTIVE_SETTINGS: (id: string) => ['location', id, 'effective-settings'] as const,
+  LOCATION_POLICY_VIEW: (id: string) => ['location', id, 'policy-view'] as const,
+  USER_EFFECTIVE_SETTINGS: (id: string) => ['user', id, 'effective-settings'] as const,
   // Custom Fields
   CUSTOM_FIELDS: (targetObject?: string) =>
     targetObject ? ['custom-fields', targetObject] as const : ['custom-fields'] as const,
@@ -83,4 +88,19 @@ export const QUERY_KEYS = {
   NOTIFICATION_EVENTS: ['notification', 'events'] as const,
   IN_APP_NOTIFICATIONS: ['notification', 'in-app'] as const,
   UNREAD_NOTIFICATION_COUNT: ['notification', 'unread-count'] as const,
+
+  // Holidays
+  HOLIDAY_CALENDARS: ['holiday', 'calendars'] as const,
+  HOLIDAY_CALENDAR_TREE: ['holiday', 'calendars', 'tree'] as const,
+  HOLIDAY_CALENDAR_DETAIL: (id: string) => ['holiday', 'calendars', id] as const,
+  HOLIDAYS_BY_CALENDAR: (calendarId: string) => ['holiday', 'calendars', calendarId, 'holidays'] as const,
+  HOLIDAY_DETAIL: (id: string) => ['holiday', id] as const,
+  HOLIDAY_ASSIGNMENTS: ['holiday', 'assignments'] as const,
+  HOLIDAY_ASSIGNMENTS_BY_LOCATION: (locationId: string) => ['holiday', 'assignments', locationId] as const,
+
+  // Work Schedules
+  WORK_SCHEDULES: ['work-schedules'] as const,
+  WORK_SCHEDULE_DETAIL: (id: string) => ['work-schedule', id] as const,
+  WORK_SCHEDULE_ASSIGNMENTS: ['work-schedule', 'assignments'] as const,
+  WORK_SCHEDULE_ASSIGNMENTS_BY_LOCATION: (locationId: string) => ['work-schedule', 'assignments', locationId] as const,
 } as const;

@@ -2,19 +2,22 @@
 import { useParams, useNavigate } from 'react-router-dom';
 import { UserHistoryPanel } from '@/features/people/components/UserHistoryPanel';
 import { TableSkeleton } from '@/components/ui/TableSkeleton';
-import { History, ArrowLeft, Users, Edit2, Mail, RefreshCw, Monitor } from 'lucide-react';
+import { History, ArrowLeft, Users, Edit2, Mail, RefreshCw, Monitor, Clock, CalendarDays, FileText, Briefcase, MapPin } from 'lucide-react';
 import { useUserDetail } from '@/features/people/hooks/useUserDetail';
 import { useResendInvite } from '@/features/people/hooks/useResendInvite';
 import { useCallback, useState } from 'react';
 import { ReportingLinesPanel } from '@/features/people/components/ReportingLinesPanel';
 import { EffectivePermissionsPanel } from '@/features/people/components/EffectivePermissionsPanel';
 import { UserAppAccessPanel } from '@/features/people/components/UserAppAccessPanel';
+import { formatTimeInTimezone, getTimezoneOffset } from '@/lib/timezone';
+import { useUserEffectiveSettings } from '@/features/locations/hooks/useUserEffectiveSettings';
 
 import { useUpdateUser } from '@/features/people/hooks/useUpdateUser';
 import { useDepartments } from '@/features/organization/hooks/useDepartments';
 import { useLocations } from '@/features/locations/hooks/useLocations';
 import { useFormMetadata } from '@/features/people/hooks/useFormMetadata';
 import { UserForm, type UserFormData } from '@/features/people/components/UserForm';
+import { UserLocationAssignmentModal } from '@/features/people/components/UserLocationAssignmentModal';
 import { Modal } from '@/components/ui/Modal';
 
 import { ErrorState } from '@/components/ui/ErrorState';
@@ -33,9 +36,11 @@ export default function UserDetailPage() {
   const { id } = useParams<{ id: string }>();
   const navigate = useNavigate();
   const { data: user, isLoading, isError, refetch } = useUserDetail(id!);
+  const { data: effectiveSettings } = useUserEffectiveSettings(id!);
   const resendInvite = useResendInvite();
 
   const [isEditModalOpen, setIsEditModalOpen] = useState(false);
+  const [isLocationModalOpen, setIsLocationModalOpen] = useState(false);
   const updateUser = useUpdateUser(id!);
   const { data: departments = [] } = useDepartments();
   const { data: locations = [] } = useLocations();
@@ -183,11 +188,101 @@ export default function UserDetailPage() {
       <div className="grid grid-cols-4 gap-4">
         <InfoCard label="Department" value={user.department?.name || 'Not assigned'} />
         <InfoCard label="Employment Type" value={formatEmploymentType(user.employment_type)} />
-        <InfoCard label="Location" value={user.location ? `${user.location.name} (${user.location.timezone})` : 'Not assigned'} />
+        <div className="bg-white rounded-lg border border-line shadow-card p-4 relative">
+          <p className="text-xs font-medium text-ink-secondary mb-1">Location</p>
+          <p className="text-sm font-semibold text-ink">
+            {user.location ? user.location.name : 'Not assigned'}
+          </p>
+          {user.location?.timezone && (
+            <p className="text-xs font-mono text-ink-muted mt-0.5">
+              {user.location.timezone} ({getTimezoneOffset(user.location.timezone)})
+            </p>
+          )}
+          <button
+            onClick={() => setIsLocationModalOpen(true)}
+            className="absolute top-2 right-2 h-7 w-7 flex items-center justify-center rounded-md text-ink-muted hover:text-ink hover:bg-surface-alt transition-colors"
+            title="Change Location"
+          >
+            <MapPin className="w-3.5 h-3.5" />
+          </button>
+        </div>
         <InfoCard
           label="Hire Date"
           value={user.hire_date ? formatDate(user.hire_date) : 'Not set'}
         />
+      </div>
+
+      {/* ── Timezone Info ── */}
+      {user.location?.timezone && (
+        <div className="flex items-center gap-3 px-4 py-3 bg-surface-alt border border-line rounded-lg">
+          <Clock className="w-4 h-4 text-ink-secondary" />
+          <div className="flex items-center gap-2 text-sm">
+            <span className="text-ink-secondary">Local time at location:</span>
+            <span className="font-mono font-medium text-ink">
+              {formatTimeInTimezone(new Date(), user.location.timezone, 'datetime')}
+            </span>
+          </div>
+        </div>
+      )}
+
+      {/* ── Effective Settings (Location Inheritance) ── */}
+      <div className="rounded-xl p-5" style={{ background: 'rgba(255,255,255,0.03)', border: '1px solid rgba(255,255,255,0.07)' }}>
+        <div className="flex items-center gap-2 mb-4">
+          <Briefcase className="w-4 h-4" style={{ color: '#f5b02a' }} />
+          <h2 className="text-sm font-bold" style={{ color: 'var(--text-main)' }}>Effective Settings (Location Inheritance)</h2>
+        </div>
+        <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+          {effectiveSettings?.timezone && (
+            <div>
+              <div className="flex items-center gap-1.5 mb-1">
+                <Clock className="w-3 h-3" style={{ color: '#60a5fa' }} />
+                <span className="text-[10px] font-semibold uppercase tracking-wider" style={{ color: '#94a3b8' }}>Timezone</span>
+              </div>
+              <p className="text-sm font-semibold font-mono" style={{ color: 'var(--text-main)' }}>{effectiveSettings.timezone}</p>
+            </div>
+          )}
+          {effectiveSettings?.holiday_calendar && (
+            <div>
+              <div className="flex items-center gap-1.5 mb-1">
+                <CalendarDays className="w-3 h-3" style={{ color: '#34d399' }} />
+                <span className="text-[10px] font-semibold uppercase tracking-wider" style={{ color: '#94a3b8' }}>Holiday Calendar</span>
+              </div>
+              <p className="text-sm font-semibold" style={{ color: 'var(--text-main)' }}>{effectiveSettings.holiday_calendar.name}</p>
+            </div>
+          )}
+          {effectiveSettings?.work_schedule && (
+            <div>
+              <div className="flex items-center gap-1.5 mb-1">
+                <Clock className="w-3 h-3" style={{ color: '#fbbf24' }} />
+                <span className="text-[10px] font-semibold uppercase tracking-wider" style={{ color: '#94a3b8' }}>Work Schedule</span>
+              </div>
+              <p className="text-sm font-semibold" style={{ color: 'var(--text-main)' }}>{effectiveSettings.work_schedule.name}</p>
+              <p className="text-[10px]" style={{ color: '#94a3b8' }}>{effectiveSettings.work_schedule.working_hours?.start} – {effectiveSettings.work_schedule.working_hours?.end}</p>
+            </div>
+          )}
+          {effectiveSettings?.policies && (
+            <div>
+              <div className="flex items-center gap-1.5 mb-1">
+                <FileText className="w-3 h-3" style={{ color: '#c084fc' }} />
+                <span className="text-[10px] font-semibold uppercase tracking-wider" style={{ color: '#94a3b8' }}>Resolved Policies</span>
+              </div>
+              <p className="text-sm font-semibold" style={{ color: 'var(--text-main)' }}>{effectiveSettings.policies.length} policy{(effectiveSettings.policies.length !== 1) ? 'ies' : 'y'}</p>
+              {effectiveSettings.policies.length > 0 && (
+                <div className="mt-1 space-y-0.5">
+                  {effectiveSettings.policies.slice(0, 3).map((p: any) => (
+                    <p key={p.policy_version_id} className="text-[10px]" style={{ color: '#94a3b8' }}>
+                      {p.title}
+                      <span className="ml-1 opacity-60">({p.source})</span>
+                    </p>
+                  ))}
+                  {effectiveSettings.policies.length > 3 && (
+                    <p className="text-[10px]" style={{ color: 'rgba(148,163,184,0.5)' }}>+{effectiveSettings.policies.length - 3} more</p>
+                  )}
+                </div>
+              )}
+            </div>
+          )}
+        </div>
       </div>
 
       {/* ── Reporting Lines Panel ── */}
@@ -215,6 +310,14 @@ export default function UserDetailPage() {
         <h2 className="text-base font-semibold text-ink">User History</h2>
       </div>
       <UserHistoryPanel userId={user._id} />
+
+      {/* ── Location Assignment Modal ── */}
+      <UserLocationAssignmentModal
+        user={user}
+        isOpen={isLocationModalOpen}
+        onClose={() => setIsLocationModalOpen(false)}
+        requiredFields={formMetadata?.required_fields || ['email', 'full_name']}
+      />
 
       {/* ── Edit Modal ── */}
       {isEditModalOpen && (
@@ -267,11 +370,14 @@ export default function UserDetailPage() {
 
 // ── Sub-components ─────────────────────────────────────────────────────────
 
-function InfoCard({ label, value }: { label: string; value: string }) {
+function InfoCard({ label, value, subValue }: { label: string; value: string; subValue?: string }) {
   return (
     <div className="bg-white rounded-lg border border-line shadow-card p-4">
       <p className="text-xs font-medium text-ink-secondary mb-1">{label}</p>
       <p className="text-sm font-semibold text-ink">{value}</p>
+      {subValue && (
+        <p className="text-xs font-mono text-ink-muted mt-0.5">{subValue}</p>
+      )}
     </div>
   );
 }

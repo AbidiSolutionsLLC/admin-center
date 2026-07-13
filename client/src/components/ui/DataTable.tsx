@@ -31,7 +31,7 @@ export function DataTable<TData, TValue>({
   });
 
   return (
-    <div className="glass-card overflow-x-auto" style={{ borderRadius: 20 }}>
+    <div className="glass-card" style={{ borderRadius: 20, overflowX: 'auto' }}>
       <table className="glass-table">
         <thead>
           {table.getHeaderGroups().map((headerGroup) => (
@@ -44,6 +44,10 @@ export function DataTable<TData, TValue>({
                     <th
                       key={header.id}
                       className={alignmentClass}
+                      style={{
+                        minWidth: header.column.columnDef.minSize || undefined,
+                        width: header.column.columnDef.size || undefined,
+                      }}
                     >
                       {header.isPlaceholder
                         ? null
@@ -70,7 +74,12 @@ export function DataTable<TData, TValue>({
                   const alignmentClass = meta?.align === 'right' ? 'text-right' : meta?.align === 'center' ? 'text-center' : '';
                   
                   return (
-                    <td key={cell.id} className={cn('text-sm text-ink', alignmentClass)}>
+                    <td key={cell.id} className={cn('text-sm text-ink', alignmentClass)}
+                      style={{
+                        minWidth: cell.column.columnDef.minSize || undefined,
+                        width: cell.column.columnDef.size || undefined,
+                      }}
+                    >
                       {flexRender(cell.column.columnDef.cell, cell.getContext())}
                     </td>
                   );

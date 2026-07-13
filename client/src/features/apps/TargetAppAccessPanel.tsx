@@ -3,7 +3,7 @@ import { cn } from '@/utils/cn';
 import { useTargetApps } from '@/features/apps/useApps';
 
 interface TargetAppAccessPanelProps {
-  targetType: 'role' | 'department' | 'group' | 'user';
+  targetType: 'role' | 'department' | 'group' | 'user' | 'location';
   targetId: string;
 }
 

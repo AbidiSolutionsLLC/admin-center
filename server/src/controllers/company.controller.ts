@@ -6,16 +6,7 @@ import { AppError } from '../utils/AppError';
 import { auditLogger } from '../lib/auditLogger';
 import { z } from 'zod';
 import { validateEmployeeIdFormat } from '../services/employeeId';
-
-// ── Common timezones list for validation ────────────────────────────────────
-let VALID_TIMEZONES: string[] = [];
-try {
-  // Intl.supportedValuesOf is available in Node 16+ / V8 9.3+
-  VALID_TIMEZONES = (Intl as any).supportedValuesOf('timeZone') as string[];
-} catch {
-  // Fallback: skip server-side validation — client already restricts to known values
-  VALID_TIMEZONES = [];
-}
+import { ALL_IANA_TIMEZONES } from '../constants/timezones';
 
 const UpdateCompanyNameSchema = z.object({
   name: z.string().min(2, 'Company name must be at least 2 characters').max(100, 'Company name must be 100 characters or fewer'),
@@ -227,7 +218,7 @@ export const updateTimezone = asyncHandler(async (req: Request, res: Response) =
   const input = UpdateTimezoneSchema.parse(req.body);
 
   // Validate the timezone is an IANA timezone identifier
-  if (VALID_TIMEZONES.length > 1 && !VALID_TIMEZONES.includes(input.timezone)) {
+  if (ALL_IANA_TIMEZONES.length > 1 && !ALL_IANA_TIMEZONES.includes(input.timezone)) {
     throw new AppError(`Invalid timezone: "${input.timezone}". Must be a valid IANA timezone.`, 400, 'INVALID_TIMEZONE');
   }
 
@@ -279,6 +270,49 @@ export const updateLocale = asyncHandler(async (req: Request, res: Response) => 
     object_label: company?.name || 'company',
     before_state: { locale: before.settings?.locale || 'en-US' },
     after_state: { locale: input.locale },
+  });
+
+  res.json({ success: true, data: company });
+});
+
+const UpdateDefaultLocationSchema = z.object({
+  default_location_id: z.string().nullable(),
+});
+
+export const updateDefaultLocation = asyncHandler(async (req: Request, res: Response) => {
+  const input = UpdateDefaultLocationSchema.parse(req.body);
+
+  // Validate the location exists and belongs to this company
+  if (input.default_location_id) {
+    const { Location } = await import('../models/Location.model');
+    const location = await Location.findOne({
+      _id: input.default_location_id,
+      company_id: req.user.company_id,
+      is_deleted: { $ne: true },
+    });
+    if (!location) {
+      throw new AppError('Location not found or deleted', 404, 'LOCATION_NOT_FOUND');
+    }
+  }
+
+  const before = await Company.findById(req.user.company_id).lean();
+  if (!before) throw new AppError('Company not found', 404, 'COMPANY_NOT_FOUND');
+
+  const company = await Company.findByIdAndUpdate(
+    req.user.company_id,
+    { 'settings.default_location_id': input.default_location_id },
+    { new: true, runValidators: true },
+  );
+
+  await auditLogger.log({
+    req,
+    action: 'company.default_location_updated',
+    module: 'company',
+    object_type: 'company',
+    object_id: req.user.company_id,
+    object_label: company?.name || 'company',
+    before_state: { default_location_id: before.settings?.default_location_id ?? null },
+    after_state: { default_location_id: input.default_location_id },
   });
 
   res.json({ success: true, data: company });

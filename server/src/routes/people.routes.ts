@@ -12,12 +12,14 @@ import {
   bulkInviteUsers,
   bulkUpdateLifecycle,
   bulkAssignRole,
+  bulkAssignLocation,
   exportUsers,
   deleteUser,
   resendInvite,
   getUserHistory,
   getEffectivePermissions,
   getUserAppAccessHistory,
+  getUserEffectiveSettings,
 } from '../controllers/people.controller';
 
 import { assignUserOrg } from '../controllers/organization.controller';
@@ -80,6 +82,12 @@ router.put('/bulk-lifecycle', requireRole(PEOPLE_MANAGERS), bulkUpdateLifecycle)
 router.post('/bulk-assign-role', requireRole(PEOPLE_MANAGERS), bulkAssignRole);
 
 /**
+ * POST /people/bulk-assign-location
+ * Bulk assign location to users
+ */
+router.post('/bulk-assign-location', requireRole(PEOPLE_MANAGERS), bulkAssignLocation);
+
+/**
  * ── Parameterized Routes (Registered Last) ───────────────────────────────────
  */
 
@@ -106,6 +114,12 @@ router.get('/:id/app-history', requireRole(PEOPLE_MANAGERS), getUserAppAccessHis
  * Returns effective permissions for a single user
  */
 router.get('/:id/effective-permissions', requireRole(PEOPLE_MANAGERS), getEffectivePermissions);
+
+/**
+ * GET /people/:id/effective-settings
+ * Returns effective location-based settings for a user
+ */
+router.get('/:id/effective-settings', getUserEffectiveSettings);
 
 /**
  * POST /people/:id/resend-invite

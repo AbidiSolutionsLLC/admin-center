@@ -16,6 +16,8 @@ export interface ILocation extends Document {
   parent_id?: Types.ObjectId;
   timezone: string;
   is_headquarters: boolean;
+  is_deleted: boolean;
+  deleted_at?: Date;
   address?: string;
   working_hours?: {
     start: string;
@@ -38,6 +40,8 @@ const LocationSchema = new Schema<ILocation>({
   parent_id: { type: Schema.Types.ObjectId, ref: 'Location' },
   timezone: { type: String, required: true, default: 'UTC' },
   is_headquarters: { type: Boolean, default: false },
+  is_deleted: { type: Boolean, default: false },
+  deleted_at: Date,
   address: String,
   working_hours: {
     start: String,

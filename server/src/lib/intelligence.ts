@@ -105,6 +105,30 @@ export const runIntelligenceRules = async (companyId: string | Types.ObjectId): 
   }
 
   // ────────────────────────────────────────────────────────────────────────────
+  // RULE-17: Active user with no location assigned
+  // ────────────────────────────────────────────────────────────────────────────
+
+  for (const user of activeUsers) {
+    if (!user.location_id) {
+      insightsToUpsert.push({
+        company_id: companyObjectId,
+        category: 'health',
+        severity: 'warning',
+        title: `${user.full_name} has no location assigned`,
+        description: 'Active users should be assigned to a primary location for proper timezone, holiday calendar, and policy inheritance.',
+        reasoning: `User "${user.full_name}" (${user.email}) is in 'active' lifecycle state but has no location_id assigned. They will default to UTC timezone and may miss location-specific policies.`,
+        affected_object_type: 'User',
+        affected_object_id: user._id.toString(),
+        affected_object_label: user.full_name,
+        remediation_url: `/people/${user._id}`,
+        remediation_action: 'Assign this user to a location',
+        is_resolved: false,
+        detected_at: new Date(),
+      });
+    }
+  }
+
+  // ────────────────────────────────────────────────────────────────────────────
   // RULE-05: Orphan team (Team model with department_id pointing to non-existent dept)
   // ────────────────────────────────────────────────────────────────────────────
 
@@ -950,6 +974,34 @@ export const runIntelligenceRules = async (companyId: string | Types.ObjectId): 
   }
 
   // ────────────────────────────────────────────────────────────────────────────
+  // Auto-resolve RULE-17 insights where user now has a location
+  // ────────────────────────────────────────────────────────────────────────────
+
+  const usersWithLocation = await User.find({
+    company_id: companyObjectId,
+    lifecycle_state: 'active',
+    is_active: true,
+    location_id: { $exists: true, $ne: null },
+  }).lean();
+
+  for (const user of usersWithLocation) {
+    await Insight.updateMany(
+      {
+        company_id: companyObjectId,
+        affected_object_id: user._id.toString(),
+        title: `${user.full_name} has no location assigned`,
+        is_resolved: false,
+      },
+      {
+        $set: {
+          is_resolved: true,
+          resolved_at: new Date(),
+        }
+      }
+    );
+  }
+
+  // ────────────────────────────────────────────────────────────────────────────
   // Auto-resolve RULE-06 insights where role permissions reduced
   // ────────────────────────────────────────────────────────────────────────────
 
@@ -1255,6 +1307,64 @@ export const runIntelligenceRules = async (companyId: string | Types.ObjectId): 
         }
       );
     }
+  }
+
+  // ────────────────────────────────────────────────────────────────────────────
+  // RULE-18: Company has no default location configured with users lacking location
+  // ────────────────────────────────────────────────────────────────────────────
+
+  const companyForRule18 = await Company.findById(companyObjectId).select('settings.default_location_id').lean();
+  const hasDefaultLocation = !!companyForRule18?.settings?.default_location_id;
+
+  if (!hasDefaultLocation) {
+    const usersWithoutLocationCount = await User.countDocuments({
+      company_id: companyObjectId,
+      lifecycle_state: 'active',
+      is_active: true,
+      $or: [
+        { location_id: { $exists: false } },
+        { location_id: null },
+      ],
+    });
+
+    if (usersWithoutLocationCount > 0) {
+      insightsToUpsert.push({
+        company_id: companyObjectId,
+        category: 'recommendation',
+        severity: 'info',
+        title: 'No default location configured',
+        description: 'Configure a default location to ensure users without an assigned location still receive proper timezone, holiday calendar, policy, and app access settings.',
+        reasoning: `${usersWithoutLocationCount} active user(s) have no location assigned and no company default location is set. These users will use UTC timezone and may miss location-specific configurations.`,
+        affected_object_type: 'Company',
+        affected_object_id: companyForRule18!._id.toString(),
+        affected_object_label: 'Company Settings',
+        remediation_url: '/company/settings',
+        remediation_action: 'Set a default location in Company Settings',
+        is_resolved: false,
+        detected_at: new Date(),
+      });
+    }
+  }
+
+  // ────────────────────────────────────────────────────────────────────────────
+  // Auto-resolve RULE-18 insight when default location is set
+  // ────────────────────────────────────────────────────────────────────────────
+
+  if (hasDefaultLocation) {
+    await Insight.updateMany(
+      {
+        company_id: companyObjectId,
+        affected_object_id: companyForRule18!._id.toString(),
+        title: 'No default location configured',
+        is_resolved: false,
+      },
+      {
+        $set: {
+          is_resolved: true,
+          resolved_at: new Date(),
+        }
+      }
+    );
   }
 
   // ────────────────────────────────────────────────────────────────────────────

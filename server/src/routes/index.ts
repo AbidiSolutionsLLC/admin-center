@@ -18,6 +18,8 @@ import dataFieldsRoutes from './dataFields.routes';
 import integrationsRoutes from './integrations.routes';
 import workflowsRoutes from './workflows.routes';
 import approvalsRoutes from './approvals.routes';
+import holidaysRoutes from './holidays.routes';
+import workSchedulesRoutes from './workSchedules.routes';
 import notificationsRoutes from './notifications.routes';
 import companyRoutes from './company.routes';
 import groupsRoutes from './groups.routes';
@@ -50,6 +52,9 @@ router.use('/integrations', integrationsRoutes);
 router.use('/workflows', workflowsRoutes);
 router.use('/approvals', approvalsRoutes);
 router.use('/notifications', notificationsRoutes);
+router.use('/holidays', holidaysRoutes);
+router.use('/work-schedules', workSchedulesRoutes);
+
 router.use('/company', companyRoutes); // FIX-03: Company settings routes
 router.use('/access-control-policies', accessControlPoliciesRoutes);
 router.use('/data-governance-policies', dataGovernancePoliciesRoutes);

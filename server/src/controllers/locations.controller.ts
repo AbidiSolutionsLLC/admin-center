@@ -2,10 +2,14 @@
 import { Request, Response } from 'express';
 import { z } from 'zod';
 import { asyncHandler } from '../utils/asyncHandler';
-import { Location } from '../models/Location.model';
+import { Location, ILocation } from '../models/Location.model';
 import { User } from '../models/User.model';
+import { PolicyVersion } from '../models/PolicyVersion.model';
+import { PolicyAssignment } from '../models/PolicyAssignment.model';
 import { auditLogger } from '../lib/auditLogger';
 import { AppError } from '../utils/AppError';
+import { isValidTimezone } from '../constants/timezones';
+import { locationSettingsService } from '../services/locationSettings.service';
 
 // ── Zod Schemas ──────────────────────────────────────────────────────────────
 
@@ -13,17 +17,41 @@ const CreateLocationSchema = z.object({
   name: z.string().min(1, 'Name is required').max(150),
   type: z.enum(['region', 'country', 'city', 'office']),
   parent_id: z.string().optional().nullable(),
-  timezone: z.string().min(1, 'Timezone is required').default('UTC'),
+  timezone: z.string().min(1, 'Timezone is required').default('UTC')
+    .refine((val) => isValidTimezone(val), {
+      message: 'Invalid timezone. Must be a valid IANA timezone identifier (e.g. America/New_York).',
+    }),
   is_headquarters: z.boolean().default(false),
   address: z.string().optional().nullable(),
+  working_days: z.array(z.number().min(0).max(6)).optional(),
   working_hours: z.object({
     start: z.string(),
     end: z.string(),
-    days: z.array(z.number().min(0).max(6)),
   }).optional().nullable(),
+}).refine(data => data.type === 'region' || !!data.parent_id, {
+  message: 'Parent location is required unless the type is Region.',
+  path: ['parent_id'],
 });
 
-const UpdateLocationSchema = CreateLocationSchema.partial();
+const UpdateLocationSchema = z.object({
+  name: z.string().min(1, 'Name is required').max(150).optional(),
+  type: z.enum(['region', 'country', 'city', 'office']).optional(),
+  parent_id: z.string().optional().nullable(),
+  timezone: z.string().min(1, 'Timezone is required')
+    .refine((val) => isValidTimezone(val), {
+      message: 'Invalid timezone. Must be a valid IANA timezone identifier (e.g. America/New_York).',
+    }).optional(),
+  is_headquarters: z.boolean().optional(),
+  address: z.string().optional().nullable(),
+  working_days: z.array(z.number().min(0).max(6)).optional(),
+  working_hours: z.object({
+    start: z.string(),
+    end: z.string(),
+  }).optional().nullable(),
+}).refine(data => !data.type || data.type === 'region' || !!data.parent_id, {
+  message: 'Parent location is required unless the type is Region.',
+  path: ['parent_id'],
+});
 
 // ── Helpers ──────────────────────────────────────────────────────────────────
 
@@ -58,9 +86,11 @@ async function enrichLocations(
  * Returns all locations for the requesting company, enriched with user counts.
  */
 export const getLocations = asyncHandler(async (req: Request, res: Response) => {
-  const locations = await Location.find({
-    company_id: req.user.company_id,
-  })
+  const includeDeleted = req.query.include_deleted === 'true';
+  const filter: Record<string, unknown> = { company_id: req.user.company_id };
+  if (!includeDeleted) filter.is_deleted = { $ne: true };
+
+  const locations = await Location.find(filter)
     .populate('parent_id', 'name type')
     .sort({ created_at: 1 })
     .lean();
@@ -77,6 +107,7 @@ export const getLocations = asyncHandler(async (req: Request, res: Response) => 
 export const getLocationTree = asyncHandler(async (req: Request, res: Response) => {
   const locations = await Location.find({
     company_id: req.user.company_id,
+    is_deleted: { $ne: true },
   })
     .populate('parent_id', 'name type')
     .sort({ created_at: 1 })
@@ -112,6 +143,7 @@ export const getLocationById = asyncHandler(async (req: Request, res: Response) 
   const location = await Location.findOne({
     _id: req.params.id,
     company_id: req.user.company_id,
+    is_deleted: { $ne: true },
   }).populate('parent_id', 'name type');
 
   if (!location) {
@@ -129,10 +161,11 @@ export const getLocationById = asyncHandler(async (req: Request, res: Response) 
 export const createLocation = asyncHandler(async (req: Request, res: Response) => {
   const input = CreateLocationSchema.parse(req.body);
 
-  // Check for duplicate location name within the same company
+  // Check for duplicate location name within the same company (active only)
   const existing = await Location.findOne({
     company_id: req.user.company_id,
     name: input.name,
+    is_deleted: { $ne: true },
   });
 
   if (existing) {
@@ -143,13 +176,26 @@ export const createLocation = asyncHandler(async (req: Request, res: Response) =
     );
   }
 
-  const location = await Location.create({
+  // Merge flat working_days into working_hours.days for the model
+  const locationData: Record<string, unknown> = {
     ...input,
     parent_id: input.parent_id || undefined,
     address: input.address || undefined,
-    working_hours: input.working_hours || undefined,
     company_id: req.user.company_id,
-  });
+  };
+  delete locationData.working_days;
+
+  if (input.working_days && input.working_days.length > 0) {
+    locationData.working_hours = {
+      start: input.working_hours?.start ?? '09:00',
+      end: input.working_hours?.end ?? '17:00',
+      days: input.working_days,
+    };
+  } else {
+    locationData.working_hours = input.working_hours || undefined;
+  }
+
+  const location = await Location.create(locationData);
 
   await auditLogger.log({
     req,
@@ -175,17 +221,19 @@ export const updateLocation = asyncHandler(async (req: Request, res: Response) =
   const location = await Location.findOne({
     _id: req.params.id,
     company_id: req.user.company_id,
+    is_deleted: { $ne: true },
   });
 
   if (!location) {
     throw new AppError('Location not found', 404, 'NOT_FOUND');
   }
 
-  // If name is being changed, check for duplicate name
+  // If name is being changed, check for duplicate name (active only)
   if (input.name && input.name !== location.name) {
     const existing = await Location.findOne({
       company_id: req.user.company_id,
       name: input.name,
+      is_deleted: { $ne: true },
       _id: { $ne: req.params.id },
     });
 
@@ -200,10 +248,34 @@ export const updateLocation = asyncHandler(async (req: Request, res: Response) =
 
   const beforeState = location.toObject();
 
-  // Normalize empty strings → undefined
-  const updates: Record<string, unknown> = { ...input };
+  // Merge flat working_days into working_hours.days for the model
+  const { working_days, ...restInput } = input;
+  const updates: Record<string, unknown> = { ...restInput, parent_id: restInput.parent_id || undefined, address: restInput.address || undefined };
   if (updates.parent_id === '') updates.parent_id = null;
   if (updates.address === '') updates.address = null;
+  delete updates.working_days;
+
+  if (working_days) {
+    if (working_days.length > 0) {
+      updates.working_hours = {
+        start: input.working_hours?.start ?? location.working_hours?.start ?? '09:00',
+        end: input.working_hours?.end ?? location.working_hours?.end ?? '17:00',
+        days: working_days,
+      };
+    } else if (input.working_hours) {
+      updates.working_hours = {
+        start: input.working_hours.start,
+        end: input.working_hours.end,
+        days: location.working_hours?.days ?? [1, 2, 3, 4, 5],
+      };
+    }
+  } else if (input.working_hours) {
+    updates.working_hours = {
+      start: input.working_hours.start,
+      end: input.working_hours.end,
+      days: location.working_hours?.days ?? [1, 2, 3, 4, 5],
+    };
+  }
 
   Object.assign(location, updates);
   await location.save();
@@ -230,6 +302,7 @@ export const deleteLocation = asyncHandler(async (req: Request, res: Response) =
   const location = await Location.findOne({
     _id: req.params.id,
     company_id: req.user.company_id,
+    is_deleted: { $ne: true },
   });
 
   if (!location) {
@@ -251,9 +324,34 @@ export const deleteLocation = asyncHandler(async (req: Request, res: Response) =
     );
   }
 
+  // Check if child locations exist
+  const childCount = await Location.countDocuments({
+    company_id: req.user.company_id,
+    parent_id: location._id,
+    is_deleted: { $ne: true },
+  });
+
+  if (childCount > 0) {
+    throw new AppError(
+      `Cannot delete location "${location.name}" — it has ${childCount} child location${childCount > 1 ? 's' : ''}. Reassign or remove child locations first.`,
+      409,
+      'LOCATION_HAS_CHILDREN'
+    );
+  }
+
   const beforeState = location.toObject();
 
-  await Location.deleteOne({ _id: location._id });
+  // Clean up orphaned policy assignments for this location
+  await PolicyAssignment.deleteMany({
+    company_id: req.user.company_id,
+    target_type: 'location',
+    target_id: req.params.id,
+  });
+
+  // Soft delete — mark as deleted instead of removing
+  location.is_deleted = true;
+  location.deleted_at = new Date();
+  await location.save();
 
   await auditLogger.log({
     req,
@@ -262,6 +360,187 @@ export const deleteLocation = asyncHandler(async (req: Request, res: Response) =
     object_type: 'Location',
     object_id: location._id.toString(),
     object_label: location.name,
+    before_state: beforeState,
+    after_state: location.toObject(),
+  });
+
+  res.status(200).json({ success: true, data: {} });
+});
+
+/**
+ * GET /locations/:id/users
+ * Returns all users assigned to a specific location.
+ */
+export const getLocationUsers = asyncHandler(async (req: Request, res: Response) => {
+  const location = await Location.findOne({
+    _id: req.params.id,
+    company_id: req.user.company_id,
+    is_deleted: { $ne: true },
+  });
+  if (!location) {
+    throw new AppError('Location not found', 404, 'NOT_FOUND');
+  }
+
+  const users = await User.find({
+    company_id: req.user.company_id,
+    location_id: location._id,
+    is_active: true,
+  })
+    .select('full_name email employee_id department_id lifecycle_state')
+    .populate('department_id', 'name slug')
+    .sort({ full_name: 1 })
+    .lean();
+
+  res.status(200).json({ success: true, data: users });
+});
+
+/**
+ * GET /locations/:id/policies
+ * Returns policies assigned to a location (both global and location-specific).
+ */
+export const getLocationPolicies = asyncHandler(async (req: Request, res: Response) => {
+  const location = await Location.findOne({
+    _id: req.params.id,
+    company_id: req.user.company_id,
+    is_deleted: { $ne: true },
+  });
+  if (!location) {
+    throw new AppError('Location not found', 404, 'NOT_FOUND');
+  }
+
+  const policyView = await locationSettingsService.getLocationPolicyView(
+    req.params.id,
+    req.user.company_id
+  );
+
+  res.status(200).json({ success: true, data: policyView });
+});
+
+/**
+ * GET /locations/:id/effective-settings
+ * Returns the effective settings that users at this location would inherit.
+ */
+export const getLocationEffectiveSettings = asyncHandler(async (req: Request, res: Response) => {
+  const location = await Location.findOne({
+    _id: req.params.id,
+    company_id: req.user.company_id,
+    is_deleted: { $ne: true },
+  });
+  if (!location) {
+    throw new AppError('Location not found', 404, 'NOT_FOUND');
+  }
+
+  const userCount = await User.countDocuments({
+    company_id: req.user.company_id,
+    location_id: location._id,
+    is_active: true,
+  });
+
+  const policyView = await locationSettingsService.getLocationPolicyView(
+    req.params.id,
+    req.user.company_id
+  );
+
+  res.status(200).json({
+    success: true,
+    data: {
+      timezone: location.timezone,
+      working_hours: location.working_hours,
+      user_count: userCount,
+      policies: policyView,
+    },
+  });
+});
+
+/**
+ * POST /locations/:id/assign-policy
+ * Assigns a published policy to this location.
+ */
+export const assignPolicyToLocation = asyncHandler(async (req: Request, res: Response) => {
+  const location = await Location.findOne({
+    _id: req.params.id,
+    company_id: req.user.company_id,
+    is_deleted: { $ne: true },
+  });
+  if (!location) {
+    throw new AppError('Location not found', 404, 'NOT_FOUND');
+  }
+
+  const input = z.object({
+    policy_version_id: z.string().min(1),
+  }).parse(req.body);
+
+  const policyVersion = await PolicyVersion.findOne({
+    _id: input.policy_version_id,
+    company_id: req.user.company_id,
+    status: 'published',
+  });
+  if (!policyVersion) {
+    throw new AppError('Published policy version not found', 404, 'POLICY_NOT_FOUND');
+  }
+
+  const existing = await PolicyAssignment.findOne({
+    company_id: req.user.company_id,
+    policy_version_id: policyVersion._id,
+    target_type: 'location',
+    target_id: req.params.id,
+  });
+  if (existing) {
+    throw new AppError('Policy is already assigned to this location', 400, 'POLICY_ALREADY_ASSIGNED');
+  }
+
+  const assignment = await PolicyAssignment.create({
+    company_id: req.user.company_id,
+    policy_version_id: policyVersion._id,
+    target_type: 'location',
+    target_id: req.params.id,
+    target_label: location.name,
+  });
+
+  await auditLogger.log({
+    req,
+    action: 'policy.location_assigned',
+    module: 'locations',
+    object_type: 'PolicyAssignment',
+    object_id: assignment._id.toString(),
+    object_label: `${policyVersion.title} v${policyVersion.version_number} → ${location.name}`,
+    before_state: null,
+    after_state: {
+      policy_version_id: policyVersion._id.toString(),
+      location_id: req.params.id,
+      location_name: location.name,
+      policy_title: policyVersion.title,
+    },
+  });
+
+  res.status(201).json({ success: true, data: assignment });
+});
+
+/**
+ * DELETE /locations/:id/policies/:policyVersionId
+ * Removes a policy assignment from this location.
+ */
+export const removeLocationPolicy = asyncHandler(async (req: Request, res: Response) => {
+  const assignment = await PolicyAssignment.findOne({
+    company_id: req.user.company_id,
+    policy_version_id: req.params.policyVersionId,
+    target_type: 'location',
+    target_id: req.params.id,
+  });
+  if (!assignment) {
+    throw new AppError('Policy assignment not found for this location', 404, 'ASSIGNMENT_NOT_FOUND');
+  }
+
+  const beforeState = assignment.toObject();
+  await PolicyAssignment.findByIdAndDelete(assignment._id);
+
+  await auditLogger.log({
+    req,
+    action: 'policy.location_assignment_removed',
+    module: 'locations',
+    object_type: 'PolicyAssignment',
+    object_id: assignment._id.toString(),
+    object_label: `${assignment.target_label}`,
     before_state: beforeState,
     after_state: null,
   });

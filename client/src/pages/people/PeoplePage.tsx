@@ -2,11 +2,11 @@
 import { useState, useMemo, useCallback } from 'react';
 import {
   Users, UserPlus, Search, ChevronDown, X, RefreshCw,
-  Download, UserCheck, ArrowRightCircle, User as UserIcon, History
+  Download, UserCheck, ArrowRightCircle, MapPin, User as UserIcon, History
 } from 'lucide-react';
 
 
-import { useUsers, useBulkLifecycleChange, useBulkAssignRole, useExportUsers } from '@/features/people/hooks/useUsers';
+import { useUsers, useBulkLifecycleChange, useBulkAssignRole, useBulkAssignLocation, useExportUsers } from '@/features/people/hooks/useUsers';
 import { useUpdateUser } from '@/features/people/hooks/useUpdateUser';
 import { useUpdateLifecycle } from '@/features/people/hooks/useUpdateLifecycle';
 import { useUserStats } from '@/features/people/hooks/useUserStats';
@@ -18,6 +18,7 @@ import { useRoles } from '@/features/roles/useRoles';
 import { UserTable } from '@/features/people/components/UserTable';
 import { InviteModal } from '@/features/people/components/InviteModal';
 import { UserOrgAssignmentModal } from '@/features/people/components/UserOrgAssignmentModal';
+import { UserLocationAssignmentModal } from '@/features/people/components/UserLocationAssignmentModal';
 import { useTeams } from '@/features/teams/hooks/useTeams';
 import { UserForm, type UserFormData } from '@/features/people/components/UserForm';
 import { UserHistoryPanel } from '@/features/people/components/UserHistoryPanel';
@@ -103,14 +104,20 @@ export default function PeoplePage() {
       const matchesLifecycleState =
         !filters.lifecycle_state || user.lifecycle_state === filters.lifecycle_state;
 
+      const userDeptId = typeof user.department_id === 'object' && user.department_id !== null
+        ? (user.department_id as { _id: string })._id
+        : user.department_id;
       const matchesDepartment =
-        !filters.department_id || user.department_id === filters.department_id;
+        !filters.department_id || userDeptId === filters.department_id;
 
       const matchesEmploymentType =
         !filters.employment_type || user.employment_type === filters.employment_type;
 
+      const userLocId = typeof user.location_id === 'object' && user.location_id !== null
+        ? (user.location_id as { _id: string })._id
+        : user.location_id;
       const matchesLocation =
-        !filters.location_id || user.location_id === filters.location_id;
+        !filters.location_id || userLocId === filters.location_id;
 
       const matchesIncompleteData =
         !filters.incomplete_data || user.is_flagged === true;
@@ -145,6 +152,7 @@ export default function PeoplePage() {
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
   const bulkLifecycle = useBulkLifecycleChange();
   const bulkRole = useBulkAssignRole();
+  const bulkLocation = useBulkAssignLocation();
   const resendInvite = useResendInvite();
 
   const handleResendInvite = useCallback((user: User) => {
@@ -160,13 +168,15 @@ export default function PeoplePage() {
   const [isInviteModalOpen, setIsInviteModalOpen] = useState(false);
   const [editingUser, setEditingUser] = useState<User | null>(null);
   const [assigningOrgUser, setAssigningOrgUser] = useState<User | null>(null);
+  const [assigningLocationUser, setAssigningLocationUser] = useState<User | null>(null);
   const [changingLifecycleUser, setChangingLifecycleUser] = useState<User | null>(null);
 
   // ── Bulk action modal targets ──────────────────────────────────────
-  const [bulkAction, setBulkAction] = useState<'lifecycle' | 'role' | null>(null);
+  const [bulkAction, setBulkAction] = useState<'lifecycle' | 'role' | 'location' | null>(null);
   const [bulkLifecycleTarget, setBulkLifecycleTarget] = useState<LifecycleState | ''>('');
   const [bulkLifecycleReason, setBulkLifecycleReason] = useState('');
   const [bulkRoleTarget, setBulkRoleTarget] = useState('');
+  const [bulkLocationTarget, setBulkLocationTarget] = useState('');
 
   // ── Handlers ─────────────────────────────────────────────────────────
   const toggleRow = useCallback((userId: string) => {
@@ -221,6 +231,20 @@ export default function PeoplePage() {
     );
   }, [bulkRoleTarget, selectedIds, bulkRole, clearSelection]);
 
+  const handleBulkLocation = useCallback(() => {
+    if (!bulkLocationTarget || selectedIds.size === 0) return;
+    bulkLocation.mutate(
+      { user_ids: Array.from(selectedIds), location_id: bulkLocationTarget },
+      {
+        onSuccess: () => {
+          setBulkAction(null);
+          setBulkLocationTarget('');
+          clearSelection();
+        },
+      }
+    );
+  }, [bulkLocationTarget, selectedIds, bulkLocation, clearSelection]);
+
   const handleExport = useCallback(() => {
     exportMutation.mutate();
   }, [exportMutation]);
@@ -247,6 +271,14 @@ export default function PeoplePage() {
 
   const handleCloseAssignOrg = useCallback(() => {
     setAssigningOrgUser(null);
+  }, []);
+
+  const handleOpenAssignLocation = useCallback((user: User) => {
+    setAssigningLocationUser(user);
+  }, []);
+
+  const handleCloseAssignLocation = useCallback(() => {
+    setAssigningLocationUser(null);
   }, []);
 
   const handleOpenLifecycleChange = useCallback((user: User) => {
@@ -347,12 +379,13 @@ export default function PeoplePage() {
           ) : (
             <>
               {/* ── Bulk Action Bar ── */}
-              {selectedIds.size > 0 && (
+                  {selectedIds.size > 0 && (
                 <BulkActionBar
                   selectedCount={selectedIds.size}
                   onClearSelection={clearSelection}
                   onChangeLifecycle={() => setBulkAction('lifecycle')}
                   onAssignRole={() => setBulkAction('role')}
+                  onChangeLocation={() => setBulkAction('location')}
                   onExport={handleExport}
                 />
               )}
@@ -361,6 +394,7 @@ export default function PeoplePage() {
                 users={filteredUsers}
                 onEdit={handleOpenEdit}
                 onAssignOrg={handleOpenAssignOrg}
+                onAssignLocation={handleOpenAssignLocation}
                 onChangeState={handleOpenLifecycleChange}
                 onResendInvite={handleResendInvite}
                 selectedIds={selectedIds}
@@ -404,6 +438,16 @@ export default function PeoplePage() {
         />
       )}
 
+      {/* ── Location Assignment Modal ── */}
+      {assigningLocationUser && (
+        <UserLocationAssignmentModal
+          user={assigningLocationUser}
+          isOpen={!!assigningLocationUser}
+          onClose={handleCloseAssignLocation}
+          requiredFields={formMetadata?.required_fields || ['email', 'full_name']}
+        />
+      )}
+
 
       {/* ── Lifecycle Change Modal ── */}
       {changingLifecycleUser && (
@@ -440,6 +484,20 @@ export default function PeoplePage() {
           onTargetChange={setBulkRoleTarget}
           isPending={bulkRole.isPending}
           roles={roles}
+        />
+      )}
+
+      {/* ── Bulk Location Modal ── */}
+      {bulkAction === 'location' && (
+        <BulkLocationModal
+          isOpen={bulkAction === 'location'}
+          onClose={() => { setBulkAction(null); setBulkLocationTarget(''); }}
+          selectedCount={selectedIds.size}
+          onSubmit={handleBulkLocation}
+          targetLocation={bulkLocationTarget}
+          onTargetChange={setBulkLocationTarget}
+          isPending={bulkLocation.isPending}
+          locations={locations}
         />
       )}
     </div>
@@ -873,10 +931,11 @@ interface BulkActionBarProps {
   onClearSelection: () => void;
   onChangeLifecycle: () => void;
   onAssignRole: () => void;
+  onChangeLocation: () => void;
   onExport: () => void;
 }
 
-function BulkActionBar({ selectedCount, onClearSelection, onChangeLifecycle, onAssignRole, onExport }: BulkActionBarProps) {
+function BulkActionBar({ selectedCount, onClearSelection, onChangeLifecycle, onAssignRole, onChangeLocation, onExport }: BulkActionBarProps) {
   return (
     <div className="bg-white rounded-lg border border-line shadow-card px-4 py-3 flex items-center gap-3">
       <span className="text-sm font-medium text-ink">
@@ -896,6 +955,13 @@ function BulkActionBar({ selectedCount, onClearSelection, onChangeLifecycle, onA
       >
         <UserCheck className="w-3.5 h-3.5" />
         Assign Role
+      </button>
+      <button
+        onClick={onChangeLocation}
+        className="h-8 px-3 text-xs font-medium rounded-md border border-line bg-white text-ink hover:bg-surface-alt transition-colors inline-flex items-center gap-1.5"
+      >
+        <MapPin className="w-3.5 h-3.5" />
+        Change Location
       </button>
       <button
         onClick={onExport}
@@ -1050,6 +1116,66 @@ function BulkRoleModal({ isOpen, onClose, selectedCount, onSubmit, targetRole, o
             {roles.map((role) => (
               <option key={role._id} value={role._id}>
                 {role.name}
+              </option>
+            ))}
+          </select>
+        </div>
+      </div>
+    </Modal>
+  );
+}
+
+// ── Bulk Location Assign Modal ────────────────────────────────────────────
+
+interface BulkLocationModalProps {
+  isOpen: boolean;
+  onClose: () => void;
+  selectedCount: number;
+  onSubmit: () => void;
+  targetLocation: string;
+  onTargetChange: (locationId: string) => void;
+  isPending: boolean;
+  locations: Array<{ _id: string; name: string }>;
+}
+
+function BulkLocationModal({ isOpen, onClose, selectedCount, onSubmit, targetLocation, onTargetChange, isPending, locations }: BulkLocationModalProps) {
+  return (
+    <Modal
+      isOpen={isOpen}
+      onClose={onClose}
+      title="Bulk Change Location"
+      description={`Change the primary location for ${selectedCount} selected users. Users already at this location will be skipped.`}
+      size="md"
+      footer={
+        <>
+          <button onClick={onClose} disabled={isPending} className="h-9 px-4 text-sm font-medium rounded-md border border-line bg-white text-ink hover:bg-surface-alt transition-colors disabled:opacity-50">
+            Cancel
+          </button>
+          <button
+            onClick={onSubmit}
+            disabled={isPending || !targetLocation}
+            className="h-9 px-4 text-sm font-medium rounded-md bg-primary hover:bg-primary-hover text-white transition-colors disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2"
+          >
+            <MapPin className="w-4 h-4" />
+            {isPending ? 'Processing...' : `Assign to ${selectedCount} Users`}
+          </button>
+        </>
+      }
+    >
+      <div className="space-y-4">
+        <div>
+          <label className="text-sm font-medium text-ink block mb-1.5">
+            Location <span className="text-error">*</span>
+          </label>
+          <select
+            value={targetLocation}
+            onChange={(e) => onTargetChange(e.target.value)}
+            className="w-full h-9 px-3 text-sm rounded-md border border-line bg-white text-ink focus:outline-none focus:ring-2 focus:ring-primary/30 focus:border-primary transition-all duration-150"
+          >
+            <option value="">Select location...</option>
+            {locations.map((loc) => (
+              <option key={loc._id} value={loc._id}>
+                {loc.name}
               </option>
             ))}
           </select>

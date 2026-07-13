@@ -3,8 +3,11 @@ import React from 'react';
 import { useForm, Controller } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { z } from 'zod';
+import { COMMON_TIMEZONES, formatTimezoneLabel } from '@/constants/timezones';
+import { getLocalTime, getTimezoneOffset } from '@/lib/timezone';
 import type { Location, LocationType } from '@/types';
-import { cn } from '@/utils/cn';
+
+// ── Schema ───────────────────────────────────────────────────────────────────
 
 const schema = z.object({
   name: z.string().min(1, 'Location name is required').max(150, 'Name too long'),
@@ -13,14 +16,19 @@ const schema = z.object({
   timezone: z.string().min(1, 'Timezone is required'),
   is_headquarters: z.boolean().default(false),
   address: z.string().optional().nullable(),
+  working_days: z.array(z.number().min(0).max(6)).optional(),
   working_hours: z.object({
     start: z.string(),
     end: z.string(),
-    days: z.array(z.number().min(0).max(6)),
   }).optional().nullable(),
+}).refine(data => data.type === 'region' || !!data.parent_id, {
+  message: 'Parent location is required unless it is a Region.',
+  path: ['parent_id'],
 });
 
 export type LocationFormData = z.infer<typeof schema>;
+
+// ── Constants ────────────────────────────────────────────────────────────────
 
 interface LocationFormProps {
   initialData?: Location;
@@ -29,53 +37,29 @@ interface LocationFormProps {
   isSubmitting?: boolean;
 }
 
-const TYPE_OPTIONS: { value: LocationType; label: string }[] = [
-  { value: 'region', label: 'Region' },
-  { value: 'country', label: 'Country' },
-  { value: 'city', label: 'City' },
-  { value: 'office', label: 'Office' },
+const TYPE_OPTIONS: { value: LocationType; label: string; desc: string }[] = [
+  { value: 'region',  label: 'Region',  desc: 'Top-level geographic area (e.g. North America)' },
+  { value: 'country', label: 'Country', desc: 'Country within a region (e.g. Pakistan)' },
+  { value: 'city',    label: 'City',    desc: 'City within a country (e.g. Karachi)' },
+  { value: 'office',  label: 'Office',  desc: 'Physical office location' },
 ];
 
-// Common IANA timezones
-const TIMEZONE_OPTIONS = [
-  'UTC',
-  'America/New_York',
-  'America/Chicago',
-  'America/Denver',
-  'America/Los_Angeles',
-  'America/Toronto',
-  'America/Vancouver',
-  'Europe/London',
-  'Europe/Paris',
-  'Europe/Berlin',
-  'Europe/Amsterdam',
-  'Asia/Dubai',
-  'Asia/Kolkata',
-  'Asia/Shanghai',
-  'Asia/Tokyo',
-  'Asia/Singapore',
-  'Australia/Sydney',
-  'Pacific/Auckland',
+const DAY_LABELS = [
+  { value: 0, label: 'Sun' },
+  { value: 1, label: 'Mon' },
+  { value: 2, label: 'Tue' },
+  { value: 3, label: 'Wed' },
+  { value: 4, label: 'Thu' },
+  { value: 5, label: 'Fri' },
+  { value: 6, label: 'Sat' },
 ];
 
-const DAYS = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
-
-const inputClass = (hasError?: boolean) =>
-  cn(
-    'w-full h-10 px-3 text-sm rounded-md border bg-white/5 text-slate-200 border-white/10',
-    'placeholder:text-slate-500 transition-all duration-150',
-    'focus:outline-none focus:ring-1 focus:border-primary/50 focus:ring-primary/50',
-    'disabled:bg-black/20 disabled:text-slate-500 disabled:cursor-not-allowed',
-    hasError
-      ? 'border-error focus:border-error focus:ring-error/50'
-      : 'hover:border-white/20'
-  );
+// ── Form ─────────────────────────────────────────────────────────────────────
 
 /**
- * LocationForm Component
+ * LocationForm Component — dark glass theme.
  * Create/edit form for locations with full Zod validation.
- * Submits via a hidden button (id="location-form") triggered from the modal footer.
- * Used on: LocationsPage (create + edit modal).
+ * Submits via a hidden button triggered from the modal footer.
  */
 export const LocationForm: React.FC<LocationFormProps> = ({
   initialData,
@@ -88,95 +72,119 @@ export const LocationForm: React.FC<LocationFormProps> = ({
     control,
     reset,
     watch,
+    handleSubmit,
     formState: { errors },
   } = useForm<LocationFormData>({
     resolver: zodResolver(schema),
     defaultValues: {
       name: initialData?.name ?? '',
-      type: initialData?.type ?? 'office',
+      type: initialData?.type ?? 'region',
       parent_id: typeof initialData?.parent_id === 'object'
-        ? (initialData.parent_id as any)?._id
+        ? (initialData.parent_id as any)?._id ?? ''
         : initialData?.parent_id ?? '',
-      timezone: initialData?.timezone ?? 'UTC',
+      timezone: initialData?.timezone ?? 'Asia/Karachi',
       is_headquarters: initialData?.is_headquarters ?? false,
       address: initialData?.address ?? '',
-      working_hours: initialData?.working_hours ?? null,
+      working_days: initialData?.working_hours?.days ?? [],
+      working_hours: initialData?.working_hours
+        ? { start: initialData.working_hours.start, end: initialData.working_hours.end }
+        : null,
     },
   });
 
-  // Reset form when initialData changes
   React.useEffect(() => {
     if (initialData) {
       reset({
         name: initialData.name ?? '',
-        type: initialData.type ?? 'office',
+        type: initialData.type ?? 'region',
         parent_id: typeof initialData.parent_id === 'object'
-          ? (initialData.parent_id as any)?._id
+          ? (initialData.parent_id as any)?._id ?? ''
           : initialData.parent_id ?? '',
-        timezone: initialData.timezone ?? 'UTC',
+        timezone: initialData.timezone ?? 'Asia/Karachi',
         is_headquarters: initialData.is_headquarters ?? false,
         address: initialData.address ?? '',
-        working_hours: initialData.working_hours ?? null,
+        working_days: initialData.working_hours?.days ?? [],
+        working_hours: initialData.working_hours
+          ? { start: initialData.working_hours.start, end: initialData.working_hours.end }
+          : null,
       });
     }
   }, [initialData, reset]);
 
   const selectedType = watch('type');
   const isHQ = watch('is_headquarters');
+  const selectedTimezone = watch('timezone');
+
   const availableParents = locations.filter(
     (l) => l._id !== initialData?._id && l.type !== selectedType
   );
 
+  const fieldStyle = (hasError?: boolean): React.CSSProperties => ({
+    borderColor: hasError ? 'rgba(239,68,68,0.5)' : undefined,
+    boxShadow: hasError ? '0 0 0 3px rgba(239,68,68,0.08)' : undefined,
+  });
+
   return (
-    <form id="location-form" onSubmit={(e) => { e.preventDefault(); }} className="space-y-5" noValidate>
+    <form id="location-form" onSubmit={handleSubmit(onSubmit)} className="space-y-5" noValidate>
+
       {/* Name */}
       <div className="space-y-1.5">
-        <label htmlFor="loc-name" className="text-sm font-medium text-ink">
-          Location Name <span className="text-red-500">*</span>
+        <label htmlFor="loc-name">
+          Location Name <span style={{ color: '#ef4444' }}>*</span>
         </label>
         <input
           id="loc-name"
           {...register('name')}
-          placeholder="e.g. North America, New York Office"
+          placeholder="e.g. North America, Karachi Office"
           disabled={isSubmitting}
-          className={inputClass(!!errors.name)}
+          style={fieldStyle(!!errors.name)}
         />
-        {errors.name && <p className="text-xs text-error">{errors.name.message}</p>}
+        {errors.name && <p className="text-xs mt-1" style={{ color: '#f87171' }}>{errors.name.message}</p>}
       </div>
 
-      {/* Type */}
+      {/* Type — card picker */}
       <div className="space-y-1.5">
-        <label htmlFor="loc-type" className="text-sm font-medium text-ink">
-          Type <span className="text-red-500">*</span>
-        </label>
+        <label>Type <span style={{ color: '#ef4444' }}>*</span></label>
         <Controller
           name="type"
           control={control}
           render={({ field }) => (
-            <select
-              id="loc-type"
-              {...field}
-              disabled={isSubmitting}
-              className={inputClass(!!errors.type)}
-            >
-              {TYPE_OPTIONS.map((opt) => (
-                <option key={opt.value} value={opt.value}>{opt.label}</option>
-              ))}
-            </select>
+            <div className="grid grid-cols-2 gap-2">
+              {TYPE_OPTIONS.map((opt) => {
+                const selected = field.value === opt.value;
+                return (
+                  <button
+                    key={opt.value}
+                    type="button"
+                    disabled={isSubmitting}
+                    onClick={() => field.onChange(opt.value)}
+                    className="text-left p-3 rounded-xl transition-all border"
+                    style={{
+                      background: selected ? 'rgba(245,176,42,0.1)' : 'rgba(255,255,255,0.03)',
+                      borderColor: selected ? 'rgba(245,176,42,0.4)' : 'rgba(255,255,255,0.08)',
+                      boxShadow: selected ? '0 0 0 1px rgba(245,176,42,0.15)' : 'none',
+                    }}
+                  >
+                    <p className="text-sm font-bold" style={{ color: selected ? '#f5b02a' : 'var(--text-main)' }}>
+                      {opt.label}
+                    </p>
+                    <p className="text-xs mt-0.5" style={{ color: 'var(--text-muted)' }}>{opt.desc}</p>
+                  </button>
+                );
+              })}
+            </div>
           )}
         />
-        {errors.type && <p className="text-xs text-error">{errors.type.message}</p>}
+        {errors.type && <p className="text-xs mt-1" style={{ color: '#f87171' }}>{errors.type.message}</p>}
       </div>
 
       {/* Parent Location */}
       <div className="space-y-1.5">
-        <label htmlFor="loc-parent" className="text-sm font-medium text-ink">
-          Parent Location
-        </label>
-        <p className="text-xs text-ink-secondary">
+        <label htmlFor="loc-parent">Parent Location</label>
+        <p className="text-xs mb-2" style={{ color: 'var(--text-muted)' }}>
           {selectedType === 'region'
-            ? 'Regions are top-level and cannot have a parent.'
-            : `Select the parent ${selectedType === 'country' ? 'region' : selectedType === 'city' ? 'country' : 'city or region'}.`}
+            ? 'Regions are top-level and do not require a parent.'
+            : `Select the parent ${selectedType === 'country' ? 'region' : selectedType === 'city' ? 'country or region' : 'city, country, or region'}.`}
         </p>
         <Controller
           name="parent_id"
@@ -187,7 +195,7 @@ export const LocationForm: React.FC<LocationFormProps> = ({
               {...field}
               value={field.value ?? ''}
               disabled={isSubmitting || selectedType === 'region'}
-              className={inputClass(!!errors.parent_id)}
+              style={fieldStyle(!!errors.parent_id)}
             >
               <option value="">No parent (top-level)</option>
               {availableParents.map((loc) => (
@@ -198,187 +206,155 @@ export const LocationForm: React.FC<LocationFormProps> = ({
             </select>
           )}
         />
-        {errors.parent_id && <p className="text-xs text-error">{errors.parent_id.message}</p>}
+        {errors.parent_id && <p className="text-xs mt-1" style={{ color: '#f87171' }}>{errors.parent_id.message}</p>}
       </div>
 
       {/* Timezone */}
       <div className="space-y-1.5">
-        <label htmlFor="loc-timezone" className="text-sm font-medium text-ink">
-          IANA Timezone <span className="text-red-500">*</span>
-        </label>
+        <label htmlFor="loc-timezone">Timezone <span style={{ color: '#ef4444' }}>*</span></label>
         <Controller
           name="timezone"
           control={control}
           render={({ field }) => (
-            <select
-              id="loc-timezone"
-              {...field}
-              disabled={isSubmitting}
-              className={inputClass(!!errors.timezone)}
-            >
-              {TIMEZONE_OPTIONS.map((tz) => (
-                <option key={tz} value={tz}>{tz}</option>
+            <select id="loc-timezone" {...field} disabled={isSubmitting} style={fieldStyle(!!errors.timezone)}>
+              {COMMON_TIMEZONES.map((tz) => (
+                <option key={tz} value={tz}>{formatTimezoneLabel(tz)}</option>
               ))}
             </select>
           )}
         />
-        {errors.timezone && <p className="text-xs text-error">{errors.timezone.message}</p>}
-        <p className="text-xs text-ink-secondary">
-          Local time preview: {getTimePreview(watch('timezone'))}
-        </p>
+        {errors.timezone && <p className="text-xs mt-1" style={{ color: '#f87171' }}>{errors.timezone.message}</p>}
+        {selectedTimezone && (
+          <div className="flex items-center gap-3 text-xs" style={{ color: 'var(--text-muted)' }}>
+            <span>
+              Local time: <span className="font-mono">{getLocalTime(selectedTimezone)}</span>
+            </span>
+            <span className="text-ink-muted">|</span>
+            <span>
+              {getTimezoneOffset(selectedTimezone)}
+            </span>
+          </div>
+        )}
       </div>
 
-      {/* Headquarters Flag */}
-      <div className="flex items-center gap-2">
+      {/* Headquarters */}
+      <div
+        className="flex items-start gap-3 p-3 rounded-xl cursor-pointer"
+        style={{ background: 'rgba(255,255,255,0.03)', border: '1px solid rgba(255,255,255,0.07)' }}
+        onClick={() => !isSubmitting && register('is_headquarters').onChange({ target: { value: !isHQ, name: 'is_headquarters' } })}
+      >
         <input
           id="loc-hq"
           type="checkbox"
           {...register('is_headquarters')}
           disabled={isSubmitting}
-          className="w-4 h-4 rounded border-line text-primary focus:ring-primary/30"
+          className="mt-0.5 flex-shrink-0"
         />
-        <label htmlFor="loc-hq" className="text-sm font-medium text-ink">
-          Set as Headquarters
-        </label>
+        <div>
+          <p className="text-sm font-semibold" style={{ color: 'var(--text-main)' }}>Set as Headquarters</p>
+          <p className="text-xs" style={{ color: 'var(--text-muted)' }}>
+            Only one location per company can be HQ. This will replace any existing headquarters.
+          </p>
+        </div>
       </div>
       {isHQ && (
-        <p className="text-xs text-warning bg-warningLight border border-warningBorder rounded px-3 py-2">
-          Only one location per company can be set as headquarters. This will override any existing HQ.
-        </p>
+        <div className="flex items-start gap-2 p-3 rounded-xl text-xs"
+          style={{ background: 'rgba(245,176,42,0.08)', border: '1px solid rgba(245,176,42,0.2)', color: '#fbbf24' }}>
+          ⚠ Setting this as HQ will override any existing headquarters location.
+        </div>
       )}
-
-      {/* Address */}
-      <div className="space-y-1.5">
-        <label htmlFor="loc-address" className="text-sm font-medium text-ink">
-          Address
-        </label>
-        <input
-          id="loc-address"
-          {...register('address')}
-          placeholder="e.g. 123 Main St, New York, NY 10001"
-          disabled={isSubmitting}
-          className={inputClass(!!errors.address)}
-        />
-        {errors.address && <p className="text-xs text-error">{errors.address.message}</p>}
-      </div>
 
       {/* Working Hours */}
       <div className="space-y-1.5">
         <label className="text-sm font-medium text-ink">Working Hours</label>
+        <p className="text-xs mb-2" style={{ color: 'var(--text-muted)' }}>
+          Set default working days and hours for this location. You can also assign a full work schedule from the Work Schedules page.
+        </p>
+
+        {/* Working Days */}
+        <Controller
+          name="working_days"
+          control={control}
+          render={({ field }) => (
+            <div className="flex flex-wrap gap-2 mb-3">
+              {DAY_LABELS.map((day) => {
+                const currentDays = field.value ?? [];
+                const isSelected = currentDays.includes(day.value);
+                return (
+                  <button
+                    key={day.value}
+                    type="button"
+                    disabled={isSubmitting}
+                    onClick={() => {
+                      if (isSelected) {
+                        field.onChange(currentDays.filter((d) => d !== day.value));
+                      } else {
+                        field.onChange([...currentDays, day.value]);
+                      }
+                    }}
+                    className="px-3 py-1.5 text-xs font-semibold rounded-lg transition-all border"
+                    style={{
+                      background: isSelected ? 'rgba(245,176,42,0.12)' : 'rgba(255,255,255,0.03)',
+                      borderColor: isSelected ? 'rgba(245,176,42,0.4)' : 'rgba(255,255,255,0.08)',
+                      color: isSelected ? '#f5b02a' : '#94a3b8',
+                    }}
+                  >
+                    {day.label}
+                  </button>
+                );
+              })}
+            </div>
+          )}
+        />
+
+        {/* Working Hours Time */}
         <Controller
           name="working_hours"
           control={control}
           render={({ field }) => (
-            <WorkingHoursField
-              value={field.value}
-              onChange={field.onChange}
-              disabled={isSubmitting}
-            />
+            <div className="grid grid-cols-2 gap-3">
+              <div className="space-y-1">
+                <label className="text-xs" style={{ color: 'var(--text-muted)' }}>Start Time</label>
+                <input
+                  type="time"
+                  value={field.value?.start ?? '09:00'}
+                  onChange={(e) => field.onChange({ ...field.value, start: e.target.value })}
+                  disabled={isSubmitting}
+                  className="w-full h-9 px-3 text-sm rounded-lg border bg-white text-ink"
+                  style={{ borderColor: 'rgba(255,255,255,0.08)' }}
+                />
+              </div>
+              <div className="space-y-1">
+                <label className="text-xs" style={{ color: 'var(--text-muted)' }}>End Time</label>
+                <input
+                  type="time"
+                  value={field.value?.end ?? '17:00'}
+                  onChange={(e) => field.onChange({ ...field.value, end: e.target.value })}
+                  disabled={isSubmitting}
+                  className="w-full h-9 px-3 text-sm rounded-lg border bg-white text-ink"
+                  style={{ borderColor: 'rgba(255,255,255,0.08)' }}
+                />
+              </div>
+            </div>
           )}
         />
       </div>
 
-      {/* Hidden submit button for modal footer trigger */}
+      {/* Address */}
+      <div className="space-y-1.5">
+        <label htmlFor="loc-address">Address</label>
+        <input
+          id="loc-address"
+          {...register('address')}
+          placeholder="e.g. 123 Main St, Karachi, Pakistan"
+          disabled={isSubmitting}
+          style={fieldStyle(!!errors.address)}
+        />
+        {errors.address && <p className="text-xs mt-1" style={{ color: '#f87171' }}>{errors.address.message}</p>}
+      </div>
+
+      {/* Hidden submit trigger */}
       <button type="submit" id="location-form-submit" className="hidden" />
     </form>
-  );
-};
-
-// ── Sub-components ───────────────────────────────────────────────────────────
-
-function getTimePreview(timezone: string): string {
-  try {
-    const now = new Date();
-    const formatter = new Intl.DateTimeFormat('en-US', {
-      timeZone: timezone,
-      hour: '2-digit',
-      minute: '2-digit',
-      hour12: true,
-    });
-    return formatter.format(now);
-  } catch {
-    return 'Invalid timezone';
-  }
-}
-
-interface WorkingHoursFieldProps {
-  value: { start: string; end: string; days: number[] } | null;
-  onChange: (value: { start: string; end: string; days: number[] } | null) => void;
-  disabled?: boolean;
-}
-
-const WorkingHoursField: React.FC<WorkingHoursFieldProps> = ({ value, onChange, disabled }) => {
-  if (!value) {
-    return (
-      <button
-        type="button"
-        onClick={() => onChange({ start: '09:00', end: '17:00', days: [0, 1, 2, 3, 4] })}
-        className="text-xs text-accent hover:underline"
-        disabled={disabled}
-      >
-        + Add working hours
-      </button>
-    );
-  }
-
-  return (
-    <div className="space-y-2 p-3 border border-line rounded-md bg-surface-alt">
-      <div className="flex items-center gap-3">
-        <div className="flex-1">
-          <label className="text-xs text-ink-secondary">Start</label>
-          <input
-            type="time"
-            value={value.start}
-            onChange={(e) => onChange({ ...value, start: e.target.value })}
-            disabled={disabled}
-            className="w-full h-8 px-2 text-sm rounded border border-line bg-white"
-          />
-        </div>
-        <div className="flex-1">
-          <label className="text-xs text-ink-secondary">End</label>
-          <input
-            type="time"
-            value={value.end}
-            onChange={(e) => onChange({ ...value, end: e.target.value })}
-            disabled={disabled}
-            className="w-full h-8 px-2 text-sm rounded border border-line bg-white"
-          />
-        </div>
-      </div>
-      <div>
-        <label className="text-xs text-ink-secondary">Days</label>
-        <div className="flex gap-1 mt-1">
-          {DAYS.map((day, idx) => (
-            <button
-              key={idx}
-              type="button"
-              onClick={() => {
-                const days = value.days.includes(idx)
-                  ? value.days.filter((d) => d !== idx)
-                  : [...value.days, idx];
-                onChange({ ...value, days });
-              }}
-              disabled={disabled}
-              className={cn(
-                'w-8 h-7 text-xs rounded border transition-colors',
-                value.days.includes(idx)
-                  ? 'bg-primary text-white border-primary'
-                  : 'bg-white text-ink-secondary border-line hover:bg-surface'
-              )}
-            >
-              {day.charAt(0)}
-            </button>
-          ))}
-        </div>
-      </div>
-      <button
-        type="button"
-        onClick={() => onChange(null)}
-        className="text-xs text-error hover:underline"
-        disabled={disabled}
-      >
-        Remove working hours
-      </button>
-    </div>
   );
 };

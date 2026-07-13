@@ -56,6 +56,29 @@ export const useUpdateTimezone = () => {
   });
 };
 
+// ── Update default location ──────────────────────────────────────────────────
+export const useUpdateDefaultLocation = () => {
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: async (payload: { default_location_id: string | null }) => {
+      const response = await apiClient.put<ApiResponse<CompanySettings>>(
+        '/company/settings/default-location',
+        payload
+      );
+      return response.data.data;
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: QUERY_KEYS.COMPANY_EMPLOYEE_ID_FORMAT });
+      toast.success('Default location updated successfully');
+    },
+    onError: (error: any) => {
+      const message = error.response?.data?.error || 'Failed to update default location';
+      toast.error(message);
+    },
+  });
+};
+
 // ── Update locale ────────────────────────────────────────────────────────────
 export const useUpdateLocale = () => {
   const queryClient = useQueryClient();

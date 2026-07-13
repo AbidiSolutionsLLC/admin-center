@@ -12,6 +12,7 @@ import {
   updateCompanyName,
   updateTimezone,
   updateLocale,
+  updateDefaultLocation,
 } from '../controllers/company.controller';
 
 const router = Router();
@@ -27,5 +28,6 @@ router.put('/settings/domain-enforcement',        updateDomainEnforcement);
 router.put('/settings/company-name',              updateCompanyName);
 router.put('/settings/timezone',                  updateTimezone);
 router.put('/settings/locale',                    updateLocale);
+router.put('/settings/default-location',           updateDefaultLocation);
 
 export default router;

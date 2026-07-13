@@ -14,6 +14,7 @@ import { Department } from '../models/Department.model';
 import { UserRole } from '../models/UserRole.model';
 import { Group } from '../models/Group.model';
 import { GroupMember } from '../models/GroupMember.model';
+import { Company } from '../models/Company.model';
 import { Types } from 'mongoose';
 
 /**
@@ -79,12 +80,20 @@ const getUserAccessibleAppIds = async (userId: string, companyId: string): Promi
   const userGroups = await GroupMember.find({ user_id: userId }).lean();
   const groupIds = userGroups.map(ug => ug.group_id);
 
+  // Determine effective location (user's location or company default)
+  const effectiveLocationId = user.location_id
+    || (await Company.findById(companyId).select('settings.default_location_id').lean())?.settings?.default_location_id;
+
   const targets: any[] = [
     { target_type: 'user', target_id: user._id },
     ...Array.from(allRoleIds).map(id => ({ target_type: 'role', target_id: new Types.ObjectId(id) })),
     ...Array.from(allDeptIds).map(id => ({ target_type: 'department', target_id: new Types.ObjectId(id) })),
     ...groupIds.map(id => ({ target_type: 'group', target_id: id }))
   ];
+
+  if (effectiveLocationId) {
+    targets.push({ target_type: 'location', target_id: new Types.ObjectId(effectiveLocationId) });
+  }
 
   // Find attribute-based assignments
   const attributeAssignments = await AppAssignment.find({
@@ -151,7 +160,7 @@ const updateAppSchema = z.object({
  * Zod schema for assigning an app
  */
 const assignAppSchema = z.object({
-  target_type: z.enum(['role', 'department', 'group', 'user', 'attribute']),
+  target_type: z.enum(['role', 'department', 'group', 'user', 'attribute', 'location']),
   target_id: z.string().trim().optional(),
   attribute_name: z.string().trim().optional(),
   attribute_value: z.string().trim().optional(),
@@ -743,6 +752,13 @@ export const assignApp = asyncHandler(async (req: Request, res: Response) => {
     affectedUsers = await GroupMember.countDocuments({
       group_id: targetIdObj,
     });
+  } else if (validated.target_type === 'location') {
+    const targetIdObj = new Types.ObjectId(validated.target_id!);
+    affectedUsers = await User.countDocuments({
+      company_id: companyId,
+      location_id: targetIdObj,
+      is_active: true,
+    });
   } else if (validated.target_type === 'attribute') {
     if (validated.attribute_name === 'domain') {
       const users = await User.find({ company_id: companyId, is_active: true }).select('email').lean();
@@ -1042,7 +1058,7 @@ export const getAppAssignmentsByTarget = asyncHandler(async (req: Request, res: 
   const companyId = req.user!.company_id;
   const { target_type, target_id } = req.params;
 
-  if (!['role', 'department', 'group', 'user'].includes(target_type)) {
+  if (!['role', 'department', 'group', 'user', 'location'].includes(target_type)) {
     throw new AppError('Invalid target_type', 400, 'INVALID_PARAMS');
   }
 
