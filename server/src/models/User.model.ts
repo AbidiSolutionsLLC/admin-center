@@ -26,6 +26,11 @@ export interface IUser extends Document {
   employment_type: EmploymentType;
   location_id?: Types.ObjectId;
   custom_fields: Record<string, unknown>;
+  delegates: Array<{
+    user_id: Types.ObjectId;
+    start_date: Date;
+    end_date: Date;
+  }>;
   last_login?: Date;
   mfa_enabled: boolean;
   refresh_token_hash?: string;
@@ -64,6 +69,11 @@ const UserSchema = new Schema<IUser>({
   employment_type: { type: String, enum: ['full_time', 'part_time', 'contractor', 'intern'], default: 'full_time' },
   location_id: { type: Schema.Types.ObjectId, ref: 'Location' },
   custom_fields: { type: Schema.Types.Mixed, default: {} },
+  delegates: [{
+    user_id: { type: Schema.Types.ObjectId, ref: 'User', required: true },
+    start_date: { type: Date, required: true },
+    end_date: { type: Date, required: true },
+  }],
   last_login: Date,
   mfa_enabled: { type: Boolean, default: false },
   refresh_token_hash: String,
@@ -80,6 +90,7 @@ UserSchema.index({ last_login: 1 });
 UserSchema.index({ company_id: 1, manager_id: 1 });
 UserSchema.index({ company_id: 1, secondary_manager_ids: 1 });
 UserSchema.index({ company_id: 1, role: 1 });
+UserSchema.index({ 'delegates.user_id': 1 });
 
 // ── Pre-save Hook: Auto-generate employee_id ────────────────────────────────
 /**

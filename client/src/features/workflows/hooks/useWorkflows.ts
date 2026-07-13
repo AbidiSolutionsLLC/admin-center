@@ -13,6 +13,7 @@ import type {
   ReorderStepsInput,
   TestWorkflowInput,
   WorkflowTestResult,
+  WorkflowSimulationResult,
 } from '@/types';
 
 /**
@@ -46,6 +47,23 @@ export const useWorkflowDetail = (workflowId: string) => {
       return data.data;
     },
     enabled: !!workflowId,
+    staleTime: 1000 * 60 * 2,
+    retry: 2,
+  });
+};
+
+/**
+ * Fetches all versions of a specific workflow.
+ * Used on: WorkflowsPage (versions tab)
+ */
+export const useWorkflowVersions = (workflowKey: string) => {
+  return useQuery<Workflow[]>({
+    queryKey: ['workflows', 'versions', workflowKey],
+    queryFn: async () => {
+      const { data } = await apiClient.get(`/workflows/versions?workflow_key=${workflowKey}`);
+      return data.data;
+    },
+    enabled: !!workflowKey,
     staleTime: 1000 * 60 * 2,
     retry: 2,
   });
@@ -99,49 +117,95 @@ export const useUpdateWorkflow = (workflowId: string) => {
 };
 
 /**
- * Enables a draft workflow.
- * Produces audit event: workflow.enabled
+ * Publishes a draft workflow.
+ * Produces audit event: workflow.published
  * Used on: WorkflowsPage (status actions)
  */
-export const useEnableWorkflow = (workflowId: string) => {
+export const usePublishWorkflow = (workflowId: string) => {
   const queryClient = useQueryClient();
 
   return useMutation<Workflow, Error, void>({
     mutationFn: async () => {
-      const { data } = await apiClient.post(`/workflows/${workflowId}/enable`);
+      const { data } = await apiClient.post(`/workflows/${workflowId}/publish`);
       return data.data;
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: QUERY_KEYS.WORKFLOWS });
       queryClient.invalidateQueries({ queryKey: QUERY_KEYS.WORKFLOW_DETAIL(workflowId) });
-      toast.success('Workflow enabled');
+      toast.success('Workflow published');
     },
     onError: (error: unknown) => {
-      console.error('Enable workflow failed', error);
+      console.error('Publish workflow failed', error);
     },
   });
 };
 
 /**
- * Disables an enabled workflow.
- * Produces audit event: workflow.disabled
+ * Archives a published workflow.
+ * Produces audit event: workflow.archived
  * Used on: WorkflowsPage (status actions)
  */
-export const useDisableWorkflow = (workflowId: string) => {
+export const useArchiveWorkflow = (workflowId: string) => {
   const queryClient = useQueryClient();
 
   return useMutation<Workflow, Error, void>({
     mutationFn: async () => {
-      const { data } = await apiClient.post(`/workflows/${workflowId}/disable`);
+      const { data } = await apiClient.post(`/workflows/${workflowId}/archive`);
       return data.data;
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: QUERY_KEYS.WORKFLOWS });
       queryClient.invalidateQueries({ queryKey: QUERY_KEYS.WORKFLOW_DETAIL(workflowId) });
-      toast.success('Workflow disabled');
+      toast.success('Workflow archived');
     },
     onError: (error: unknown) => {
-      console.error('Disable workflow failed', error);
+      console.error('Archive workflow failed', error);
+    },
+  });
+};
+
+/**
+ * Creates a new draft from an existing workflow.
+ * Produces audit event: workflow.draft_created
+ * Used on: WorkflowsPage (create draft action)
+ */
+export const useCreateDraftWorkflow = (workflowId: string) => {
+  const queryClient = useQueryClient();
+
+  return useMutation<Workflow, Error, void>({
+    mutationFn: async () => {
+      const { data } = await apiClient.post(`/workflows/${workflowId}/draft`);
+      return data.data;
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: QUERY_KEYS.WORKFLOWS });
+      toast.success('Draft created');
+    },
+    onError: (error: unknown) => {
+      console.error('Create draft workflow failed', error);
+    },
+  });
+};
+
+/**
+ * Rollback to a previous workflow version.
+ * Produces audit event: workflow.rolled_back
+ * Used on: WorkflowsPage (versions tab)
+ */
+export const useRollbackWorkflow = (workflowId: string) => {
+  const queryClient = useQueryClient();
+
+  return useMutation<Workflow, Error, void>({
+    mutationFn: async () => {
+      const { data } = await apiClient.post(`/workflows/${workflowId}/rollback`);
+      return data.data;
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: QUERY_KEYS.WORKFLOWS });
+      toast.success('Rolled back successfully');
+    },
+    onError: (error: unknown) => {
+      console.error('Rollback workflow failed', error);
     },
   });
 };
@@ -158,7 +222,7 @@ export const useDeleteWorkflow = () => {
     mutationFn: async ({ workflow_id }: { workflow_id: string }) => {
       await apiClient.delete(`/workflows/${workflow_id}`);
     },
-    onSuccess: (_, vars) => {
+    onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: QUERY_KEYS.WORKFLOWS });
       toast.success('Workflow deleted');
     },
@@ -308,3 +372,24 @@ export const useTestWorkflow = (workflowId: string) => {
     },
   });
 };
+
+/**
+ * Simulates a workflow with a mock payload to verify conditions without executing.
+ * Used on: WorkflowsPage (simulate modal)
+ */
+export const useSimulateWorkflow = (workflowId: string) => {
+  return useMutation<WorkflowSimulationResult, Error, TestWorkflowInput>({
+    mutationFn: async (input: TestWorkflowInput) => {
+      const { data } = await apiClient.post(`/workflows/${workflowId}/simulate`, input);
+      return data.data;
+    },
+    onSuccess: () => {
+      toast.success('Simulation complete');
+    },
+    onError: (error: unknown) => {
+      console.error('Workflow simulation failed', error);
+      toast.error('Simulation failed');
+    },
+  });
+};
+

@@ -2,13 +2,14 @@
 import { useParams, useNavigate } from 'react-router-dom';
 import { UserHistoryPanel } from '@/features/people/components/UserHistoryPanel';
 import { TableSkeleton } from '@/components/ui/TableSkeleton';
-import { History, ArrowLeft, Users, Edit2, Mail, RefreshCw, Monitor, Clock, CalendarDays, FileText, Briefcase, MapPin } from 'lucide-react';
+import { History, ArrowLeft, Users, Edit2, Mail, RefreshCw, Monitor, PlaneTakeoff, Clock, CalendarDays, FileText, Briefcase, MapPin } from 'lucide-react';
 import { useUserDetail } from '@/features/people/hooks/useUserDetail';
 import { useResendInvite } from '@/features/people/hooks/useResendInvite';
 import { useCallback, useState } from 'react';
 import { ReportingLinesPanel } from '@/features/people/components/ReportingLinesPanel';
 import { EffectivePermissionsPanel } from '@/features/people/components/EffectivePermissionsPanel';
 import { UserAppAccessPanel } from '@/features/people/components/UserAppAccessPanel';
+import { UserDelegatesPanel } from '@/features/people/components/UserDelegatesPanel';
 import { formatTimeInTimezone, getTimezoneOffset } from '@/lib/timezone';
 import { useUserEffectiveSettings } from '@/features/locations/hooks/useUserEffectiveSettings';
 
@@ -303,6 +304,13 @@ export default function UserDetailPage() {
         <h2 className="text-base font-semibold text-ink">App Access History</h2>
       </div>
       <UserAppAccessPanel userId={user._id} />
+
+      {/* ── Delegates Panel ── */}
+      <div className="flex items-center gap-2 mb-2 pt-4">
+        <PlaneTakeoff className="w-5 h-5 text-ink-secondary" />
+        <h2 className="text-base font-semibold text-ink">Approval Delegates</h2>
+      </div>
+      <UserDelegatesPanel userId={user._id} />
 
       {/* ── History Panel ── */}
       <div className="flex items-center gap-2 mb-2 pt-4">

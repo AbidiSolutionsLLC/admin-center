@@ -712,15 +712,19 @@ export const getBUTree = asyncHandler(async (req: Request, res: Response) => {
     dept_count: number;
   }
 
-  const buildTree = (parentId: string): OrgTreeNode[] => {
+  const buildTree = (parentId: string, visited: Set<string> = new Set()): OrgTreeNode[] => {
     // Find children (could be BUs or Departments)
     const children = allOrgUnits.filter(
       (u) => u.parent_id?.toString() === parentId
     );
 
-    return children.map((child): OrgTreeNode => {
+    return children.filter(child => !visited.has(child._id.toString())).map((child): OrgTreeNode => {
       const childId = child._id.toString();
       
+      // Add child to visited set to prevent cyclic loops
+      const nextVisited = new Set(visited);
+      nextVisited.add(childId);
+
       // Teams directly under this unit
       const unitTeams = teams.filter(
         (t) => t.department_id?.toString() === childId
@@ -730,7 +734,7 @@ export const getBUTree = asyncHandler(async (req: Request, res: Response) => {
       });
 
       // Recursive children
-      const nestedChildren = buildTree(childId);
+      const nestedChildren = buildTree(childId, nextVisited);
 
       // Count all non-BU descendants in this branch
       const countDepts = (nodes: OrgTreeNode[]): number => {

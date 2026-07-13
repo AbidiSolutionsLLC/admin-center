@@ -25,8 +25,13 @@ export interface LifecycleEvent {
   userId: string;
   userName: string;
   userEmail: string;
-  lifecycleFrom: string;
-  lifecycleTo: string;
+  trigger: string;
+  lifecycleFrom?: string;
+  lifecycleTo?: string;
+  roleFrom?: string;
+  roleTo?: string;
+  departmentFrom?: string;
+  departmentTo?: string;
 }
 
 export interface StepExecutionResult {
@@ -46,6 +51,7 @@ export interface WorkflowExecutionResult {
   stepsFailed: number;
   stepResults: StepExecutionResult[];
   executionTimeMs: number;
+  slaStatus?: 'ok' | 'breached' | 'pending';
   errorMessage?: string;
 }
 
@@ -194,15 +200,17 @@ export async function executeWorkflow(
       run = await WorkflowRun.create({
         company_id: new Types.ObjectId(event.companyId),
         workflow_id: workflow._id,
-        triggered_by: event.lifecycleTo ? 'user.lifecycle_changed' : 'test',
+        triggered_by: event.trigger,
         triggered_by_object_id: event.userId,
         triggered_by_label: event.userName,
         status: 'success',
         steps_executed: 0,
         steps_succeeded: 0,
         steps_failed: 0,
-        event_payload: event,
+        event_payload: { ...event } as Record<string, unknown>,
         execution_time_ms: 0,
+        step_results: [],
+        sla_status: 'pending',
       });
     }
 
@@ -217,15 +225,112 @@ export async function executeWorkflow(
     for (let i = stepsExecuted; i < steps.length; i++) {
       const step = steps[i];
       
+      // Evaluate conditions if any
+      let conditionsMet = true;
+      if (step.conditions && step.conditions.length > 0) {
+        // Resolve field against event payload
+        const getNestedValue = (obj: any, path: string) => path.split('.').reduce((acc, part) => acc && acc[part], obj);
+        
+        for (const condition of step.conditions) {
+          const actualValue = getNestedValue(event, condition.field);
+          
+          let matches = false;
+          switch (condition.operator) {
+            case 'equals':
+              matches = String(actualValue) === String(condition.value);
+              break;
+            case 'not_equals':
+              matches = String(actualValue) !== String(condition.value);
+              break;
+            case 'contains':
+              matches = String(actualValue).includes(String(condition.value));
+              break;
+            case 'greater_than':
+              matches = Number(actualValue) > Number(condition.value);
+              break;
+            case 'less_than':
+              matches = Number(actualValue) < Number(condition.value);
+              break;
+          }
+          
+          if (!matches) {
+            conditionsMet = false;
+            break;
+          }
+        }
+      }
+
+      if (!conditionsMet) {
+        stepResults.push({
+          stepId: step._id.toString(),
+          stepName: step.name,
+          actionType: step.action_type,
+          success: true, // skipped is technically not a failure
+          output: { note: 'Step skipped due to unmatched conditions' },
+        });
+        
+        run?.step_results?.push({
+          step_id: step._id,
+          step_name: step.name,
+          action_type: step.action_type,
+          status: 'skipped',
+          execution_time_ms: 0,
+          started_at: new Date(),
+          completed_at: new Date(),
+          sla_breached: false,
+        });
+
+        stepsExecuted++;
+        stepsSucceeded++;
+        continue;
+      }
+      
+      const stepStartTime = Date.now();
+      
       if (step.action_type === 'require_approval') {
         // Pause here
-        await ApprovalRequest.create({
+        const approverUserIds = (step.action_config.approver_user_ids as string[]) || [];
+        const approvalCondition = (step.action_config.approval_condition as 'any' | 'all') || 'any';
+        const approval = await ApprovalRequest.create({
           company_id: step.company_id,
           workflow_run_id: run._id,
           workflow_step_id: step._id,
-          approver_user_ids: step.action_config.approver_user_ids || [],
-          status: 'pending'
+          approver_user_ids: approverUserIds,
+          approval_condition: approvalCondition,
+          status: 'pending',
+          decisions: []
         });
+        
+        // Notify approvers on task assignment
+        const company = await Company.findById(event.companyId);
+        for (const approverId of approverUserIds) {
+           const user = await User.findById(approverId);
+           if (user) {
+              await deliverNotification({
+                 companyId: event.companyId,
+                 templateKey: 'task_assignment_alert',
+                 user_id: user._id.toString(),
+                 user_name: user.full_name.split(' ')[0],
+                 user_full_name: user.full_name,
+                 user_email: user.email,
+                 company_name: company?.name,
+                 detail: `You have been assigned a new task: "${step.name}". Please review and approve.`,
+                 triggered_by_event: 'workflow.task_assigned',
+                 forceEmail: true,
+              }).catch(err => console.error('[NotificationEngine] Task assignment notification failed:', err));
+           }
+        }
+        
+        run?.step_results?.push({
+          step_id: step._id,
+          step_name: step.name,
+          action_type: step.action_type,
+          status: 'pending',
+          execution_time_ms: 0,
+          started_at: new Date(),
+          sla_breached: false,
+        });
+        
         status = 'pending_approval';
         break;
       }
@@ -233,6 +338,22 @@ export async function executeWorkflow(
       stepsExecuted++;
       const result = await executeStep(step, event);
       stepResults.push(result);
+      
+      const stepExecutionTimeMs = Date.now() - stepStartTime;
+      const stepSlaBreached = step.sla_config?.threshold_minutes 
+        ? stepExecutionTimeMs > step.sla_config.threshold_minutes * 60000 
+        : false;
+
+      run?.step_results?.push({
+        step_id: step._id,
+        step_name: step.name,
+        action_type: step.action_type,
+        status: result.success ? 'success' : 'failure',
+        execution_time_ms: stepExecutionTimeMs,
+        started_at: new Date(stepStartTime),
+        completed_at: new Date(),
+        sla_breached: stepSlaBreached,
+      });
 
       if (result.success) {
         stepsSucceeded++;
@@ -258,6 +379,16 @@ export async function executeWorkflow(
         : 'success';
   }
 
+  let slaStatus: 'ok' | 'breached' | 'pending' = 'pending';
+  const totalExecutionTimeMs = (run?.execution_time_ms || 0) + executionTimeMs;
+  if (status !== 'pending_approval') {
+    if (workflow.sla_config?.threshold_minutes && totalExecutionTimeMs > workflow.sla_config.threshold_minutes * 60000) {
+      slaStatus = 'breached';
+    } else {
+      slaStatus = 'ok';
+    }
+  }
+
   // Update the workflow run
   if (run) {
     run.status = status;
@@ -268,7 +399,8 @@ export async function executeWorkflow(
     if (errorMessage) {
       run.error_details = { last_failed_step: stepResults.find((r) => !r.success) };
     }
-    run.execution_time_ms = (run.execution_time_ms || 0) + executionTimeMs;
+    run.execution_time_ms = totalExecutionTimeMs;
+    run.sla_status = slaStatus;
     await run.save();
   }
 
@@ -279,7 +411,7 @@ export async function executeWorkflow(
       category: 'health',
       severity: 'critical',
       title: `Workflow "${workflow.name}" failed`,
-      description: `Workflow execution failed for user ${event.userName} on lifecycle change ${event.lifecycleFrom} → ${event.lifecycleTo}.`,
+      description: `Workflow execution failed for user ${event.userName} on event ${event.trigger}.`,
       reasoning: errorMessage || 'Unknown error during workflow execution.',
       affected_object_type: 'Workflow',
       affected_object_id: workflow._id.toString(),
@@ -301,6 +433,24 @@ export async function executeWorkflow(
     ).catch((notifError) => {
       console.error('[NotificationEngine] Workflow failure notification failed:', notifError);
     });
+  } else if (status === 'success' && run) {
+    // Notify on successful workflow completion
+    const company = await Company.findById(event.companyId);
+    const user = await User.findById(event.userId);
+    if (user) {
+       await deliverNotification({
+           companyId: event.companyId,
+           templateKey: 'workflow_completion_alert',
+           user_id: user._id.toString(),
+           user_name: user.full_name.split(' ')[0],
+           user_full_name: user.full_name,
+           user_email: user.email,
+           company_name: company?.name,
+           detail: `The workflow "${workflow.name}" has been completed successfully.`,
+           triggered_by_event: 'workflow.completed',
+           forceEmail: true,
+       }).catch(err => console.error('[NotificationEngine] Workflow completion notification failed:', err));
+    }
   }
 
   return {
@@ -311,6 +461,7 @@ export async function executeWorkflow(
     stepsFailed,
     stepResults,
     executionTimeMs,
+    slaStatus,
     errorMessage,
   };
 }
@@ -348,8 +499,26 @@ export async function resumeWorkflow(runId: string, approved: boolean, decidedBy
     return;
   }
 
-  const event = run.event_payload as LifecycleEvent;
+  const event = run.event_payload as unknown as LifecycleEvent;
   if (!event) throw new Error('Event payload missing from WorkflowRun, cannot resume');
+
+  // Update the pending step result
+  const pendingStep = run.step_results?.find(s => s.status === 'pending');
+  if (pendingStep) {
+    const completedAt = new Date();
+    const executionTimeMs = completedAt.getTime() - pendingStep.started_at.getTime();
+    
+    const step = await WorkflowStep.findById(pendingStep.step_id);
+    const stepSlaBreached = step?.sla_config?.threshold_minutes 
+        ? executionTimeMs > step.sla_config.threshold_minutes * 60000 
+        : false;
+
+    pendingStep.status = 'success';
+    pendingStep.completed_at = completedAt;
+    pendingStep.execution_time_ms = executionTimeMs;
+    pendingStep.sla_breached = stepSlaBreached;
+    run.execution_time_ms = (run.execution_time_ms || 0) + executionTimeMs;
+  }
 
   // Increment stepsExecuted because the approval step was successful.
   run.steps_executed += 1;
@@ -364,15 +533,27 @@ export async function resumeWorkflow(runId: string, approved: boolean, decidedBy
  * Finds all enabled workflows matching the trigger config and executes them.
  */
 export async function handleLifecycleEvent(event: LifecycleEvent): Promise<WorkflowExecutionResult[]> {
-  // Find all enabled workflows that match this lifecycle transition
-  const workflows = await Workflow.find({
+  // Find all enabled workflows that match this trigger
+  const matchQuery: any = {
     company_id: new Types.ObjectId(event.companyId),
-    trigger: 'user.lifecycle_changed',
-    status: 'enabled' as WorkflowStatus,
+    trigger: event.trigger,
+    status: 'published' as WorkflowStatus,
     is_active: true,
-    'trigger_config.lifecycle_from': event.lifecycleFrom,
-    'trigger_config.lifecycle_to': event.lifecycleTo,
-  });
+  };
+
+  if (event.trigger === 'user.lifecycle_changed') {
+    matchQuery['trigger_config.lifecycle_from'] = event.lifecycleFrom;
+    matchQuery['trigger_config.lifecycle_to'] = event.lifecycleTo;
+  } else if (event.trigger === 'user.role_changed') {
+    if (event.roleFrom) matchQuery['trigger_config.role_from'] = event.roleFrom;
+    if (event.roleTo) matchQuery['trigger_config.role_to'] = event.roleTo;
+  } else if (event.trigger === 'user.department_changed') {
+    if (event.departmentFrom) matchQuery['trigger_config.department_from'] = event.departmentFrom;
+    if (event.departmentTo) matchQuery['trigger_config.department_to'] = event.departmentTo;
+  }
+  // For user.created, no config needed
+
+  const workflows = await Workflow.find(matchQuery);
 
   const results: WorkflowExecutionResult[] = [];
 
@@ -386,7 +567,7 @@ export async function handleLifecycleEvent(event: LifecycleEvent): Promise<Workf
       const run = await WorkflowRun.create({
         company_id: new Types.ObjectId(event.companyId),
         workflow_id: workflow._id,
-        triggered_by: 'user.lifecycle_changed',
+        triggered_by: event.trigger,
         triggered_by_object_id: event.userId,
         triggered_by_label: event.userName,
         status: 'failure' as WorkflowRunStatus,
@@ -395,6 +576,8 @@ export async function handleLifecycleEvent(event: LifecycleEvent): Promise<Workf
         steps_failed: 0,
         error_message: errorMessage,
         execution_time_ms: 0,
+        step_results: [],
+        sla_status: 'pending'
       });
 
       // Create insight for failed workflow
@@ -403,7 +586,7 @@ export async function handleLifecycleEvent(event: LifecycleEvent): Promise<Workf
         category: 'health',
         severity: 'critical',
         title: `Workflow "${workflow.name}" failed to execute`,
-        description: `Workflow failed for user ${event.userName} on ${event.lifecycleFrom} → ${event.lifecycleTo}.`,
+        description: `Workflow failed for user ${event.userName} on event ${event.trigger}.`,
         reasoning: errorMessage,
         affected_object_type: 'Workflow',
         affected_object_id: workflow._id.toString(),
@@ -422,10 +605,129 @@ export async function handleLifecycleEvent(event: LifecycleEvent): Promise<Workf
         stepsFailed: 0,
         stepResults: [],
         executionTimeMs: 0,
+        slaStatus: 'pending',
         errorMessage,
       });
     }
   }
 
   return results;
+}
+
+export interface SimulationResult {
+  stepId: string;
+  stepName: string;
+  actionType: string;
+  conditionsMet: boolean;
+  executed: boolean;
+  reason?: string;
+  simulatedOutput?: Record<string, unknown>;
+}
+
+export interface WorkflowSimulationResult {
+  status: 'simulated';
+  stepsEvaluated: number;
+  stepsTriggered: number;
+  stepsSkipped: number;
+  stepResults: SimulationResult[];
+}
+
+/**
+ * Simulates a workflow execution.
+ * Evaluates conditions and steps but does NOT affect real data or execute external services.
+ */
+export async function simulateWorkflow(
+  workflow: typeof Workflow.prototype,
+  event: LifecycleEvent
+): Promise<WorkflowSimulationResult> {
+  const stepResults: SimulationResult[] = [];
+  let stepsEvaluated = 0;
+  let stepsTriggered = 0;
+  let stepsSkipped = 0;
+
+  // Fetch steps ordered by step_order
+  const steps = await WorkflowStep.find({
+    company_id: new Types.ObjectId(event.companyId),
+    workflow_id: workflow._id,
+    is_active: true,
+  }).sort({ step_order: 1 });
+
+  const getNestedValue = (obj: any, path: string) => {
+    if (!path || !obj) return undefined;
+    return path.split('.').reduce((acc, part) => acc && acc[part], obj);
+  };
+
+  for (const step of steps) {
+    stepsEvaluated++;
+    
+    // Evaluate conditions if any
+    let conditionsMet = true;
+    let failedCondition = null;
+    
+    if (step.conditions && step.conditions.length > 0) {
+      for (const condition of step.conditions) {
+        const actualValue = getNestedValue(event, condition.field);
+        
+        let matches = false;
+        switch (condition.operator) {
+          case 'equals':
+            matches = String(actualValue) === String(condition.value);
+            break;
+          case 'not_equals':
+            matches = String(actualValue) !== String(condition.value);
+            break;
+          case 'contains':
+            matches = String(actualValue).includes(String(condition.value));
+            break;
+          case 'greater_than':
+            matches = Number(actualValue) > Number(condition.value);
+            break;
+          case 'less_than':
+            matches = Number(actualValue) < Number(condition.value);
+            break;
+        }
+        
+        if (!matches) {
+          conditionsMet = false;
+          failedCondition = condition;
+          break;
+        }
+      }
+    }
+
+    if (!conditionsMet) {
+      stepsSkipped++;
+      stepResults.push({
+        stepId: step._id.toString(),
+        stepName: step.name,
+        actionType: step.action_type,
+        conditionsMet: false,
+        executed: false,
+        reason: `Skipped: condition '${failedCondition?.field} ${failedCondition?.operator} ${failedCondition?.value}' not met (was '${getNestedValue(event, failedCondition?.field!)}')`,
+      });
+      continue;
+    }
+    
+    stepsTriggered++;
+    stepResults.push({
+      stepId: step._id.toString(),
+      stepName: step.name,
+      actionType: step.action_type,
+      conditionsMet: true,
+      executed: true,
+      reason: 'Conditions met, action would be executed',
+      simulatedOutput: {
+        note: `Action ${step.action_type} execution simulated`,
+        config: step.action_config
+      }
+    });
+  }
+
+  return {
+    status: 'simulated',
+    stepsEvaluated,
+    stepsTriggered,
+    stepsSkipped,
+    stepResults,
+  };
 }

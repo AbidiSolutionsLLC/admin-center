@@ -26,6 +26,7 @@ import groupsRoutes from './groups.routes';
 import accessControlPoliciesRoutes from './accessControlPolicies.routes';
 import dataGovernancePoliciesRoutes from './dataGovernancePolicies.routes';
 import policyTemplatesRoutes from './policyTemplates.routes';
+import workflowTemplatesRoutes from './workflowTemplates.routes';
 
 const router = Router();
 
@@ -59,6 +60,7 @@ router.use('/company', companyRoutes); // FIX-03: Company settings routes
 router.use('/access-control-policies', accessControlPoliciesRoutes);
 router.use('/data-governance-policies', dataGovernancePoliciesRoutes);
 router.use('/policy-templates', policyTemplatesRoutes);
+router.use('/workflow-templates', workflowTemplatesRoutes);
 
 // Protected test route for verifying JWT rejection logic
 router.get('/protected-test', requireAuth, (req, res) => {

@@ -17,6 +17,17 @@ export interface IWorkflowRun extends Document {
   error_details?: Record<string, unknown>;
   event_payload?: Record<string, unknown>;
   execution_time_ms: number;
+  sla_status?: 'ok' | 'breached' | 'pending';
+  step_results?: {
+    step_id: Types.ObjectId;
+    step_name: string;
+    action_type: string;
+    status: 'success' | 'failure' | 'skipped' | 'pending';
+    execution_time_ms: number;
+    started_at: Date;
+    completed_at?: Date;
+    sla_breached: boolean;
+  }[];
   created_at: Date;
 }
 
@@ -34,6 +45,17 @@ const WorkflowRunSchema = new Schema<IWorkflowRun>({
   error_details: { type: Schema.Types.Mixed },
   event_payload: { type: Schema.Types.Mixed },
   execution_time_ms: { type: Number, required: true },
+  sla_status: { type: String, enum: ['ok', 'breached', 'pending'], default: 'pending' },
+  step_results: [{
+    step_id: { type: Schema.Types.ObjectId, ref: 'WorkflowStep' },
+    step_name: { type: String },
+    action_type: { type: String },
+    status: { type: String, enum: ['success', 'failure', 'skipped', 'pending'] },
+    execution_time_ms: { type: Number },
+    started_at: { type: Date },
+    completed_at: { type: Date },
+    sla_breached: { type: Boolean, default: false }
+  }],
 }, { timestamps: { createdAt: 'created_at', updatedAt: false } });
 
 // Indexes for querying runs by workflow and status

@@ -525,6 +525,12 @@ export type LifecycleState = 'invited' | 'onboarding' | 'active' | 'probation' |
 export type EmploymentType = 'full_time' | 'part_time' | 'contractor' | 'intern';
 export type UserRole = typeof ROLES[keyof typeof ROLES];
 
+export interface Delegate {
+  user_id: string | { _id: string; full_name: string; email: string; avatar_url?: string };
+  start_date: string;
+  end_date: string;
+}
+
 export interface User {
   _id: string;
   company_id: string;
@@ -558,6 +564,7 @@ export interface User {
   updated_at: string;
   /** Virtual field: array of role names/IDs — populated by server if requested */
   roles?: Array<{ _id: string; name: string }>;
+  delegates?: Delegate[];
 }
 
 export interface InviteUserInput {
@@ -574,6 +581,7 @@ export interface InviteUserInput {
   hire_date?: string | null;
   location_id?: string | null;
   custom_fields?: Record<string, unknown>;
+  delegates?: Delegate[];
 }
 
 export interface UpdateUserInput {
@@ -591,6 +599,7 @@ export interface UpdateUserInput {
   termination_date?: string | null;
   location_id?: string | null;
   custom_fields?: Record<string, unknown>;
+  delegates?: Delegate[];
 }
 
 export interface UpdateLifecycleInput {
@@ -1039,8 +1048,8 @@ export interface PolicyConflictCheck {
 // Workflows
 // ─────────────────────────────────────────────────────────────────────────────
 
-export type WorkflowTrigger = 'user.lifecycle_changed';
-export type WorkflowStatus = 'draft' | 'enabled' | 'disabled';
+export type WorkflowTrigger = 'user.lifecycle_changed' | 'user.created' | 'user.role_changed' | 'user.department_changed';
+export type WorkflowStatus = 'draft' | 'published' | 'archived';
 export type WorkflowActionType =
   | 'send_email'
   | 'assign_role'
@@ -1052,19 +1061,29 @@ export type WorkflowActionType =
   | 'require_approval';
 
 export interface WorkflowTriggerConfig {
-  lifecycle_from: string[];
-  lifecycle_to: string[];
+  lifecycle_from?: string[];
+  lifecycle_to?: string[];
+  role_from?: string[];
+  role_to?: string[];
+  department_from?: string[];
+  department_to?: string[];
 }
 
 export interface Workflow {
   _id: string;
   company_id: string;
+  workflow_key: string;
+  version_number: number;
   name: string;
   description?: string;
   trigger: WorkflowTrigger;
   trigger_config: WorkflowTriggerConfig;
   status: WorkflowStatus;
   is_active: boolean;
+  sla_config?: {
+    threshold_minutes: number;
+    notify_on_breach: boolean;
+  };
   created_by: {
     _id: string;
     full_name: string;
@@ -1078,6 +1097,13 @@ export interface Workflow {
   created_at: string;
   updated_at: string;
   steps?: WorkflowStep[]; // Populated on detail view
+  version_count?: number; // Added when listing workflows
+}
+
+export interface WorkflowStepCondition {
+  field: string;
+  operator: 'equals' | 'not_equals' | 'contains' | 'greater_than' | 'less_than';
+  value: unknown;
 }
 
 export interface WorkflowStep {
@@ -1087,9 +1113,18 @@ export interface WorkflowStep {
   name: string;
   description?: string;
   action_type: WorkflowActionType;
-  action_config: Record<string, unknown>;
+  action_config: Record<string, unknown> & {
+    approver_user_ids?: string[];
+    approval_condition?: 'any' | 'all';
+    escalations?: any[];
+  };
+  conditions?: WorkflowStepCondition[];
   step_order: number;
   is_active: boolean;
+  sla_config?: {
+    threshold_minutes: number;
+    notify_on_breach: boolean;
+  };
   created_at: string;
   updated_at: string;
 }
@@ -1109,6 +1144,17 @@ export interface WorkflowRun {
   steps_failed: number;
   error_message?: string;
   execution_time_ms: number;
+  sla_status?: 'ok' | 'breached' | 'pending';
+  step_results?: {
+    step_id: string;
+    step_name: string;
+    action_type: string;
+    status: 'success' | 'failure' | 'skipped' | 'pending';
+    execution_time_ms: number;
+    started_at: string;
+    completed_at?: string;
+    sla_breached: boolean;
+  }[];
   created_at: string;
 }
 
@@ -1117,12 +1163,20 @@ export interface CreateWorkflowInput {
   description?: string;
   trigger: WorkflowTrigger;
   trigger_config: WorkflowTriggerConfig;
+  sla_config?: {
+    threshold_minutes: number;
+    notify_on_breach: boolean;
+  };
 }
 
 export interface UpdateWorkflowInput {
   name?: string;
   description?: string;
   trigger_config?: WorkflowTriggerConfig;
+  sla_config?: {
+    threshold_minutes: number;
+    notify_on_breach: boolean;
+  };
 }
 
 export interface CreateWorkflowStepInput {
@@ -1130,7 +1184,12 @@ export interface CreateWorkflowStepInput {
   description?: string;
   action_type: WorkflowActionType;
   action_config?: Record<string, unknown>;
+  conditions?: WorkflowStepCondition[];
   step_order: number;
+  sla_config?: {
+    threshold_minutes: number;
+    notify_on_breach: boolean;
+  };
 }
 
 export interface ReorderStepsInput {
@@ -1141,8 +1200,22 @@ export interface TestWorkflowInput {
   user_id: string;
   user_name: string;
   user_email: string;
-  lifecycle_from: string;
-  lifecycle_to: string;
+  trigger: string;
+  lifecycle_from?: string;
+  lifecycle_to?: string;
+  role_from?: string;
+  role_to?: string;
+  department_from?: string;
+  department_to?: string;
+}
+
+export interface WorkflowRunStep {
+  stepId: string;
+  stepName: string;
+  actionType: string;
+  success: boolean;
+  error?: string;
+  output?: Record<string, unknown>;
 }
 
 export interface WorkflowRunDetails extends WorkflowRun {
@@ -1162,7 +1235,15 @@ export interface ApprovalRequest {
   workflow_step_id: string | WorkflowStep;
   approver_roles: string[];
   approver_user_ids: string[];
+  approval_condition: 'any' | 'all';
   status: ApprovalStatus;
+  decisions: Array<{
+    user_id: string;
+    status: 'approved' | 'rejected';
+    delegated_for?: string;
+    comments?: string;
+    decided_at: string;
+  }>;
   decided_by?: string;
   decided_at?: string;
   comments?: string;
@@ -1185,6 +1266,24 @@ export interface WorkflowTestResult {
   }>;
   executionTimeMs: number;
   errorMessage?: string;
+}
+
+export interface SimulationResult {
+  stepId: string;
+  stepName: string;
+  actionType: string;
+  conditionsMet: boolean;
+  executed: boolean;
+  reason?: string;
+  simulatedOutput?: Record<string, unknown>;
+}
+
+export interface WorkflowSimulationResult {
+  status: 'simulated';
+  stepsEvaluated: number;
+  stepsTriggered: number;
+  stepsSkipped: number;
+  stepResults: SimulationResult[];
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -1358,6 +1457,47 @@ export interface PolicyTemplate {
     target_id: string;
   }>;
   variables: string[];
+  created_at: string;
+  updated_at: string;
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Workflow Templates
+// ─────────────────────────────────────────────────────────────────────────────
+
+export interface WorkflowTemplateStep {
+  name: string;
+  description?: string;
+  action_type: 'send_email' | 'assign_role' | 'revoke_access' | 'notify_manager' | 'update_field' | 'create_task' | 'webhook' | 'require_approval';
+  action_config: Record<string, unknown>;
+  conditions?: Array<{
+    field: string;
+    operator: 'equals' | 'not_equals' | 'contains' | 'greater_than' | 'less_than';
+    value: unknown;
+  }>;
+  step_order: number;
+  sla_config?: {
+    threshold_minutes: number;
+    notify_on_breach: boolean;
+  };
+}
+
+export interface WorkflowTemplate {
+  _id: string;
+  company_id: string | null;
+  name: string;
+  description?: string;
+  trigger: string;
+  trigger_config?: {
+    lifecycle_from?: string[];
+    lifecycle_to?: string[];
+    role_from?: string[];
+    role_to?: string[];
+    department_from?: string[];
+    department_to?: string[];
+  };
+  steps: WorkflowTemplateStep[];
+  is_active: boolean;
   created_at: string;
   updated_at: string;
 }
