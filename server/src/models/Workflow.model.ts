@@ -66,21 +66,23 @@ WorkflowSchema.index({ company_id: 1, is_active: 1 });
 
 // ── Immutability Guard ───────────────────────────────────────────────────────
 WorkflowSchema.pre('save', function() {
-  if (this.isModified() && !this.isNew && this.status === 'published') {
+  if (this.isModified() && !this.isNew && this.status === 'published' && !this.isModified('status')) {
     throw new AppError('Cannot modify published workflow version. Create a new draft instead.', 400, 'CANNOT_MODIFY_PUBLISHED');
   }
 });
 
 WorkflowSchema.pre('updateOne', function() {
   const filter = this.getFilter();
-  if (filter.status === 'published') {
+  const update = this.getUpdate() as any;
+  if (filter.status === 'published' && (!update.$set || update.$set.status !== 'archived')) {
     throw new AppError('Cannot update published workflow version. Create a new draft instead.', 400, 'CANNOT_MODIFY_PUBLISHED');
   }
 });
 
 WorkflowSchema.pre('findOneAndUpdate', function() {
   const filter = this.getFilter();
-  if (filter.status === 'published') {
+  const update = this.getUpdate() as any;
+  if (filter.status === 'published' && (!update.$set || update.$set.status !== 'archived')) {
     throw new AppError('Cannot update published workflow version. Create a new draft instead.', 400, 'CANNOT_MODIFY_PUBLISHED');
   }
 });

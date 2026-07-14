@@ -61,28 +61,31 @@ PolicyVersionSchema.index({ company_id: 1, expiry_date: 1 });
  * Exception: archiving a published policy (status changes to 'archived') is allowed.
  */
 PolicyVersionSchema.pre('save', function() {
-  if (this.isModified() && !this.isNew && this.status === 'published') {
+  if (this.isModified() && !this.isNew && this.status === 'published' && !this.isModified('status')) {
     throw new AppError('Cannot modify published policy version. Create a new version instead.', 400, 'CANNOT_MODIFY_PUBLISHED');
   }
 });
 
 PolicyVersionSchema.pre('updateOne', function() {
   const filter = this.getFilter();
-  if (filter.status === 'published') {
+  const update = this.getUpdate() as any;
+  if (filter.status === 'published' && (!update.$set || update.$set.status !== 'archived')) {
     throw new AppError('Cannot update published policy version. Create a new version instead.', 400, 'CANNOT_MODIFY_PUBLISHED');
   }
 });
 
 PolicyVersionSchema.pre('findOneAndUpdate', function() {
   const filter = this.getFilter();
-  if (filter.status === 'published') {
+  const update = this.getUpdate() as any;
+  if (filter.status === 'published' && (!update.$set || update.$set.status !== 'archived')) {
     throw new AppError('Cannot update published policy version. Create a new version instead.', 400, 'CANNOT_MODIFY_PUBLISHED');
   }
 });
 
 PolicyVersionSchema.pre('updateMany', function() {
   const filter = this.getFilter();
-  if (filter.status === 'published') {
+  const update = this.getUpdate() as any;
+  if (filter.status === 'published' && (!update.$set || update.$set.status !== 'archived')) {
     throw new AppError('Cannot update published policy version. Create a new version instead.', 400, 'CANNOT_MODIFY_PUBLISHED');
   }
 });
