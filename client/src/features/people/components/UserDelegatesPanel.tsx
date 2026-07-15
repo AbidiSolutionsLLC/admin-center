@@ -1,6 +1,6 @@
 // src/features/people/components/UserDelegatesPanel.tsx
 import { useState } from 'react';
-import { PlaneTakeoff, Plus, Trash2, Save } from 'lucide-react';
+import { PlaneTakeoff, Plus, Trash2, Save, Edit2 } from 'lucide-react';
 import { useUserDetail } from '../hooks/useUserDetail';
 import { useUpdateUser } from '../hooks/useUpdateUser';
 import { formatDate } from '@/utils/formatDate';
@@ -16,6 +16,7 @@ export function UserDelegatesPanel({ userId }: UserDelegatesPanelProps) {
   const updateMutation = useUpdateUser(userId);
 
   const [isAssignModalOpen, setIsAssignModalOpen] = useState(false);
+  const [editingIndex, setEditingIndex] = useState<number | null>(null);
   const [formData, setFormData] = useState({
     user_id: '',
     start_date: '',
@@ -40,14 +41,23 @@ export function UserDelegatesPanel({ userId }: UserDelegatesPanelProps) {
     const newDelegate = {
       user_id: formData.user_id,
       start_date: formData.start_date,
-      end_date: formData.end_date,
+      end_date: formData.end_date || undefined,
     };
+    
+    let updatedDelegates;
+    if (editingIndex !== null) {
+      updatedDelegates = [...existingDelegates];
+      updatedDelegates[editingIndex] = newDelegate;
+    } else {
+      updatedDelegates = [...existingDelegates, newDelegate];
+    }
 
     updateMutation.mutate(
-      { delegates: [...existingDelegates, newDelegate] },
+      { delegates: updatedDelegates },
       {
         onSuccess: () => {
           setIsAssignModalOpen(false);
+          setEditingIndex(null);
           setFormData({ user_id: '', start_date: '', end_date: '' });
         },
       }
@@ -88,12 +98,12 @@ export function UserDelegatesPanel({ userId }: UserDelegatesPanelProps) {
         <div className="space-y-3">
           {delegates.map((delegate: any, index: number) => {
             const start = new Date(delegate.start_date);
-            const end = new Date(delegate.end_date);
+            const end = delegate.end_date ? new Date(delegate.end_date) : null;
             
-            end.setHours(23, 59, 59, 999);
+            if (end) end.setHours(23, 59, 59, 999);
             
-            const isActive = now >= start && now <= end;
-            const isPast = now > end;
+            const isActive = now >= start && (!end || now <= end);
+            const isPast = end ? now > end : false;
             const isFuture = now < start;
 
             let statusText = 'Active';
@@ -136,18 +146,36 @@ export function UserDelegatesPanel({ userId }: UserDelegatesPanelProps) {
                      <p className="text-xs text-ink-muted truncate mb-0.5">{delegateEmail}</p>
                   )}
                   <p className="text-xs text-ink-secondary mt-1">
-                    From {formatDate(delegate.start_date)} to {formatDate(delegate.end_date)}
+                    From {formatDate(delegate.start_date)} {delegate.end_date ? `to ${formatDate(delegate.end_date)}` : '(Permanent)'}
                   </p>
                 </div>
 
-                <button
-                  onClick={() => handleRevoke(index)}
-                  className="p-1.5 text-ink-secondary hover:text-error hover:bg-error-light rounded transition-colors shrink-0"
-                  title="Revoke Delegate"
-                  disabled={updateMutation.isPending}
-                >
-                  <Trash2 className="w-4 h-4" />
-                </button>
+                <div className="flex items-center gap-1 shrink-0">
+                  <button
+                    onClick={() => {
+                      setEditingIndex(index);
+                      setFormData({
+                        user_id: typeof delegate.user_id === 'object' && delegate.user_id ? delegate.user_id._id : delegate.user_id,
+                        start_date: new Date(delegate.start_date).toISOString().split('T')[0],
+                        end_date: delegate.end_date ? new Date(delegate.end_date).toISOString().split('T')[0] : '',
+                      });
+                      setIsAssignModalOpen(true);
+                    }}
+                    className="p-1.5 text-ink-secondary hover:text-primary hover:bg-primary-light rounded transition-colors"
+                    title="Edit Delegate"
+                    disabled={updateMutation.isPending}
+                  >
+                    <Edit2 className="w-4 h-4" />
+                  </button>
+                  <button
+                    onClick={() => handleRevoke(index)}
+                    className="p-1.5 text-ink-secondary hover:text-error hover:bg-error-light rounded transition-colors"
+                    title="Revoke Delegate"
+                    disabled={updateMutation.isPending}
+                  >
+                    <Trash2 className="w-4 h-4" />
+                  </button>
+                </div>
               </div>
             );
           })}
@@ -157,14 +185,22 @@ export function UserDelegatesPanel({ userId }: UserDelegatesPanelProps) {
       {/* Assign Delegate Modal */}
       <Modal
         isOpen={isAssignModalOpen}
-        onClose={() => setIsAssignModalOpen(false)}
-        title="Assign Delegate"
+        onClose={() => {
+          setIsAssignModalOpen(false);
+          setEditingIndex(null);
+          setFormData({ user_id: '', start_date: '', end_date: '' });
+        }}
+        title={editingIndex !== null ? "Edit Delegate" : "Assign Delegate"}
         description="Select a user to act as an approval delegate during a specified timeframe."
         size="sm"
         footer={
           <>
             <button
-              onClick={() => setIsAssignModalOpen(false)}
+              onClick={() => {
+                setIsAssignModalOpen(false);
+                setEditingIndex(null);
+                setFormData({ user_id: '', start_date: '', end_date: '' });
+              }}
               disabled={updateMutation.isPending}
               className="h-9 px-4 text-sm font-medium rounded-md border border-line bg-white text-ink hover:bg-surface-alt transition-colors"
             >
@@ -172,11 +208,11 @@ export function UserDelegatesPanel({ userId }: UserDelegatesPanelProps) {
             </button>
             <button
               onClick={handleAssign}
-              disabled={updateMutation.isPending || !formData.user_id || !formData.start_date || !formData.end_date}
+              disabled={updateMutation.isPending || !formData.user_id || !formData.start_date}
               className="h-9 px-4 text-sm font-medium rounded-md bg-primary hover:bg-primary-hover text-white transition-colors disabled:opacity-50 flex items-center gap-2"
             >
               <Save className="w-4 h-4" />
-              {updateMutation.isPending ? 'Assigning...' : 'Assign Delegate'}
+              {updateMutation.isPending ? 'Saving...' : (editingIndex !== null ? 'Save Changes' : 'Assign Delegate')}
             </button>
           </>
         }
@@ -205,7 +241,7 @@ export function UserDelegatesPanel({ userId }: UserDelegatesPanelProps) {
             </div>
             <div>
               <label className="text-sm font-medium text-ink block mb-1.5">
-                End Date <span className="text-error">*</span>
+                End Date <span className="text-ink-muted font-normal">(Optional)</span>
               </label>
               <input
                 type="date"

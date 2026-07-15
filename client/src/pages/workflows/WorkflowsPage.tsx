@@ -226,7 +226,8 @@ export default function WorkflowsPage() {
             </div>
           ) : (
             <div className="bg-white rounded-lg border border-line shadow-card overflow-hidden">
-              <table className="w-full">
+              <div className="overflow-x-auto">
+                <table className="w-full min-w-[800px]">
                 <thead className="bg-white/5 border-b border-line">
                   <tr>
                     <th className="text-[11px] font-semibold text-ink-secondary uppercase tracking-wider h-10 px-4 text-left">
@@ -266,7 +267,8 @@ export default function WorkflowsPage() {
                     />
                   ))}
                 </tbody>
-              </table>
+                </table>
+              </div>
             </div>
           )}
         </>
@@ -1136,8 +1138,9 @@ function WorkflowVersionsView({ workflow }: { workflow: Workflow }) {
     <div className="space-y-3">
       {versions && versions.length > 0 ? (
         <div className="border border-line rounded-md overflow-hidden">
-          <table className="w-full">
-            <thead className="bg-white/5 border-b border-line">
+          <div className="overflow-x-auto">
+            <table className="w-full min-w-[600px]">
+              <thead className="bg-white/5 border-b border-line">
               <tr>
                 <th className="text-[11px] font-semibold text-ink-secondary uppercase tracking-wider h-10 px-4 text-left">
                   Version
@@ -1188,8 +1191,9 @@ function WorkflowVersionsView({ workflow }: { workflow: Workflow }) {
                   </td>
                 </tr>
               ))}
-            </tbody>
-          </table>
+              </tbody>
+            </table>
+          </div>
         </div>
       ) : (
         <div className="p-8 text-center border border-line rounded-md bg-surface-alt">
@@ -1204,7 +1208,7 @@ function WorkflowVersionsView({ workflow }: { workflow: Workflow }) {
 // ── Tab: Steps View (with drag-handle reordering) ───────────────────────────
 
 function WorkflowStepsView({ workflowId, status }: { workflowId: string; status: WorkflowStatus }) {
-  const { data: workflowData, isLoading } = useWorkflowDetail(workflowId);
+  const { data: workflowData, isLoading, isError } = useWorkflowDetail(workflowId);
   const addStepMutation = useAddWorkflowStep(workflowId);
   const deleteStepMutation = useDeleteWorkflowStep(workflowId);
   const reorderMutation = useReorderWorkflowSteps(workflowId);
@@ -1251,6 +1255,7 @@ function WorkflowStepsView({ workflowId, status }: { workflowId: string; status:
   );
 
   if (isLoading) return <TableSkeleton rows={4} columns={4} />;
+  if (isError) return <div className="p-8 text-center text-error">Failed to load workflow details.</div>;
 
   return (
     <div className="space-y-4">
@@ -1452,6 +1457,7 @@ function AddStepModal({ isOpen, onClose, addMutation, currentStepCount }: AddSte
     conditions: [] as { field: string; operator: 'equals' | 'not_equals' | 'contains' | 'greater_than' | 'less_than'; value: string }[],
     escalation_timeout_hours: '',
     escalation_fallback_ids: [] as string[],
+    escalation_notify_fallback: true,
     sla_threshold_minutes: '',
     sla_notify_on_breach: false,
   });
@@ -1469,7 +1475,7 @@ function AddStepModal({ isOpen, onClose, addMutation, currentStepCount }: AddSte
               escalations: formData.escalation_timeout_hours ? [{
                 timeout_hours: parseInt(formData.escalation_timeout_hours, 10),
                 fallback_approver_ids: formData.escalation_fallback_ids,
-                notify_fallback: true
+                notify_fallback: formData.escalation_notify_fallback
               }] : [],
             } 
           : {},
@@ -1621,6 +1627,15 @@ function AddStepModal({ isOpen, onClose, addMutation, currentStepCount }: AddSte
                     placeholder="Select fallback..."
                     onlyActive={true}
                   />
+                  <label className="flex items-center gap-2 mt-2">
+                    <input
+                      type="checkbox"
+                      checked={formData.escalation_notify_fallback}
+                      onChange={(e) => setFormData({ ...formData, escalation_notify_fallback: e.target.checked })}
+                      className="w-4 h-4 text-primary rounded border-line focus:ring-primary/30"
+                    />
+                    <span className="text-xs text-ink-secondary">Notify fallback approvers</span>
+                  </label>
                 </div>
               </div>
             </div>
@@ -2268,7 +2283,7 @@ function SimulateWorkflowModal({ isOpen, onClose, simulateMutation, workflow }: 
 // ── Tab: Run History View ───────────────────────────────────────────────────
 
 function WorkflowRunsView({ workflowId }: { workflowId: string }) {
-  const { data: runs, isLoading } = useWorkflowRuns(workflowId);
+  const { data: runs, isLoading, isError } = useWorkflowRuns(workflowId);
   const [expandedRows, setExpandedRows] = useState<Set<string>>(new Set());
 
   const toggleRow = (runId: string) => {
@@ -2282,13 +2297,15 @@ function WorkflowRunsView({ workflowId }: { workflowId: string }) {
   };
 
   if (isLoading) return <TableSkeleton rows={4} columns={7} />;
+  if (isError) return <div className="p-8 text-center text-error">Failed to load run history.</div>;
 
   return (
     <div className="space-y-3">
       {runs && runs.length > 0 ? (
         <div className="border border-line rounded-md overflow-hidden">
-          <table className="w-full">
-            <thead className="bg-white/5 border-b border-line">
+          <div className="overflow-x-auto">
+            <table className="w-full min-w-[800px]">
+              <thead className="bg-white/5 border-b border-line">
               <tr>
                 <th className="w-10 px-4 text-left h-10"></th>
                 <th className="text-[11px] font-semibold text-ink-secondary uppercase tracking-wider h-10 px-4 text-left">
@@ -2353,6 +2370,10 @@ function WorkflowRunsView({ workflowId }: { workflowId: string }) {
                         ) : run.sla_status === 'ok' ? (
                           <span className="inline-flex items-center gap-1 text-[11px] font-semibold bg-success-light text-success border border-success/20 rounded-full px-2.5 py-0.5">
                             Met
+                          </span>
+                        ) : run.sla_status === 'pending' ? (
+                          <span className="inline-flex items-center gap-1 text-[11px] font-semibold bg-amber-50 text-amber-700 border border-amber-200 rounded-full px-2.5 py-0.5">
+                            Pending
                           </span>
                         ) : (
                           <span className="text-ink-secondary text-xs">-</span>
@@ -2424,6 +2445,7 @@ function WorkflowRunsView({ workflowId }: { workflowId: string }) {
               })}
             </tbody>
           </table>
+          </div>
         </div>
       ) : (
         <div className="p-8 text-center border border-line rounded-md bg-surface-alt">

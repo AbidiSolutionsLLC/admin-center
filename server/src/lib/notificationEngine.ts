@@ -105,26 +105,32 @@ async function deliverEmail(
   }
 
   // Log delivery event
-  const event = await NotificationEvent.create({
-    company_id: new Types.ObjectId(payload.companyId),
-    template_id: template._id,
-    recipient_user_id: new Types.ObjectId(payload.user_id),
-    recipient_email: payload.user_email,
-    channel: 'email',
-    status,
-    subject_rendered: renderedSubject,
-    body_rendered: renderedBody,
-    error_message: errorMessage,
-    triggered_by_event: payload.triggered_by_event,
-    triggered_by_object_type: payload.triggered_by_object_type,
-    triggered_by_object_id: payload.triggered_by_object_id,
-    delivery_timestamp: timestamp,
-  });
+  let event_id = 'unknown';
+  try {
+    const event = await NotificationEvent.create({
+      company_id: new Types.ObjectId(payload.companyId),
+      template_id: template._id,
+      recipient_user_id: new Types.ObjectId(payload.user_id),
+      recipient_email: payload.user_email,
+      channel: 'email',
+      status,
+      subject_rendered: renderedSubject,
+      body_rendered: renderedBody,
+      error_message: errorMessage,
+      triggered_by_event: payload.triggered_by_event,
+      triggered_by_object_type: payload.triggered_by_object_type,
+      triggered_by_object_id: payload.triggered_by_object_id,
+      delivery_timestamp: timestamp,
+    });
+    event_id = event._id.toString();
+  } catch (err) {
+    console.error('[NotificationEngine] Failed to log email delivery event:', err);
+  }
 
   return {
     channel: 'email',
     status,
-    event_id: event._id.toString(),
+    event_id,
     error: errorMessage,
   };
 }
@@ -161,25 +167,31 @@ async function deliverInApp(
   }
 
   // Log delivery event
-  const event = await NotificationEvent.create({
-    company_id: new Types.ObjectId(payload.companyId),
-    template_id: template._id,
-    recipient_user_id: new Types.ObjectId(payload.user_id),
-    channel: 'in_app',
-    status,
-    subject_rendered: renderedSubject,
-    body_rendered: renderedBody,
-    error_message: errorMessage,
-    triggered_by_event: payload.triggered_by_event,
-    triggered_by_object_type: payload.triggered_by_object_type,
-    triggered_by_object_id: payload.triggered_by_object_id,
-    delivery_timestamp: timestamp,
-  });
+  let event_id = 'unknown';
+  try {
+    const event = await NotificationEvent.create({
+      company_id: new Types.ObjectId(payload.companyId),
+      template_id: template._id,
+      recipient_user_id: new Types.ObjectId(payload.user_id),
+      channel: 'in_app',
+      status,
+      subject_rendered: renderedSubject,
+      body_rendered: renderedBody,
+      error_message: errorMessage,
+      triggered_by_event: payload.triggered_by_event,
+      triggered_by_object_type: payload.triggered_by_object_type,
+      triggered_by_object_id: payload.triggered_by_object_id,
+      delivery_timestamp: timestamp,
+    });
+    event_id = event._id.toString();
+  } catch (err) {
+    console.error('[NotificationEngine] Failed to log in-app delivery event:', err);
+  }
 
   return {
     channel: 'in_app',
     status,
-    event_id: event._id.toString(),
+    event_id,
     error: errorMessage,
   };
 }
