@@ -27,6 +27,7 @@ import { TableSkeleton } from '@/components/ui/TableSkeleton';
 import { ErrorState } from '@/components/ui/ErrorState';
 import { EmptyState } from '@/components/ui/EmptyState';
 import { Modal } from '@/components/ui/Modal';
+import { Button } from '@/components/ui/button';
 import { cn } from '@/utils/cn';
 import { ROUTES } from '@/constants/routes';
 import type { Location, HolidayCalendar, Holiday, WorkSchedule } from '@/types';
@@ -57,29 +58,27 @@ export default function LocationsPage() {
       {/* Page header */}
       <div className="flex items-start justify-between gap-4 flex-wrap">
         <div>
-          <h1 className="text-2xl font-bold tracking-tight" style={{ color: 'var(--text-main)' }}>Locations</h1>
-          <p className="mt-1 text-sm" style={{ color: 'var(--text-muted)' }}>
+          <h1 className="text-[22px] font-semibold tracking-tight text-ink">Locations</h1>
+          <p className="mt-0.5 text-sm text-ink-secondary">
             Manage your company's location hierarchy, holiday calendars, and work schedules
           </p>
         </div>
       </div>
 
       {/* Tab navigation */}
-      <div className="flex p-1 rounded-xl gap-1" style={{ background: 'rgba(255,255,255,0.04)', border: '1px solid rgba(255,255,255,0.07)', width: 'fit-content' }}>
+      <div className="flex bg-surface-alt p-1 rounded-lg gap-1 w-fit">
         {TABS.map((tab) => (
           <button
             key={tab.key}
             onClick={() => setActiveTab(tab.key)}
             className={cn(
-              'flex items-center gap-1.5 px-4 py-1.5 text-sm font-semibold rounded-lg transition-all',
-            )}
-            style={
+              'flex items-center gap-1.5 px-4 py-2 text-sm font-medium rounded-md transition-all',
               activeTab === tab.key
-                ? { background: 'rgba(245,176,42,0.12)', color: '#f5b02a' }
-                : { color: '#94a3b8' }
-            }
+                ? 'bg-white text-ink shadow-sm'
+                : 'text-ink-secondary hover:text-ink'
+            )}
           >
-            <tab.icon className="w-3.5 h-3.5" />
+            <tab.icon className="w-4 h-4" />
             {tab.label}
           </button>
         ))}
@@ -160,21 +159,23 @@ function LocationsTab() {
     <div className="space-y-6">
       {/* Locations toolbar */}
       <div className="flex items-center justify-between gap-3 flex-wrap">
-        <div className="flex p-1 rounded-xl gap-1" style={{ background: 'rgba(255,255,255,0.04)', border: '1px solid rgba(255,255,255,0.07)' }}>
+        <div className="flex bg-surface-alt p-1 rounded-lg gap-1 flex-shrink-0">
           <button
             onClick={() => setViewMode('table')}
             className={cn(
-              'flex items-center gap-1.5 px-3 py-1.5 text-sm font-semibold rounded-lg transition-all',
+              'flex items-center gap-1.5 px-3 py-1.5 text-sm font-medium rounded-md transition-all',
+              viewMode === 'table' ? 'bg-white text-ink shadow-sm' : 'text-ink-secondary hover:text-ink'
             )}
-            style={viewMode === 'table' ? { background: 'rgba(245,176,42,0.12)', color: '#f5b02a' } : { color: '#94a3b8' }}
           >
             <Layers className="w-3.5 h-3.5" />
             List
           </button>
           <button
             onClick={() => setViewMode('tree')}
-            className={cn('flex items-center gap-1.5 px-3 py-1.5 text-sm font-semibold rounded-lg transition-all')}
-            style={viewMode === 'tree' ? { background: 'rgba(245,176,42,0.12)', color: '#f5b02a' } : { color: '#94a3b8' }}
+            className={cn(
+              'flex items-center gap-1.5 px-3 py-1.5 text-sm font-medium rounded-md transition-all',
+              viewMode === 'tree' ? 'bg-white text-ink shadow-sm' : 'text-ink-secondary hover:text-ink'
+            )}
           >
             <Building2 className="w-3.5 h-3.5" />
             Hierarchy
@@ -185,42 +186,43 @@ function LocationsTab() {
           {viewMode === 'table' && (
             <>
               <div className="relative">
-                <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-3.5 h-3.5 pointer-events-none" style={{ color: '#94a3b8' }} />
+                <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-ink-muted pointer-events-none" />
                 <input
                   type="text"
                   placeholder="Search locations..."
                   value={searchQuery}
                   onChange={(e) => setSearchQuery(e.target.value)}
-                  className="h-9 pl-9 pr-8 text-sm w-56"
-                  style={{ borderRadius: '12px' }}
+                  className="h-9 pl-9 pr-8 text-sm rounded-md border border-line bg-white text-ink placeholder:text-ink-muted focus:outline-none focus:ring-2 focus:ring-primary/30 focus:border-primary transition-all duration-150 w-56"
                 />
                 {searchQuery && (
-                  <button onClick={() => setSearchQuery('')} className="absolute right-2 top-1/2 -translate-y-1/2" style={{ color: '#94a3b8' }}>
+                  <button onClick={() => setSearchQuery('')} className="absolute right-2 top-1/2 -translate-y-1/2 text-ink-muted hover:text-ink">
                     <X className="w-3.5 h-3.5" />
                   </button>
                 )}
               </div>
-              <select
-                value={typeFilter}
-                onChange={(e) => setTypeFilter(e.target.value)}
-                className="h-9 text-sm px-3"
-                style={{ borderRadius: '12px', minWidth: '120px' }}
-              >
-                <option value="all">All Types</option>
-                <option value="region">Region</option>
-                <option value="country">Country</option>
-                <option value="city">City</option>
-                <option value="office">Office</option>
-              </select>
+              <div className="relative">
+                <select
+                  value={typeFilter}
+                  onChange={(e) => setTypeFilter(e.target.value)}
+                  className="h-9 pl-3 pr-8 text-sm rounded-md border border-line bg-white text-ink focus:outline-none focus:ring-2 focus:ring-primary/30 focus:border-primary transition-all duration-150 appearance-none cursor-pointer min-w-[120px]"
+                >
+                  <option value="all">All Types</option>
+                  <option value="region">Region</option>
+                  <option value="country">Country</option>
+                  <option value="city">City</option>
+                  <option value="office">Office</option>
+                </select>
+                <ChevronDown className="absolute right-2 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-ink-muted pointer-events-none" />
+              </div>
             </>
           )}
-          <button
+          <Button
             onClick={openCreateModal}
-            className="btn-primary-glow flex items-center gap-2 px-4 py-2 rounded-xl text-sm font-bold"
+            className="h-9 px-4 text-sm font-medium rounded-md bg-primary hover:bg-primary-hover text-white transition-colors flex items-center gap-2 flex-shrink-0"
           >
             <Plus className="w-4 h-4" />
             Add Location
-          </button>
+          </Button>
         </div>
       </div>
 
@@ -263,22 +265,26 @@ function LocationsTab() {
         description={editingLocation ? 'Update the location details.' : 'Add a new location to your hierarchy.'}
         size="lg"
         footer={
-          <div className="flex justify-end gap-2">
+          <>
             <button
+              type="button"
               onClick={handleCloseModal}
-              className="px-4 py-2 text-sm font-semibold rounded-xl transition-all"
-              style={{ background: 'rgba(255,255,255,0.06)', border: '1px solid rgba(255,255,255,0.08)', color: '#f8fafc' }}
+              disabled={createMutation.isPending || updateMutation.isPending}
+              className="h-9 px-4 text-sm font-medium rounded-md border border-line bg-white text-ink hover:bg-surface-alt transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
             >
               Cancel
             </button>
-            <button
+            <Button
               onClick={handleModalSubmit}
               disabled={createMutation.isPending || updateMutation.isPending}
-              className="btn-primary-glow px-4 py-2 text-sm font-bold rounded-xl disabled:opacity-50 disabled:cursor-not-allowed"
+              className={cn(
+                'h-9 px-4 text-sm font-medium rounded-md bg-primary hover:bg-primary-hover text-white transition-colors',
+                'disabled:opacity-50 disabled:cursor-not-allowed'
+              )}
             >
               {(createMutation.isPending || updateMutation.isPending) ? 'Saving...' : (editingLocation ? 'Update Location' : 'Create Location')}
-            </button>
-          </div>
+            </Button>
+          </>
         }
       >
         <LocationForm
@@ -419,33 +425,37 @@ function HolidaysTab() {
       {/* Header row */}
       <div className="flex items-start justify-between">
         <div>
-          <p className="text-sm" style={{ color: 'var(--text-muted)' }}>
+          <p className="text-sm text-ink-secondary">
             Manage holiday calendars, holidays, and location assignments
           </p>
         </div>
-        <button
+        <Button
           onClick={handleCreateCalendar}
-          className="btn-primary-glow flex items-center gap-2 px-4 py-2 rounded-xl text-sm font-bold"
+          className="h-9 px-4 text-sm font-medium rounded-md bg-primary hover:bg-primary-hover text-white transition-colors flex items-center gap-2 flex-shrink-0"
         >
           <Plus className="w-4 h-4" />
           New Calendar
-        </button>
+        </Button>
       </div>
 
       {/* Internal tab navigation */}
-      <div className="flex p-1 rounded-xl gap-1" style={{ background: 'rgba(255,255,255,0.04)', border: '1px solid rgba(255,255,255,0.07)', width: 'fit-content' }}>
+      <div className="flex bg-surface-alt p-1 rounded-lg gap-1 w-fit">
         <button
           onClick={() => setActiveHolidayTab('calendars')}
-          className={cn('flex items-center gap-1.5 px-3 py-1.5 text-sm font-semibold rounded-lg transition-all')}
-          style={activeHolidayTab === 'calendars' ? { background: 'rgba(245,176,42,0.12)', color: '#f5b02a' } : { color: '#94a3b8' }}
+          className={cn(
+            'flex items-center gap-1.5 px-3 py-1.5 text-sm font-medium rounded-md transition-all',
+            activeHolidayTab === 'calendars' ? 'bg-white text-ink shadow-sm' : 'text-ink-secondary hover:text-ink'
+          )}
         >
           <Calendar className="w-3.5 h-3.5" />
           Holiday Calendars
         </button>
         <button
           onClick={() => setActiveHolidayTab('holidays')}
-          className={cn('flex items-center gap-1.5 px-3 py-1.5 text-sm font-semibold rounded-lg transition-all')}
-          style={activeHolidayTab === 'holidays' ? { background: 'rgba(245,176,42,0.12)', color: '#f5b02a' } : { color: '#94a3b8' }}
+          className={cn(
+            'flex items-center gap-1.5 px-3 py-1.5 text-sm font-medium rounded-md transition-all',
+            activeHolidayTab === 'holidays' ? 'bg-white text-ink shadow-sm' : 'text-ink-secondary hover:text-ink'
+          )}
         >
           <Clock className="w-3.5 h-3.5" />
           Holidays
@@ -512,13 +522,13 @@ function HolidaysTab() {
                     {holidaysData?.length ?? 0} holiday{(holidaysData?.length ?? 0) !== 1 ? 's' : ''} configured
                   </p>
                 </div>
-                <button
+                <Button
                   onClick={handleCreateHoliday}
-                  className="btn-primary-glow flex items-center gap-2 px-4 py-2 rounded-xl text-sm font-bold"
+                  className="h-9 px-4 text-sm font-medium rounded-md bg-primary hover:bg-primary-hover text-white transition-colors flex items-center gap-2 flex-shrink-0"
                 >
                   <Plus className="w-4 h-4" />
                   Add Holiday
-                </button>
+                </Button>
               </div>
 
               {isHolidaysLoading ? (
@@ -530,11 +540,7 @@ function HolidaysTab() {
                   title="No holidays yet"
                   description="Add holidays to this calendar to get started."
                   icon={Calendar}
-                  action={
-                    <button onClick={handleCreateHoliday} className="btn-primary-glow px-4 py-2 rounded-xl text-sm font-bold">
-                      Add Holiday
-                    </button>
-                  }
+                  action={{ label: 'Add Holiday', onClick: handleCreateHoliday }}
                 />
               ) : (
                 <div className="overflow-x-auto">
@@ -639,26 +645,30 @@ function HolidaysTab() {
         description={editingCalendar ? 'Update the holiday calendar details.' : 'Add a new holiday calendar.'}
         size="md"
         footer={
-          <div className="flex justify-end gap-2">
+          <>
             <button
+              type="button"
               onClick={closeCalendarFormModal}
-              className="px-4 py-2 text-sm font-semibold rounded-xl transition-all"
-              style={{ background: 'rgba(255,255,255,0.06)', border: '1px solid rgba(255,255,255,0.08)', color: '#f8fafc' }}
+              disabled={isCreatingCalendar || isUpdatingCalendar}
+              className="h-9 px-4 text-sm font-medium rounded-md border border-line bg-white text-ink hover:bg-surface-alt transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
             >
               Cancel
             </button>
-            <button
+            <Button
               onClick={() => {
                 const btn = document.getElementById('holiday-calendar-form-submit') as HTMLButtonElement;
                 btn?.click();
               }}
               disabled={isCreatingCalendar || isUpdatingCalendar}
-              className="btn-primary-glow px-4 py-2 text-sm font-bold rounded-xl disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2"
+              className={cn(
+                'h-9 px-4 text-sm font-medium rounded-md bg-primary hover:bg-primary-hover text-white transition-colors flex items-center gap-2',
+                'disabled:opacity-50 disabled:cursor-not-allowed'
+              )}
             >
-              {(isCreatingCalendar || isUpdatingCalendar) && <div className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin" />}
+              {(isCreatingCalendar || isUpdatingCalendar) && <div className="w-4 h-4 border-2 border-primary/30 border-t-white rounded-full animate-spin" />}
               {editingCalendar ? 'Update Calendar' : 'Create Calendar'}
-            </button>
-          </div>
+            </Button>
+          </>
         }
       >
         <HolidayCalendarForm
@@ -688,26 +698,30 @@ function HolidaysTab() {
         description={selectedHoliday ? 'Update the holiday details.' : `Add a new holiday to ${selectedCalendar?.name ?? 'the calendar'}.`}
         size="md"
         footer={
-          <div className="flex justify-end gap-2">
+          <>
             <button
+              type="button"
               onClick={closeHolidayFormModal}
-              className="px-4 py-2 text-sm font-semibold rounded-xl transition-all"
-              style={{ background: 'rgba(255,255,255,0.06)', border: '1px solid rgba(255,255,255,0.08)', color: '#f8fafc' }}
+              disabled={isCreatingHoliday}
+              className="h-9 px-4 text-sm font-medium rounded-md border border-line bg-white text-ink hover:bg-surface-alt transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
             >
               Cancel
             </button>
-            <button
+            <Button
               onClick={() => {
                 const btn = document.getElementById('holiday-form-submit') as HTMLButtonElement;
                 btn?.click();
               }}
               disabled={isCreatingHoliday}
-              className="btn-primary-glow px-4 py-2 text-sm font-bold rounded-xl disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2"
+              className={cn(
+                'h-9 px-4 text-sm font-medium rounded-md bg-primary hover:bg-primary-hover text-white transition-colors flex items-center gap-2',
+                'disabled:opacity-50 disabled:cursor-not-allowed'
+              )}
             >
-              {isCreatingHoliday && <div className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin" />}
+              {isCreatingHoliday && <div className="w-4 h-4 border-2 border-primary/30 border-t-white rounded-full animate-spin" />}
               {selectedHoliday ? 'Update Holiday' : 'Create Holiday'}
-            </button>
-          </div>
+            </Button>
+          </>
         }
       >
         <HolidayForm
@@ -780,17 +794,17 @@ function WorkSchedulesTab() {
       {/* Header row */}
       <div className="flex items-start justify-between">
         <div>
-          <p className="text-sm" style={{ color: 'var(--text-muted)' }}>
+          <p className="text-sm text-ink-secondary">
             Define working hours per location for scheduling and SLA management
           </p>
         </div>
-        <button
+        <Button
           onClick={handleCreate}
-          className="btn-primary-glow flex items-center gap-2 px-4 py-2 rounded-xl text-sm font-bold"
+          className="h-9 px-4 text-sm font-medium rounded-md bg-primary hover:bg-primary-hover text-white transition-colors flex items-center gap-2 flex-shrink-0"
         >
           <Plus className="w-4 h-4" />
           New Schedule
-        </button>
+        </Button>
       </div>
 
       {/* Table */}
