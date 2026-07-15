@@ -196,6 +196,7 @@ export async function executeWorkflow(
       stepsExecuted = run.steps_executed;
       stepsSucceeded = run.steps_succeeded;
       stepsFailed = run.steps_failed;
+    }
     let steps: any[] = [];
     if (existingRunId && run) {
       // Use snapshotted steps to ensure consistency if admin modifies workflow rule during execution
@@ -320,11 +321,11 @@ export async function executeWorkflow(
         const company = await Company.findById(event.companyId);
         
         // Filter out deactivated users
-        const activeApproverIds = [];
+        const activeApproverIds: Types.ObjectId[] = [];
         for (const approverId of approverUserIds) {
            const user = await User.findById(approverId);
-           if (user && user.is_active && user.lifecycle_state !== 'deactivated') {
-              activeApproverIds.push(approverId);
+            if (user && user.is_active && user.lifecycle_state !== 'deactivated') {
+              activeApproverIds.push(user._id as Types.ObjectId);
               await deliverNotification({
                  companyId: event.companyId,
                  templateKey: 'task_assignment_alert',
@@ -539,8 +540,8 @@ export async function resumeWorkflow(runId: string, approved: boolean, decidedBy
     if (!step) {
       step = await WorkflowStep.findById(pendingStep.step_id) as any;
     }
-    const stepSlaBreached = step?.sla_config?.threshold_minutes 
-        ? executionTimeMs > step.sla_config.threshold_minutes * 60000 
+    const stepSlaBreached = (step as any)?.sla_config?.threshold_minutes 
+        ? executionTimeMs > (step as any).sla_config.threshold_minutes * 60000 
         : false;
 
     pendingStep.status = 'success';

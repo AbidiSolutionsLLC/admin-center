@@ -1,5 +1,5 @@
 // src/pages/workflows/WorkflowsPage.tsx
-import { useState, useMemo, useCallback, Fragment } from 'react';
+import { useState, useMemo, useCallback, useEffect, Fragment } from 'react';
 import {
   GitBranch, Plus, Eye, Play, Power, PowerOff, Trash2, Search, X,
   ChevronDown, ChevronRight, GripVertical, Save, FlaskConical, History, AlertTriangle,
@@ -32,7 +32,9 @@ import { EmptyState } from '@/components/ui/EmptyState';
 import { UserSelect } from '@/components/ui/UserSelect';
 import { useUsers } from '@/features/people/hooks/useUsers';
 import { Modal } from '@/components/ui/Modal';
+import { ConfirmDialog } from '@/components/ui/ConfirmDialog';
 import { cn } from '@/utils/cn';
+import { toast } from 'sonner';
 import { formatDate } from '@/utils/formatDate';
 import type {
   Workflow,
@@ -98,6 +100,7 @@ export default function WorkflowsPage() {
   const [isCreateModalOpen, setIsCreateModalOpen] = useState(false);
   const [isEditModalOpen, setIsEditModalOpen] = useState(false);
   const [editingWorkflow, setEditingWorkflow] = useState<Workflow | null>(null);
+  const [deletingWorkflow, setDeletingWorkflow] = useState<Workflow | null>(null);
   const [selectedWorkflow, setSelectedWorkflow] = useState<Workflow | null>(null);
   const [activeDetailTab, setActiveDetailTab] = useState<'steps' | 'runs' | 'config' | 'versions'>('steps');
   const [activeTab, setActiveTab] = useState<'workflows' | 'templates'>('workflows');
@@ -263,7 +266,7 @@ export default function WorkflowsPage() {
                         setEditingWorkflow(wf);
                         setIsEditModalOpen(true);
                       }}
-                      onDelete={() => deleteMutation.mutate({ workflow_id: wf._id })}
+                      onDelete={() => setDeletingWorkflow(wf)}
                     />
                   ))}
                 </tbody>
@@ -275,6 +278,22 @@ export default function WorkflowsPage() {
       )}
       </>
     )}
+
+      {/* ── Delete Confirmation ── */}
+      <ConfirmDialog
+        isOpen={!!deletingWorkflow}
+        onClose={() => setDeletingWorkflow(null)}
+        onConfirm={() => {
+          if (deletingWorkflow) {
+            deleteMutation.mutate({ workflow_id: deletingWorkflow._id });
+            setDeletingWorkflow(null);
+          }
+        }}
+        title="Delete Workflow"
+        description={`Are you sure you want to delete "${deletingWorkflow?.name}"? This action cannot be undone.`}
+        confirmLabel="Delete"
+        variant="danger"
+      />
 
       {/* ── Create Workflow Modal ── */}
       <CreateWorkflowModal
@@ -571,8 +590,44 @@ function CreateWorkflowModal({ isOpen, onClose, createMutation }: CreateWorkflow
     sla_threshold_minutes: '',
     sla_notify_on_breach: false,
   });
+  const [formErrors, setFormErrors] = useState<Record<string, string>>({});
+  const [submitted, setSubmitted] = useState(false);
+
+  const isDirty = !submitted && (!!formData.name || !!formData.description || !!formData.sla_threshold_minutes || formData.lifecycle_from.length > 0 || formData.lifecycle_to.length > 0);
+
+  useEffect(() => {
+    if (!isOpen || !isDirty) return;
+    const handler = (e: BeforeUnloadEvent) => { e.preventDefault(); e.returnValue = ''; };
+    window.addEventListener('beforeunload', handler);
+    return () => window.removeEventListener('beforeunload', handler);
+  }, [isOpen, isDirty]);
+
+  const validate = (): boolean => {
+    const errors: Record<string, string> = {};
+    if (!formData.name.trim()) errors.name = 'Name is required.';
+    if (formData.trigger === 'user.lifecycle_changed') {
+      if (formData.lifecycle_from.length === 0) errors.lifecycle_from = "At least one 'Trigger From' state is required.";
+      if (formData.lifecycle_to.length === 0) errors.lifecycle_to = "At least one 'Trigger To' state is required.";
+    }
+    if (formData.trigger === 'user.role_changed') {
+      if (formData.role_from.length === 0) errors.role_from = "At least one 'Trigger From' role is required.";
+      if (formData.role_to.length === 0) errors.role_to = "At least one 'Trigger To' role is required.";
+    }
+    if (formData.trigger === 'user.department_changed') {
+      if (formData.department_from.length === 0) errors.department_from = "At least one 'Trigger From' department is required.";
+      if (formData.department_to.length === 0) errors.department_to = "At least one 'Trigger To' department is required.";
+    }
+    if (formData.sla_threshold_minutes) {
+      const num = parseInt(formData.sla_threshold_minutes, 10);
+      if (isNaN(num)) errors.sla_threshold = 'Please enter a valid number.';
+      else if (num < 0) errors.sla_threshold = 'Value must be zero or greater.';
+    }
+    setFormErrors(errors);
+    return Object.keys(errors).length === 0;
+  };
 
   const handleSubmit = () => {
+    if (!validate()) return;
     createMutation.mutate(
       {
         name: formData.name,
@@ -599,6 +654,7 @@ function CreateWorkflowModal({ isOpen, onClose, createMutation }: CreateWorkflow
       },
       {
         onSuccess: () => {
+          setSubmitted(true);
           onClose();
           setFormData({
             name: '',
@@ -670,10 +726,11 @@ function CreateWorkflowModal({ isOpen, onClose, createMutation }: CreateWorkflow
           <input
             type="text"
             value={formData.name}
-            onChange={(e) => setFormData({ ...formData, name: e.target.value })}
+            onChange={(e) => { setFormData({ ...formData, name: e.target.value }); setFormErrors(prev => ({ ...prev, name: '' })); }}
             placeholder="e.g., Offboarding Automation"
-            className="w-full h-9 px-3 text-sm rounded-md border border-line bg-white text-ink placeholder:text-ink-muted focus:outline-none focus:ring-2 focus:ring-primary/30 focus:border-primary transition-all duration-150"
+            className={cn("w-full h-9 px-3 text-sm rounded-md border bg-white text-ink placeholder:text-ink-muted focus:outline-none focus:ring-2 focus:ring-primary/30 focus:border-primary transition-all duration-150", formErrors.name ? 'border-error' : 'border-line')}
           />
+          {formErrors.name && <p className="mt-1 text-xs text-error">{formErrors.name}</p>}
         </div>
 
         <div>
@@ -718,7 +775,7 @@ function CreateWorkflowModal({ isOpen, onClose, createMutation }: CreateWorkflow
                   <button
                     key={`from-${state}`}
                     type="button"
-                    onClick={() => toggleArrayItem('lifecycle_from', state)}
+                    onClick={() => { toggleArrayItem('lifecycle_from', state); setFormErrors(prev => ({ ...prev, lifecycle_from: '' })); }}
                     className={cn(
                       'h-7 px-3 text-xs font-medium rounded-full border transition-colors',
                       formData.lifecycle_from.includes(state)
@@ -730,6 +787,7 @@ function CreateWorkflowModal({ isOpen, onClose, createMutation }: CreateWorkflow
                   </button>
                 ))}
               </div>
+              {formErrors.lifecycle_from && <p className="mt-1 text-xs text-error">{formErrors.lifecycle_from}</p>}
             </div>
 
             <div>
@@ -741,7 +799,7 @@ function CreateWorkflowModal({ isOpen, onClose, createMutation }: CreateWorkflow
                   <button
                     key={`to-${state}`}
                     type="button"
-                    onClick={() => toggleArrayItem('lifecycle_to', state)}
+                    onClick={() => { toggleArrayItem('lifecycle_to', state); setFormErrors(prev => ({ ...prev, lifecycle_to: '' })); }}
                     className={cn(
                       'h-7 px-3 text-xs font-medium rounded-full border transition-colors',
                       formData.lifecycle_to.includes(state)
@@ -753,6 +811,7 @@ function CreateWorkflowModal({ isOpen, onClose, createMutation }: CreateWorkflow
                   </button>
                 ))}
               </div>
+              {formErrors.lifecycle_to && <p className="mt-1 text-xs text-error">{formErrors.lifecycle_to}</p>}
             </div>
           </>
         )}
@@ -762,14 +821,16 @@ function CreateWorkflowModal({ isOpen, onClose, createMutation }: CreateWorkflow
             <p className="text-sm text-ink-secondary mb-2">Note: Configured role transitions (e.g. from Employee to Manager) can be mapped using exact Role IDs. For MVP, please leave empty to trigger on ANY role change, or use the detailed workflow editor after creation.</p>
             <div className="grid grid-cols-2 gap-4">
                <div>
-                  <label className="text-sm font-medium text-ink block mb-1.5">From Role IDs</label>
-                  <input type="text" placeholder="e.g. role_id_1, role_id_2" value={formData.role_from.join(',')} onChange={(e) => setFormData({...formData, role_from: e.target.value.split(',').filter(Boolean)})} className="w-full h-9 px-3 text-sm rounded-md border border-line bg-white" />
+                  <label className="text-sm font-medium text-ink block mb-1.5">From Role IDs <span className="text-error">*</span></label>
+                  <input type="text" placeholder="e.g. role_id_1, role_id_2" value={formData.role_from.join(',')} onChange={(e) => { setFormData({...formData, role_from: e.target.value.split(',').filter(Boolean)}); setFormErrors(prev => ({ ...prev, role_from: '' })); }} className="w-full h-9 px-3 text-sm rounded-md border border-line bg-white" />
                </div>
                <div>
-                  <label className="text-sm font-medium text-ink block mb-1.5">To Role IDs</label>
-                  <input type="text" placeholder="e.g. role_id_3" value={formData.role_to.join(',')} onChange={(e) => setFormData({...formData, role_to: e.target.value.split(',').filter(Boolean)})} className="w-full h-9 px-3 text-sm rounded-md border border-line bg-white" />
+                  <label className="text-sm font-medium text-ink block mb-1.5">To Role IDs <span className="text-error">*</span></label>
+                  <input type="text" placeholder="e.g. role_id_3" value={formData.role_to.join(',')} onChange={(e) => { setFormData({...formData, role_to: e.target.value.split(',').filter(Boolean)}); setFormErrors(prev => ({ ...prev, role_to: '' })); }} className="w-full h-9 px-3 text-sm rounded-md border border-line bg-white" />
                </div>
             </div>
+            {formErrors.role_from && <p className="mt-1 text-xs text-error">{formErrors.role_from}</p>}
+            {formErrors.role_to && <p className="mt-1 text-xs text-error">{formErrors.role_to}</p>}
           </div>
         )}
 
@@ -778,14 +839,16 @@ function CreateWorkflowModal({ isOpen, onClose, createMutation }: CreateWorkflow
             <p className="text-sm text-ink-secondary mb-2">Note: Configured department transitions can be mapped using exact Department IDs. For MVP, please leave empty to trigger on ANY department change, or use the detailed workflow editor after creation.</p>
             <div className="grid grid-cols-2 gap-4">
                <div>
-                  <label className="text-sm font-medium text-ink block mb-1.5">From Dept IDs</label>
-                  <input type="text" placeholder="e.g. dept_id_1" value={formData.department_from.join(',')} onChange={(e) => setFormData({...formData, department_from: e.target.value.split(',').filter(Boolean)})} className="w-full h-9 px-3 text-sm rounded-md border border-line bg-white" />
+                  <label className="text-sm font-medium text-ink block mb-1.5">From Dept IDs <span className="text-error">*</span></label>
+                  <input type="text" placeholder="e.g. dept_id_1" value={formData.department_from.join(',')} onChange={(e) => { setFormData({...formData, department_from: e.target.value.split(',').filter(Boolean)}); setFormErrors(prev => ({ ...prev, department_from: '' })); }} className="w-full h-9 px-3 text-sm rounded-md border border-line bg-white" />
                </div>
                <div>
-                  <label className="text-sm font-medium text-ink block mb-1.5">To Dept IDs</label>
-                  <input type="text" placeholder="e.g. dept_id_2" value={formData.department_to.join(',')} onChange={(e) => setFormData({...formData, department_to: e.target.value.split(',').filter(Boolean)})} className="w-full h-9 px-3 text-sm rounded-md border border-line bg-white" />
+                  <label className="text-sm font-medium text-ink block mb-1.5">To Dept IDs <span className="text-error">*</span></label>
+                  <input type="text" placeholder="e.g. dept_id_2" value={formData.department_to.join(',')} onChange={(e) => { setFormData({...formData, department_to: e.target.value.split(',').filter(Boolean)}); setFormErrors(prev => ({ ...prev, department_to: '' })); }} className="w-full h-9 px-3 text-sm rounded-md border border-line bg-white" />
                </div>
             </div>
+            {formErrors.department_from && <p className="mt-1 text-xs text-error">{formErrors.department_from}</p>}
+            {formErrors.department_to && <p className="mt-1 text-xs text-error">{formErrors.department_to}</p>}
           </div>
         )}
 
@@ -800,12 +863,15 @@ function CreateWorkflowModal({ isOpen, onClose, createMutation }: CreateWorkflow
               </label>
               <input
                 type="number"
-                min="1"
+                min="0"
+                step="1"
                 placeholder="e.g. 60"
                 value={formData.sla_threshold_minutes}
-                onChange={(e) => setFormData({ ...formData, sla_threshold_minutes: e.target.value })}
-                className="w-full h-8 px-3 text-sm rounded-md border border-line bg-white text-ink placeholder:text-ink-muted focus:outline-none focus:ring-2 focus:ring-primary/30 focus:border-primary transition-all duration-150"
+                onChange={(e) => { const v = e.target.value; if (v === '' || /^\d+$/.test(v)) { setFormData({ ...formData, sla_threshold_minutes: v }); setFormErrors(prev => ({ ...prev, sla_threshold: '' })); } }}
+                onKeyDown={(e) => { if (e.key === 'e' || e.key === 'E' || e.key === '+' || e.key === '-') e.preventDefault(); }}
+                className={cn("w-full h-8 px-3 text-sm rounded-md border bg-white text-ink placeholder:text-ink-muted focus:outline-none focus:ring-2 focus:ring-primary/30 focus:border-primary transition-all duration-150", formErrors.sla_threshold ? 'border-error' : 'border-line')}
               />
+              {formErrors.sla_threshold && <p className="mt-1 text-xs text-error">{formErrors.sla_threshold}</p>}
             </div>
             <div className="flex items-center mt-5">
               <label className="flex items-center gap-2 cursor-pointer">
@@ -849,6 +915,20 @@ function EditWorkflowModal({ isOpen, onClose, workflow }: EditWorkflowModalProps
     sla_threshold_minutes: workflow.sla_config?.threshold_minutes?.toString() || '',
     sla_notify_on_breach: workflow.sla_config?.notify_on_breach || false,
   });
+  const [submitted, setSubmitted] = useState(false);
+
+  const isDirty = !submitted && (
+    formData.name !== workflow.name ||
+    (formData.description || '') !== (workflow.description || '') ||
+    formData.sla_threshold_minutes !== (workflow.sla_config?.threshold_minutes?.toString() || '')
+  );
+
+  useEffect(() => {
+    if (!isOpen || !isDirty) return;
+    const handler = (e: BeforeUnloadEvent) => { e.preventDefault(); e.returnValue = ''; };
+    window.addEventListener('beforeunload', handler);
+    return () => window.removeEventListener('beforeunload', handler);
+  }, [isOpen, isDirty]);
 
   const handleSubmit = () => {
     updateMutation.mutate(
@@ -876,6 +956,7 @@ function EditWorkflowModal({ isOpen, onClose, workflow }: EditWorkflowModalProps
       },
       {
         onSuccess: () => {
+          setSubmitted(true);
           onClose();
         },
       }
@@ -926,14 +1007,15 @@ function EditWorkflowModal({ isOpen, onClose, workflow }: EditWorkflowModalProps
             <label className="text-sm font-medium text-ink block mb-1.5">
               Workflow Name <span className="text-error">*</span>
             </label>
-            <input
-              type="text"
-              value={formData.name}
-              onChange={(e) => setFormData({ ...formData, name: e.target.value })}
-              placeholder="e.g., Onboarding Approvals"
-              className="w-full h-9 px-3 text-sm rounded-md border border-line bg-white text-ink focus:ring-2 focus:ring-primary/30 focus:border-primary transition-all"
-            />
-          </div>
+          <input
+            type="text"
+            value={formData.name}
+            onChange={(e) => { setFormData({ ...formData, name: e.target.value }); setFormErrors(prev => ({ ...prev, step_name: '' })); }}
+            placeholder="e.g., Send termination email"
+            className={cn("w-full h-9 px-3 text-sm rounded-md border bg-white text-ink placeholder:text-ink-muted focus:outline-none focus:ring-2 focus:ring-primary/30 focus:border-primary transition-all duration-150", formErrors.step_name ? 'border-error' : 'border-line')}
+          />
+          {formErrors.step_name && <p className="mt-1 text-xs text-error">{formErrors.step_name}</p>}
+        </div>
           <div className="col-span-2">
             <label className="text-sm font-medium text-ink block mb-1.5">
               Description (optional)
@@ -1274,7 +1356,13 @@ function WorkflowStepsView({ workflowId, status }: { workflowId: string; status:
             </button>
           )}
           <button
-            onClick={() => setIsSimulateModalOpen(true)}
+            onClick={() => {
+              if (steps.length === 0) {
+                toast.error('Workflow has no steps to simulate.');
+                return;
+              }
+              setIsSimulateModalOpen(true);
+            }}
             className="h-9 px-4 text-sm font-medium rounded-md border border-line bg-white text-ink hover:bg-surface-alt transition-colors flex items-center gap-2"
           >
             <FlaskConical className="w-4 h-4" />
@@ -1461,8 +1549,20 @@ function AddStepModal({ isOpen, onClose, addMutation, currentStepCount }: AddSte
     sla_threshold_minutes: '',
     sla_notify_on_breach: false,
   });
+  const [formErrors, setFormErrors] = useState<Record<string, string>>({});
+
+  const validate = (): boolean => {
+    const errors: Record<string, string> = {};
+    if (!formData.name.trim()) errors.step_name = 'Step Name is required.';
+    if (formData.action_type === 'require_approval' && formData.approver_user_ids.length === 0) {
+      errors.approvers = 'At least one approver is required.';
+    }
+    setFormErrors(errors);
+    return Object.keys(errors).length === 0;
+  };
 
   const handleSubmit = () => {
+    if (!validate()) return;
     addMutation.mutate(
       {
         name: formData.name,
@@ -1508,7 +1608,7 @@ function AddStepModal({ isOpen, onClose, addMutation, currentStepCount }: AddSte
           </button>
           <button
             onClick={handleSubmit}
-            disabled={addMutation.isPending || !formData.name}
+            disabled={addMutation.isPending}
             className="h-9 px-4 text-sm font-medium rounded-md bg-primary hover:bg-primary-hover text-white transition-colors disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2"
           >
             <Save className="w-4 h-4" />
@@ -1576,10 +1676,11 @@ function AddStepModal({ isOpen, onClose, addMutation, currentStepCount }: AddSte
               </label>
               <MultiUserSelect
                 value={formData.approver_user_ids}
-                onChange={(values) => setFormData({ ...formData, approver_user_ids: values })}
+                onChange={(values) => { setFormData({ ...formData, approver_user_ids: values }); setFormErrors(prev => ({ ...prev, approvers: '' })); }}
                 placeholder="Select specific users..."
                 onlyActive={true}
               />
+              {formErrors.approvers && <p className="mt-1 text-xs text-error">{formErrors.approvers}</p>}
             </div>
             <div>
               <label className="text-sm font-medium text-ink block mb-1.5">
@@ -2065,10 +2166,7 @@ function SimulateWorkflowModal({ isOpen, onClose, simulateMutation, workflow }: 
   };
 
   const handleSubmit = () => {
-    simulateMutation.mutate({
-      ...formData,
-      trigger: workflow.trigger
-    }, { 
+    simulateMutation.mutate(formData, { 
       onSuccess: (res) => {
         setSimulationResult(res);
       }

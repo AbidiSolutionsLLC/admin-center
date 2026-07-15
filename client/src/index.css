@@ -669,3 +669,310 @@ div.animate-pulse, span.animate-pulse {
   outline: none !important;
   box-shadow: 0 0 0 2px rgba(245,176,42,0.35) !important;
 }
+
+/* ═══════════════════════════════════════════════════════
+   US81-US89 FIXES
+═══════════════════════════════════════════════════════ */
+
+/* 24. Text overflow ellipsis on select options */
+select option {
+  max-width: 100%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* 25. Error message typography and icon alignment */
+.field-error-message {
+  display: flex;
+  align-items: flex-start;
+  gap: 4px;
+  font-size: 12px;
+  color: #ef4444;
+  line-height: 1.4;
+  margin-top: 4px;
+}
+.field-error-message svg {
+  flex-shrink: 0;
+  margin-top: 1px;
+}
+
+/* 26. Mobile responsiveness breakpoints */
+@media (max-width: 640px) {
+  .responsive-stack {
+    flex-direction: column !important;
+  }
+  .responsive-grid {
+    grid-template-columns: 1fr !important;
+  }
+  .responsive-hide {
+    display: none !important;
+  }
+  select, input[type="time"], input[type="date"], button {
+    width: 100% !important;
+    max-width: 100% !important;
+  }
+  .responsive-day-buttons {
+    flex-wrap: wrap;
+    gap: 4px;
+  }
+  .responsive-day-buttons button {
+    flex: 1 1 calc(33.33% - 4px);
+    min-width: 0;
+  }
+}
+
+/* 27. Button hover state fixes */
+button:not(:disabled):hover {
+  transition: background-color 0.2s ease, box-shadow 0.2s ease, transform 0.15s ease;
+}
+.btn-hover-primary:not(:disabled):hover {
+  background-color: rgba(245,176,42,0.2) !important;
+  box-shadow: 0 2px 8px rgba(245,176,42,0.15);
+}
+
+/* 28. Disabled button cursor */
+button:disabled,
+button[disabled],
+.btn-disabled {
+  cursor: not-allowed !important;
+  opacity: 0.5;
+}
+button:disabled:hover,
+button[disabled]:hover {
+  transform: none !important;
+  box-shadow: none !important;
+}
+
+/* 29. Custom thin scrollbar for rules/overflow containers */
+.custom-scrollbar {
+  scrollbar-width: thin;
+  scrollbar-color: rgba(189,189,189,0.5) transparent;
+}
+.custom-scrollbar::-webkit-scrollbar {
+  width: 4px;
+  height: 4px;
+}
+.custom-scrollbar::-webkit-scrollbar-track {
+  background: transparent;
+}
+.custom-scrollbar::-webkit-scrollbar-thumb {
+  background: #BDBDBD;
+  border-radius: 4px;
+}
+.custom-scrollbar::-webkit-scrollbar-thumb:hover {
+  background: #9E9E9E;
+}
+
+/* 30. Normalize button text alignment */
+button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  text-align: center;
+  line-height: 1;
+}
+
+/* 31. Empty state illustration placeholder */
+.empty-state-illustration {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  padding: 48px 24px;
+  text-align: center;
+}
+
+/* 32. Toast success icon alignment */
+.toast-icon-aligned {
+  display: inline-flex;
+  align-items: center;
+  vertical-align: middle;
+}
+.toast-icon-aligned svg {
+  vertical-align: middle;
+}
+
+/* 33. Policy badge contrast fix */
+.policy-badge-regional {
+  background: rgba(59,130,246,0.12) !important;
+  color: #60a5fa !important;
+  border: 1px solid rgba(59,130,246,0.3) !important;
+}
+
+/* 34. Read-only global policy styling */
+.policy-readonly {
+  opacity: 0.6;
+  pointer-events: none;
+  cursor: not-allowed;
+}
+
+/* 35. Diff highlight background */
+.diff-highlight {
+  background: rgba(253,230,138,0.15) !important;
+  border-left: 3px solid #fbbf24;
+}
+
+/* 36. Spinner animation smooth fix */
+@keyframes spin-smooth {
+  0% { transform: rotate(0deg); }
+  100% { transform: rotate(360deg); }
+}
+.spinner-smooth {
+  animation: spin-smooth 0.8s linear infinite;
+}
+
+/* 37. Toast slide animation */
+@keyframes toast-slide-in {
+  from { opacity: 0; transform: translateX(100%) translateY(-10px); }
+  to { opacity: 1; transform: translateX(0) translateY(0); }
+}
+@keyframes toast-fade-out {
+  from { opacity: 1; }
+  to { opacity: 0; }
+}
+.toast-animated {
+  animation: toast-slide-in 0.3s ease-out forwards;
+}
+
+/* 38. Dropdown flip for upward opening */
+.dropdown-upward {
+  transform-origin: bottom center;
+}
+[data-radix-popper-content-wrapper] {
+  z-index: 9999 !important;
+}
+
+/* 39. No results empty state */
+.no-results-text {
+  font-style: italic;
+  color: #757575;
+  padding: 16px;
+  text-align: center;
+  font-size: 13px;
+}
+
+/* 40. Max length restriction on inputs */
+input[maxlength] {
+  /* handled natively */
+}
+
+/* 41. Unsaved changes modal z-index */
+.warning-modal-overlay {
+  z-index: 9998 !important;
+}
+
+/* 42. Dropdown long name truncation */
+select.truncate-option option {
+  max-width: 280px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* 43. Cancel button text alignment fix */
+.cancel-btn-centered {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  line-height: 1;
+  padding: 8px 16px;
+}
+
+/* 44. Error border styling */
+.field-error-border {
+  border-color: #ef4444 !important;
+  box-shadow: 0 0 0 1px rgba(239,68,68,0.3) !important;
+}
+
+/* 45. Disabled location dropdown option */
+select option:disabled {
+  color: #94a3b8;
+  cursor: not-allowed;
+}
+
+/* 46. Dropdown collision upward detection */
+.dropdown-open-upwards {
+  bottom: 100%;
+  top: auto;
+  margin-bottom: 4px;
+}
+
+/* 47. "Rule Overridden" icon styling */
+.rule-overridden-icon {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  font-size: 11px;
+  color: #fbbf24;
+  background: rgba(251,191,36,0.1);
+  padding: 2px 6px;
+  border-radius: 4px;
+}
+
+/* 48. Drag ghost shadow */
+.drag-ghost {
+  box-shadow: 0 8px 24px rgba(0,0,0,0.3) !important;
+  opacity: 0.9;
+  transform: rotate(2deg) scale(1.02);
+  transition: box-shadow 0.2s ease, transform 0.1s ease;
+}
+
+/* 49. Mobile responsive media queries for tables */
+@media (max-width: 768px) {
+  .responsive-table {
+    display: block;
+    overflow-x: auto;
+    -webkit-overflow-scrolling: touch;
+  }
+  .responsive-table table {
+    min-width: 600px;
+  }
+  .responsive-card-layout {
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+  }
+  .responsive-card-layout > * {
+    width: 100% !important;
+  }
+  .modal-mobile {
+    width: 95vw !important;
+    max-width: 95vw !important;
+    margin: 0 auto;
+  }
+  .modal-mobile .modal-footer {
+    flex-direction: column-reverse;
+    gap: 8px;
+  }
+  .modal-mobile .modal-footer button {
+    width: 100%;
+  }
+}
+
+/* 50. Scrollbar thin variants */
+.scrollbar-thin-gray {
+  scrollbar-width: thin;
+  scrollbar-color: #BDBDBD transparent;
+}
+.scrollbar-thin-gray::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+.scrollbar-thin-gray::-webkit-scrollbar-thumb {
+  background: #BDBDBD;
+  border-radius: 8px;
+}
+
+/* 51. Backdrop blur fix for modals */
+.modal-backdrop-blur {
+  backdrop-filter: blur(4px) !important;
+  -webkit-backdrop-filter: blur(4px) !important;
+}
+
+/* 52. Modal title typography */
+.modal-title {
+  font-size: 24px !important;
+  font-weight: 600 !important;
+  color: #1E293B !important;
+}

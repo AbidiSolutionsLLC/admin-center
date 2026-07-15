@@ -507,7 +507,7 @@ export default function CompanySettingsPage() {
     handleSubmit,
     watch,
     reset,
-    formState: { errors },
+    formState: { errors, isDirty },
   } = useForm<FormValues>({
     resolver: zodResolver(CompanySettingsSchema),
     defaultValues: {
@@ -530,8 +530,18 @@ export default function CompanySettingsPage() {
   }, [currentFormat, data?.employee_id_counter]);
 
   const onSubmit = (values: FormValues) => {
-    updateEmployeeIdFormat.mutate({ employee_id_format: values.employee_id_format });
+    updateEmployeeIdFormat.mutate({ employee_id_format: values.employee_id_format.trim() });
   };
+
+  useEffect(() => {
+    if (!isDirty) return;
+    const handler = (e: BeforeUnloadEvent) => {
+      e.preventDefault();
+      e.returnValue = '';
+    };
+    window.addEventListener('beforeunload', handler);
+    return () => window.removeEventListener('beforeunload', handler);
+  }, [isDirty]);
 
   if (isLoading) {
     return (

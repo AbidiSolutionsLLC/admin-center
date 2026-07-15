@@ -4,7 +4,8 @@ import { Button } from '@/components/ui/button';
 import { useAssignUserLocation } from '../hooks/useAssignUserLocation';
 import { useLocations } from '@/features/locations/hooks/useLocations';
 import { cn } from '@/utils/cn';
-import { Clock, CalendarDays } from 'lucide-react';
+import { Clock, CalendarDays, AlertTriangle } from 'lucide-react';
+import { toast } from 'sonner';
 import type { User, Location } from '@/types';
 
 interface UserLocationAssignmentModalProps {
@@ -19,6 +20,11 @@ const inputClass = cn(
   'placeholder:text-slate-500 transition-all duration-150',
   'focus:outline-none focus:ring-1 focus:border-primary/50 focus:ring-primary/50',
   'disabled:bg-black/20 disabled:text-slate-500 disabled:cursor-not-allowed hover:border-white/20'
+);
+
+const selectClass = cn(
+  inputClass,
+  'appearance-none pr-8 mb-2'
 );
 
 export const UserLocationAssignmentModal: React.FC<UserLocationAssignmentModalProps> = ({
@@ -39,12 +45,23 @@ export const UserLocationAssignmentModal: React.FC<UserLocationAssignmentModalPr
   }, [user]);
 
   const [selectedLocationId, setSelectedLocationId] = useState<string>('');
+  const hasUnsavedChanges = selectedLocationId !== currentLocationId && isOpen;
 
   React.useEffect(() => {
     if (isOpen && user) {
       setSelectedLocationId(currentLocationId);
     }
   }, [user, isOpen, currentLocationId]);
+
+  React.useEffect(() => {
+    if (!hasUnsavedChanges) return;
+    const handler = (e: BeforeUnloadEvent) => {
+      e.preventDefault();
+      e.returnValue = '';
+    };
+    window.addEventListener('beforeunload', handler);
+    return () => window.removeEventListener('beforeunload', handler);
+  }, [hasUnsavedChanges]);
 
   const selectedLocation = useMemo(() => {
     if (!selectedLocationId || !locations) return null;
@@ -53,6 +70,15 @@ export const UserLocationAssignmentModal: React.FC<UserLocationAssignmentModalPr
 
   const handleSubmit = () => {
     if (!user) return;
+
+    if (selectedLocationId === currentLocationId) {
+      return;
+    }
+
+    if (!navigator.onLine) {
+      toast.error('Network connection lost. Please check your internet and try again.');
+      return;
+    }
 
     assignMutation.mutate(
       {
@@ -63,7 +89,18 @@ export const UserLocationAssignmentModal: React.FC<UserLocationAssignmentModalPr
       },
       {
         onSuccess: () => {
+          toast.success('Policies are being re-evaluated for the new region.');
           onClose();
+        },
+        onError: (error: any) => {
+          const status = error?.response?.status;
+          if (status === 409) {
+            toast.error('User data has changed, please refresh and try again.');
+          } else if (error?.message?.includes('NetworkError') || !navigator.onLine) {
+            toast.error('Network connection lost. Please check your internet and try again.');
+          } else {
+            toast.error(error?.response?.data?.message || 'Failed to assign location');
+          }
         },
       }
     );
@@ -73,7 +110,7 @@ export const UserLocationAssignmentModal: React.FC<UserLocationAssignmentModalPr
     <Modal
       isOpen={isOpen}
       onClose={onClose}
-      title="Assign Location"
+      title="Update User Location"
       description={`Update ${user?.full_name}'s primary location.`}
       size="md"
       footer={
@@ -82,7 +119,7 @@ export const UserLocationAssignmentModal: React.FC<UserLocationAssignmentModalPr
             type="button"
             onClick={onClose}
             disabled={assignMutation.isPending}
-            className="h-9 px-4 text-sm font-medium rounded-md border border-line bg-white text-ink hover:bg-surface-alt transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+            className="h-9 px-4 text-sm font-medium rounded-md border border-line bg-white text-ink hover:bg-surface-alt transition-colors disabled:opacity-50 disabled:cursor-not-allowed cancel-btn-centered"
           >
             Cancel
           </button>
@@ -93,6 +130,7 @@ export const UserLocationAssignmentModal: React.FC<UserLocationAssignmentModalPr
               'h-9 px-4 text-sm font-medium rounded-md bg-primary hover:bg-primary-hover text-white transition-colors',
               'disabled:opacity-50 disabled:cursor-not-allowed'
             )}
+            style={assignMutation.isPending || selectedLocationId === currentLocationId ? { cursor: 'not-allowed', opacity: 0.5 } : {}}
           >
             {assignMutation.isPending ? 'Saving...' : 'Save Assignment'}
           </Button>
@@ -109,11 +147,12 @@ export const UserLocationAssignmentModal: React.FC<UserLocationAssignmentModalPr
             id="user-location"
             value={selectedLocationId}
             onChange={(e) => setSelectedLocationId(e.target.value)}
-            className={inputClass}
+            className={selectClass}
+            style={{ textOverflow: 'ellipsis', overflow: 'hidden', whiteSpace: 'nowrap' }}
           >
-            <option value="">No location</option>
+            <option value="" className="no-results-text">No location</option>
             {(locations ?? []).map((loc: Location) => (
-              <option key={loc._id} value={loc._id}>
+              <option key={loc._id} value={loc._id} className="truncate-option">
                 {loc.name} {loc.type ? `(${loc.type})` : ''}
               </option>
             ))}

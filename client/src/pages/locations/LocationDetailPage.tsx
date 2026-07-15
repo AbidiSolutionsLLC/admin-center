@@ -55,13 +55,13 @@ function PolicyStatusBadge({ isOverridden }: { isOverridden: boolean }) {
 
 function PolicySourceBadge({ source }: { source: string }) {
   const config: Record<string, { bg: string; color: string; border: string; label: string }> = {
-    global: { bg: 'rgba(96,165,250,0.12)', color: '#60a5fa', border: 'rgba(96,165,250,0.3)', label: 'Global' },
-    location: { bg: 'rgba(245,176,42,0.12)', color: '#fbbf24', border: 'rgba(245,176,42,0.3)', label: 'Location' },
+    global: { bg: 'rgba(59,130,246,0.12)', color: '#60a5fa', border: 'rgba(59,130,246,0.3)', label: 'Global' },
+    location: { bg: 'rgba(59,130,246,0.12)', color: '#60a5fa', border: 'rgba(59,130,246,0.3)', label: 'Regional' },
     direct: { bg: 'rgba(168,85,247,0.12)', color: '#c084fc', border: 'rgba(168,85,247,0.3)', label: 'Direct' },
   };
   const c = config[source] || config.direct;
   return (
-    <span className="inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-bold"
+    <span className="inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-bold policy-badge-regional"
       style={{ background: c.bg, color: c.color, border: `1px solid ${c.border}` }}>
       {c.label}
     </span>
@@ -337,7 +337,7 @@ export default function LocationDetailPage() {
       {activeTab === 'policies' && (
         <div className="space-y-5">
           {/* Global Policies */}
-          <div className="rounded-xl overflow-hidden" style={{ background: 'rgba(255,255,255,0.03)', border: '1px solid rgba(255,255,255,0.07)' }}>
+          <div className="rounded-xl overflow-hidden policy-readonly" style={{ background: 'rgba(255,255,255,0.03)', border: '1px solid rgba(255,255,255,0.07)' }}>
             <div className="px-5 py-3" style={{ borderBottom: '1px solid rgba(255,255,255,0.06)' }}>
               <h3 className="text-sm font-bold" style={{ color: 'var(--text-main)' }}>
                 Global Policies ({policiesView?.global_policies?.length || 0})

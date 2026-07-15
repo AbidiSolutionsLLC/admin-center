@@ -1209,6 +1209,19 @@ export interface TestWorkflowInput {
   department_to?: string;
 }
 
+/** Simulate endpoint — trigger is inferred from the workflow record on the server. */
+export interface SimulateWorkflowInput {
+  user_id: string;
+  user_name: string;
+  user_email: string;
+  lifecycle_from?: string;
+  lifecycle_to?: string;
+  role_from?: string;
+  role_to?: string;
+  department_from?: string;
+  department_to?: string;
+}
+
 export interface WorkflowRunStep {
   stepId: string;
   stepName: string;

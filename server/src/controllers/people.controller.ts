@@ -1241,7 +1241,9 @@ export const updateUser = asyncHandler(async (req: Request, res: Response) => {
   }
 
   // Audit log — location change fires a dedicated event
-  if (updates.location_id !== undefined && updates.location_id !== beforeState.location_id) {
+  const oldLocationId = beforeState.location_id?.toString() ?? null;
+  const newLocationId = updates.location_id?.toString() ?? null;
+  if (updates.location_id !== undefined && oldLocationId !== newLocationId) {
     await auditLogger.log({
       req,
       action: 'user.location_assigned',

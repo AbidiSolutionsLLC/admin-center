@@ -27,7 +27,7 @@ export interface ContextEngineResult {
 export const contextEngine = {
 
   onLocationChanged: async (event: ContextChangeEvent): Promise<ContextEngineResult> => {
-    const { userId, companyId } = event;
+    const { userId, companyId, newLocationId } = event;
 
     const user = await User.findOne({ _id: userId, company_id: companyId });
     if (!user) {

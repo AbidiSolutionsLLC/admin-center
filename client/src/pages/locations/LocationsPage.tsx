@@ -30,7 +30,7 @@ import { Modal } from '@/components/ui/Modal';
 import { Button } from '@/components/ui/button';
 import { cn } from '@/utils/cn';
 import { ROUTES } from '@/constants/routes';
-import type { Location, HolidayCalendar, Holiday, WorkSchedule } from '@/types';
+import type { Location, LocationTreeNode, HolidayCalendar, Holiday, WorkSchedule } from '@/types';
 import type { HolidayCalendarFormData } from '@/types/holidays';
 import type { HolidayFormData } from '@/types/holidays';
 import type { WorkScheduleFormData } from '@/features/work-schedules/components/WorkScheduleForm';
@@ -99,7 +99,7 @@ function LocationsTab() {
   const createMutation = useCreateLocation();
   const updateMutation = useUpdateLocation();
 
-  const [viewMode, setViewMode] = useState<'table' | 'tree'>('table');
+  const [viewMode, setViewMode] = useState<'table' | 'tree'>('tree');
   const [searchQuery, setSearchQuery] = useState('');
   const [typeFilter, setTypeFilter] = useState('all');
   const [isFormModalOpen, setIsFormModalOpen] = useState(false);
@@ -113,6 +113,23 @@ function LocationsTab() {
       return nameMatch && matchesType;
     });
   }, [locations, searchQuery, typeFilter]);
+
+  const filterTree = useCallback((nodes: LocationTreeNode[] | undefined): LocationTreeNode[] | undefined => {
+    if (!nodes) return undefined;
+    if (!searchQuery && typeFilter === 'all') return nodes;
+    const result: LocationTreeNode[] = [];
+    for (const node of nodes) {
+      const nameMatch = node.name?.toLowerCase().includes(searchQuery.toLowerCase());
+      const typeMatch = typeFilter === 'all' || node.type === typeFilter;
+      const children = filterTree(node.children);
+      if ((nameMatch && typeMatch) || (children && children.length > 0)) {
+        result.push({ ...node, children: children ?? node.children });
+      }
+    }
+    return result.length > 0 ? result : undefined;
+  }, [searchQuery, typeFilter]);
+
+  const visibleTreeData = useMemo(() => filterTree(treeData), [treeData, filterTree]);
 
   const openCreateModal = () => { setEditingLocation(null); setIsFormModalOpen(true); };
   const openEditModal = (loc: Location) => { setEditingLocation(loc); setIsFormModalOpen(true); };
@@ -183,39 +200,35 @@ function LocationsTab() {
         </div>
 
         <div className="flex items-center gap-3">
-          {viewMode === 'table' && (
-            <>
-              <div className="relative">
-                <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-ink-muted pointer-events-none" />
-                <input
-                  type="text"
-                  placeholder="Search locations..."
-                  value={searchQuery}
-                  onChange={(e) => setSearchQuery(e.target.value)}
-                  className="h-9 pl-9 pr-8 text-sm rounded-md border border-line bg-white text-ink placeholder:text-ink-muted focus:outline-none focus:ring-2 focus:ring-primary/30 focus:border-primary transition-all duration-150 w-56"
-                />
-                {searchQuery && (
-                  <button onClick={() => setSearchQuery('')} className="absolute right-2 top-1/2 -translate-y-1/2 text-ink-muted hover:text-ink">
-                    <X className="w-3.5 h-3.5" />
-                  </button>
-                )}
-              </div>
-              <div className="relative">
-                <select
-                  value={typeFilter}
-                  onChange={(e) => setTypeFilter(e.target.value)}
-                  className="h-9 pl-3 pr-8 text-sm rounded-md border border-line bg-white text-ink focus:outline-none focus:ring-2 focus:ring-primary/30 focus:border-primary transition-all duration-150 appearance-none cursor-pointer min-w-[120px]"
-                >
-                  <option value="all">All Types</option>
-                  <option value="region">Region</option>
-                  <option value="country">Country</option>
-                  <option value="city">City</option>
-                  <option value="office">Office</option>
-                </select>
-                <ChevronDown className="absolute right-2 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-ink-muted pointer-events-none" />
-              </div>
-            </>
-          )}
+          <div className="relative">
+            <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-ink-muted pointer-events-none" />
+            <input
+              type="text"
+              placeholder="Search locations..."
+              value={searchQuery}
+              onChange={(e) => setSearchQuery(e.target.value)}
+              className="h-9 pl-9 pr-8 text-sm rounded-md border border-line bg-white text-ink placeholder:text-ink-muted focus:outline-none focus:ring-2 focus:ring-primary/30 focus:border-primary transition-all duration-150 w-56"
+            />
+            {searchQuery && (
+              <button onClick={() => setSearchQuery('')} className="absolute right-2 top-1/2 -translate-y-1/2 text-ink-muted hover:text-ink">
+                <X className="w-3.5 h-3.5" />
+              </button>
+            )}
+          </div>
+          <div className="relative">
+            <select
+              value={typeFilter}
+              onChange={(e) => setTypeFilter(e.target.value)}
+              className="h-9 pl-3 pr-8 text-sm rounded-md border border-line bg-white text-ink focus:outline-none focus:ring-2 focus:ring-primary/30 focus:border-primary transition-all duration-150 appearance-none cursor-pointer min-w-[120px]"
+            >
+              <option value="all">All Types</option>
+              <option value="region">Region</option>
+              <option value="country">Country</option>
+              <option value="city">City</option>
+              <option value="office">Office</option>
+            </select>
+            <ChevronDown className="absolute right-2 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-ink-muted pointer-events-none" />
+          </div>
           <Button
             onClick={openCreateModal}
             className="h-9 px-4 text-sm font-medium rounded-md bg-primary hover:bg-primary-hover text-white transition-colors flex items-center gap-2 flex-shrink-0"
@@ -246,8 +259,14 @@ function LocationsTab() {
       ) : (
         isTreeLoading ? (
           <TableSkeleton rows={8} columns={3} />
-        ) : treeData?.length ? (
-          <LocationHierarchy data={treeData} />
+        ) : visibleTreeData?.length ? (
+          <LocationHierarchy data={visibleTreeData} />
+        ) : searchQuery || typeFilter !== 'all' ? (
+          <EmptyState
+            title="No locations found"
+            description="Try adjusting your search or filter."
+            icon={MapPin}
+          />
         ) : (
           <EmptyState
             title="No location hierarchy"
@@ -741,6 +760,7 @@ function WorkSchedulesTab() {
   const [isAssignmentModalOpen, setIsAssignmentModalOpen] = useState(false);
   const [editingSchedule, setEditingSchedule] = useState<WorkSchedule | null>(null);
   const [selectedSchedule, setSelectedSchedule] = useState<WorkSchedule | null>(null);
+  const [isFormDirty, setIsFormDirty] = useState(false);
 
   const {
     data: schedules,
@@ -838,8 +858,9 @@ function WorkSchedulesTab() {
                 const btn = document.getElementById('work-schedule-form-submit') as HTMLButtonElement;
                 btn?.click();
               }}
-              disabled={isCreating || isUpdating}
+              disabled={isCreating || isUpdating || (editingSchedule && !isFormDirty)}
               className="btn-primary-glow px-4 py-2 text-sm font-bold rounded-xl disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2"
+              style={editingSchedule && !isFormDirty ? { cursor: 'not-allowed', opacity: 0.5 } : {}}
             >
               {(isCreating || isUpdating) && <div className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin" />}
               {editingSchedule ? 'Update Schedule' : 'Create Schedule'}
@@ -852,6 +873,7 @@ function WorkSchedulesTab() {
           onSubmit={handleFormSubmit}
           isSubmitting={isCreating || isUpdating}
           isEdit={!!editingSchedule}
+          onDirtyChange={setIsFormDirty}
         />
       </Modal>
 

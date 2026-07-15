@@ -12,6 +12,15 @@ import { isValidTimezone } from '../constants/timezones';
 
 // ── Zod Schemas ──────────────────────────────────────────────────────────────
 
+const workingHoursSchema = z.object({
+  start: z.string().regex(/^([01]\d|2[0-3]):([0-5]\d)$/, 'Invalid time format (HH:mm)'),
+  end: z.string().regex(/^([01]\d|2[0-3]):([0-5]\d)$/, 'Invalid time format (HH:mm)'),
+}).refine((data) => data.end > data.start, {
+  message: 'End time must be after start time',
+}).refine((data) => data.end !== data.start, {
+  message: 'Working hours must be greater than zero',
+});
+
 const CreateWorkScheduleSchema = z.object({
   name: z.string().min(1, 'Name is required').max(150),
   description: z.string().optional().nullable(),
@@ -20,10 +29,7 @@ const CreateWorkScheduleSchema = z.object({
       message: 'Invalid timezone. Must be a valid IANA timezone identifier.',
     }),
   working_days: z.array(z.number().min(0).max(6)).min(1, 'At least one working day is required'),
-  working_hours: z.object({
-    start: z.string().regex(/^([01]\d|2[0-3]):([0-5]\d)$/, 'Invalid time format (HH:mm)'),
-    end: z.string().regex(/^([01]\d|2[0-3]):([0-5]\d)$/, 'Invalid time format (HH:mm)'),
-  }),
+  working_hours: workingHoursSchema,
   break_hours: z.object({
     start: z.string().regex(/^([01]\d|2[0-3]):([0-5]\d)$/, 'Invalid time format (HH:mm)'),
     end: z.string().regex(/^([01]\d|2[0-3]):([0-5]\d)$/, 'Invalid time format (HH:mm)'),
@@ -198,6 +204,19 @@ export const updateWorkSchedule = asyncHandler(async (req: Request, res: Respons
     after_state: schedule.toObject(),
   });
 
+  // Recalculate SLA due dates for affected locations when schedule changes
+  if (input.working_days || input.working_hours) {
+    const { slaCalculator } = await import('../services/slaCalculator.service');
+    const assignments = await WorkScheduleAssignment.find({
+      work_schedule_id: schedule._id,
+      company_id: req.user.company_id,
+    }).lean();
+    const locationIds = [...new Set(assignments.map((a) => a.location_id.toString()))];
+    for (const locId of locationIds) {
+      slaCalculator.recalculateForLocation(locId, req.user.company_id).catch(() => {});
+    }
+  }
+
   res.status(200).json({ success: true, data: schedule });
 });
 
@@ -350,6 +369,10 @@ export const createWorkScheduleAssignment = asyncHandler(async (req: Request, re
     before_state: null,
     after_state: assignment.toObject(),
   });
+
+  // Recalculate SLA due dates for affected location
+  const { slaCalculator } = await import('../services/slaCalculator.service');
+  slaCalculator.recalculateForLocation(location._id.toString(), req.user.company_id).catch(() => {});
 
   res.status(201).json({ success: true, data: assignment });
 });

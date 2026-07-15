@@ -2,7 +2,7 @@
 import { useParams, useNavigate } from 'react-router-dom';
 import { UserHistoryPanel } from '@/features/people/components/UserHistoryPanel';
 import { TableSkeleton } from '@/components/ui/TableSkeleton';
-import { History, ArrowLeft, Users, Edit2, Mail, RefreshCw, Monitor, PlaneTakeoff, Clock, CalendarDays, FileText, Briefcase, MapPin } from 'lucide-react';
+import { History, ArrowLeft, Users, Edit2, Mail, RefreshCw, Monitor, PlaneTakeoff, Clock, CalendarDays, FileText, Briefcase, MapPin, ArrowRight, WifiOff } from 'lucide-react';
 import { useUserDetail } from '@/features/people/hooks/useUserDetail';
 import { useResendInvite } from '@/features/people/hooks/useResendInvite';
 import { useCallback, useState } from 'react';
@@ -233,57 +233,63 @@ export default function UserDetailPage() {
           <h2 className="text-sm font-bold" style={{ color: 'var(--text-main)' }}>Effective Settings (Location Inheritance)</h2>
         </div>
         <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-          {effectiveSettings?.timezone && (
-            <div>
-              <div className="flex items-center gap-1.5 mb-1">
-                <Clock className="w-3 h-3" style={{ color: '#60a5fa' }} />
-                <span className="text-[10px] font-semibold uppercase tracking-wider" style={{ color: '#94a3b8' }}>Timezone</span>
-              </div>
-              <p className="text-sm font-semibold font-mono" style={{ color: 'var(--text-main)' }}>{effectiveSettings.timezone}</p>
+          <div>
+            <div className="flex items-center gap-1.5 mb-1">
+              <Clock className="w-3 h-3" style={{ color: '#60a5fa' }} />
+              <span className="text-[10px] font-semibold uppercase tracking-wider" style={{ color: '#94a3b8' }}>Timezone</span>
+              {effectiveSettings?.timezone && <ArrowRight className="w-2.5 h-2.5" style={{ color: '#60a5fa' }} />}
             </div>
-          )}
-          {effectiveSettings?.holiday_calendar && (
-            <div>
-              <div className="flex items-center gap-1.5 mb-1">
-                <CalendarDays className="w-3 h-3" style={{ color: '#34d399' }} />
-                <span className="text-[10px] font-semibold uppercase tracking-wider" style={{ color: '#94a3b8' }}>Holiday Calendar</span>
-              </div>
-              <p className="text-sm font-semibold" style={{ color: 'var(--text-main)' }}>{effectiveSettings.holiday_calendar.name}</p>
+            <p className="text-sm font-semibold font-mono" style={{ color: 'var(--text-main)' }}>{effectiveSettings?.timezone || 'Company default'}</p>
+          </div>
+          <div>
+            <div className="flex items-center gap-1.5 mb-1">
+              <CalendarDays className="w-3 h-3" style={{ color: '#34d399' }} />
+              <span className="text-[10px] font-semibold uppercase tracking-wider" style={{ color: '#94a3b8' }}>Holiday Calendar</span>
+              {effectiveSettings?.holiday_calendar && <ArrowRight className="w-2.5 h-2.5" style={{ color: '#34d399' }} />}
             </div>
-          )}
-          {effectiveSettings?.work_schedule && (
-            <div>
-              <div className="flex items-center gap-1.5 mb-1">
-                <Clock className="w-3 h-3" style={{ color: '#fbbf24' }} />
-                <span className="text-[10px] font-semibold uppercase tracking-wider" style={{ color: '#94a3b8' }}>Work Schedule</span>
-              </div>
-              <p className="text-sm font-semibold" style={{ color: 'var(--text-main)' }}>{effectiveSettings.work_schedule.name}</p>
-              <p className="text-[10px]" style={{ color: '#94a3b8' }}>{effectiveSettings.work_schedule.working_hours?.start} – {effectiveSettings.work_schedule.working_hours?.end}</p>
+            <p className="text-sm font-semibold" style={{ color: 'var(--text-main)' }}>{effectiveSettings?.holiday_calendar?.name || 'None assigned'}</p>
+          </div>
+          <div>
+            <div className="flex items-center gap-1.5 mb-1">
+              <Clock className="w-3 h-3" style={{ color: '#fbbf24' }} />
+              <span className="text-[10px] font-semibold uppercase tracking-wider" style={{ color: '#94a3b8' }}>Work Schedule</span>
+              {effectiveSettings?.work_schedule && <ArrowRight className="w-2.5 h-2.5" style={{ color: '#fbbf24' }} />}
             </div>
-          )}
-          {effectiveSettings?.policies && (
-            <div>
-              <div className="flex items-center gap-1.5 mb-1">
-                <FileText className="w-3 h-3" style={{ color: '#c084fc' }} />
-                <span className="text-[10px] font-semibold uppercase tracking-wider" style={{ color: '#94a3b8' }}>Resolved Policies</span>
-              </div>
-              <p className="text-sm font-semibold" style={{ color: 'var(--text-main)' }}>{effectiveSettings.policies.length} policy{(effectiveSettings.policies.length !== 1) ? 'ies' : 'y'}</p>
-              {effectiveSettings.policies.length > 0 && (
-                <div className="mt-1 space-y-0.5">
-                  {effectiveSettings.policies.slice(0, 3).map((p: any) => (
-                    <p key={p.policy_version_id} className="text-[10px]" style={{ color: '#94a3b8' }}>
-                      {p.title}
-                      <span className="ml-1 opacity-60">({p.source})</span>
-                    </p>
-                  ))}
-                  {effectiveSettings.policies.length > 3 && (
-                    <p className="text-[10px]" style={{ color: 'rgba(148,163,184,0.5)' }}>+{effectiveSettings.policies.length - 3} more</p>
-                  )}
-                </div>
-              )}
+            <p className="text-sm font-semibold" style={{ color: 'var(--text-main)' }}>{effectiveSettings?.work_schedule?.name || 'None assigned'}</p>
+            {effectiveSettings?.work_schedule?.working_hours ? (
+              <p className="text-[10px]" style={{ color: '#94a3b8' }}>{effectiveSettings.work_schedule.working_hours.start} – {effectiveSettings.work_schedule.working_hours.end}</p>
+            ) : (
+              <p className="text-[10px]" style={{ color: '#94a3b8' }}>No hours configured</p>
+            )}
+          </div>
+          <div>
+            <div className="flex items-center gap-1.5 mb-1">
+              <FileText className="w-3 h-3" style={{ color: '#c084fc' }} />
+              <span className="text-[10px] font-semibold uppercase tracking-wider" style={{ color: '#94a3b8' }}>Resolved Policies</span>
+              {effectiveSettings?.policies && effectiveSettings.policies.length > 0 && <ArrowRight className="w-2.5 h-2.5" style={{ color: '#c084fc' }} />}
             </div>
-          )}
+            <p className="text-sm font-semibold" style={{ color: 'var(--text-main)' }}>{effectiveSettings?.policies?.length ?? 0} polic{(effectiveSettings?.policies?.length ?? 0) !== 1 ? 'ies' : 'y'}</p>
+            {effectiveSettings?.policies && effectiveSettings.policies.length > 0 && (
+              <div className="mt-1 space-y-0.5">
+                {effectiveSettings.policies.slice(0, 3).map((p: any) => (
+                  <p key={p.policy_version_id} className="text-[10px]" style={{ color: '#94a3b8' }}>
+                    {p.title}
+                    <span className="ml-1 opacity-60">({p.source})</span>
+                  </p>
+                ))}
+                {effectiveSettings.policies.length > 3 && (
+                  <p className="text-[10px]" style={{ color: 'rgba(148,163,184,0.5)' }}>+{effectiveSettings.policies.length - 3} more</p>
+                )}
+              </div>
+            )}
+          </div>
         </div>
+        {typeof navigator !== 'undefined' && !navigator.onLine && (
+          <div className="mt-3 flex items-center gap-1.5 text-[10px]" style={{ color: '#f59e0b' }}>
+            <WifiOff className="w-3 h-3" />
+            <span>Some settings may be stale — you are offline.</span>
+          </div>
+        )}
       </div>
 
       {/* ── Reporting Lines Panel ── */}

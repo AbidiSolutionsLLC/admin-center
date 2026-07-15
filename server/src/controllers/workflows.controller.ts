@@ -129,6 +129,19 @@ const TestWorkflowSchema = z.object({
   department_to: z.string().optional(),
 });
 
+// Simulate schema does NOT accept a trigger — the workflow's own trigger is always used.
+const SimulateWorkflowSchema = z.object({
+  user_id: z.string().min(1, 'user_id is required'),
+  user_name: z.string().min(1, 'user_name is required'),
+  user_email: z.string().email('Invalid email'),
+  lifecycle_from: z.string().optional(),
+  lifecycle_to: z.string().optional(),
+  role_from: z.string().optional(),
+  role_to: z.string().optional(),
+  department_from: z.string().optional(),
+  department_to: z.string().optional(),
+});
+
 // ── Controllers ──────────────────────────────────────────────────────────────
 
 /**
@@ -1051,7 +1064,7 @@ export const handleLifecycleTrigger = asyncHandler(async (req: Request, res: Res
  * Does NOT affect real data.
  */
 export const simulateWorkflowHandler = asyncHandler(async (req: Request, res: Response) => {
-  const input = TestWorkflowSchema.parse(req.body);
+  const input = SimulateWorkflowSchema.parse(req.body);
 
   const workflow = await Workflow.findOne({
     _id: req.params.id,
@@ -1076,7 +1089,7 @@ export const simulateWorkflowHandler = asyncHandler(async (req: Request, res: Re
     userId: input.user_id,
     userName: input.user_name,
     userEmail: input.user_email,
-    trigger: input.trigger,
+    trigger: workflow.trigger,
     lifecycleFrom: input.lifecycle_from,
     lifecycleTo: input.lifecycle_to,
     roleFrom: input.role_from,

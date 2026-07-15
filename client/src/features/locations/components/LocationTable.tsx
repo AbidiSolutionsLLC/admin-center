@@ -116,8 +116,8 @@ export const LocationTable: React.FC<LocationTableProps> = ({
                         <TypeIcon className="w-4 h-4" style={{ color: iconColor }} />
                       </div>
                       <div>
-                        <div className="flex items-center gap-2">
-                          <span className="text-sm font-semibold" style={{ color: 'var(--text-main)' }}>{loc.name}</span>
+                        <div className="flex items-center gap-2 min-w-0">
+                          <span className="text-sm font-semibold truncate max-w-[220px]" style={{ color: 'var(--text-main)' }} title={loc.name}>{loc.name}</span>
                           {loc.is_headquarters && (
                             <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-bold"
                               style={{ background: 'rgba(245,176,42,0.15)', color: '#fbbf24', border: '1px solid rgba(245,176,42,0.3)' }}>
