@@ -29,7 +29,7 @@ export interface IUser extends Document {
   delegates: Array<{
     user_id: Types.ObjectId;
     start_date: Date;
-    end_date: Date;
+    end_date?: Date;
   }>;
   last_login?: Date;
   mfa_enabled: boolean;
@@ -72,7 +72,7 @@ const UserSchema = new Schema<IUser>({
   delegates: [{
     user_id: { type: Schema.Types.ObjectId, ref: 'User', required: true },
     start_date: { type: Date, required: true },
-    end_date: { type: Date, required: true },
+    end_date: { type: Date },
   }],
   last_login: Date,
   mfa_enabled: { type: Boolean, default: false },

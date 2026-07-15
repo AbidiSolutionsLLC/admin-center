@@ -196,7 +196,28 @@ export async function executeWorkflow(
       stepsExecuted = run.steps_executed;
       stepsSucceeded = run.steps_succeeded;
       stepsFailed = run.steps_failed;
+    let steps: any[] = [];
+    if (existingRunId && run) {
+      // Use snapshotted steps to ensure consistency if admin modifies workflow rule during execution
+      if (run.snapshot_steps && run.snapshot_steps.length > 0) {
+        steps = run.snapshot_steps;
+      } else {
+        // Fallback for older runs without snapshots
+        steps = await WorkflowStep.find({
+          company_id: new Types.ObjectId(event.companyId),
+          workflow_id: workflow._id,
+          is_active: true,
+        }).sort({ step_order: 1 });
+      }
     } else {
+      steps = await WorkflowStep.find({
+        company_id: new Types.ObjectId(event.companyId),
+        workflow_id: workflow._id,
+        is_active: true,
+      }).sort({ step_order: 1 });
+      
+      const snapshot_steps = steps.map(s => s.toObject ? s.toObject() : s);
+
       run = await WorkflowRun.create({
         company_id: new Types.ObjectId(event.companyId),
         workflow_id: workflow._id,
@@ -210,16 +231,10 @@ export async function executeWorkflow(
         event_payload: { ...event } as Record<string, unknown>,
         execution_time_ms: 0,
         step_results: [],
+        snapshot_steps,
         sla_status: 'pending',
       });
     }
-
-    // Fetch steps ordered by step_order
-    const steps = await WorkflowStep.find({
-      company_id: new Types.ObjectId(event.companyId),
-      workflow_id: workflow._id,
-      is_active: true,
-    }).sort({ step_order: 1 });
 
     // Execute steps sequentially
     for (let i = stepsExecuted; i < steps.length; i++) {
@@ -303,9 +318,13 @@ export async function executeWorkflow(
         
         // Notify approvers on task assignment
         const company = await Company.findById(event.companyId);
+        
+        // Filter out deactivated users
+        const activeApproverIds = [];
         for (const approverId of approverUserIds) {
            const user = await User.findById(approverId);
-           if (user) {
+           if (user && user.is_active && user.lifecycle_state !== 'deactivated') {
+              activeApproverIds.push(approverId);
               await deliverNotification({
                  companyId: event.companyId,
                  templateKey: 'task_assignment_alert',
@@ -318,7 +337,15 @@ export async function executeWorkflow(
                  triggered_by_event: 'workflow.task_assigned',
                  forceEmail: true,
               }).catch(err => console.error('[NotificationEngine] Task assignment notification failed:', err));
+           } else if (user) {
+              console.warn(`[WorkflowEngine] Skipping task assignment for deactivated user ${user._id}`);
            }
+        }
+        
+        // Update the approval request if some approvers were deactivated
+        if (activeApproverIds.length < approverUserIds.length) {
+           approval.approver_user_ids = activeApproverIds;
+           await approval.save();
         }
         
         run?.step_results?.push({
@@ -508,7 +535,10 @@ export async function resumeWorkflow(runId: string, approved: boolean, decidedBy
     const completedAt = new Date();
     const executionTimeMs = completedAt.getTime() - pendingStep.started_at.getTime();
     
-    const step = await WorkflowStep.findById(pendingStep.step_id);
+    let step = run.snapshot_steps?.find(s => String((s as any)._id) === String(pendingStep.step_id));
+    if (!step) {
+      step = await WorkflowStep.findById(pendingStep.step_id) as any;
+    }
     const stepSlaBreached = step?.sla_config?.threshold_minutes 
         ? executionTimeMs > step.sla_config.threshold_minutes * 60000 
         : false;

@@ -91,6 +91,12 @@ interface SendEmailParams {
  */
 const sendEmailInternal = async (params: SendEmailParams): Promise<void> => {
   const { to, subject, html, text } = params;
+  
+  if (!to || typeof to !== 'string' || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(to)) {
+    console.warn(`[EmailService] Invalid or missing email address: "${to}". Skipping email delivery.`);
+    return;
+  }
+  
   const senderAddress = process.env.SENDER_EMAIL_ADDRESS;
 
   // 1. Try Azure Communication Services

@@ -30,6 +30,15 @@ const CreateWorkflowSchema = z.object({
     department_to: z.array(z.string()).optional(),
   }).optional(),
   sla_config: SlaConfigSchema.optional(),
+}).superRefine((data, ctx) => {
+  if (data.trigger === 'user.lifecycle_changed') {
+    if (!data.trigger_config?.lifecycle_from?.length) {
+      ctx.addIssue({ code: z.ZodIssueCode.custom, message: "At least one 'Trigger From' state is required", path: ['trigger_config', 'lifecycle_from'] });
+    }
+    if (!data.trigger_config?.lifecycle_to?.length) {
+      ctx.addIssue({ code: z.ZodIssueCode.custom, message: "At least one 'Trigger To' state is required", path: ['trigger_config', 'lifecycle_to'] });
+    }
+  }
 });
 
 const UpdateWorkflowSchema = z.object({
@@ -46,10 +55,20 @@ const UpdateWorkflowSchema = z.object({
     })
     .optional(),
   sla_config: SlaConfigSchema.optional(),
+}).superRefine((data, ctx) => {
+  // If it's a partial update we might not have all fields, but if trigger_config is present for lifecycle we should validate
+  // We can't strictly enforce it here because trigger type is not in UpdateWorkflowSchema, 
+  // but we can ensure arrays are not empty if they are provided
+  if (data.trigger_config?.lifecycle_from !== undefined && data.trigger_config.lifecycle_from.length === 0) {
+    ctx.addIssue({ code: z.ZodIssueCode.custom, message: "At least one 'Trigger From' state is required", path: ['trigger_config', 'lifecycle_from'] });
+  }
+  if (data.trigger_config?.lifecycle_to !== undefined && data.trigger_config.lifecycle_to.length === 0) {
+    ctx.addIssue({ code: z.ZodIssueCode.custom, message: "At least one 'Trigger To' state is required", path: ['trigger_config', 'lifecycle_to'] });
+  }
 });
 
 const CreateStepSchema = z.object({
-  name: z.string().trim().min(1).max(200),
+  name: z.string().trim().min(1, 'Step Name is required').max(200),
   description: z.string().trim().max(500).optional(),
   action_type: z.enum([
     'send_email',
@@ -69,6 +88,23 @@ const CreateStepSchema = z.object({
   })).optional().default([]),
   step_order: z.number().int().min(0),
   sla_config: SlaConfigSchema.optional(),
+}).superRefine((data, ctx) => {
+  if (data.action_type === 'require_approval') {
+    if (data.action_config.timeout_hours !== undefined && data.action_config.timeout_hours !== "") {
+      const timeout = Number(data.action_config.timeout_hours);
+      if (isNaN(timeout) || timeout <= 0) {
+        ctx.addIssue({ code: z.ZodIssueCode.custom, message: "Timeout must be greater than 0", path: ['action_config', 'timeout_hours'] });
+      }
+    }
+    if (!data.action_config.approver_user_ids || !Array.isArray(data.action_config.approver_user_ids) || data.action_config.approver_user_ids.length === 0) {
+        ctx.addIssue({ code: z.ZodIssueCode.custom, message: "At least one approver must be selected", path: ['action_config', 'approver_user_ids'] });
+    } else {
+        const uniqueApprovers = new Set(data.action_config.approver_user_ids as string[]);
+        if (uniqueApprovers.size !== data.action_config.approver_user_ids.length) {
+            ctx.addIssue({ code: z.ZodIssueCode.custom, message: "Duplicate approvers are not allowed", path: ['action_config', 'approver_user_ids'] });
+        }
+    }
+  }
 });
 
 const ReorderStepsSchema = z.object({
@@ -334,6 +370,16 @@ export const publishWorkflow = asyncHandler(async (req: Request, res: Response) 
 
   if (workflow.status !== 'draft') {
     throw new AppError('Only draft workflows can be published', 400, 'INVALID_STATUS');
+  }
+
+  // Check if workflow has steps
+  const stepCount = await WorkflowStep.countDocuments({
+    company_id: new Types.ObjectId(req.user.company_id),
+    workflow_id: workflow._id,
+  });
+
+  if (stepCount === 0) {
+    throw new AppError('Cannot publish workflow with no steps', 400, 'EMPTY_WORKFLOW');
   }
 
   // Archive currently published version for this key
@@ -1014,6 +1060,15 @@ export const simulateWorkflowHandler = asyncHandler(async (req: Request, res: Re
 
   if (!workflow) {
     throw new AppError('Workflow not found', 404, 'WORKFLOW_NOT_FOUND');
+  }
+
+  const stepCount = await WorkflowStep.countDocuments({
+    company_id: new Types.ObjectId(req.user.company_id),
+    workflow_id: workflow._id,
+  });
+
+  if (stepCount === 0) {
+    throw new AppError('Workflow has no steps to simulate', 400, 'EMPTY_WORKFLOW');
   }
 
   const event = {

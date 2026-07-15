@@ -77,13 +77,13 @@ export const MultiUserSelect: React.FC<MultiUserSelectProps> = ({
           selectedUsers.map((user) => (
             <span
               key={user._id}
-              className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-primary/10 text-primary text-[11px] font-medium animate-in fade-in zoom-in duration-200"
+              className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-primary/10 text-primary text-[11px] font-medium animate-in fade-in zoom-in duration-200 max-w-full"
             >
-              {user.full_name}
+              <span className="truncate max-w-[150px]" title={user.full_name}>{user.full_name}</span>
               <button
                 type="button"
                 onClick={(e) => removeUser(e, user._id)}
-                className="hover:bg-primary/20 rounded-full p-0.5 transition-colors"
+                className="hover:bg-primary/20 rounded-full p-0.5 transition-colors shrink-0"
               >
                 <X className="w-3 h-3" />
               </button>

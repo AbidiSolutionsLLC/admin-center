@@ -18,6 +18,7 @@ export interface IWorkflowRun extends Document {
   event_payload?: Record<string, unknown>;
   execution_time_ms: number;
   sla_status?: 'ok' | 'breached' | 'pending';
+  snapshot_steps?: Record<string, unknown>[];
   step_results?: {
     step_id: Types.ObjectId;
     step_name: string;
@@ -46,6 +47,7 @@ const WorkflowRunSchema = new Schema<IWorkflowRun>({
   event_payload: { type: Schema.Types.Mixed },
   execution_time_ms: { type: Number, required: true },
   sla_status: { type: String, enum: ['ok', 'breached', 'pending'], default: 'pending' },
+  snapshot_steps: [{ type: Schema.Types.Mixed }],
   step_results: [{
     step_id: { type: Schema.Types.ObjectId, ref: 'WorkflowStep' },
     step_name: { type: String },
