@@ -91,14 +91,18 @@ async function deliverEmail(
   let errorMessage: string | undefined;
 
   try {
-    const transporter = getTransporter();
-    await transporter.sendMail({
+    const transporter = await getTransporter();
+    const info = await transporter.sendMail({
       from: process.env.EMAIL_FROM ?? process.env.SMTP_FROM_EMAIL ?? 'noreply@admin-center.com',
       to: payload.user_email,
       subject: renderedSubject,
       html: renderedBody,
       text: renderedBody.replace(/<[^>]*>/g, ''), // Strip HTML for text fallback
     });
+    
+    if (!process.env.SMTP_HOST) {
+      console.log('📧 Ethereal Email preview URL: %s', nodemailer.getTestMessageUrl(info));
+    }
 
     status = 'sent';
   } catch (error) {

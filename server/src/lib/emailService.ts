@@ -42,7 +42,7 @@ if (connectionString) {
  * Nodemailer transporter configuration
  * Used as a fallback when Azure is not configured
  */
-const createTransporter = () => {
+const createTransporter = async () => {
   // If SMTP configuration from env exists
   if (process.env.SMTP_HOST) {
     return nodemailer.createTransport({
@@ -56,23 +56,25 @@ const createTransporter = () => {
     });
   }
 
-  // Development fallback: log emails to console
+  // Development fallback: use auto-generated ethereal.email test account
   console.warn('⚠️  No Azure or SMTP service configured. Using ethereal.email test account.');
+  const testAccount = await nodemailer.createTestAccount();
   return nodemailer.createTransport({
     host: 'smtp.ethereal.email',
     port: 587,
+    secure: false, // true for 465, false for other ports
     auth: {
-      user: 'ethereal.user@ethereal.email',
-      pass: 'ethereal_password',
+      user: testAccount.user,
+      pass: testAccount.pass,
     },
   });
 };
 
 let transporter: nodemailer.Transporter | null = null;
 
-export const getTransporter = (): nodemailer.Transporter => {
+export const getTransporter = async (): Promise<nodemailer.Transporter> => {
   if (!transporter) {
-    transporter = createTransporter();
+    transporter = await createTransporter();
   }
   return transporter;
 };
@@ -133,7 +135,12 @@ const sendEmailInternal = async (params: SendEmailParams): Promise<void> => {
     text,
   };
 
-  await getTransporter().sendMail(mailOptions);
+  const tp = await getTransporter();
+  const info = await tp.sendMail(mailOptions);
+  
+  if (!process.env.SMTP_HOST) {
+    console.log('📧 Ethereal Email preview URL: %s', nodemailer.getTestMessageUrl(info));
+  }
 };
 
 // ── Public API ─────────────────────────────────────────────────────────────
