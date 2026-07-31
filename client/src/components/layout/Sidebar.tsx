@@ -14,6 +14,7 @@ import {
   GitBranch,
   CheckSquare,
   MapPin,
+  Database,
 } from 'lucide-react';
 import { useAuthStore } from '@/store/useAuthStore';
 import { useUIStore } from '@/store/useUIStore';
@@ -44,6 +45,7 @@ const navGroups = [
       { label: 'Policies', href: ROUTES.POLICIES, icon: FileText },
       { label: 'Workflows', href: ROUTES.WORKFLOWS, icon: GitBranch },
       { label: 'Approvals', href: ROUTES.APPROVALS, icon: CheckSquare },
+      { label: 'Data Fields', href: ROUTES.DATA_FIELDS, icon: Database },
     ],
   },
 

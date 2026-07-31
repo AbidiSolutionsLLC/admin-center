@@ -44,6 +44,7 @@ export const useWorkSchedules = () => {
     onSuccess: (_data, { id }) => {
       queryClient.invalidateQueries({ queryKey: QUERY_KEYS.WORK_SCHEDULES });
       queryClient.invalidateQueries({ queryKey: QUERY_KEYS.WORK_SCHEDULE_DETAIL(id) });
+      queryClient.invalidateQueries({ queryKey: ['user'] });
       toast.success('Work schedule updated successfully');
     },
     onError: (error) => {

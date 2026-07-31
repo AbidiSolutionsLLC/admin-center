@@ -12,6 +12,7 @@ import type {
   CreateWorkflowStepInput,
   ReorderStepsInput,
   TestWorkflowInput,
+  SimulateWorkflowInput,
   WorkflowTestResult,
   WorkflowSimulationResult,
 } from '@/types';
@@ -134,8 +135,9 @@ export const usePublishWorkflow = (workflowId: string) => {
       queryClient.invalidateQueries({ queryKey: QUERY_KEYS.WORKFLOW_DETAIL(workflowId) });
       toast.success('Workflow published');
     },
-    onError: (error: unknown) => {
-      console.error('Publish workflow failed', error);
+    onError: (error: any) => {
+      const message = error?.response?.data?.message || error?.message || 'Failed to publish workflow';
+      toast.error(message);
     },
   });
 };
@@ -378,8 +380,8 @@ export const useTestWorkflow = (workflowId: string) => {
  * Used on: WorkflowsPage (simulate modal)
  */
 export const useSimulateWorkflow = (workflowId: string) => {
-  return useMutation<WorkflowSimulationResult, Error, TestWorkflowInput>({
-    mutationFn: async (input: TestWorkflowInput) => {
+  return useMutation<WorkflowSimulationResult, Error, SimulateWorkflowInput>({
+    mutationFn: async (input: SimulateWorkflowInput) => {
       const { data } = await apiClient.post(`/workflows/${workflowId}/simulate`, input);
       return data.data;
     },

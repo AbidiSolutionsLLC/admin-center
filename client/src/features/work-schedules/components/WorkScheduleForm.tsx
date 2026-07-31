@@ -1,20 +1,28 @@
 // client/src/features/work-schedules/components/WorkScheduleForm.tsx
-import React from 'react';
+import React, { useEffect } from 'react';
 import { useForm, Controller } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { z } from 'zod';
 import { COMMON_TIMEZONES, formatTimezoneLabel } from '@/constants/timezones';
 import type { WorkSchedule } from '@/types';
 
+const dayOfWeekSchema = z.number().min(0).max(6);
+
 const schema = z.object({
   name: z.string().min(1, 'Schedule name is required').max(150, 'Name too long'),
   description: z.string().optional().nullable(),
   timezone: z.string().min(1, 'Timezone is required'),
-  working_days: z.array(z.number().min(0).max(6)).min(1, 'Select at least one working day'),
+  working_days: z.array(dayOfWeekSchema).min(1, 'Select at least one working day'),
   working_hours: z.object({
     start: z.string().min(1, 'Start time is required'),
     end: z.string().min(1, 'End time is required'),
-  }),
+  }).refine((data) => {
+    if (!data.start || !data.end) return true;
+    return data.end > data.start;
+  }, { message: 'End time must be after start time' }).refine((data) => {
+    if (!data.start || !data.end) return true;
+    return data.end !== data.start;
+  }, { message: 'Working hours must be greater than zero' }),
   break_hours: z.object({
     start: z.string(),
     end: z.string(),
@@ -29,6 +37,7 @@ interface WorkScheduleFormProps {
   onSubmit: (data: WorkScheduleFormData) => void;
   isSubmitting?: boolean;
   isEdit?: boolean;
+  onDirtyChange?: (dirty: boolean) => void;
 }
 
 const DAY_LABELS = [
@@ -52,7 +61,7 @@ export const WorkScheduleForm: React.FC<WorkScheduleFormProps> = ({
     control,
     watch,
     handleSubmit,
-    formState: { errors },
+    formState: { errors, isDirty },
   } = useForm<WorkScheduleFormData>({
     resolver: zodResolver(schema),
     defaultValues: {
@@ -65,6 +74,22 @@ export const WorkScheduleForm: React.FC<WorkScheduleFormProps> = ({
       is_active: initialData?.is_active ?? true,
     },
   });
+
+  const isSaveDisabled = !isDirty || isSubmitting || Object.keys(errors).length > 0;
+
+  useEffect(() => {
+    onDirtyChange?.(isDirty);
+  }, [isDirty, onDirtyChange]);
+
+  useEffect(() => {
+    if (!isDirty) return;
+    const handler = (e: BeforeUnloadEvent) => {
+      e.preventDefault();
+      e.returnValue = '';
+    };
+    window.addEventListener('beforeunload', handler);
+    return () => window.removeEventListener('beforeunload', handler);
+  }, [isDirty]);
 
   const fieldStyle = (hasError?: boolean): React.CSSProperties => ({
     borderColor: hasError ? 'rgba(239,68,68,0.5)' : undefined,

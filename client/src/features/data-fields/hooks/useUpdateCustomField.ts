@@ -24,8 +24,7 @@ export const useUpdateCustomField = (targetObject?: TargetObject) => {
       toast.success('Custom field updated successfully');
     },
     onError: (error) => {
-      console.error('Custom field update failed:', error);
-      toast.error('Failed to update custom field. Please try again.');
+      toast.error(error instanceof Error ? error.message : 'Failed to update custom field. Please try again.');
     },
   });
 };

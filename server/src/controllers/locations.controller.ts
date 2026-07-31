@@ -6,6 +6,7 @@ import { Location, ILocation } from '../models/Location.model';
 import { User } from '../models/User.model';
 import { PolicyVersion } from '../models/PolicyVersion.model';
 import { PolicyAssignment } from '../models/PolicyAssignment.model';
+import { AccessControlPolicy } from '../models/AccessControlPolicy.model';
 import { auditLogger } from '../lib/auditLogger';
 import { AppError } from '../utils/AppError';
 import { isValidTimezone } from '../constants/timezones';
@@ -246,6 +247,34 @@ export const updateLocation = asyncHandler(async (req: Request, res: Response) =
     }
   }
 
+  // Prevent circular reference when changing parent
+  if (input.parent_id && input.parent_id !== (location.parent_id?.toString() ?? null)) {
+    if (input.parent_id === req.params.id) {
+      throw new AppError('A location cannot be its own parent.', 400, 'SELF_PARENT');
+    }
+    const descendants = await Location.find({
+      company_id: req.user.company_id,
+      parent_id: req.params.id,
+      is_deleted: { $ne: true },
+    }).select('_id').lean();
+    const visited = new Set<string>([req.params.id]);
+    const queue = descendants.map(d => d._id.toString());
+    while (queue.length > 0) {
+      const current = queue.shift()!;
+      if (current === input.parent_id) {
+        throw new AppError('Circular reference detected: the selected parent is a descendant of this location.', 400, 'CIRCULAR_PARENT');
+      }
+      if (visited.has(current)) continue;
+      visited.add(current);
+      const children = await Location.find({
+        company_id: req.user.company_id,
+        parent_id: current,
+        is_deleted: { $ne: true },
+      }).select('_id').lean();
+      for (const c of children) queue.push(c._id.toString());
+    }
+  }
+
   const beforeState = location.toObject();
 
   // Merge flat working_days into working_hours.days for the model
@@ -336,6 +365,47 @@ export const deleteLocation = asyncHandler(async (req: Request, res: Response) =
       `Cannot delete location "${location.name}" — it has ${childCount} child location${childCount > 1 ? 's' : ''}. Reassign or remove child locations first.`,
       409,
       'LOCATION_HAS_CHILDREN'
+    );
+  }
+
+  // Check if access rules reference this location
+  const accessRuleCount = await AccessControlPolicy.countDocuments({
+    company_id: req.user.company_id,
+    'conditions.location_id': req.params.id,
+  });
+  if (accessRuleCount > 0) {
+    throw new AppError(
+      `Cannot delete location "${location.name}" — it is referenced by ${accessRuleCount} access rule${accessRuleCount > 1 ? 's' : ''}. Remove the rules first.`,
+      409,
+      'LOCATION_HAS_ACCESS_RULES'
+    );
+  }
+
+  // Check if work schedule assignments reference this location
+  const { WorkScheduleAssignment } = await import('../models/WorkScheduleAssignment.model');
+  const scheduleCount = await WorkScheduleAssignment.countDocuments({
+    company_id: req.user.company_id,
+    location_id: location._id,
+  });
+  if (scheduleCount > 0) {
+    throw new AppError(
+      `Cannot delete location "${location.name}" — it has ${scheduleCount} work schedule assignment${scheduleCount > 1 ? 's' : ''}. Remove assignments first.`,
+      409,
+      'LOCATION_HAS_SCHEDULE_ASSIGNMENTS'
+    );
+  }
+
+  // Check if holiday assignments reference this location
+  const { HolidayAssignment } = await import('../models/HolidayAssignment.model');
+  const holidayCount = await HolidayAssignment.countDocuments({
+    company_id: req.user.company_id,
+    location_id: location._id,
+  });
+  if (holidayCount > 0) {
+    throw new AppError(
+      `Cannot delete location "${location.name}" — it has ${holidayCount} holiday assignment${holidayCount > 1 ? 's' : ''}. Remove assignments first.`,
+      409,
+      'LOCATION_HAS_HOLIDAY_ASSIGNMENTS'
     );
   }
 
@@ -487,6 +557,22 @@ export const assignPolicyToLocation = asyncHandler(async (req: Request, res: Res
   });
   if (existing) {
     throw new AppError('Policy is already assigned to this location', 400, 'POLICY_ALREADY_ASSIGNED');
+  }
+
+  // Check if this policy is a locked global policy that cannot be overridden
+  const globalPolicyAssignments = await PolicyAssignment.find({
+    company_id: req.user.company_id,
+    target_type: 'all',
+  }).lean();
+  const isLockedGlobal = globalPolicyAssignments.some(
+    (gpa) => gpa.policy_version_id.toString() === input.policy_version_id
+  );
+  if (isLockedGlobal) {
+    throw new AppError(
+      'This global policy is locked and cannot be overridden at the location level.',
+      400,
+      'LOCKED_POLICY_CANNOT_OVERRIDE'
+    );
   }
 
   const assignment = await PolicyAssignment.create({

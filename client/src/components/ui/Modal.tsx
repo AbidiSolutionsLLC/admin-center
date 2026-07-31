@@ -11,6 +11,7 @@ interface ModalProps {
   children: React.ReactNode;
   footer?: React.ReactNode;
   size?: 'sm' | 'md' | 'lg' | 'xl';
+  titleSize?: 'default' | 'lg';
 }
 
 /**
@@ -48,7 +49,7 @@ export const Modal: React.FC<ModalProps> = ({
           {/* Header */}
           <div className="px-6 py-5 border-b border-white/10 flex items-center justify-between flex-shrink-0 bg-black/20">
             <div>
-              <Dialog.Title className="text-[15px] font-semibold text-slate-200">
+              <Dialog.Title className="text-lg font-bold text-slate-200">
                 {title}
               </Dialog.Title>
               {description && (

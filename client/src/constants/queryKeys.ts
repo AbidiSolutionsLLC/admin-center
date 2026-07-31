@@ -79,6 +79,14 @@ export const QUERY_KEYS = {
   CUSTOM_FIELDS: (targetObject?: string) =>
     targetObject ? ['custom-fields', targetObject] as const : ['custom-fields'] as const,
   CUSTOM_FIELD_DETAIL: (id: string) => ['custom-field', id] as const,
+  CUSTOM_FIELD_USAGE: (id: string) => ['custom-field', id, 'usage'] as const,
+  CUSTOM_FIELD_VERSIONS: (id: string) => ['custom-field', id, 'versions'] as const,
+  CUSTOM_FIELD_DEPENDENTS: (id: string) => ['custom-field', id, 'dependents'] as const,
+  EFFECTIVE_CUSTOM_FIELDS: (targetObject: string, roleIds: string[]) =>
+    ['custom-fields', 'effective', targetObject, roleIds] as const,
+  PROFILE_LAYOUTS: (targetObject?: string) =>
+    targetObject ? ['profile-layouts', targetObject] as const : ['profile-layouts'] as const,
+  PROFILE_LAYOUT_DETAIL: (id: string) => ['profile-layout', id] as const,
   // Integrations
   INTEGRATIONS: ['integrations'] as const,
   INTEGRATION_DETAIL: (id: string) => ['integration', id] as const,

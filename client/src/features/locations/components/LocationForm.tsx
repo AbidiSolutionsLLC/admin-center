@@ -120,9 +120,29 @@ export const LocationForm: React.FC<LocationFormProps> = ({
   );
 
   const fieldStyle = (hasError?: boolean): React.CSSProperties => ({
-    borderColor: hasError ? 'rgba(239,68,68,0.5)' : undefined,
-    boxShadow: hasError ? '0 0 0 3px rgba(239,68,68,0.08)' : undefined,
+    width: '100%',
+    background: 'rgba(255,255,255,0.04)',
+    backdropFilter: 'blur(8px)',
+    border: hasError ? '1px solid rgba(239,68,68,0.5)' : '1px solid rgba(255,255,255,0.08)',
+    borderRadius: 12,
+    padding: '12px 16px',
+    fontSize: 14,
+    color: '#f8fafc',
+    outline: 'none',
+    transition: 'all 0.25s ease',
   });
+
+  const handleFocus = (e: React.FocusEvent<HTMLInputElement | HTMLSelectElement>, hasError?: boolean) => {
+    e.currentTarget.style.background = 'rgba(255,255,255,0.07)';
+    e.currentTarget.style.borderColor = hasError ? 'rgba(239,68,68,0.5)' : 'rgba(245,176,42,0.35)';
+    e.currentTarget.style.boxShadow = hasError ? '0 0 0 3px rgba(239,68,68,0.1)' : '0 0 0 3px rgba(245,176,42,0.06)';
+  };
+
+  const handleBlur = (e: React.FocusEvent<HTMLInputElement | HTMLSelectElement>, hasError?: boolean) => {
+    e.currentTarget.style.background = 'rgba(255,255,255,0.04)';
+    e.currentTarget.style.borderColor = hasError ? 'rgba(239,68,68,0.5)' : 'rgba(255,255,255,0.08)';
+    e.currentTarget.style.boxShadow = 'none';
+  };
 
   return (
     <form id="location-form" onSubmit={handleSubmit(onSubmit)} className="space-y-5" noValidate>
@@ -138,6 +158,8 @@ export const LocationForm: React.FC<LocationFormProps> = ({
           placeholder="e.g. North America, Karachi Office"
           disabled={isSubmitting}
           style={fieldStyle(!!errors.name)}
+          onFocus={(e) => handleFocus(e, !!errors.name)}
+          onBlur={(e) => handleBlur(e, !!errors.name)}
         />
         {errors.name && <p className="text-xs mt-1" style={{ color: '#f87171' }}>{errors.name.message}</p>}
       </div>
@@ -196,6 +218,8 @@ export const LocationForm: React.FC<LocationFormProps> = ({
               value={field.value ?? ''}
               disabled={isSubmitting || selectedType === 'region'}
               style={fieldStyle(!!errors.parent_id)}
+              onFocus={(e) => handleFocus(e, !!errors.parent_id)}
+              onBlur={(e) => handleBlur(e, !!errors.parent_id)}
             >
               <option value="">No parent (top-level)</option>
               {availableParents.map((loc) => (
@@ -216,7 +240,14 @@ export const LocationForm: React.FC<LocationFormProps> = ({
           name="timezone"
           control={control}
           render={({ field }) => (
-            <select id="loc-timezone" {...field} disabled={isSubmitting} style={fieldStyle(!!errors.timezone)}>
+            <select
+              id="loc-timezone"
+              {...field}
+              disabled={isSubmitting}
+              style={fieldStyle(!!errors.timezone)}
+              onFocus={(e) => handleFocus(e, !!errors.timezone)}
+              onBlur={(e) => handleBlur(e, !!errors.timezone)}
+            >
               {COMMON_TIMEZONES.map((tz) => (
                 <option key={tz} value={tz}>{formatTimezoneLabel(tz)}</option>
               ))}
@@ -349,6 +380,8 @@ export const LocationForm: React.FC<LocationFormProps> = ({
           placeholder="e.g. 123 Main St, Karachi, Pakistan"
           disabled={isSubmitting}
           style={fieldStyle(!!errors.address)}
+          onFocus={(e) => handleFocus(e, !!errors.address)}
+          onBlur={(e) => handleBlur(e, !!errors.address)}
         />
         {errors.address && <p className="text-xs mt-1" style={{ color: '#f87171' }}>{errors.address.message}</p>}
       </div>
