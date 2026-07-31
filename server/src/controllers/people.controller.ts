@@ -18,17 +18,19 @@ import { Department } from '../models/Department.model';
 import { Location } from '../models/Location.model';
 import { Team } from '../models/Team.model';
 import { locationSettingsService } from '../services/locationSettings.service';
-import { handleLifecycleEvent } from '../lib/workflowEngine';
+import { handleLifecycleEvent, resumeWorkflow } from '../lib/workflowEngine';
+import { ApprovalRequest } from '../models/ApprovalRequest.model';
 import { deliverNotification } from '../lib/notificationEngine';
 import { contextEngine } from '../services/contextEngine.service';
 import { PERMISSION_GROUPS, ROLES } from '../constants/roles';
 import { NotificationTemplate } from '../models/NotificationTemplate.model';
 import { AuditEvent } from '../models/AuditEvent.model';
-import { resolveUserPermissions } from '../lib/rbac';
+import { resolveUserPermissions, hasPermission } from '../lib/rbac';
 import { App } from '../models/App.model';
 import { AppAssignment } from '../models/AppAssignment.model';
 import { Group } from '../models/Group.model';
 import { GroupMember } from '../models/GroupMember.model';
+import { applyDataGovernanceRead, applyDataGovernanceWrite } from '../lib/dataGovernance';
 
 
 // ── Types & Interfaces ───────────────────────────────────────────────────────
@@ -414,6 +416,45 @@ async function runLifecycleAutomations(
         termination_date_set: targetState === 'terminated'
       },
     });
+
+    // Unblock pending workflow approvals for this user
+    try {
+      const pendingApprovals = await ApprovalRequest.find({
+        status: 'pending',
+        approver_user_ids: user._id
+      });
+      
+      for (const approval of pendingApprovals) {
+        // Remove user from approvers
+        await ApprovalRequest.updateOne(
+          { _id: approval._id },
+          { $pull: { approver_user_ids: user._id } }
+        );
+        
+        const remainingCount = approval.approver_user_ids.length - 1;
+        
+        if (approval.approval_condition === 'all') {
+          const approvedCount = approval.decisions.filter(d => d.status === 'approved').length;
+          if (remainingCount === 0 || approvedCount >= remainingCount) {
+            approval.status = 'approved';
+            approval.decided_at = new Date();
+            approval.comments = 'Automatically approved due to approver deactivation satisfying conditions.';
+            await approval.save();
+            await resumeWorkflow(approval.workflow_run_id.toString(), true, user._id.toString());
+          }
+        } else if (approval.approval_condition === 'any') {
+          if (remainingCount === 0) {
+            approval.status = 'rejected';
+            approval.decided_at = new Date();
+            approval.comments = 'All assigned approvers were deactivated.';
+            await approval.save();
+            await resumeWorkflow(approval.workflow_run_id.toString(), false, user._id.toString());
+          }
+        }
+      }
+    } catch (err) {
+      console.error('[Lifecycle Automation] Failed to update pending approvals:', err);
+    }
   }
 
   if (targetState === 'archived') {
@@ -712,7 +753,8 @@ export const getUsers = asyncHandler(async (req: Request, res: Response) => {
   users.forEach(user => checkAndFlagUserDataIntegrity(user, req.user.company_id));
 
   const enriched = await enrichUsers(users, req.user.company_id);
-  res.status(200).json({ success: true, data: enriched });
+  const safeData = await applyDataGovernanceRead(req.user, 'User', enriched);
+  res.status(200).json({ success: true, data: safeData });
 });
 
 /**
@@ -739,7 +781,8 @@ export const getUserById = asyncHandler(async (req: Request, res: Response) => {
   }
 
   const [enriched] = await enrichUsers([user.toObject()], req.user.company_id);
-  res.status(200).json({ success: true, data: enriched });
+  const safeData = await applyDataGovernanceRead(req.user, 'User', enriched);
+  res.status(200).json({ success: true, data: safeData });
 });
 
 /**
@@ -1055,9 +1098,10 @@ export const inviteUser = asyncHandler(async (req: Request, res: Response) => {
  */
 export const updateUser = asyncHandler(async (req: Request, res: Response) => {
   const input = UpdateUserSchema.parse(req.body);
+  const safeInput = await applyDataGovernanceWrite(req.user, 'User', input);
 
   // Validate company-required fields (only check fields present in body)
-  await validateRequiredFields(req, input as unknown as Record<string, unknown>, false);
+  await validateRequiredFields(req, safeInput as unknown as Record<string, unknown>, false);
 
   const filter: UserFilter = {
     _id: getRouteId(req.params.id),
@@ -1165,7 +1209,7 @@ export const updateUser = asyncHandler(async (req: Request, res: Response) => {
   const beforeState = user.toObject();
 
   // Normalize empty strings → null
-  const updates: Record<string, unknown> = { ...input };
+  const updates: Record<string, unknown> = { ...safeInput };
   if (updates.department_id === '') updates.department_id = null;
   if (updates.team_id === '') updates.team_id = null;
   if (updates.manager_id === '') updates.manager_id = null;
@@ -1188,8 +1232,8 @@ export const updateUser = asyncHandler(async (req: Request, res: Response) => {
   await user.save();
 
   // Sync multiple roles if provided
-  if (input.role_ids !== undefined) {
-    const roleIds = input.role_ids;
+  if (safeInput.role_ids !== undefined) {
+    const roleIds = safeInput.role_ids;
     
     if (roleIds.length > 0) {
       const roles = await Role.find({
@@ -2108,6 +2152,19 @@ export const bulkAssignLocation = asyncHandler(async (req: Request, res: Respons
  * Audit event logged with filter params and row count.
  */
 export const exportUsers = asyncHandler(async (req: Request, res: Response) => {
+  const canExport = await hasPermission(req.user.userId, req.user.company_id, 'people', 'export', 'all');
+  if (!canExport) {
+    await auditLogger.log({
+      req,
+      action: 'export.unauthorized_attempt',
+      module: 'people',
+      object_type: 'System',
+      object_id: 'export',
+      object_label: 'Unauthorized export attempt blocked',
+    });
+    throw new AppError('You do not have permission to export data.', 403, 'FORBIDDEN');
+  }
+
   const { lifecycle_state, department_id, employment_type } = req.query;
 
   const filter: UserFilter = {
@@ -2139,10 +2196,12 @@ export const exportUsers = asyncHandler(async (req: Request, res: Response) => {
     .sort({ created_at: -1 })
     .lean();
 
+  const safeUsers = await applyDataGovernanceRead(req.user, 'User', users);
+
   // Build CSV
   const headers = ['Employee ID', 'Full Name', 'Email', 'Phone', 'Department', 'Manager', 'Location', 'Lifecycle State', 'Employment Type', 'Hire Date', 'Last Login', 'Created At'];
 
-  const rows = users.map((u: any) => {
+  const rows = safeUsers.map((u: any) => {
     const dept = typeof u.department_id === 'object' ? u.department_id?.name : '';
     const manager = typeof u.manager_id === 'object' ? u.manager_id?.full_name : '';
     const location = typeof u.location_id === 'object' ? u.location_id?.name : '';
@@ -2298,6 +2357,53 @@ export const getEffectivePermissions = asyncHandler(async (req: Request, res: Re
     },
   });
 });
+
+/**
+ * POST /people/:id/unlock
+ * Admin action to unlock a user account that was locked due to multiple failed login attempts.
+ */
+export const unlockUser = asyncHandler(async (req: Request, res: Response) => {
+  const userId = getRouteId(req.params.id);
+
+  const user = await User.findOne({
+    _id: userId,
+    company_id: req.user.company_id,
+  });
+
+  if (!user) {
+    throw new AppError('User not found', 404, 'NOT_FOUND');
+  }
+
+  if (!user.locked_until || user.locked_until < new Date()) {
+    throw new AppError('User is not currently locked out', 400, 'BAD_REQUEST');
+  }
+
+  const prevLockedUntil = user.locked_until;
+
+  user.locked_until = undefined;
+  // Also clear any MFA OTP if they were locked during MFA attempt
+  user.mfa_otp = undefined;
+  user.mfa_otp_expires_at = undefined;
+  
+  await user.save();
+
+  await auditLogger.log({
+    req,
+    action: 'user.unlocked',
+    module: 'people',
+    object_type: 'User',
+    object_id: user._id.toString(),
+    object_label: user.full_name,
+    before_state: { locked_until: prevLockedUntil },
+    after_state: { locked_until: null },
+  });
+
+  res.status(200).json({
+    success: true,
+    message: 'User account unlocked successfully',
+  });
+});
+
 
 /**
  * GET /people/:id/effective-settings

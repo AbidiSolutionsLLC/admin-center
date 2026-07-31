@@ -10,6 +10,8 @@ import {
   deleteSecurityPolicy,
   getSecurityEvents,
   forceLogoutUser,
+  getActiveSessions,
+  terminateSession,
 } from '../controllers/security.controller';
 
 const router = Router();
@@ -28,5 +30,7 @@ router.get('/events', getSecurityEvents);
 
 // Session management routes
 router.post('/force-logout/:userId', requireRole(PERMISSION_GROUPS.IT_ADMINS), forceLogoutUser);
+router.get('/sessions', requireRole(PERMISSION_GROUPS.IT_ADMINS), getActiveSessions);
+router.delete('/sessions/:tokenId', requireRole(PERMISSION_GROUPS.IT_ADMINS), terminateSession);
 
 export default router;

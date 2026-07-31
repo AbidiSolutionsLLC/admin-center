@@ -2,8 +2,9 @@
 import { useParams, useNavigate } from 'react-router-dom';
 import { UserHistoryPanel } from '@/features/people/components/UserHistoryPanel';
 import { TableSkeleton } from '@/components/ui/TableSkeleton';
-import { History, ArrowLeft, Users, Edit2, Mail, RefreshCw, Monitor, PlaneTakeoff, Clock, CalendarDays, FileText, Briefcase, MapPin } from 'lucide-react';
+import { History, ArrowLeft, Users, Edit2, Mail, RefreshCw, Monitor, PlaneTakeoff, Clock, CalendarDays, FileText, Briefcase, MapPin, ShieldAlert, Lock, Unlock } from 'lucide-react';
 import { useUserDetail } from '@/features/people/hooks/useUserDetail';
+import { useUnlockUser } from '@/features/people/hooks/useUnlockUser';
 import { useResendInvite } from '@/features/people/hooks/useResendInvite';
 import { useCallback, useState } from 'react';
 import { ReportingLinesPanel } from '@/features/people/components/ReportingLinesPanel';
@@ -39,6 +40,7 @@ export default function UserDetailPage() {
   const { data: user, isLoading, isError, refetch } = useUserDetail(id!);
   const { data: effectiveSettings } = useUserEffectiveSettings(id!);
   const resendInvite = useResendInvite();
+  const unlockUser = useUnlockUser(id!);
 
   const [isEditModalOpen, setIsEditModalOpen] = useState(false);
   const [isLocationModalOpen, setIsLocationModalOpen] = useState(false);
@@ -152,6 +154,13 @@ export default function UserDetailPage() {
                 {user.full_name}
               </h1>
               <LifecycleStateBadge state={user.lifecycle_state} />
+              <RiskLevelBadge level={user.risk_level || 'none'} score={user.risk_score} />
+              {user.locked_until && new Date(user.locked_until) > new Date() && (
+                <div className="flex items-center gap-1.5 px-2 py-0.5 rounded-full bg-red-50 border border-red-200 text-red-700 text-xs font-medium">
+                  <Lock className="w-3 h-3" />
+                  Locked
+                </div>
+              )}
             </div>
             <div className="flex items-center gap-3 mt-1">
               <p className="text-sm text-ink-secondary">{user.email}</p>
@@ -165,6 +174,16 @@ export default function UserDetailPage() {
           </div>
         </div>
         <div className="flex items-center gap-2">
+          {user.locked_until && new Date(user.locked_until) > new Date() && (
+            <button
+              onClick={() => unlockUser.mutate()}
+              disabled={unlockUser.isPending}
+              className="h-9 px-4 text-sm font-medium rounded-md border border-red-200 bg-red-50 text-red-700 hover:bg-red-100 transition-colors flex items-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed"
+            >
+              <Unlock className="w-4 h-4" />
+              Unlock
+            </button>
+          )}
           {user.lifecycle_state === 'invited' && (
             <button
               onClick={handleResendInvite}
@@ -434,4 +453,21 @@ function formatDate(dateStr: string): string {
     month: 'short',
     day: 'numeric',
   });
+}
+
+function RiskLevelBadge({ level, score }: { level: string; score?: number }) {
+  if (level === 'none' || level === 'low') return null;
+  const isHigh = level === 'high';
+  return (
+    <span
+      className={cn(
+        'inline-flex items-center gap-1 text-[11px] font-semibold border rounded-full px-2.5 py-0.5 tracking-wide border-current cursor-help',
+        isHigh ? 'bg-red-50 text-red-600' : 'bg-amber-50 text-amber-600'
+      )}
+      title={`Risk Score: ${score}`}
+    >
+      <ShieldAlert className="w-3 h-3" />
+      {isHigh ? 'High Risk' : 'Medium Risk'}
+    </span>
+  );
 }

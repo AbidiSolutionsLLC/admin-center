@@ -24,6 +24,8 @@ export const ROUTES = {
   INTEGRATIONS: '/integrations',
   AUDIT_LOGS: '/audit-logs',
   LOGIN: '/login',
+  FORGOT_PASSWORD: '/forgot-password',
+  RESET_PASSWORD: '/reset-password',
   ONBOARDING: '/onboarding',
   HOLIDAYS: '/holidays',
   HOLIDAY_CALENDAR_DETAIL: (id: string) => `/holidays/${id}/calendars`,

@@ -18,3 +18,13 @@ export const signRefreshToken = (payload: Pick<AdminClaim, 'userId'>): string =>
 
 export const verifyAccessToken = (token: string): AdminClaim =>
   jwt.verify(token, process.env.JWT_ACCESS_SECRET!) as AdminClaim;
+
+export interface MfaClaim {
+  mfaUserId: string;
+}
+
+export const signMfaToken = (payload: MfaClaim): string =>
+  jwt.sign(payload, process.env.JWT_ACCESS_SECRET!, { expiresIn: '10m' });
+
+export const verifyMfaToken = (token: string): MfaClaim =>
+  jwt.verify(token, process.env.JWT_ACCESS_SECRET!) as MfaClaim;

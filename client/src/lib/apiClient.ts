@@ -23,7 +23,13 @@ apiClient.interceptors.response.use(
     const originalRequest = err.config;
     
     // 1. Handle 401 & Token Refresh
-    if (err.response?.status === 401 && !originalRequest._retry && originalRequest.url !== '/auth/login' && originalRequest.url !== '/auth/refresh') {
+    if (
+      err.response?.status === 401 && 
+      !originalRequest._retry && 
+      originalRequest.url !== '/auth/login' && 
+      originalRequest.url !== '/auth/refresh' &&
+      originalRequest.url !== '/auth/verify-mfa'
+    ) {
       originalRequest._retry = true;
       try {
         const { data } = await apiClient.post('/auth/refresh');

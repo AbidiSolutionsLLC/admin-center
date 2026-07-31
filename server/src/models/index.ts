@@ -25,6 +25,7 @@ export * from './SecurityPolicy.model';
 export * from './PolicyVersion.model';
 export * from './PolicyAcknowledgment.model';
 export * from './InviteToken.model';
+export * from './PasswordResetToken.model';
 export * from './CustomField.model';
 export * from './Integration.model';
 export * from './IntegrationSyncLog.model';

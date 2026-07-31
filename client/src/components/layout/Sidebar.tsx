@@ -59,6 +59,7 @@ const navGroups = [
     roles: [...PERMISSION_GROUPS.IT_ADMINS, 'super_admin'],
     items: [
       { label: 'Company settings', href: ROUTES.COMPANY_SETTINGS, icon: Settings },
+      { label: 'Security', href: ROUTES.SECURITY, icon: Shield },
     ],
   },
 ];

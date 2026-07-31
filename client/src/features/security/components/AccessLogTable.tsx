@@ -163,6 +163,9 @@ export function AccessLogTable() {
                     IP Address
                   </th>
                   <th className="h-10 px-4 text-left text-[11px] font-semibold text-ink-secondary uppercase tracking-wider">
+                    Location
+                  </th>
+                  <th className="h-10 px-4 text-left text-[11px] font-semibold text-ink-secondary uppercase tracking-wider">
                     Status
                   </th>
                   <th className="h-10 px-4 text-center text-[11px] font-semibold text-ink-secondary uppercase tracking-wider">
@@ -199,6 +202,9 @@ export function AccessLogTable() {
                       </td>
                       <td className="h-14 px-4 text-sm font-mono text-ink-secondary">
                         {event.ip_address || '—'}
+                      </td>
+                      <td className="h-14 px-4 text-sm text-ink-secondary">
+                        {(event.metadata?.location as string) || '—'}
                       </td>
                       <td className="h-14 px-4 text-sm">
                         {isSuspicious ? (

@@ -509,6 +509,10 @@ input[type="checkbox"] {
   display: inline-block;
   position: relative;
   cursor: pointer;
+  margin: 0 !important;
+  margin-right: 8px !important;
+  flex-shrink: 0 !important;
+  vertical-align: middle;
 }
 
 [role="checkbox"][data-state="checked"],

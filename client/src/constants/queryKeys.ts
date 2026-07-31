@@ -44,6 +44,7 @@ export const QUERY_KEYS = {
   SECURITY_POLICY: ['security', 'policy'] as const,
   SECURITY_EVENTS: (filters?: Record<string, unknown>) =>
     filters ? ['security', 'events', filters] as const : ['security', 'events'] as const,
+  ACTIVE_SESSIONS: ['security', 'active-sessions'] as const,
   COMPANY_EMPLOYEE_ID_FORMAT: ['company', 'employee-id-format'] as const,
   COMPANY_REQUIRED_USER_FIELDS: ['company', 'required-user-fields'] as const,
   DOMAIN_ENFORCEMENT: ['company', 'domain-enforcement'] as const,

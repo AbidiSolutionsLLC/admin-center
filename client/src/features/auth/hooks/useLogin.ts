@@ -16,6 +16,9 @@ export const useLogin = () => {
       return data.data;
     },
     onSuccess: (data) => {
+      if (data.requires_mfa) {
+        return; // Handled in the component via mutateAsync or onSuccess callback
+      }
       setAuth({
         accessToken: data.accessToken,
         companyId: data.user.company_id,
@@ -27,10 +30,20 @@ export const useLogin = () => {
       toast.success('Successfully logged in');
       navigate(ROUTES.OVERVIEW, { replace: true });
     },
-    onError: (error: any) => {
+    onError: (error: any, variables) => {
       console.error('Login failed', error);
+      const code = error.response?.data?.code;
       const message = error.response?.data?.error || error.response?.data?.message || 'Login failed. Please check your credentials.';
       toast.error(message);
+      
+      if (code === 'PASSWORD_EXPIRED') {
+        const email = variables?.email;
+        if (email) {
+          navigate(`${ROUTES.FORGOT_PASSWORD}?email=${encodeURIComponent(email)}`);
+        } else {
+          navigate(ROUTES.FORGOT_PASSWORD);
+        }
+      }
     },
   });
 };

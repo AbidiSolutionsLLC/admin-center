@@ -21,6 +21,8 @@ import { InAppNotification } from '../models/InAppNotification.model';
 import { NotificationEvent } from '../models/NotificationEvent.model';
 import { getTransporter, sendEmail } from './emailService';
 import { Company } from '../models/Company.model';
+import { User } from '../models/User.model';
+import { PERMISSION_GROUPS } from '../constants/roles';
 import nodemailer from 'nodemailer';
 import { Types } from 'mongoose';
 
@@ -347,4 +349,84 @@ export async function sendWorkflowFailureNotification(
     triggered_by_object_type: 'WorkflowRun',
     triggered_by_object_id: workflowId,
   });
+}
+
+/**
+ * Sends a security alert to all active IT Admins of a company.
+ * Creates the 'security_alert' template if it doesn't exist.
+ */
+export async function sendSecurityAlert(
+  companyId: string,
+  eventType: string,
+  detail: string,
+  overrideEmails?: string[]
+): Promise<DeliveryResult[]> {
+  const templateKey = 'security_alert';
+  let template = await NotificationTemplate.findOne({
+    company_id: new Types.ObjectId(companyId),
+    key: templateKey,
+  });
+
+  if (!template) {
+    // Create the default security alert template
+    const adminUser = await User.findOne({ company_id: companyId, role: { $in: PERMISSION_GROUPS.SUPER_ADMINS } });
+    template = await NotificationTemplate.create({
+      company_id: new Types.ObjectId(companyId),
+      name: 'Security Alert',
+      key: templateKey,
+      description: 'Triggered when unusual activity or risk thresholds are exceeded.',
+      channel: 'both',
+      severity: 'critical',
+      digest_mode: 'immediate',
+      subject: 'Security Alert: {{company_name}}',
+      body: 'Hello {{user_name}},\n\nA security event requires your attention.\n\nEvent Type: ' + eventType + '\nDetails: {{detail}}\n\nPlease review the Access Logs immediately.',
+      trigger_event: 'security.alert',
+      is_active: true,
+      created_by: adminUser?._id || new Types.ObjectId(),
+    });
+  }
+
+  if (!template.is_active) {
+    return [];
+  }
+
+  const company = await Company.findById(companyId);
+  const companyName = company?.name || 'Admin Center';
+
+  let recipients: typeof User.prototype[] = [];
+
+  if (overrideEmails && overrideEmails.length > 0) {
+    recipients = await User.find({
+      company_id: companyId,
+      email: { $in: overrideEmails.map(e => e.toLowerCase()) },
+      is_active: true,
+    });
+  } else {
+    recipients = await User.find({
+      company_id: companyId,
+      role: { $in: PERMISSION_GROUPS.IT_ADMINS },
+      is_active: true,
+      email: { $exists: true, $ne: '' },
+    });
+  }
+
+  const results: DeliveryResult[] = [];
+
+  for (const admin of recipients) {
+    const res = await deliverNotification({
+      companyId,
+      templateKey,
+      user_id: admin._id.toString(),
+      user_name: admin.full_name.split(' ')[0],
+      user_full_name: admin.full_name,
+      user_email: admin.email,
+      company_name: companyName,
+      detail,
+      triggered_by_event: 'security.alert',
+      triggered_by_object_type: 'SecurityEvent',
+    });
+    results.push(...res);
+  }
+
+  return results;
 }

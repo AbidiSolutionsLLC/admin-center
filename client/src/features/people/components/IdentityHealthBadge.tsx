@@ -143,8 +143,29 @@ export const IdentityHealthBadge: React.FC<IdentityHealthBadgeProps> = ({ user, 
       });
     }
 
+    // Check security risk
+    if (user.risk_level === 'high') {
+      signals.push({
+        status: 'critical',
+        label: 'Security Risk',
+        tooltip: `High security risk detected (Score: ${user.risk_score})`,
+      });
+    } else if (user.risk_level === 'medium') {
+      signals.push({
+        status: 'warning',
+        label: 'Security Risk',
+        tooltip: `Medium security risk detected (Score: ${user.risk_score})`,
+      });
+    } else {
+      signals.push({
+        status: 'ok',
+        label: 'Security',
+        tooltip: 'No significant security risks detected',
+      });
+    }
+
     return signals;
-  }, [user, user.location_id, user.location, user.is_flagged]);
+  }, [user, user.location_id, user.location, user.is_flagged, user.risk_level, user.risk_score]);
 
   const hasCritical = healthSignals.some((s) => s.status === 'critical');
   const hasWarning = healthSignals.some((s) => s.status === 'warning');

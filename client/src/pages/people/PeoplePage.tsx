@@ -27,6 +27,7 @@ import { LifecycleStateSelector } from '@/features/people/components/LifecycleSt
 import { TableSkeleton } from '@/components/ui/TableSkeleton';
 import { ErrorState } from '@/components/ui/ErrorState';
 import { EmptyState } from '@/components/ui/EmptyState';
+import { PermissionGate } from '@/components/ui/PermissionGate';
 import { Modal } from '@/components/ui/Modal';
 import type { User, LifecycleState, EmploymentType, Department, Location } from '@/types';
 import { cn } from '@/utils/cn';
@@ -963,13 +964,15 @@ function BulkActionBar({ selectedCount, onClearSelection, onChangeLifecycle, onA
         <MapPin className="w-3.5 h-3.5" />
         Change Location
       </button>
-      <button
-        onClick={onExport}
-        className="h-8 px-3 text-xs font-medium rounded-md border border-line bg-white text-ink hover:bg-surface-alt transition-colors inline-flex items-center gap-1.5 ml-auto"
-      >
-        <Download className="w-3.5 h-3.5" />
-        Export CSV
-      </button>
+      <PermissionGate module="people" action="export">
+        <button
+          onClick={onExport}
+          className="h-8 px-3 text-xs font-medium rounded-md border border-line bg-white text-ink hover:bg-surface-alt transition-colors inline-flex items-center gap-1.5 ml-auto"
+        >
+          <Download className="w-3.5 h-3.5" />
+          Export CSV
+        </button>
+      </PermissionGate>
       <button
         onClick={onClearSelection}
         className="h-8 px-3 text-xs font-medium rounded-md text-ink-secondary hover:text-ink transition-colors"

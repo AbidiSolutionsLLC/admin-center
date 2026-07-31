@@ -76,8 +76,8 @@ export const WorkflowTemplatesView = () => {
           {templates.map((t) => (
             <div key={t._id} className="bg-white rounded-lg border border-line shadow-card p-5 flex flex-col h-full hover:shadow-card-hover transition-all duration-200">
               <div className="flex justify-between items-start mb-4">
-                <div>
-                  <h3 className="text-sm font-semibold text-ink">{t.name}</h3>
+                <div className="flex-1 min-w-0 pr-3">
+                  <h3 className="text-sm font-semibold text-ink truncate" title={t.name}>{t.name}</h3>
                   <span className="inline-block px-2 py-0.5 mt-1.5 bg-surface-alt text-ink-secondary border border-line rounded-md text-[10px] uppercase font-bold tracking-wider">
                     {t.trigger}
                   </span>

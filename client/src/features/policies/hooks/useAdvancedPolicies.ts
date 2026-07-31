@@ -86,6 +86,23 @@ export const useCreateDataGovernancePolicy = () => {
   });
 };
 
+export const useUpdateDataGovernancePolicy = () => {
+  const queryClient = useQueryClient();
+  return useMutation<DataGovernancePolicy, Error, { id: string; data: Partial<DataGovernancePolicy> }>({
+    mutationFn: async ({ id, data }) => {
+      const response = await apiClient.put(`/data-governance-policies/${id}`, data);
+      return response.data.data;
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ADVANCED_POLICY_KEYS.dataGovernance });
+      toast.success('Policy updated successfully');
+    },
+    onError: (error: any) => {
+      toast.error(error?.response?.data?.error || 'Failed to update policy');
+    },
+  });
+};
+
 export const useDeleteDataGovernancePolicy = () => {
   const queryClient = useQueryClient();
   return useMutation<void, Error, string>({

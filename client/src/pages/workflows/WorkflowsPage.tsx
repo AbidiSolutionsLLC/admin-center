@@ -760,7 +760,7 @@ function CreateWorkflowModal({ isOpen, onClose, createMutation }: CreateWorkflow
         {formData.trigger === 'user.role_changed' && (
           <div className="p-3 bg-surface border border-line rounded-md">
             <p className="text-sm text-ink-secondary mb-2">Note: Configured role transitions (e.g. from Employee to Manager) can be mapped using exact Role IDs. For MVP, please leave empty to trigger on ANY role change, or use the detailed workflow editor after creation.</p>
-            <div className="grid grid-cols-2 gap-4">
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                <div>
                   <label className="text-sm font-medium text-ink block mb-1.5">From Role IDs</label>
                   <input type="text" placeholder="e.g. role_id_1, role_id_2" value={formData.role_from.join(',')} onChange={(e) => setFormData({...formData, role_from: e.target.value.split(',').filter(Boolean)})} className="w-full h-9 px-3 text-sm rounded-md border border-line bg-white" />
@@ -776,7 +776,7 @@ function CreateWorkflowModal({ isOpen, onClose, createMutation }: CreateWorkflow
         {formData.trigger === 'user.department_changed' && (
           <div className="p-3 bg-surface border border-line rounded-md">
             <p className="text-sm text-ink-secondary mb-2">Note: Configured department transitions can be mapped using exact Department IDs. For MVP, please leave empty to trigger on ANY department change, or use the detailed workflow editor after creation.</p>
-            <div className="grid grid-cols-2 gap-4">
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                <div>
                   <label className="text-sm font-medium text-ink block mb-1.5">From Dept IDs</label>
                   <input type="text" placeholder="e.g. dept_id_1" value={formData.department_from.join(',')} onChange={(e) => setFormData({...formData, department_from: e.target.value.split(',').filter(Boolean)})} className="w-full h-9 px-3 text-sm rounded-md border border-line bg-white" />
@@ -793,7 +793,7 @@ function CreateWorkflowModal({ isOpen, onClose, createMutation }: CreateWorkflow
           <label className="text-sm font-medium text-ink block mb-1.5">
             SLA Configuration (optional)
           </label>
-          <div className="grid grid-cols-2 gap-4">
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
             <div>
               <label className="text-xs text-ink-secondary block mb-1">
                 Threshold (Minutes)
@@ -921,7 +921,7 @@ function EditWorkflowModal({ isOpen, onClose, workflow }: EditWorkflowModalProps
       }
     >
       <div className="space-y-6">
-        <div className="grid grid-cols-2 gap-4">
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
           <div className="col-span-2">
             <label className="text-sm font-medium text-ink block mb-1.5">
               Workflow Name <span className="text-error">*</span>
@@ -976,7 +976,7 @@ function EditWorkflowModal({ isOpen, onClose, workflow }: EditWorkflowModalProps
         </div>
 
         {formData.trigger === 'user.lifecycle_changed' && (
-          <div className="grid grid-cols-2 gap-4 border-t border-line pt-5">
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 border-t border-line pt-5">
             <div>
               <label className="text-sm font-medium text-ink block mb-2">From States (Optional)</label>
               <div className="flex flex-wrap gap-2">
@@ -1022,7 +1022,7 @@ function EditWorkflowModal({ isOpen, onClose, workflow }: EditWorkflowModalProps
 
         <div className="border-t border-line pt-5">
           <h4 className="text-sm font-medium text-ink mb-3">Service Level Agreement (SLA)</h4>
-          <div className="grid grid-cols-2 gap-4">
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
             <div>
               <label className="text-xs text-ink-secondary block mb-1">
                 Threshold (minutes)
@@ -1603,7 +1603,7 @@ function AddStepModal({ isOpen, onClose, addMutation, currentStepCount }: AddSte
               <label className="text-sm font-medium text-ink block mb-1.5">
                 Escalation Rules (optional)
               </label>
-              <div className="grid grid-cols-2 gap-4">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                 <div>
                   <label className="text-xs text-ink-secondary block mb-1">
                     Timeout (Hours)
@@ -1716,7 +1716,7 @@ function AddStepModal({ isOpen, onClose, addMutation, currentStepCount }: AddSte
           <label className="text-sm font-medium text-ink block mb-1.5">
             SLA Configuration (optional)
           </label>
-          <div className="grid grid-cols-2 gap-4">
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
             <div>
               <label className="text-xs text-ink-secondary block mb-1">
                 Threshold (Minutes)
@@ -1987,7 +1987,7 @@ function EditStepModal({ isOpen, onClose, workflowId, step }: EditStepModalProps
 
         <div className="border-t border-line pt-4">
           <h4 className="text-sm font-medium text-ink mb-3">Step SLA</h4>
-          <div className="grid grid-cols-2 gap-4">
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
             <div>
               <label className="text-xs text-ink-secondary block mb-1">
                 Threshold (minutes)
@@ -2165,7 +2165,7 @@ function SimulateWorkflowModal({ isOpen, onClose, simulateMutation, workflow }: 
       }
     >
       <div className="space-y-4">
-        <div className="grid grid-cols-2 gap-4">
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
           <div>
             <label className="text-sm font-medium text-ink block mb-1.5">
               Select User <span className="text-error">*</span>
@@ -2210,7 +2210,7 @@ function SimulateWorkflowModal({ isOpen, onClose, simulateMutation, workflow }: 
         </div>
 
         {workflow.trigger === 'user.lifecycle_changed' && (
-          <div className="grid grid-cols-2 gap-4">
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
             <div>
               <label className="text-sm font-medium text-ink block mb-1.5">
                 Lifecycle From <span className="text-error">*</span>
@@ -2251,7 +2251,7 @@ function SimulateWorkflowModal({ isOpen, onClose, simulateMutation, workflow }: 
         )}
 
         {workflow.trigger === 'user.role_changed' && (
-          <div className="grid grid-cols-2 gap-4">
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
             <div>
               <label className="text-sm font-medium text-ink block mb-1.5">Role From</label>
               <input type="text" value={formData.role_from} onChange={(e) => setFormData({...formData, role_from: e.target.value})} placeholder="e.g. Employee" className="w-full h-9 px-3 text-sm rounded-md border border-line bg-white text-ink" />
@@ -2264,7 +2264,7 @@ function SimulateWorkflowModal({ isOpen, onClose, simulateMutation, workflow }: 
         )}
 
         {workflow.trigger === 'user.department_changed' && (
-          <div className="grid grid-cols-2 gap-4">
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
             <div>
               <label className="text-sm font-medium text-ink block mb-1.5">Department From</label>
               <input type="text" value={formData.department_from} onChange={(e) => setFormData({...formData, department_from: e.target.value})} placeholder="e.g. Engineering" className="w-full h-9 px-3 text-sm rounded-md border border-line bg-white text-ink" />
@@ -2465,7 +2465,7 @@ function WorkflowRunsView({ workflowId }: { workflowId: string }) {
 function WorkflowConfigView({ workflow }: { workflow: Workflow }) {
   return (
     <div className="space-y-4">
-      <div className="grid grid-cols-2 gap-4">
+      <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
         <div>
           <p className="text-xs text-ink-secondary mb-1">Name</p>
           <p className="text-sm font-medium text-ink">{workflow.name}</p>
@@ -2499,7 +2499,7 @@ function WorkflowConfigView({ workflow }: { workflow: Workflow }) {
       </div>
 
       {workflow.trigger === 'user.lifecycle_changed' && (
-        <div className="grid grid-cols-2 gap-4">
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
           <div>
             <p className="text-xs text-ink-secondary mb-1.5">Trigger From (source states)</p>
             <div className="flex flex-wrap gap-1.5">
@@ -2522,7 +2522,7 @@ function WorkflowConfigView({ workflow }: { workflow: Workflow }) {
       )}
 
       {workflow.trigger === 'user.role_changed' && (
-        <div className="grid grid-cols-2 gap-4">
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
           <div>
             <p className="text-xs text-ink-secondary mb-1.5">From Role IDs</p>
             <div className="flex flex-wrap gap-1.5">
@@ -2545,7 +2545,7 @@ function WorkflowConfigView({ workflow }: { workflow: Workflow }) {
       )}
 
       {workflow.trigger === 'user.department_changed' && (
-        <div className="grid grid-cols-2 gap-4">
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
           <div>
             <p className="text-xs text-ink-secondary mb-1.5">From Department IDs</p>
             <div className="flex flex-wrap gap-1.5">
@@ -2570,7 +2570,7 @@ function WorkflowConfigView({ workflow }: { workflow: Workflow }) {
       {workflow.sla_config && (
         <div className="pt-4 border-t border-line">
           <p className="text-sm font-medium text-ink mb-3">SLA Configuration</p>
-          <div className="grid grid-cols-2 gap-4">
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
             <div>
               <p className="text-xs text-ink-secondary mb-1">Threshold</p>
               <p className="text-sm text-ink">{workflow.sla_config.threshold_minutes} minutes</p>
@@ -2583,7 +2583,7 @@ function WorkflowConfigView({ workflow }: { workflow: Workflow }) {
         </div>
       )}
 
-      <div className="grid grid-cols-2 gap-4 text-sm border-t border-line pt-4">
+      <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 text-sm border-t border-line pt-4">
         <div>
           <p className="text-xs text-ink-secondary mb-1">Created By</p>
           <p className="text-sm text-ink">

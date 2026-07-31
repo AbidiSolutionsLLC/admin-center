@@ -559,6 +559,8 @@ export interface User {
   last_login?: string;
   mfa_enabled: boolean;
   is_flagged: boolean;
+  risk_score?: number;
+  risk_level?: 'none' | 'low' | 'medium' | 'high';
   is_active: boolean;
   created_at: string;
   updated_at: string;
@@ -864,6 +866,7 @@ export interface SecurityPolicySettings {
   max_failed_login_attempts: number;
   lockout_duration_minutes: number;
   session_timeout_minutes: number;
+  max_concurrent_sessions: number;
   require_mfa: boolean;
   password_min_length: number;
   password_require_uppercase: boolean;
@@ -871,8 +874,11 @@ export interface SecurityPolicySettings {
   password_require_numbers: boolean;
   password_require_special_chars: boolean;
   password_expiry_days: number;
+  password_history_count: number;
   ip_whitelist_enabled: boolean;
   ip_whitelist: string[];
+  ip_blacklist_enabled: boolean;
+  ip_blacklist: string[];
 }
 
 export interface SecurityPolicy {
@@ -901,6 +907,20 @@ export interface SecurityEventsResponse {
     total: number;
     totalPages: number;
   };
+}
+
+export interface ActiveSession {
+  _id: string;
+  user: {
+    _id: string;
+    full_name: string;
+    email: string;
+  } | null;
+  ip_address?: string;
+  user_agent?: string;
+  created_at: string;
+  last_activity_at: string;
+  expires_at: string;
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -1436,12 +1456,20 @@ export interface DataGovernancePolicy {
   _id: string;
   company_id: string;
   name: string;
-  description?: string;
-  target_role_ids: string[];
-  field_name: string;
-  masking_type: 'full' | 'partial' | 'hash';
-  condition_logic?: string;
+  description: string;
   is_active: boolean;
+  resource: string;
+  granularity: 'row' | 'column';
+  rules: Array<{
+    fields?: string[];
+    condition?: Record<string, any>;
+    action: 'mask' | 'hide' | 'encrypt';
+    mask_pattern?: string;
+  }>;
+  applied_to?: {
+    roles?: string[];
+    departments?: string[];
+  };
   created_at: string;
   updated_at: string;
 }

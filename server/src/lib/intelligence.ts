@@ -1400,6 +1400,126 @@ export const runIntelligenceRules = async (companyId: string | Types.ObjectId): 
     }
   }
 
+  // ────────────────────────────────────────────────────────────────────────────
+  // RULE-18: Risky User Detection
+  // ────────────────────────────────────────────────────────────────────────────
+  
+  const { SecurityEvent } = await import('../models/SecurityEvent.model');
+  const sevenDaysAgoForRisk = new Date();
+  sevenDaysAgoForRisk.setDate(sevenDaysAgoForRisk.getDate() - 7);
+
+  for (const user of activeUsers) {
+    const events = await SecurityEvent.find({
+      company_id: companyObjectId,
+      user_id: user._id,
+      created_at: { $gte: sevenDaysAgoForRisk }
+    }).lean();
+
+    let calculatedRiskScore = 0;
+    let loginFailures = 0;
+    let suspiciousCount = 0;
+    const locations = new Set<string>();
+    const ips = new Set<string>();
+
+    for (const event of events) {
+      if (event.event_type === 'login_failure') {
+        loginFailures++;
+      }
+      if (event.is_suspicious) {
+        suspiciousCount++;
+      }
+      if (event.event_type === 'login_success' || event.event_type === 'login_attempt') {
+        if (event.ip_address) ips.add(event.ip_address);
+        if (event.metadata && typeof event.metadata.location === 'string') {
+          locations.add(event.metadata.location);
+        }
+      }
+    }
+
+    calculatedRiskScore += Math.min(loginFailures * 10, 40);
+    calculatedRiskScore += suspiciousCount * 20;
+
+    if (ips.size > 2) {
+      calculatedRiskScore += 20;
+    }
+    if (locations.size > 1) {
+      calculatedRiskScore += 20;
+    }
+
+    const adminRoles = ['Super Admin', 'HR Admin', 'IT Admin', 'Ops Admin', 'Admin'];
+    const isAdmin = adminRoles.includes(user.role);
+
+    if (isAdmin) {
+      calculatedRiskScore = Math.floor(calculatedRiskScore * 1.5);
+    }
+
+    calculatedRiskScore = Math.min(calculatedRiskScore, 100);
+
+    let calculatedRiskLevel: 'none' | 'low' | 'medium' | 'high' = 'none';
+    if (calculatedRiskScore > 0) calculatedRiskLevel = 'low';
+    if (calculatedRiskScore >= 30) calculatedRiskLevel = 'medium';
+    if (calculatedRiskScore >= 60) calculatedRiskLevel = 'high';
+
+    if (isAdmin && calculatedRiskLevel === 'medium') {
+      calculatedRiskLevel = 'high'; // Stricter risk level for admins
+    }
+
+    if (user.risk_score !== calculatedRiskScore || user.risk_level !== calculatedRiskLevel) {
+      await User.updateOne(
+        { _id: user._id },
+        { $set: { risk_score: calculatedRiskScore, risk_level: calculatedRiskLevel } }
+      );
+    }
+
+    if (securityPolicy?.settings?.terminate_session_on_risk && securityPolicy.settings.risk_threshold_for_termination) {
+      if (calculatedRiskScore >= securityPolicy.settings.risk_threshold_for_termination) {
+        const { RefreshToken } = await import('../models/RefreshToken.model');
+        const updatedTokens = await RefreshToken.updateMany(
+          { user_id: user._id, is_revoked: false },
+          { $set: { is_revoked: true } }
+        );
+        
+        if (updatedTokens.modifiedCount > 0) {
+          await User.updateOne(
+            { _id: user._id },
+            { $unset: { refresh_token_hash: "" } }
+          );
+
+          await SecurityEvent.create({
+            company_id: companyObjectId,
+            user_id: user._id,
+            email: user.email,
+            event_type: 'token_revoked',
+            is_suspicious: true,
+            metadata: {
+              reason: 'risk_threshold_exceeded',
+              risk_score: calculatedRiskScore,
+              threshold: securityPolicy.settings.risk_threshold_for_termination
+            }
+          });
+        }
+      }
+    }
+
+    if (calculatedRiskLevel === 'medium' || calculatedRiskLevel === 'high') {
+      insightsToUpsert.push({
+        company_id: companyObjectId,
+        category: 'health',
+        severity: calculatedRiskLevel === 'high' ? 'critical' : 'warning',
+        title: `Risky user detected: ${user.full_name}`,
+        description: `User exhibits suspicious activity patterns. Risk Score: ${calculatedRiskScore} (${calculatedRiskLevel.toUpperCase()}).`,
+        reasoning: `In the last 7 days: ${loginFailures} failed logins, ${suspiciousCount} suspicious flags, logged in from ${locations.size} locations and ${ips.size} IP addresses.`,
+        affected_object_type: 'User',
+        affected_object_id: user._id.toString(),
+        affected_object_label: user.full_name,
+        remediation_url: `/people/${user._id}`,
+        remediation_action: 'Review user activity or force logout',
+        is_resolved: false,
+        detected_at: new Date(),
+      });
+    }
+  }
+
   // Auto-resolve RULE-15
   const activeRedundancyInsights = await Insight.find({
     company_id: companyObjectId,

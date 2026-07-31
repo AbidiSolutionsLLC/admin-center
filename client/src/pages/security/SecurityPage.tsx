@@ -3,8 +3,10 @@ import { useState } from 'react';
 import { Shield, Activity } from 'lucide-react';
 import { SecurityPolicyForm } from '@/features/security/components/SecurityPolicyForm';
 import { AccessLogTable } from '@/features/security/components/AccessLogTable';
+import { ActiveSessionsTable } from '@/features/security/components/ActiveSessionsTable';
+import { Users } from 'lucide-react';
 
-type TabType = 'policy' | 'access-log';
+type TabType = 'policy' | 'access-log' | 'active-sessions';
 
 /**
  * Security Page
@@ -52,13 +54,26 @@ export default function SecurityPage() {
           <Activity className="w-4 h-4" />
           Access Log
         </button>
+        <button
+          onClick={() => setActiveTab('active-sessions')}
+          className={`flex items-center gap-2 px-4 py-2 text-sm font-medium rounded-md transition-colors ${
+            activeTab === 'active-sessions'
+              ? 'bg-primary text-white'
+              : 'text-ink-secondary hover:text-ink hover:bg-surface-alt'
+          }`}
+        >
+          <Users className="w-4 h-4" />
+          Active Sessions
+        </button>
       </div>
 
       {/* Tab Content */}
       {activeTab === 'policy' ? (
         <SecurityPolicyForm />
-      ) : (
+      ) : activeTab === 'access-log' ? (
         <AccessLogTable />
+      ) : (
+        <ActiveSessionsTable />
       )}
     </div>
   );

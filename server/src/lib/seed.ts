@@ -313,6 +313,9 @@ export const seedSecurityPolicy = async (companyId: string | Types.ObjectId): Pr
       password_expiry_days: 90,
       ip_whitelist_enabled: false,
       ip_whitelist: [],
+      ip_blacklist_enabled: false,
+      ip_blacklist: [],
+      alert_settings: { },
     },
   });
 

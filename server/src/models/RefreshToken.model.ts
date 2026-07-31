@@ -8,6 +8,9 @@ export interface IRefreshToken extends Document {
   ip_address?: string;
   user_agent?: string;
   is_revoked: boolean;
+  last_activity_at: Date;
+  created_at: Date;
+  updated_at: Date;
 }
 
 const RefreshTokenSchema = new Schema<IRefreshToken>({
@@ -17,6 +20,7 @@ const RefreshTokenSchema = new Schema<IRefreshToken>({
   ip_address: String,
   user_agent: String,
   is_revoked: { type: Boolean, default: false },
+  last_activity_at: { type: Date, default: Date.now },
 }, { timestamps: { createdAt: 'created_at', updatedAt: 'updated_at' } });
 
 // Automatically delete expired tokens

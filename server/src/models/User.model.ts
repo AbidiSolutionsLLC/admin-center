@@ -12,6 +12,8 @@ export interface IUser extends Document {
   full_name: string;
   email: string;
   password_hash: string;
+  previous_password_hashes: string[];
+  password_changed_at?: Date;
   phone?: string;
   avatar_url?: string;
   department_id?: Types.ObjectId;
@@ -33,8 +35,13 @@ export interface IUser extends Document {
   }>;
   last_login?: Date;
   mfa_enabled: boolean;
+  mfa_otp?: string;
+  mfa_otp_expires_at?: Date;
   refresh_token_hash?: string;
   is_flagged: boolean; // Flag for data integrity issues
+  risk_score: number;
+  risk_level: 'none' | 'low' | 'medium' | 'high';
+  locked_until?: Date;
   is_active: boolean;
   created_at: Date;
   updated_at: Date;
@@ -46,6 +53,8 @@ const UserSchema = new Schema<IUser>({
   full_name: { type: String, required: true },
   email: { type: String, required: true, lowercase: true },
   password_hash: { type: String, required: true },
+  previous_password_hashes: [{ type: String }],
+  password_changed_at: Date,
   phone: String,
   avatar_url: String,
   department_id: { type: Schema.Types.ObjectId, ref: 'Department' },
@@ -76,8 +85,13 @@ const UserSchema = new Schema<IUser>({
   }],
   last_login: Date,
   mfa_enabled: { type: Boolean, default: false },
+  mfa_otp: String,
+  mfa_otp_expires_at: Date,
   refresh_token_hash: String,
   is_flagged: { type: Boolean, default: false },
+  risk_score: { type: Number, default: 0 },
+  risk_level: { type: String, enum: ['none', 'low', 'medium', 'high'], default: 'none' },
+  locked_until: Date,
   is_active: { type: Boolean, default: false },
 }, { timestamps: { createdAt: 'created_at', updatedAt: 'updated_at' } });
 

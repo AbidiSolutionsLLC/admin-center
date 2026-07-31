@@ -7,6 +7,7 @@ import { useAuditEventDetail } from '@/features/audit/hooks/useAuditEventDetail'
 import { AuditFilters } from '@/features/audit/components/AuditFilters';
 import { AuditLogTable } from '@/features/audit/components/AuditLogTable';
 import { AuditEventDetail } from '@/features/audit/components/AuditEventDetail';
+import { PermissionGate } from '@/components/ui/PermissionGate';
 import type { AuditEvent } from '@/types';
 
 /**
@@ -76,14 +77,16 @@ export default function AuditLogsPage() {
           </p>
         </div>
         <div className="flex items-center gap-2">
-          <button
-            onClick={handleExport}
-            disabled={exportMutation.isPending}
-            className="h-9 px-4 text-sm font-medium rounded-md border border-line bg-white text-ink hover:bg-surface-alt transition-colors flex items-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed"
-          >
-            <Download className="w-4 h-4" />
-            {exportMutation.isPending ? 'Exporting...' : 'Export CSV'}
-          </button>
+          <PermissionGate module="audit" action="export">
+            <button
+              onClick={handleExport}
+              disabled={exportMutation.isPending}
+              className="h-9 px-4 text-sm font-medium rounded-md border border-line bg-white text-ink hover:bg-surface-alt transition-colors flex items-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed"
+            >
+              <Download className="w-4 h-4" />
+              {exportMutation.isPending ? 'Exporting...' : 'Export CSV'}
+            </button>
+          </PermissionGate>
         </div>
       </div>
 

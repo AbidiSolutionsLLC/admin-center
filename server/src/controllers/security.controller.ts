@@ -57,15 +57,28 @@ export const createSecurityPolicy = asyncHandler(async (req: Request, res: Respo
       max_failed_login_attempts: z.number().min(1).max(20).optional(),
       lockout_duration_minutes: z.number().min(1).optional(),
       session_timeout_minutes: z.number().min(1).optional(),
+      max_concurrent_sessions: z.number().min(1).max(10).optional(),
       require_mfa: z.boolean().optional(),
+      terminate_session_on_risk: z.boolean().optional(),
+      risk_threshold_for_termination: z.number().min(1).max(100).optional(),
       password_min_length: z.number().min(4).max(128).optional(),
       password_require_uppercase: z.boolean().optional(),
       password_require_lowercase: z.boolean().optional(),
       password_require_numbers: z.boolean().optional(),
       password_require_special_chars: z.boolean().optional(),
       password_expiry_days: z.number().min(0).optional(),
+      password_history_count: z.number().min(0).max(24).optional(),
       ip_whitelist_enabled: z.boolean().optional(),
       ip_whitelist: z.array(z.string().trim()).optional(),
+      ip_blacklist_enabled: z.boolean().optional(),
+      ip_blacklist: z.array(z.string().trim()).optional(),
+      alert_settings: z.object({
+        notify_on_failed_logins: z.boolean().optional(),
+        failed_logins_threshold: z.number().min(1).optional(),
+        notify_on_suspicious_login: z.boolean().optional(),
+        notify_on_risk_flags: z.boolean().optional(),
+        alert_emails: z.array(z.string().trim().email()).optional(),
+      }).optional(),
     }).optional(),
   });
 
@@ -115,15 +128,28 @@ export const updateSecurityPolicy = asyncHandler(async (req: Request, res: Respo
       max_failed_login_attempts: z.number().min(1).max(20).optional(),
       lockout_duration_minutes: z.number().min(1).optional(),
       session_timeout_minutes: z.number().min(1).optional(),
+      max_concurrent_sessions: z.number().min(1).max(10).optional(),
       require_mfa: z.boolean().optional(),
+      terminate_session_on_risk: z.boolean().optional(),
+      risk_threshold_for_termination: z.number().min(1).max(100).optional(),
       password_min_length: z.number().min(4).max(128).optional(),
       password_require_uppercase: z.boolean().optional(),
       password_require_lowercase: z.boolean().optional(),
       password_require_numbers: z.boolean().optional(),
       password_require_special_chars: z.boolean().optional(),
       password_expiry_days: z.number().min(0).optional(),
+      password_history_count: z.number().min(0).max(24).optional(),
       ip_whitelist_enabled: z.boolean().optional(),
       ip_whitelist: z.array(z.string().trim()).optional(),
+      ip_blacklist_enabled: z.boolean().optional(),
+      ip_blacklist: z.array(z.string().trim()).optional(),
+      alert_settings: z.object({
+        notify_on_failed_logins: z.boolean().optional(),
+        failed_logins_threshold: z.number().min(1).optional(),
+        notify_on_suspicious_login: z.boolean().optional(),
+        notify_on_risk_flags: z.boolean().optional(),
+        alert_emails: z.array(z.string().trim().email()).optional(),
+      }).optional(),
     }).optional(),
   });
 
@@ -314,4 +340,100 @@ export const forceLogoutUser = asyncHandler(async (req: Request, res: Response) 
     message: 'User logged out successfully',
     data: { userId: user._id },
   });
+});
+
+/**
+ * GET /api/v1/security/sessions
+ * Returns all active sessions (refresh tokens) for the current company.
+ */
+export const getActiveSessions = asyncHandler(async (req: Request, res: Response) => {
+  // First find all users for this company
+  const users = await User.find({ company_id: req.user.company_id }).select('_id full_name email role');
+  let userIds = users.map(u => u._id);
+
+  if (req.query.roleFilter === 'admin') {
+    const adminRoles = ['Super Admin', 'HR Admin', 'IT Admin', 'Ops Admin', 'Admin'];
+    userIds = users.filter(u => adminRoles.includes(u.role)).map(u => u._id);
+  }
+
+  // Then find active refresh tokens for these users
+  const activeTokens = await RefreshToken.find({
+    user_id: { $in: userIds },
+    is_revoked: false,
+    expires_at: { $gt: new Date() },
+  }).sort({ last_activity_at: -1 });
+
+  // Map users to tokens
+  const sessions = activeTokens.map(token => {
+    const user = users.find(u => u._id.toString() === token.user_id.toString());
+    return {
+      _id: token._id,
+      user: user ? { _id: user._id, full_name: user.full_name, email: user.email, role: user.role } : null,
+      ip_address: token.ip_address,
+      user_agent: token.user_agent,
+      created_at: token.created_at,
+      last_activity_at: token.last_activity_at,
+      expires_at: token.expires_at,
+    };
+  });
+
+  res.status(200).json({ success: true, data: sessions });
+});
+
+/**
+ * DELETE /api/v1/security/sessions/:tokenId
+ * Manually terminates a specific session by an admin.
+ */
+export const terminateSession = asyncHandler(async (req: Request, res: Response) => {
+  const { tokenId } = req.params;
+
+  const token = await RefreshToken.findOne({ _id: tokenId });
+  if (!token) {
+    throw new AppError('Session not found', 404, 'NOT_FOUND');
+  }
+
+  // Ensure the user belongs to the current company
+  const user = await User.findOne({ _id: token.user_id, company_id: req.user.company_id });
+  if (!user) {
+    throw new AppError('Session not found', 404, 'NOT_FOUND');
+  }
+
+  // Revoke token
+  token.is_revoked = true;
+  await token.save();
+
+  // If it's the current user's session, we might want to clear the hash. But to be safe, just revoke it.
+  // We check if this token matches the one on the user. If it does, we can clear it.
+  if (user.refresh_token_hash === token.token_hash) {
+    user.refresh_token_hash = undefined;
+    await user.save();
+  }
+
+  await SecurityEvent.create({
+    company_id: req.user.company_id,
+    user_id: user._id,
+    email: user.email,
+    event_type: 'token_revoked',
+    ip_address: req.ip,
+    user_agent: req.headers['user-agent'],
+    is_suspicious: false,
+    metadata: {
+      reason: 'manual_termination_by_admin',
+      revoked_by: req.user.userId,
+      token_id: token._id,
+    },
+  });
+
+  await auditLogger.log({
+    req,
+    action: 'security.session_terminated',
+    module: 'security',
+    object_type: 'User',
+    object_id: user._id.toString(),
+    object_label: user.full_name,
+    before_state: null,
+    after_state: { session_terminated: true, token_id: token._id.toString() },
+  });
+
+  res.status(200).json({ success: true, message: 'Session terminated successfully' });
 });

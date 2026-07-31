@@ -9,6 +9,7 @@ import { Location } from '../models/Location.model';
 import { User } from '../models/User.model';
 import { auditLogger } from '../lib/auditLogger';
 import { AppError } from '../utils/AppError';
+import { hasPermission } from '../lib/rbac';
 
 // ── Zod Schemas ──────────────────────────────────────────────────────────────
 
@@ -1082,6 +1083,19 @@ export const moveHoliday = asyncHandler(async (req: Request, res: Response) => {
  * Exports all holidays from a calendar to CSV
  */
 export const exportHolidays = asyncHandler(async (req: Request, res: Response) => {
+  const canExport = await hasPermission(req.user.userId, req.user.company_id, 'company', 'export', 'all');
+  if (!canExport) {
+    await auditLogger.log({
+      req,
+      action: 'export.unauthorized_attempt',
+      module: 'company',
+      object_type: 'System',
+      object_id: 'export',
+      object_label: 'Unauthorized export attempt blocked',
+    });
+    throw new AppError('You do not have permission to export data.', 403, 'FORBIDDEN');
+  }
+
   const calendar = await HolidayCalendar.findOne({
     _id: req.params.calendar_id,
     company_id: req.user.company_id,

@@ -9,6 +9,8 @@ import { ROUTES } from './constants/routes';
 
 // Pages
 import LoginPage from './pages/auth/LoginPage';
+import ForgotPasswordPage from './pages/auth/ForgotPasswordPage';
+import ResetPasswordPage from './pages/auth/ResetPasswordPage';
 import OnboardingPage from './pages/auth/OnboardingPage';
 import OverviewPage from './pages/overview/OverviewPage';
 import OrganizationPage from './pages/organization/OrganizationPage';
@@ -38,6 +40,8 @@ function App() {
         <Routes>
           <Route element={<GuestGuard />}>
             <Route path={ROUTES.LOGIN} element={<LoginPage />} />
+            <Route path={ROUTES.FORGOT_PASSWORD} element={<ForgotPasswordPage />} />
+            <Route path={ROUTES.RESET_PASSWORD} element={<ResetPasswordPage />} />
             <Route path={ROUTES.ONBOARDING} element={<OnboardingPage />} />
           </Route>
 

@@ -11,6 +11,7 @@ import { User } from '../models/User.model';
 import { auditLogger } from '../lib/auditLogger';
 import { AppError } from '../utils/AppError';
 import { escapeRegExp } from '../utils/regex';
+import { hasPermission } from '../lib/rbac';
 
 /**
  * GET /api/v1/audit-logs
@@ -135,6 +136,19 @@ export const getAuditEventDetail = asyncHandler(async (req: Request, res: Respon
  * Query params: same as getAuditEvents (no pagination)
  */
 export const exportAuditLogCSV = asyncHandler(async (req: Request, res: Response) => {
+  const canExport = await hasPermission(req.user.userId, req.user.company_id, 'audit', 'export', 'all');
+  if (!canExport) {
+    await auditLogger.log({
+      req,
+      action: 'export.unauthorized_attempt',
+      module: 'audit',
+      object_type: 'System',
+      object_id: 'export',
+      object_label: 'Unauthorized export attempt blocked',
+    });
+    throw new AppError('You do not have permission to export data.', 403, 'FORBIDDEN');
+  }
+
   const filter: Record<string, unknown> = {
     company_id: req.user.company_id,
   };

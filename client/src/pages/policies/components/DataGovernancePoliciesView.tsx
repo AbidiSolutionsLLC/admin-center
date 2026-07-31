@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { Plus, Database, Trash2 } from 'lucide-react';
-import { useDataGovernancePolicies, useCreateDataGovernancePolicy, useDeleteDataGovernancePolicy } from '@/features/policies/hooks/useAdvancedPolicies';
+import { useDataGovernancePolicies, useCreateDataGovernancePolicy, useDeleteDataGovernancePolicy, useUpdateDataGovernancePolicy } from '@/features/policies/hooks/useAdvancedPolicies';
 import { Modal } from '@/components/ui/Modal';
 import { ConfirmDialog } from '@/components/ui/ConfirmDialog';
 import { TableSkeleton } from '@/components/ui/TableSkeleton';
@@ -11,6 +11,7 @@ export const DataGovernancePoliciesView = () => {
   const { data: policies, isLoading } = useDataGovernancePolicies();
   const createMutation = useCreateDataGovernancePolicy();
   const deleteMutation = useDeleteDataGovernancePolicy();
+  const updateMutation = useUpdateDataGovernancePolicy();
 
   const [isCreateOpen, setIsCreateOpen] = useState(false);
   const [deleteId, setDeleteId] = useState<string | null>(null);
@@ -18,8 +19,10 @@ export const DataGovernancePoliciesView = () => {
   const [newPolicy, setNewPolicy] = useState<Partial<DataGovernancePolicy>>({
     name: '',
     description: '',
-    field_name: '',
-    masking_type: 'partial',
+    resource: 'User',
+    granularity: 'column',
+    rules: [{ action: 'mask', fields: [] }],
+    applied_to: { roles: [] },
     is_active: true,
   });
 
@@ -27,12 +30,24 @@ export const DataGovernancePoliciesView = () => {
     createMutation.mutate(newPolicy, {
       onSuccess: () => {
         setIsCreateOpen(false);
-        setNewPolicy({ name: '', description: '', field_name: '', masking_type: 'partial', is_active: true });
+        setNewPolicy({
+          name: '',
+          description: '',
+          resource: 'User',
+          granularity: 'column',
+          rules: [{ action: 'mask', fields: [] }],
+          applied_to: { roles: [] },
+          is_active: true,
+        });
       }
     });
   };
 
-  if (isLoading) return <TableSkeleton rows={4} columns={5} />;
+  const toggleActive = (policy: DataGovernancePolicy) => {
+    updateMutation.mutate({ id: policy._id, data: { is_active: !policy.is_active } });
+  };
+
+  if (isLoading) return <TableSkeleton rows={4} columns={6} />;
 
   return (
     <div className="space-y-6">
@@ -63,8 +78,9 @@ export const DataGovernancePoliciesView = () => {
             <thead className="bg-white/5 border-b border-line">
               <tr>
                 <th className="h-10 px-4 text-[11px] font-semibold text-ink-secondary uppercase tracking-wider">Rule Name</th>
-                <th className="h-10 px-4 text-[11px] font-semibold text-ink-secondary uppercase tracking-wider">Field Name</th>
-                <th className="h-10 px-4 text-[11px] font-semibold text-ink-secondary uppercase tracking-wider">Masking Type</th>
+                <th className="h-10 px-4 text-[11px] font-semibold text-ink-secondary uppercase tracking-wider">Resource</th>
+                <th className="h-10 px-4 text-[11px] font-semibold text-ink-secondary uppercase tracking-wider">Fields</th>
+                <th className="h-10 px-4 text-[11px] font-semibold text-ink-secondary uppercase tracking-wider">Action</th>
                 <th className="h-10 px-4 text-[11px] font-semibold text-ink-secondary uppercase tracking-wider">Status</th>
                 <th className="h-10 px-4 text-[11px] font-semibold text-ink-secondary uppercase tracking-wider text-right">Actions</th>
               </tr>
@@ -76,16 +92,22 @@ export const DataGovernancePoliciesView = () => {
                     <div className="text-sm font-medium text-ink">{p.name}</div>
                     <div className="text-xs text-ink-secondary mt-0.5">{p.description}</div>
                   </td>
-                  <td className="h-14 px-4 font-mono text-xs text-accent">{p.field_name}</td>
+                  <td className="h-14 px-4 text-sm text-ink capitalize">{p.resource}</td>
+                  <td className="h-14 px-4 font-mono text-[11px] text-accent">
+                    {p.rules?.[0]?.fields?.join(', ') || 'N/A'}
+                  </td>
                   <td className="h-14 px-4 capitalize">
                     <span className="inline-flex items-center text-[11px] font-semibold tracking-wide rounded-full px-2.5 py-0.5 bg-surface-alt text-ink-secondary border border-line">
-                      {p.masking_type}
+                      {p.rules?.[0]?.action || 'Unknown'}
                     </span>
                   </td>
                   <td className="h-14 px-4">
-                    <span className={`inline-flex items-center text-[11px] font-semibold tracking-wide rounded-full px-2.5 py-0.5 border ${p.is_active ? 'bg-emerald-50 text-emerald-700 border-emerald-200' : 'bg-[#F1F3F7] text-ink-secondary border-[#C8CDD8]'}`}>
+                    <button
+                      onClick={() => toggleActive(p)}
+                      className={`inline-flex items-center text-[11px] font-semibold tracking-wide rounded-full px-2.5 py-0.5 border transition-colors duration-150 ${p.is_active ? 'bg-emerald-50 text-emerald-700 border-emerald-200 hover:bg-emerald-100' : 'bg-[#F1F3F7] text-ink-secondary border-[#C8CDD8] hover:bg-[#E5E7EB]'}`}
+                    >
                       {p.is_active ? 'Active' : 'Inactive'}
-                    </span>
+                    </button>
                   </td>
                   <td className="h-14 px-4 text-right">
                     <button onClick={() => setDeleteId(p._id)} className="h-8 w-8 inline-flex items-center justify-center rounded-md text-ink-secondary hover:text-error hover:bg-red-50 transition-colors duration-150">
@@ -122,27 +144,80 @@ export const DataGovernancePoliciesView = () => {
           </div>
           <div className="grid grid-cols-2 gap-4">
             <div className="space-y-1.5">
-              <label className="text-sm font-medium text-ink">Target Field (API Key) <span className="text-error">*</span></label>
+              <label className="text-sm font-medium text-ink">Resource</label>
+              <select
+                value={newPolicy.resource}
+                onChange={(e) => setNewPolicy({ ...newPolicy, resource: e.target.value })}
+                className="w-full h-9 px-3 text-sm rounded-md border border-line bg-white text-ink focus:outline-none focus:ring-2 focus:ring-primary/30 focus:border-primary transition-all duration-150"
+              >
+                <option value="User">User</option>
+                <option value="Department">Department</option>
+                <option value="Team">Team</option>
+              </select>
+            </div>
+            <div className="space-y-1.5">
+              <label className="text-sm font-medium text-ink">Granularity</label>
+              <select
+                value={newPolicy.granularity}
+                onChange={(e) => setNewPolicy({ ...newPolicy, granularity: e.target.value as any })}
+                className="w-full h-9 px-3 text-sm rounded-md border border-line bg-white text-ink focus:outline-none focus:ring-2 focus:ring-primary/30 focus:border-primary transition-all duration-150"
+              >
+                <option value="column">Column (Field Level)</option>
+                <option value="row">Row (Record Level)</option>
+              </select>
+            </div>
+          </div>
+          <div className="grid grid-cols-2 gap-4">
+            <div className="space-y-1.5">
+              <label className="text-sm font-medium text-ink">Target Fields (comma separated) <span className="text-error">*</span></label>
               <input
                 type="text"
-                value={newPolicy.field_name}
-                onChange={(e) => setNewPolicy({ ...newPolicy, field_name: e.target.value })}
+                value={newPolicy.rules?.[0]?.fields?.join(', ') || ''}
+                onChange={(e) => {
+                  const fields = e.target.value.split(',').map(s => s.trim()).filter(Boolean);
+                  setNewPolicy({
+                    ...newPolicy,
+                    rules: [{ ...newPolicy.rules?.[0]!, fields }]
+                  });
+                }}
                 className="w-full h-9 px-3 font-mono text-xs rounded-md border border-line bg-white text-ink placeholder:text-ink-muted focus:outline-none focus:ring-2 focus:ring-primary/30 focus:border-primary transition-all duration-150"
-                placeholder="e.g. custom_fields.ssn"
+                placeholder="e.g. ssn, salary, custom_fields.dob"
               />
             </div>
             <div className="space-y-1.5">
-              <label className="text-sm font-medium text-ink">Masking Type</label>
+              <label className="text-sm font-medium text-ink">Masking Action</label>
               <select
-                value={newPolicy.masking_type}
-                onChange={(e) => setNewPolicy({ ...newPolicy, masking_type: e.target.value as any })}
+                value={newPolicy.rules?.[0]?.action || 'mask'}
+                onChange={(e) => {
+                  setNewPolicy({
+                    ...newPolicy,
+                    rules: [{ ...newPolicy.rules?.[0]!, action: e.target.value as any }]
+                  });
+                }}
                 className="w-full h-9 px-3 text-sm rounded-md border border-line bg-white text-ink focus:outline-none focus:ring-2 focus:ring-primary/30 focus:border-primary transition-all duration-150"
               >
-                <option value="partial">Partial (***-**-1234)</option>
-                <option value="full">Full (**********)</option>
-                <option value="hash">One-way Hash</option>
+                <option value="mask">Mask Data</option>
+                <option value="hide">Hide Data (Strip entirely)</option>
+                <option value="encrypt">Encrypt Data</option>
               </select>
             </div>
+          </div>
+          <div className="space-y-1.5">
+            <label className="text-sm font-medium text-ink">Authorized Role IDs (comma separated)</label>
+            <p className="text-[11px] text-ink-muted mb-1">If empty, NO roles (except Super Admins) are authorized. Specify role IDs that CAN see this data.</p>
+            <input
+              type="text"
+              value={newPolicy.applied_to?.roles?.join(', ') || ''}
+              onChange={(e) => {
+                const roles = e.target.value.split(',').map(s => s.trim()).filter(Boolean);
+                setNewPolicy({
+                  ...newPolicy,
+                  applied_to: { ...newPolicy.applied_to, roles }
+                });
+              }}
+              className="w-full h-9 px-3 text-sm rounded-md border border-line bg-white text-ink placeholder:text-ink-muted focus:outline-none focus:ring-2 focus:ring-primary/30 focus:border-primary transition-all duration-150"
+              placeholder="e.g. 64b8f0..."
+            />
           </div>
           <div className="pt-4 flex justify-end space-x-2 border-t border-line mt-6">
             <button onClick={() => setIsCreateOpen(false)} className="h-9 px-4 text-sm font-medium rounded-md border border-line bg-white text-ink hover:bg-surface-alt transition-colors duration-150">
@@ -150,7 +225,7 @@ export const DataGovernancePoliciesView = () => {
             </button>
             <button
               onClick={handleCreate}
-              disabled={!newPolicy.name || !newPolicy.field_name || createMutation.isPending}
+              disabled={!newPolicy.name || (newPolicy.rules?.[0]?.fields?.length || 0) === 0 || createMutation.isPending}
               className="h-9 px-4 text-sm font-medium rounded-md bg-primary hover:bg-primary-hover text-white transition-colors duration-150 disabled:opacity-50"
             >
               {createMutation.isPending ? 'Creating...' : 'Create Rule'}
@@ -174,4 +249,5 @@ export const DataGovernancePoliciesView = () => {
     </div>
   );
 };
+
 

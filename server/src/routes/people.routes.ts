@@ -20,6 +20,7 @@ import {
   getEffectivePermissions,
   getUserAppAccessHistory,
   getUserEffectiveSettings,
+  unlockUser,
 } from '../controllers/people.controller';
 
 import { assignUserOrg } from '../controllers/organization.controller';
@@ -144,6 +145,12 @@ router.put('/:id/lifecycle', requireRole(PEOPLE_MANAGERS), updateUserLifecycle);
  * Archive a user (soft delete)
  */
 router.delete('/:id', requireRole(PEOPLE_MANAGERS), deleteUser);
+
+/**
+ * POST /people/:id/unlock
+ * Admin action to unlock a user account that was locked due to multiple failed login attempts
+ */
+router.post('/:id/unlock', requireRole(PEOPLE_MANAGERS), unlockUser);
 
 /**
  * POST /people/:id/assign-org

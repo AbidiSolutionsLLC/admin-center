@@ -19,6 +19,11 @@ export interface IPolicyVersion extends Document {
   published_at?: Date;
   summary?: string;               // Brief description of changes in this version
   custom_fields: Record<string, unknown>;
+  settings?: {
+    identity?: Record<string, unknown>;
+    access?: Record<string, unknown>;
+    apps?: Record<string, unknown>;
+  };
   is_active: boolean;
   created_at: Date;
   updated_at: Date;
@@ -38,6 +43,11 @@ const PolicyVersionSchema = new Schema<IPolicyVersion>({
   published_at: { type: Date },
   summary: { type: String },
   custom_fields: { type: Schema.Types.Mixed, default: {} },
+  settings: {
+    identity: { type: Schema.Types.Mixed },
+    access: { type: Schema.Types.Mixed },
+    apps: { type: Schema.Types.Mixed },
+  },
   is_active: { type: Boolean, default: true },
 }, { timestamps: { createdAt: 'created_at', updatedAt: 'updated_at' } });
 
