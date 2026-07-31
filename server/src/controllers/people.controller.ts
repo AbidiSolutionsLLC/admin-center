@@ -29,6 +29,7 @@ import { App } from '../models/App.model';
 import { AppAssignment } from '../models/AppAssignment.model';
 import { Group } from '../models/Group.model';
 import { GroupMember } from '../models/GroupMember.model';
+import { validateAndSanitizeCustomFields } from '../services/customFieldValidation.service';
 
 
 // ── Types & Interfaces ───────────────────────────────────────────────────────
@@ -948,6 +949,19 @@ export const inviteUser = asyncHandler(async (req: Request, res: Response) => {
     throw new AppError('Company not found', 404, 'COMPANY_NOT_FOUND');
   }
 
+  // Validate custom field values against the field schema (story 107/114).
+  // Required fields are enforced only when the caller supplies custom field data.
+  let validatedCustomFields: Record<string, unknown> | undefined;
+  if (input.custom_fields !== undefined) {
+    const hasValues = Object.keys(input.custom_fields).length > 0;
+    validatedCustomFields = await validateAndSanitizeCustomFields(
+      req.user.company_id,
+      'user',
+      input.custom_fields,
+      { enforceRequired: hasValues },
+    );
+  }
+
   // Generate temporary password
   const tempPassword = generateTemporaryPassword();
   const password_hash = await bcrypt.hash(tempPassword, 10);
@@ -968,6 +982,7 @@ export const inviteUser = asyncHandler(async (req: Request, res: Response) => {
     secondary_manager_ids: input.secondary_manager_ids || [],
     location_id: input.location_id || undefined,
     hire_date: input.hire_date ? new Date(input.hire_date) : undefined,
+    custom_fields: validatedCustomFields ?? {},
   });
 
   // Assign multiple roles if provided
@@ -1163,6 +1178,18 @@ export const updateUser = asyncHandler(async (req: Request, res: Response) => {
   }
 
   const beforeState = user.toObject();
+
+  // Validate custom field values against the field schema (story 107/114).
+  // Required fields are enforced on update so existing records stay consistent.
+  if (input.custom_fields !== undefined) {
+    const validatedCustomFields = await validateAndSanitizeCustomFields(
+      req.user.company_id,
+      'user',
+      input.custom_fields,
+      { enforceRequired: true },
+    );
+    input.custom_fields = validatedCustomFields;
+  }
 
   // Normalize empty strings → null
   const updates: Record<string, unknown> = { ...input };

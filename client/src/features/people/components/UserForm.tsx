@@ -8,7 +8,8 @@ import { UserSelect } from '@/components/ui/UserSelect';
 import { MultiUserSelect } from '@/components/ui/MultiUserSelect';
 import { MultiRoleSelect } from '@/components/ui/MultiRoleSelect';
 import { DynamicCustomFields } from '@/features/data-fields/components/DynamicCustomFields';
-import { useCustomFields } from '@/features/data-fields/hooks/useCustomFields';
+import { isFieldRequired } from '@/features/data-fields/components/DynamicCustomFields';
+import { useEffectiveCustomFields } from '@/features/data-fields/hooks/useEffectiveCustomFields';
 import { getLocalTime } from '@/lib/timezone';
 import type { User, EmploymentType, Department, CustomField, Location, UserRole } from '@/types';
 import { cn } from '@/utils/cn';
@@ -161,7 +162,16 @@ export const UserForm: React.FC<UserFormProps> = ({
   });
 
   // ── Custom fields ──────────────────────────────────────────────────────
-  const { data: customFields = [] } = useCustomFields('user');
+  const recordRoleIds = React.useMemo(
+    () => initialData?.roles?.map((r) => (typeof r === 'string' ? r : r._id)) ?? [],
+    [initialData],
+  );
+  const { data: effectiveFields } = useEffectiveCustomFields('user', recordRoleIds);
+  const customFields = effectiveFields?.fields ?? [];
+  const readOnlyCustomFieldSlugs = React.useMemo(
+    () => customFields.filter((f) => !f.can_edit).map((f) => f.slug),
+    [customFields],
+  );
   const [customFieldValues, setCustomFieldValues] = useState<Record<string, unknown>>(
     initialData?.custom_fields ?? {}
   );
@@ -202,19 +212,19 @@ export const UserForm: React.FC<UserFormProps> = ({
   }, []);
 
   // Validate required custom fields before submit
-  const validateCustomFields = useCallback((): boolean => {
-    const newErrors: Record<string, string> = {};
-    for (const field of customFields) {
-      if (field.required) {
-        const value = customFieldValues[field.slug];
-        if (value === null || value === undefined || value === '') {
-          newErrors[field.slug] = `${field.label} is required`;
-        }
-      }
-    }
-    setCustomFieldErrors(newErrors);
-    return Object.keys(newErrors).length === 0;
-  }, [customFields, customFieldValues]);
+   const validateCustomFields = useCallback((): boolean => {
+     const newErrors: Record<string, string> = {};
+     for (const field of customFields) {
+       if (isFieldRequired(field, customFieldValues)) {
+         const value = customFieldValues[field.slug];
+         if (value === null || value === undefined || value === '') {
+           newErrors[field.slug] = `${field.label} is required`;
+         }
+       }
+     }
+     setCustomFieldErrors(newErrors);
+     return Object.keys(newErrors).length === 0;
+   }, [customFields, customFieldValues]);
 
   return (
     <form
@@ -489,6 +499,7 @@ onBlur={(e) => { e.currentTarget.style.background = 'rgba(255,255,255,0.04)'; e.
         onChange={handleCustomFieldChange}
         errors={customFieldErrors}
         disabled={isSubmitting}
+        readOnlySlugs={readOnlyCustomFieldSlugs}
       />
 
       {/* ── Delegation ── */}

@@ -5,8 +5,8 @@ import { zodResolver } from '@hookform/resolvers/zod';
 import { z } from 'zod';
 import { UserSelect } from '@/components/ui/UserSelect';
 import { MultiUserSelect } from '@/components/ui/MultiUserSelect';
-import { DynamicCustomFields } from '@/features/data-fields/components/DynamicCustomFields';
-import { useCustomFields } from '@/features/data-fields/hooks/useCustomFields';
+import { DynamicCustomFields, isFieldRequired } from '@/features/data-fields/components/DynamicCustomFields';
+import { useEffectiveCustomFields } from '@/features/data-fields/hooks/useEffectiveCustomFields';
 import type { Department, CustomField } from '@/types';
 import { cn } from '@/utils/cn';
 
@@ -113,7 +113,12 @@ export const DepartmentForm: React.FC<DepartmentFormProps> = ({
   const availableParents = departments.filter((d) => d._id !== initialData?._id);
 
   // ── Custom fields ──────────────────────────────────────────────────────
-  const { data: customFields = [] } = useCustomFields('department');
+  const { data: effectiveFields } = useEffectiveCustomFields('department', []);
+  const customFields = effectiveFields?.fields ?? [];
+  const readOnlyCustomFieldSlugs = React.useMemo(
+    () => customFields.filter((f) => !f.can_edit).map((f) => f.slug),
+    [customFields],
+  );
   const [customFieldValues, setCustomFieldValues] = useState<Record<string, unknown>>(
     initialData?.custom_fields ?? {}
   );
@@ -134,19 +139,19 @@ export const DepartmentForm: React.FC<DepartmentFormProps> = ({
     });
   }, []);
 
-  const validateCustomFields = useCallback((): boolean => {
-    const newErrors: Record<string, string> = {};
-    for (const field of customFields) {
-      if (field.required) {
-        const value = customFieldValues[field.slug];
-        if (value === null || value === undefined || value === '') {
-          newErrors[field.slug] = `${field.label} is required`;
-        }
-      }
-    }
-    setCustomFieldErrors(newErrors);
-    return Object.keys(newErrors).length === 0;
-  }, [customFields, customFieldValues]);
+   const validateCustomFields = useCallback((): boolean => {
+     const newErrors: Record<string, string> = {};
+     for (const field of customFields) {
+       if (isFieldRequired(field, customFieldValues)) {
+         const value = customFieldValues[field.slug];
+         if (value === null || value === undefined || value === '') {
+           newErrors[field.slug] = `${field.label} is required`;
+         }
+       }
+     }
+     setCustomFieldErrors(newErrors);
+     return Object.keys(newErrors).length === 0;
+   }, [customFields, customFieldValues]);
 
   const handleSubmitWithCustomFields = handleSubmit((data) => {
     if (!validateCustomFields()) return;
@@ -314,6 +319,7 @@ onBlur={(e) => { e.currentTarget.style.background = 'rgba(255,255,255,0.04)'; e.
         onChange={handleCustomFieldChange}
         errors={customFieldErrors}
         disabled={isSubmitting}
+        readOnlySlugs={readOnlyCustomFieldSlugs}
       />
 
       {/* Hidden submit — triggered by modal footer */}

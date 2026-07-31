@@ -167,9 +167,29 @@ export interface LocationEffectiveSettings {
 // Custom Fields
 // ─────────────────────────────────────────────────────────────────────────────
 
-export type FieldType = 'text' | 'number' | 'date' | 'select' | 'multi_select' | 'checkbox' | 'textarea';
+export type FieldType = 'text' | 'number' | 'date' | 'boolean' | 'select' | 'multi_select' | 'url' | 'email' | 'phone';
 export type TargetObject = 'user' | 'department' | 'policy';
 export type VisibilityRule = 'all' | 'admin_only' | 'role_specific';
+export type ConditionalOperator = 'equals' | 'not_equals' | 'contains' | 'greater_than' | 'less_than' | 'is_empty' | 'is_not_empty';
+export type ConditionalAction = 'show' | 'hide' | 'require' | 'optional';
+export type VersionChangeType = 'created' | 'updated' | 'deleted' | 'restored';
+
+export interface ValidationRules {
+  required?: boolean;
+  min_length?: number;
+  max_length?: number;
+  min?: number;
+  max?: number;
+  pattern?: string;
+  pattern_message?: string;
+}
+
+export interface ConditionalRule {
+  field_slug: string;
+  operator: ConditionalOperator;
+  value: unknown;
+  action: ConditionalAction;
+}
 
 export interface CustomField {
   _id: string;
@@ -182,9 +202,17 @@ export interface CustomField {
   placeholder?: string;
   description?: string;
   required: boolean;
+  default_value?: string;
   select_options?: string[];
+  validation_rules?: ValidationRules;
   visibility: VisibilityRule;
-  visible_roles?: string[];
+  visible_roles?: Array<{ _id: string; name: string }>;
+  edit_visibility: VisibilityRule;
+  edit_visible_roles?: Array<{ _id: string; name: string }>;
+  conditional_logic?: ConditionalRule[];
+  field_dependencies?: string[] | Array<{ _id: string; label: string }>;
+  is_system_field: boolean;
+  version: number;
   display_order: number;
   is_active: boolean;
   created_at: string;
@@ -199,9 +227,15 @@ export interface CreateCustomFieldInput {
   placeholder?: string | null;
   description?: string | null;
   required?: boolean;
+  default_value?: string | null;
   select_options?: string[] | null;
+  validation_rules?: ValidationRules | null;
   visibility?: VisibilityRule;
   visible_roles?: string[] | null;
+  edit_visibility?: VisibilityRule;
+  edit_visible_roles?: string[] | null;
+  conditional_logic?: ConditionalRule[] | null;
+  field_dependencies?: string[] | null;
   display_order?: number;
 }
 
@@ -209,6 +243,64 @@ export interface UpdateCustomFieldInput extends Partial<Omit<CreateCustomFieldIn
 
 export interface CustomFieldFilters {
   target_object: TargetObject | '';
+}
+
+export interface CustomFieldVersion {
+  _id: string;
+  company_id: string;
+  field_id: string;
+  version_number: number;
+  change_type: VersionChangeType;
+  snapshot: Record<string, unknown>;
+  changed_by: { _id: string; full_name: string; email: string };
+  change_summary?: string;
+  created_at: string;
+}
+
+export interface FieldUsageInfo {
+  hasData: boolean;
+  recordCount: number;
+  fieldDependencies: {
+    hasDependents: boolean;
+    dependentFields: Array<{ _id: string; label: string }>;
+  };
+  conditionalDependents: {
+    hasDependents: boolean;
+    dependentFields: Array<{ _id: string; label: string }>;
+  };
+}
+
+export interface ProfileLayoutField {
+  field_id: string | { _id: string; label: string; slug: string; field_type: FieldType };
+  display_order: number;
+  is_visible: boolean;
+  is_editable: boolean;
+}
+
+export interface ProfileLayout {
+  _id: string;
+  company_id: string;
+  target_object: TargetObject;
+  role_id?: string | { _id: string; name: string };
+  name: string;
+  fields: ProfileLayoutField[];
+  is_default: boolean;
+  is_active: boolean;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface CreateProfileLayoutInput {
+  target_object: TargetObject;
+  role_id?: string | null;
+  name: string;
+  fields: Array<{
+    field_id: string;
+    display_order: number;
+    is_visible: boolean;
+    is_editable: boolean;
+  }>;
+  is_default?: boolean;
 }
 
 // ─────────────────────────────────────────────────────────────────────────────

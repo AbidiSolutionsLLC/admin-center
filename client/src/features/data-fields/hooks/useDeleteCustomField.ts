@@ -3,7 +3,7 @@ import { useMutation, useQueryClient } from '@tanstack/react-query';
 import { apiClient } from '@/lib/apiClient';
 import { QUERY_KEYS } from '@/constants/queryKeys';
 import { toast } from 'sonner';
-import type { CustomField, TargetObject } from '@/types';
+import type { TargetObject } from '@/types';
 
 /**
  * Deletes (deactivates) a custom field.
@@ -13,7 +13,7 @@ import type { CustomField, TargetObject } from '@/types';
 export const useDeleteCustomField = (targetObject?: TargetObject) => {
   const queryClient = useQueryClient();
 
-  return useMutation<CustomField, Error, string>({
+  return useMutation<{ _id: string }, Error, string>({
     mutationFn: async (id) => {
       const { data } = await apiClient.delete(`/data-fields/${id}`);
       return data.data;
@@ -23,8 +23,8 @@ export const useDeleteCustomField = (targetObject?: TargetObject) => {
       toast.success('Custom field deleted successfully');
     },
     onError: (error) => {
-      console.error('Custom field deletion failed:', error);
-      toast.error('Failed to delete custom field. Please try again.');
+      const message = error instanceof Error ? error.message : 'Failed to delete custom field. Please try again.';
+      toast.error(message);
     },
   });
 };

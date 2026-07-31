@@ -13,6 +13,7 @@ import { auditLogger } from '../lib/auditLogger';
 import { runIntelligenceRules } from '../lib/intelligence';
 import { AppError } from '../utils/AppError';
 import { slugify } from '../utils/slugify';
+import { validateAndSanitizeCustomFields } from '../services/customFieldValidation.service';
 
 // ── Types & Interfaces ───────────────────────────────────────────────────────
 
@@ -47,7 +48,7 @@ const DepartmentBaseSchema = z.object({
   parent_id: z.string().optional().nullable(),
   primary_manager_id: z.string().optional().nullable(),
   secondary_manager_ids: z.array(z.string()).optional().default([]),
-  custom_fields: z.record(z.string(), z.unknown()).optional().default({}),
+  custom_fields: z.record(z.string(), z.unknown()).optional(),
 });
 
 const CreateDepartmentSchema = DepartmentBaseSchema.refine(data => {
@@ -276,13 +277,22 @@ export const createDepartment = asyncHandler(async (req: Request, res: Response)
     }
   }
 
+  // Validate custom field values against the field schema (story 107/114).
+  // Required fields are enforced only when the caller supplies custom field data.
+  const validatedCustomFields = await validateAndSanitizeCustomFields(
+    req.user.company_id,
+    'department',
+    input.custom_fields,
+    { enforceRequired: input.custom_fields !== undefined && Object.keys(input.custom_fields).length > 0 },
+  );
+
   const dept = await Department.create({
     ...input,
     // Normalize empty strings → undefined so Mongoose doesn't store ''
     parent_id: input.parent_id || undefined,
     primary_manager_id: input.primary_manager_id || undefined,
     secondary_manager_ids: input.secondary_manager_ids || [],
-    custom_fields: input.custom_fields || {},
+    custom_fields: validatedCustomFields,
     company_id: req.user.company_id,
   });
 
@@ -397,9 +407,14 @@ export const updateDepartment = asyncHandler(async (req: Request, res: Response)
     );
   }
 
-  // Merge custom_fields if provided
+  // Merge custom_fields if provided (validated against the field schema)
   if (input.custom_fields !== undefined) {
-    dept.custom_fields = input.custom_fields;
+    dept.custom_fields = await validateAndSanitizeCustomFields(
+      req.user.company_id,
+      'department',
+      input.custom_fields,
+      { enforceRequired: true },
+    );
   }
 
   Object.assign(dept, updates);

@@ -23,8 +23,7 @@ export const useCreateCustomField = (targetObject?: TargetObject) => {
       toast.success('Custom field created successfully');
     },
     onError: (error) => {
-      console.error('Custom field creation failed:', error);
-      toast.error('Failed to create custom field. Please try again.');
+      toast.error(error instanceof Error ? error.message : 'Failed to create custom field. Please try again.');
     },
   });
 };
