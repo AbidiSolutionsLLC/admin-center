@@ -3,6 +3,7 @@ import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { apiClient } from '@/lib/apiClient';
 import { QUERY_KEYS } from '@/constants/queryKeys';
 import { toast } from 'sonner';
+import { useAuthStore } from '@/store/useAuthStore';
 import type {
   NotificationTemplate,
   InAppNotification,
@@ -153,12 +154,14 @@ export const useTestTemplate = (templateId: string) => {
  * Used on: TopBar notification bell
  */
 export const useInAppNotifications = () => {
+  const accessToken = useAuthStore((state) => state.accessToken);
   return useQuery<InAppNotification[]>({
     queryKey: QUERY_KEYS.IN_APP_NOTIFICATIONS,
     queryFn: async () => {
       const { data } = await apiClient.get('/notifications/in-app');
       return data.data;
     },
+    enabled: !!accessToken,
     staleTime: 1000 * 30,
     retry: 2,
     refetchInterval: 1000 * 30,
@@ -170,12 +173,14 @@ export const useInAppNotifications = () => {
  * Used on: TopBar bell badge
  */
 export const useUnreadNotificationCount = () => {
+  const accessToken = useAuthStore((state) => state.accessToken);
   return useQuery<UnreadCount>({
     queryKey: QUERY_KEYS.UNREAD_NOTIFICATION_COUNT,
     queryFn: async () => {
       const { data } = await apiClient.get('/notifications/in-app/unread-count');
       return data.data;
     },
+    enabled: !!accessToken,
     staleTime: 1000 * 15,
     retry: 2,
     refetchInterval: 1000 * 15,

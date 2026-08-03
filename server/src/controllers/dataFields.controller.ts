@@ -588,17 +588,69 @@ interface SystemDefaultField {
   select_options?: string[];
 }
 
-const SYSTEM_DEFAULT_FIELDS: SystemDefaultField[] = [
-  { name: 'full_name', field_type: 'text', label: 'Full Name', description: 'Employee full legal name', required: true, is_system_field: true },
-  { name: 'email', field_type: 'email', label: 'Email Address', description: 'Corporate email address', required: true, is_system_field: true },
-  { name: 'phone', field_type: 'phone', label: 'Phone Number', description: 'Contact phone number', is_system_field: true },
-  { name: 'department', field_type: 'text', label: 'Department', description: 'Primary department assignment', is_system_field: true },
-  { name: 'location', field_type: 'text', label: 'Location', description: 'Office or work location', is_system_field: true },
-  { name: 'job_title', field_type: 'text', label: 'Job Title', description: 'Employee job title', is_system_field: true },
-  { name: 'employee_id', field_type: 'text', label: 'Employee ID', description: 'Unique employee identifier', is_system_field: true },
-  { name: 'hire_date', field_type: 'date', label: 'Hire Date', description: 'Date of employment start', is_system_field: true },
-  { name: 'employment_type', field_type: 'select', label: 'Employment Type', description: 'Full-time, part-time, contractor, etc.', select_options: ['Full-time', 'Part-time', 'Contractor', 'Intern'], is_system_field: true },
-];
+const SYSTEM_DEFAULT_FIELDS: Record<string, SystemDefaultField[]> = {
+  user: [
+    { name: 'full_name', field_type: 'text', label: 'Full Name', description: 'Employee full legal name', required: true, is_system_field: true },
+    { name: 'email', field_type: 'email', label: 'Email Address', description: 'Corporate email address', required: true, is_system_field: true },
+    { name: 'phone', field_type: 'phone', label: 'Phone Number', description: 'Contact phone number', is_system_field: true },
+    { name: 'department', field_type: 'text', label: 'Department', description: 'Primary department assignment', is_system_field: true },
+    { name: 'location', field_type: 'text', label: 'Location', description: 'Office or work location', is_system_field: true },
+    { name: 'job_title', field_type: 'text', label: 'Job Title', description: 'Employee job title', is_system_field: true },
+    { name: 'employee_id', field_type: 'text', label: 'Employee ID', description: 'Unique employee identifier', is_system_field: true },
+    { name: 'hire_date', field_type: 'date', label: 'Hire Date', description: 'Date of employment start', is_system_field: true },
+    { name: 'employment_type', field_type: 'select', label: 'Employment Type', description: 'Full-time, part-time, contractor, etc.', select_options: ['Full-time', 'Part-time', 'Contractor', 'Intern'], is_system_field: true },
+  ],
+  department: [
+    { name: 'name', field_type: 'text', label: 'Department Name', description: 'Name of the department', required: true, is_system_field: true },
+    { name: 'type', field_type: 'text', label: 'Department Type', description: 'Type of the department', is_system_field: true },
+    { name: 'parent_id', field_type: 'text', label: 'Parent Department', description: 'Parent department', is_system_field: true },
+    { name: 'primary_manager_id', field_type: 'text', label: 'Primary Manager', description: 'Primary manager of the department', is_system_field: true },
+    { name: 'secondary_manager_ids', field_type: 'text', label: 'Secondary Managers', description: 'Secondary managers', is_system_field: true },
+  ],
+  policy: [
+    { name: 'title', field_type: 'text', label: 'Title', description: 'Policy title', required: true, is_system_field: true },
+    { name: 'content', field_type: 'text', label: 'Content', description: 'Policy content', required: true, is_system_field: true },
+    { name: 'category', field_type: 'text', label: 'Category', description: 'Policy category', is_system_field: true },
+    { name: 'effective_date', field_type: 'date', label: 'Effective Date', description: 'Date policy goes into effect', is_system_field: true },
+    { name: 'expiry_date', field_type: 'date', label: 'Expiry Date', description: 'Date policy expires', is_system_field: true },
+    { name: 'summary', field_type: 'text', label: 'Summary', description: 'Policy summary', is_system_field: true },
+  ],
+  team: [
+    { name: 'name', field_type: 'text', label: 'Team Name', description: 'Name of the team', required: true, is_system_field: true },
+    { name: 'description', field_type: 'text', label: 'Description', description: 'Team description', is_system_field: true },
+    { name: 'department_id', field_type: 'text', label: 'Department', description: 'Department this team belongs to', is_system_field: true },
+    { name: 'team_lead_id', field_type: 'text', label: 'Team Lead', description: 'Manager or lead of the team', is_system_field: true },
+  ],
+  location: [
+    { name: 'name', field_type: 'text', label: 'Location Name', description: 'Name of the location', required: true, is_system_field: true },
+    { name: 'type', field_type: 'text', label: 'Location Type', description: 'Type of location', is_system_field: true },
+    { name: 'parent_id', field_type: 'text', label: 'Parent Location', description: 'Parent location if applicable', is_system_field: true },
+    { name: 'timezone', field_type: 'text', label: 'Timezone', description: 'Timezone of the location', is_system_field: true },
+    { name: 'is_headquarters', field_type: 'boolean', label: 'Is Headquarters', description: 'Whether this is the main HQ', is_system_field: true },
+    { name: 'address', field_type: 'text', label: 'Address', description: 'Physical address', is_system_field: true },
+  ],
+  holiday: [
+    { name: 'name', field_type: 'text', label: 'Holiday Name', description: 'Name of the holiday', required: true, is_system_field: true },
+    { name: 'date', field_type: 'date', label: 'Date', description: 'Date of the holiday', required: true, is_system_field: true },
+    { name: 'recurring_type', field_type: 'text', label: 'Recurring Type', description: 'How often it recurs', is_system_field: true },
+    { name: 'holiday_code', field_type: 'text', label: 'Holiday Code', description: 'Internal code for the holiday', is_system_field: true },
+    { name: 'is_observed', field_type: 'boolean', label: 'Is Observed', description: 'Whether it is an observed holiday', is_system_field: true },
+  ],
+  holiday_calendar: [
+    { name: 'name', field_type: 'text', label: 'Calendar Name', description: 'Name of the calendar', required: true, is_system_field: true },
+    { name: 'description', field_type: 'text', label: 'Description', description: 'Calendar description', is_system_field: true },
+    { name: 'is_active', field_type: 'boolean', label: 'Is Active', description: 'Whether calendar is active', is_system_field: true },
+  ],
+  work_schedule: [
+    { name: 'name', field_type: 'text', label: 'Schedule Name', description: 'Name of the work schedule', required: true, is_system_field: true },
+    { name: 'description', field_type: 'text', label: 'Description', description: 'Schedule description', is_system_field: true },
+    { name: 'timezone', field_type: 'text', label: 'Timezone', description: 'Timezone for the schedule', is_system_field: true },
+    { name: 'working_days', field_type: 'text', label: 'Working Days', description: 'Days of the week worked', is_system_field: true },
+    { name: 'working_hours', field_type: 'number', label: 'Working Hours', description: 'Total working hours', is_system_field: true },
+    { name: 'break_hours', field_type: 'number', label: 'Break Hours', description: 'Total break hours', is_system_field: true },
+    { name: 'is_active', field_type: 'boolean', label: 'Is Active', description: 'Whether schedule is active', is_system_field: true },
+  ],
+};
 
 // ── Field CRUD ───────────────────────────────────────────────────────────────
 
@@ -792,7 +844,12 @@ export const updateCustomField = asyncHandler(async (req: Request, res: Response
   // Validate required change: cannot make a field required if existing records have null values
   if (input.required === true && field.required === false) {
     let nullCount = 0;
-    switch (field.target_object) {
+    
+    // System fields store their data natively on the root object, not in custom_fields,
+    // and their schema-level required state is enforced by Mongoose.
+    // We allow toggling the frontend 'required' state without blocking on existing data.
+    if (!field.is_system_field) {
+      switch (field.target_object) {
       case 'user':
         nullCount = await User.countDocuments({
           company_id: req.user.company_id,
@@ -872,6 +929,7 @@ export const updateCustomField = asyncHandler(async (req: Request, res: Response
           ]
         });
         break;
+    }
     }
     if (nullCount > 0) {
       throw new AppError(
@@ -1460,10 +1518,12 @@ export const seedDefaultFields = asyncHandler(async (req: Request, res: Response
     target_object: z.enum(TARGET_OBJECTS).optional().default('user'),
   }).parse(req.body);
 
+  const fieldsToSeed = SYSTEM_DEFAULT_FIELDS[target_object] || [];
+
   const created: Array<Record<string, unknown>> = [];
   const skipped: string[] = [];
 
-  for (const defaultField of SYSTEM_DEFAULT_FIELDS) {
+  for (const defaultField of fieldsToSeed) {
     const slug = generateSlug(defaultField.name);
 
     const existing = await CustomField.findOne({
