@@ -8,6 +8,11 @@ import { ProfileLayout } from '../models/ProfileLayout.model';
 import { User } from '../models/User.model';
 import { Department } from '../models/Department.model';
 import { PolicyVersion } from '../models/PolicyVersion.model';
+import { Team } from '../models/Team.model';
+import { Location } from '../models/Location.model';
+import { Holiday } from '../models/Holiday.model';
+import { HolidayCalendar } from '../models/HolidayCalendar.model';
+import { WorkSchedule } from '../models/WorkSchedule.model';
 import { WorkflowStep } from '../models/WorkflowStep.model';
 import { auditLogger } from '../lib/auditLogger';
 import { AppError } from '../utils/AppError';
@@ -34,7 +39,7 @@ const ConditionalRuleSchema = z.object({
 });
 
 const FIELD_TYPES = ['text', 'number', 'date', 'boolean', 'select', 'multi_select', 'url', 'email', 'phone'] as const;
-const TARGET_OBJECTS = ['user', 'department', 'policy'] as const;
+const TARGET_OBJECTS = ['user', 'department', 'policy', 'team', 'location', 'holiday', 'holiday_calendar', 'work_schedule'] as const;
 const VISIBILITY_RULES = ['all', 'admin_only', 'role_specific'] as const;
 
 const CreateCustomFieldSchema = z.object({
@@ -253,6 +258,35 @@ async function checkFieldExistsWithData(fieldId: string, companyId: string, targ
         [`custom_fields.${field.slug}`]: { $exists: true, $ne: null },
       });
       break;
+    case 'team':
+      count = await Team.countDocuments({
+        company_id: companyId,
+        [`custom_fields.${field.slug}`]: { $exists: true, $ne: null },
+      });
+      break;
+    case 'location':
+      count = await Location.countDocuments({
+        company_id: companyId,
+        [`custom_fields.${field.slug}`]: { $exists: true, $ne: null },
+      });
+      break;
+    case 'holiday':
+      count = await Holiday.countDocuments({
+        [`custom_fields.${field.slug}`]: { $exists: true, $ne: null },
+      });
+      break;
+    case 'holiday_calendar':
+      count = await HolidayCalendar.countDocuments({
+        company_id: companyId,
+        [`custom_fields.${field.slug}`]: { $exists: true, $ne: null },
+      });
+      break;
+    case 'work_schedule':
+      count = await WorkSchedule.countDocuments({
+        company_id: companyId,
+        [`custom_fields.${field.slug}`]: { $exists: true, $ne: null },
+      });
+      break;
   }
 
   return { hasData: count > 0, recordCount: count };
@@ -380,6 +414,31 @@ async function migrateFieldRename(
       { company_id: companyId, [`custom_fields.${oldSlug}`]: { $exists: true } },
       { $rename: { [`custom_fields.${oldSlug}`]: `custom_fields.${newSlug}` } },
     )) as unknown as { modifiedCount: number };
+  } else if (targetObject === 'team') {
+    result = (await Team.updateMany(
+      { company_id: companyId, [`custom_fields.${oldSlug}`]: { $exists: true } },
+      { $rename: { [`custom_fields.${oldSlug}`]: `custom_fields.${newSlug}` } },
+    )) as unknown as { modifiedCount: number };
+  } else if (targetObject === 'location') {
+    result = (await Location.updateMany(
+      { company_id: companyId, [`custom_fields.${oldSlug}`]: { $exists: true } },
+      { $rename: { [`custom_fields.${oldSlug}`]: `custom_fields.${newSlug}` } },
+    )) as unknown as { modifiedCount: number };
+  } else if (targetObject === 'holiday') {
+    result = (await Holiday.updateMany(
+      { [`custom_fields.${oldSlug}`]: { $exists: true } },
+      { $rename: { [`custom_fields.${oldSlug}`]: `custom_fields.${newSlug}` } },
+    )) as unknown as { modifiedCount: number };
+  } else if (targetObject === 'holiday_calendar') {
+    result = (await HolidayCalendar.updateMany(
+      { company_id: companyId, [`custom_fields.${oldSlug}`]: { $exists: true } },
+      { $rename: { [`custom_fields.${oldSlug}`]: `custom_fields.${newSlug}` } },
+    )) as unknown as { modifiedCount: number };
+  } else if (targetObject === 'work_schedule') {
+    result = (await WorkSchedule.updateMany(
+      { company_id: companyId, [`custom_fields.${oldSlug}`]: { $exists: true } },
+      { $rename: { [`custom_fields.${oldSlug}`]: `custom_fields.${newSlug}` } },
+    )) as unknown as { modifiedCount: number };
   }
 
   return {
@@ -446,6 +505,11 @@ async function migrateFieldTypeChange(
   if (targetObject === 'user') Model = User;
   else if (targetObject === 'department') Model = Department;
   else if (targetObject === 'policy') Model = PolicyVersion;
+  else if (targetObject === 'team') Model = Team;
+  else if (targetObject === 'location') Model = Location;
+  else if (targetObject === 'holiday') Model = Holiday;
+  else if (targetObject === 'holiday_calendar') Model = HolidayCalendar;
+  else if (targetObject === 'work_schedule') Model = WorkSchedule;
   else throw new AppError('Unknown target object for migration', 400, 'INVALID_TARGET_OBJECT');
 
   const docs = await (Model as typeof User).find(query).select('custom_fields').lean();
@@ -747,6 +811,35 @@ export const updateCustomField = asyncHandler(async (req: Request, res: Response
            [`custom_fields.${field.slug}`]: { $exists: false } },
         );
         break;
+      case 'team':
+        nullCount = await Team.countDocuments({
+          company_id: req.user.company_id,
+           [`custom_fields.${field.slug}`]: { $exists: false } },
+        );
+        break;
+      case 'location':
+        nullCount = await Location.countDocuments({
+          company_id: req.user.company_id,
+           [`custom_fields.${field.slug}`]: { $exists: false } },
+        );
+        break;
+      case 'holiday':
+        nullCount = await Holiday.countDocuments({
+           [`custom_fields.${field.slug}`]: { $exists: false } },
+        );
+        break;
+      case 'holiday_calendar':
+        nullCount = await HolidayCalendar.countDocuments({
+          company_id: req.user.company_id,
+           [`custom_fields.${field.slug}`]: { $exists: false } },
+        );
+        break;
+      case 'work_schedule':
+        nullCount = await WorkSchedule.countDocuments({
+          company_id: req.user.company_id,
+           [`custom_fields.${field.slug}`]: { $exists: false } },
+        );
+        break;
     }
     if (nullCount > 0) {
       throw new AppError(
@@ -945,6 +1038,46 @@ export const clearFieldData = asyncHandler(async (req: Request, res: Response) =
       clearedCount = result.modifiedCount;
       break;
     }
+    case 'team': {
+      const result = await Team.updateMany(
+        { company_id: req.user.company_id, [`custom_fields.${field.slug}`]: { $exists: true } },
+        { $unset: { [`custom_fields.${field.slug}`]: '' } },
+      );
+      clearedCount = result.modifiedCount;
+      break;
+    }
+    case 'location': {
+      const result = await Location.updateMany(
+        { company_id: req.user.company_id, [`custom_fields.${field.slug}`]: { $exists: true } },
+        { $unset: { [`custom_fields.${field.slug}`]: '' } },
+      );
+      clearedCount = result.modifiedCount;
+      break;
+    }
+    case 'holiday': {
+      const result = await Holiday.updateMany(
+        { [`custom_fields.${field.slug}`]: { $exists: true } },
+        { $unset: { [`custom_fields.${field.slug}`]: '' } },
+      );
+      clearedCount = result.modifiedCount;
+      break;
+    }
+    case 'holiday_calendar': {
+      const result = await HolidayCalendar.updateMany(
+        { company_id: req.user.company_id, [`custom_fields.${field.slug}`]: { $exists: true } },
+        { $unset: { [`custom_fields.${field.slug}`]: '' } },
+      );
+      clearedCount = result.modifiedCount;
+      break;
+    }
+    case 'work_schedule': {
+      const result = await WorkSchedule.updateMany(
+        { company_id: req.user.company_id, [`custom_fields.${field.slug}`]: { $exists: true } },
+        { $unset: { [`custom_fields.${field.slug}`]: '' } },
+      );
+      clearedCount = result.modifiedCount;
+      break;
+    }
   }
 
   await auditLogger.log({
@@ -1027,7 +1160,7 @@ export const getDependencyMap = asyncHandler(async (req: Request, res: Response)
   const { target_object } = req.query;
 
   if (!target_object || !TARGET_OBJECTS.includes(target_object as (typeof TARGET_OBJECTS)[number])) {
-    throw new AppError('target_object is required (user, department, or policy)', 400, 'INVALID_INPUT');
+    throw new AppError('target_object is required (user, department, policy, team, location, holiday, holiday_calendar, or work_schedule)', 400, 'INVALID_INPUT');
   }
 
   const companyId = req.user.company_id;
@@ -1412,7 +1545,7 @@ export const getEffectiveCustomFields = asyncHandler(async (req: Request, res: R
   const { target_object, role_ids } = req.query;
 
   if (!target_object || !TARGET_OBJECTS.includes(target_object as (typeof TARGET_OBJECTS)[number])) {
-    throw new AppError('target_object is required (user, department, or policy)', 400, 'INVALID_INPUT');
+    throw new AppError('target_object is required (user, department, policy, team, location, holiday, holiday_calendar, or work_schedule)', 400, 'INVALID_INPUT');
   }
 
   const recordRoleIds = typeof role_ids === 'string' && role_ids.length > 0
@@ -1428,7 +1561,7 @@ export const getEffectiveCustomFields = asyncHandler(async (req: Request, res: R
     ),
     resolveStandardFieldPermissions(
       req.user.company_id,
-      target_object as 'user' | 'department' | 'policy',
+      target_object as 'user' | 'department' | 'policy' | 'team' | 'location' | 'holiday' | 'holiday_calendar' | 'work_schedule',
       req.user.userId,
     ),
   ]);

@@ -30,6 +30,7 @@ const PublishPolicySchema = z.object({
     message: 'Invalid date format',
   }).optional(),
   summary: z.string().trim().optional(),
+  custom_fields: z.record(z.string(), z.unknown()).optional(),
   assignment_rules: z
     .array(
       z.object({
@@ -77,6 +78,7 @@ const UpdateDraftPolicySchema = z.object({
     .refine((val) => !isNaN(Date.parse(val)), { message: 'Invalid date format' })
     .optional(),
   summary: z.string().trim().optional(),
+  custom_fields: z.record(z.string(), z.unknown()).optional(),
 }).superRefine((data, ctx) => {
   if (data.expiry_date && data.effective_date) {
     const effective = new Date(data.effective_date);
@@ -481,6 +483,7 @@ export const publishPolicy = asyncHandler(async (req: Request, res: Response) =>
     published_by: new Types.ObjectId(req.user.userId),
     published_at: new Date(),
     summary: input.summary,
+    custom_fields: input.custom_fields ?? {},
     is_active: true,
   });
 
@@ -534,6 +537,7 @@ export const publishPolicy = asyncHandler(async (req: Request, res: Response) =>
       published_by: req.user.userId,
       published_at: policyVersion.published_at,
       summary: policyVersion.summary,
+      custom_fields: policyVersion.custom_fields,
     },
   });
 
@@ -841,6 +845,7 @@ export const updatePolicyDraft = asyncHandler(async (req: Request, res: Response
     effective_date: policyVersion.effective_date,
     expiry_date: policyVersion.expiry_date,
     summary: policyVersion.summary,
+    custom_fields: policyVersion.custom_fields,
   };
 
   // Update fields
@@ -863,6 +868,7 @@ export const updatePolicyDraft = asyncHandler(async (req: Request, res: Response
       effective_date: policyVersion.effective_date,
       expiry_date: policyVersion.expiry_date,
       summary: policyVersion.summary,
+      custom_fields: policyVersion.custom_fields,
     },
   });
 
@@ -917,6 +923,7 @@ export const createDraftPolicy = asyncHandler(async (req: Request, res: Response
     effective_date: new Date(input.effective_date),
     expiry_date: input.expiry_date ? new Date(input.expiry_date) : undefined,
     summary: input.summary,
+    custom_fields: input.custom_fields ?? {},
     is_active: false,
   });
 
@@ -932,6 +939,7 @@ export const createDraftPolicy = asyncHandler(async (req: Request, res: Response
       policy_key: policyVersion.policy_key,
       title: policyVersion.title,
       status: policyVersion.status,
+      custom_fields: policyVersion.custom_fields,
     },
   });
 
@@ -1078,6 +1086,7 @@ export const rollbackPolicy = asyncHandler(async (req: Request, res: Response) =
     published_by: new Types.ObjectId(req.user.userId),
     published_at: new Date(),
     summary: `Rolled back to version ${oldVersion.version_number}`,
+    custom_fields: oldVersion.custom_fields ?? {},
     is_active: true,
   });
 
@@ -1131,6 +1140,7 @@ export const rollbackPolicy = asyncHandler(async (req: Request, res: Response) =
       published_by: req.user.userId,
       published_at: policyVersion.published_at,
       summary: policyVersion.summary,
+      custom_fields: policyVersion.custom_fields,
     },
   });
 

@@ -12,7 +12,7 @@ import { useFieldDependents } from '../hooks/useFieldDependents';
 const schema = z.object({
   name: z.string().min(1, 'Name is required').max(100).regex(/^[a-z0-9_]+$/, 'Lowercase letters, numbers, and underscores only'),
   field_type: z.enum(['text', 'number', 'date', 'boolean', 'select', 'multi_select', 'url', 'email', 'phone']),
-  target_object: z.enum(['user', 'department', 'policy']),
+  target_object: z.enum(['user', 'department', 'policy', 'team', 'location', 'holiday', 'holiday_calendar', 'work_schedule']),
   label: z.string().min(1, 'Label is required').max(150),
   placeholder: z.string().optional().nullable(),
   description: z.string().optional().nullable(),

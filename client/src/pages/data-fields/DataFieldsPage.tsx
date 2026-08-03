@@ -1,6 +1,6 @@
 // src/pages/data-fields/DataFieldsPage.tsx
 import { useState, useEffect, useCallback, useDeferredValue, useMemo, useRef } from 'react';
-import { Database, Plus, Search } from 'lucide-react';
+import { Database, Search } from 'lucide-react';
 import * as Tabs from '@radix-ui/react-tabs';
 import { useCustomFields } from '@/features/data-fields/hooks/useCustomFields';
 import { useCreateCustomField } from '@/features/data-fields/hooks/useCreateCustomField';
@@ -20,6 +20,11 @@ const TARGET_OBJECTS: { value: TargetObject; label: string; description: string 
   { value: 'user', label: 'People', description: 'Add custom fields to user profiles and forms' },
   { value: 'department', label: 'Departments', description: 'Add custom fields to department records' },
   { value: 'policy', label: 'Policies', description: 'Add custom fields to policy documents' },
+  { value: 'team', label: 'Teams', description: 'Add custom fields to team records' },
+  { value: 'location', label: 'Locations', description: 'Add custom fields to location records' },
+  { value: 'holiday', label: 'Holidays', description: 'Add custom fields to holiday records' },
+  { value: 'holiday_calendar', label: 'Holiday Calendars', description: 'Add custom fields to holiday calendars' },
+  { value: 'work_schedule', label: 'Work Schedules', description: 'Add custom fields to work schedules' },
 ];
 
 /**
@@ -141,10 +146,6 @@ export default function DataFieldsPage() {
             Create and manage custom fields across your organization
           </p>
         </div>
-        <Button onClick={openCreateModal} className="bg-primary hover:bg-primary-hover text-white">
-          <Plus className="w-4 h-4 mr-1.5" />
-          Add Field
-        </Button>
       </div>
 
       {/* Target object tabs */}

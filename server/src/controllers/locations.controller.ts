@@ -11,6 +11,7 @@ import { auditLogger } from '../lib/auditLogger';
 import { AppError } from '../utils/AppError';
 import { isValidTimezone } from '../constants/timezones';
 import { locationSettingsService } from '../services/locationSettings.service';
+import { validateAndSanitizeCustomFields, enforceStandardFieldPermissions, enforceCustomFieldPermissions } from '../services/customFieldValidation.service';
 
 // ── Zod Schemas ──────────────────────────────────────────────────────────────
 
@@ -29,6 +30,7 @@ const CreateLocationSchema = z.object({
     start: z.string(),
     end: z.string(),
   }).optional().nullable(),
+  custom_fields: z.record(z.string(), z.unknown()).optional(),
 }).refine(data => data.type === 'region' || !!data.parent_id, {
   message: 'Parent location is required unless the type is Region.',
   path: ['parent_id'],
@@ -49,6 +51,7 @@ const UpdateLocationSchema = z.object({
     start: z.string(),
     end: z.string(),
   }).optional().nullable(),
+  custom_fields: z.record(z.string(), z.unknown()).optional(),
 }).refine(data => !data.type || data.type === 'region' || !!data.parent_id, {
   message: 'Parent location is required unless the type is Region.',
   path: ['parent_id'],
@@ -159,44 +162,66 @@ export const getLocationById = asyncHandler(async (req: Request, res: Response) 
  * POST /locations
  * Creates a new location scoped to the requesting company's tenant.
  */
-export const createLocation = asyncHandler(async (req: Request, res: Response) => {
-  const input = CreateLocationSchema.parse(req.body);
+ export const createLocation = asyncHandler(async (req: Request, res: Response) => {
+   const input = CreateLocationSchema.parse(req.body);
 
-  // Check for duplicate location name within the same company (active only)
-  const existing = await Location.findOne({
-    company_id: req.user.company_id,
-    name: input.name,
-    is_deleted: { $ne: true },
-  });
+   // Check for duplicate location name within the same company (active only)
+   const existing = await Location.findOne({
+     company_id: req.user.company_id,
+     name: input.name,
+     is_deleted: { $ne: true },
+   });
 
-  if (existing) {
-    throw new AppError(
-      `A location with the name "${input.name}" already exists.`,
-      400,
-      'DUPLICATE_LOCATION_NAME'
-    );
-  }
+   if (existing) {
+     throw new AppError(
+       `A location with the name "${input.name}" already exists.`,
+       400,
+       'DUPLICATE_LOCATION_NAME'
+     );
+   }
 
-  // Merge flat working_days into working_hours.days for the model
-  const locationData: Record<string, unknown> = {
-    ...input,
-    parent_id: input.parent_id || undefined,
-    address: input.address || undefined,
-    company_id: req.user.company_id,
-  };
-  delete locationData.working_days;
+   // Validate and sanitize custom fields
+   const validatedCustomFields = await validateAndSanitizeCustomFields(
+     req.user.company_id,
+     'location',
+     input.custom_fields,
+   );
+   const permissionedCustomFields = await enforceCustomFieldPermissions(
+     req.user.company_id,
+     'location',
+     req.user.userId,
+     validatedCustomFields,
+   );
 
-  if (input.working_days && input.working_days.length > 0) {
-    locationData.working_hours = {
-      start: input.working_hours?.start ?? '09:00',
-      end: input.working_hours?.end ?? '17:00',
-      days: input.working_days,
-    };
-  } else {
-    locationData.working_hours = input.working_hours || undefined;
-  }
+   // Enforce standard field edit permissions
+   const filteredInput = await enforceStandardFieldPermissions(
+     req.user.company_id,
+     'location',
+     req.user.userId,
+     { ...input } as unknown as Record<string, unknown>,
+   );
 
-  const location = await Location.create(locationData);
+   // Merge flat working_days into working_hours.days for the model
+   const locationData: Record<string, unknown> = {
+     ...filteredInput,
+     parent_id: input.parent_id || undefined,
+     address: input.address || undefined,
+     company_id: req.user.company_id,
+     custom_fields: permissionedCustomFields,
+   };
+   delete locationData.working_days;
+
+   if (input.working_days && input.working_days.length > 0) {
+     locationData.working_hours = {
+       start: input.working_hours?.start ?? '09:00',
+       end: input.working_hours?.end ?? '17:00',
+       days: input.working_days,
+     };
+   } else {
+     locationData.working_hours = input.working_hours || undefined;
+   }
+
+   const location = await Location.create(locationData);
 
   await auditLogger.log({
     req,
@@ -275,39 +300,64 @@ export const updateLocation = asyncHandler(async (req: Request, res: Response) =
     }
   }
 
-  const beforeState = location.toObject();
+   const beforeState = location.toObject();
 
-  // Merge flat working_days into working_hours.days for the model
-  const { working_days, ...restInput } = input;
-  const updates: Record<string, unknown> = { ...restInput, parent_id: restInput.parent_id || undefined, address: restInput.address || undefined };
-  if (updates.parent_id === '') updates.parent_id = null;
-  if (updates.address === '') updates.address = null;
-  delete updates.working_days;
+   // Validate and sanitize custom fields
+   const validatedCustomFields = await validateAndSanitizeCustomFields(
+     req.user.company_id,
+     'location',
+     input.custom_fields,
+   );
+   const permissionedCustomFields = await enforceCustomFieldPermissions(
+     req.user.company_id,
+     'location',
+     req.user.userId,
+     validatedCustomFields,
+   );
 
-  if (working_days) {
-    if (working_days.length > 0) {
-      updates.working_hours = {
-        start: input.working_hours?.start ?? location.working_hours?.start ?? '09:00',
-        end: input.working_hours?.end ?? location.working_hours?.end ?? '17:00',
-        days: working_days,
-      };
-    } else if (input.working_hours) {
-      updates.working_hours = {
-        start: input.working_hours.start,
-        end: input.working_hours.end,
-        days: location.working_hours?.days ?? [1, 2, 3, 4, 5],
-      };
-    }
-  } else if (input.working_hours) {
-    updates.working_hours = {
-      start: input.working_hours.start,
-      end: input.working_hours.end,
-      days: location.working_hours?.days ?? [1, 2, 3, 4, 5],
-    };
-  }
+   // Enforce standard field edit permissions
+   const filteredInput = await enforceStandardFieldPermissions(
+     req.user.company_id,
+     'location',
+     req.user.userId,
+     { ...input } as unknown as Record<string, unknown>,
+   );
 
-  Object.assign(location, updates);
-  await location.save();
+   // Merge flat working_days into working_hours.days for the model
+   const { working_days, ...restInput } = filteredInput;
+   const updates: Record<string, unknown> = { ...restInput, parent_id: restInput.parent_id || undefined, address: restInput.address || undefined };
+   if (updates.parent_id === '') updates.parent_id = null;
+   if (updates.address === '') updates.address = null;
+   delete updates.working_days;
+
+   if (input.custom_fields !== undefined) {
+     updates.custom_fields = permissionedCustomFields;
+   }
+
+   if (working_days) {
+     if (working_days.length > 0) {
+       updates.working_hours = {
+         start: input.working_hours?.start ?? location.working_hours?.start ?? '09:00',
+         end: input.working_hours?.end ?? location.working_hours?.end ?? '17:00',
+         days: working_days,
+       };
+     } else if (input.working_hours) {
+       updates.working_hours = {
+         start: input.working_hours.start,
+         end: input.working_hours.end,
+         days: location.working_hours?.days ?? [1, 2, 3, 4, 5],
+       };
+     }
+   } else if (input.working_hours) {
+     updates.working_hours = {
+       start: input.working_hours.start,
+       end: input.working_hours.end,
+       days: location.working_hours?.days ?? [1, 2, 3, 4, 5],
+     };
+   }
+
+   Object.assign(location, updates);
+   await location.save();
 
   await auditLogger.log({
     req,

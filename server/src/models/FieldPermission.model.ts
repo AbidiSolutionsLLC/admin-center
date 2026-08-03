@@ -6,7 +6,7 @@ import { Schema, model, Document, Types } from 'mongoose';
  * These are the fields rendered natively in UserForm / DepartmentForm
  * and are NOT custom (dynamic) fields.
  */
-export const STANDARD_FIELDS: Record<'user' | 'department' | 'policy', string[]> = {
+export const STANDARD_FIELDS: Record<'user' | 'department' | 'policy' | 'team' | 'location' | 'holiday' | 'holiday_calendar' | 'work_schedule', string[]> = {
   user: [
     'full_name',
     'phone',
@@ -28,13 +28,18 @@ export const STANDARD_FIELDS: Record<'user' | 'department' | 'policy', string[]>
     'secondary_manager_ids',
   ],
   policy: ['title', 'content', 'category', 'effective_date', 'expiry_date', 'summary'],
+  team: ['name', 'description', 'department_id', 'team_lead_id'],
+  location: ['name', 'type', 'parent_id', 'timezone', 'is_headquarters', 'address'],
+  holiday: ['name', 'date', 'recurring_type', 'holiday_code', 'is_observed'],
+  holiday_calendar: ['name', 'description', 'is_active'],
+  work_schedule: ['name', 'description', 'timezone', 'working_days', 'working_hours', 'break_hours', 'is_active'],
 };
 
 export type FieldVisibility = 'all' | 'admin_only' | 'role_specific';
 
 export interface IFieldPermission extends Document {
   company_id: Types.ObjectId;
-  target_object: 'user' | 'department' | 'policy';
+  target_object: 'user' | 'department' | 'policy' | 'team' | 'location' | 'holiday' | 'holiday_calendar' | 'work_schedule';
   field_name: string;
   visibility: FieldVisibility;
   visible_roles?: Types.ObjectId[];
@@ -49,7 +54,7 @@ const FieldPermissionSchema = new Schema<IFieldPermission>({
   company_id: { type: Schema.Types.ObjectId, ref: 'Company', required: true, index: true },
   target_object: {
     type: String,
-    enum: ['user', 'department', 'policy'],
+    enum: ['user', 'department', 'policy', 'team', 'location', 'holiday', 'holiday_calendar', 'work_schedule'],
     required: true,
   },
   field_name: { type: String, required: true },

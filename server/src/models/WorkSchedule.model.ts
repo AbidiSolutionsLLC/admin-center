@@ -15,6 +15,7 @@ export interface IWorkSchedule extends Document {
     start: string;
     end: string;
   };
+  custom_fields: Record<string, unknown>;
   is_active: boolean;
   created_at: Date;
   updated_at: Date;
@@ -34,6 +35,7 @@ const WorkScheduleSchema = new Schema<IWorkSchedule>({
     start: String,
     end: String,
   },
+  custom_fields: { type: Schema.Types.Mixed, default: {} },
   is_active: { type: Boolean, default: true },
 }, { timestamps: { createdAt: 'created_at', updatedAt: 'updated_at' } });
 

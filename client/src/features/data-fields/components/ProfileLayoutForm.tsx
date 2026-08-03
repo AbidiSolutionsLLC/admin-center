@@ -16,7 +16,7 @@ const LayoutFieldSchema = z.object({
 
 const schema = z.object({
   name: z.string().min(1, 'Layout name is required').max(100),
-  target_object: z.enum(['user', 'department', 'policy']),
+  target_object: z.enum(['user', 'department', 'policy', 'team', 'location', 'holiday', 'holiday_calendar', 'work_schedule']),
   role_id: z.string().optional().nullable(),
   is_default: z.boolean().default(false),
   fields: z.array(LayoutFieldSchema).min(1, 'Select at least one field'),

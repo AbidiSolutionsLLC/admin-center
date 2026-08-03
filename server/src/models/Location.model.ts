@@ -24,6 +24,7 @@ export interface ILocation extends Document {
     end: string;
     days: number[];
   };
+  custom_fields: Record<string, unknown>;
   created_at: Date;
   updated_at: Date;
 }
@@ -47,7 +48,8 @@ const LocationSchema = new Schema<ILocation>({
     start: String,
     end: String,
     days: [Number]
-  }
+  },
+  custom_fields: { type: Schema.Types.Mixed, default: {} },
 }, { timestamps: { createdAt: 'created_at', updatedAt: 'updated_at' } });
 
 // ── Indexes ──────────────────────────────────────────────────────────────────

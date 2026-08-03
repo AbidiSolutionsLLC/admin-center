@@ -1,10 +1,12 @@
 // src/features/locations/components/LocationForm.tsx
-import React from 'react';
+import React, { useState, useCallback } from 'react';
 import { useForm, Controller } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { z } from 'zod';
 import { COMMON_TIMEZONES, formatTimezoneLabel } from '@/constants/timezones';
 import { getLocalTime, getTimezoneOffset } from '@/lib/timezone';
+import { DynamicCustomFields, isFieldRequired } from '@/features/data-fields/components/DynamicCustomFields';
+import { useEffectiveCustomFields } from '@/features/data-fields/hooks/useEffectiveCustomFields';
 import type { Location, LocationType } from '@/types';
 
 // ── Schema ───────────────────────────────────────────────────────────────────
@@ -32,7 +34,7 @@ export type LocationFormData = z.infer<typeof schema>;
 
 interface LocationFormProps {
   initialData?: Location;
-  onSubmit: (data: LocationFormData) => void;
+  onSubmit: (data: LocationFormData & { custom_fields?: Record<string, unknown> }) => void;
   locations: Location[];
   isSubmitting?: boolean;
 }
@@ -108,8 +110,58 @@ export const LocationForm: React.FC<LocationFormProps> = ({
           ? { start: initialData.working_hours.start, end: initialData.working_hours.end }
           : null,
       });
+      setCustomFieldValues(initialData.custom_fields ?? {});
     }
   }, [initialData, reset]);
+
+  // ── Custom fields ──
+  const { data: effectiveFields } = useEffectiveCustomFields('location', []);
+  const customFields = React.useMemo(
+    () => (effectiveFields?.fields ?? []).filter((f) => !f.is_system_field),
+    [effectiveFields],
+  );
+  const readOnlyCustomFieldSlugs = React.useMemo(
+    () => customFields.filter((f) => !f.can_edit).map((f) => f.slug),
+    [customFields],
+  );
+  const [customFieldValues, setCustomFieldValues] = useState<Record<string, unknown>>(
+    initialData?.custom_fields ?? {}
+  );
+  const [customFieldErrors, setCustomFieldErrors] = useState<Record<string, string>>({});
+
+  const handleCustomFieldChange = useCallback((slug: string, value: unknown) => {
+    setCustomFieldValues((prev) => ({ ...prev, [slug]: value }));
+    setCustomFieldErrors((prev) => {
+      const next = { ...prev };
+      delete next[slug];
+      return next;
+    });
+  }, []);
+
+  const validateCustomFields = useCallback((): boolean => {
+    const newErrors: Record<string, string> = {};
+    for (const field of customFields) {
+      if (isFieldRequired(field, customFieldValues)) {
+        const value = customFieldValues[field.slug];
+        if (value === null || value === undefined || value === '') {
+          newErrors[field.slug] = `${field.label} is required`;
+        }
+      }
+    }
+    setCustomFieldErrors(newErrors);
+    return Object.keys(newErrors).length === 0;
+  }, [customFields, customFieldValues]);
+
+  const handleSubmitWithCustomFields = handleSubmit((data) => {
+    if (!validateCustomFields()) return;
+    onSubmit({
+      ...data,
+      custom_fields: Object.keys(customFieldValues).reduce((acc, slug) => {
+        if (customFields.find((f) => f.slug === slug)?.can_edit) acc[slug] = customFieldValues[slug];
+        return acc;
+      }, {} as Record<string, unknown>),
+    });
+  });
 
   const selectedType = watch('type');
   const isHQ = watch('is_headquarters');
@@ -145,7 +197,7 @@ export const LocationForm: React.FC<LocationFormProps> = ({
   };
 
   return (
-    <form id="location-form" onSubmit={handleSubmit(onSubmit)} className="space-y-5" noValidate>
+    <form id="location-form" onSubmit={(e) => { e.preventDefault(); handleSubmitWithCustomFields(); }} className="space-y-5" noValidate>
 
       {/* Name */}
       <div className="space-y-1.5">
@@ -385,6 +437,16 @@ export const LocationForm: React.FC<LocationFormProps> = ({
         />
         {errors.address && <p className="text-xs mt-1" style={{ color: '#f87171' }}>{errors.address.message}</p>}
       </div>
+
+      {/* ── Custom Fields ── */}
+      <DynamicCustomFields
+        fields={customFields}
+        values={customFieldValues}
+        onChange={handleCustomFieldChange}
+        errors={customFieldErrors}
+        disabled={isSubmitting}
+        readOnlySlugs={readOnlyCustomFieldSlugs}
+      />
 
       {/* Hidden submit trigger */}
       <button type="submit" id="location-form-submit" className="hidden" />

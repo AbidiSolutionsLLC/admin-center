@@ -1,9 +1,11 @@
 // client/src/features/work-schedules/components/WorkScheduleForm.tsx
-import React, { useEffect } from 'react';
+import React, { useEffect, useState, useCallback } from 'react';
 import { useForm, Controller } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { z } from 'zod';
 import { COMMON_TIMEZONES, formatTimezoneLabel } from '@/constants/timezones';
+import { DynamicCustomFields, isFieldRequired } from '@/features/data-fields/components/DynamicCustomFields';
+import { useEffectiveCustomFields } from '@/features/data-fields/hooks/useEffectiveCustomFields';
 import type { WorkSchedule } from '@/types';
 
 const dayOfWeekSchema = z.number().min(0).max(6);
@@ -34,7 +36,7 @@ export type WorkScheduleFormData = z.infer<typeof schema>;
 
 interface WorkScheduleFormProps {
   initialData?: WorkSchedule;
-  onSubmit: (data: WorkScheduleFormData) => void;
+  onSubmit: (data: WorkScheduleFormData & { custom_fields?: Record<string, unknown> }) => void;
   isSubmitting?: boolean;
   isEdit?: boolean;
   onDirtyChange?: (dirty: boolean) => void;
@@ -91,13 +93,68 @@ export const WorkScheduleForm: React.FC<WorkScheduleFormProps> = ({
     return () => window.removeEventListener('beforeunload', handler);
   }, [isDirty]);
 
+  // ── Custom fields ──
+  const { data: effectiveFields } = useEffectiveCustomFields('work_schedule', []);
+  const customFields = React.useMemo(
+    () => (effectiveFields?.fields ?? []).filter((f) => !f.is_system_field),
+    [effectiveFields],
+  );
+  const readOnlyCustomFieldSlugs = React.useMemo(
+    () => customFields.filter((f) => !f.can_edit).map((f) => f.slug),
+    [customFields],
+  );
+  const [customFieldValues, setCustomFieldValues] = useState<Record<string, unknown>>(
+    initialData?.custom_fields ?? {}
+  );
+  const [customFieldErrors, setCustomFieldErrors] = useState<Record<string, string>>({});
+
+  useEffect(() => {
+    if (initialData?.custom_fields) {
+      setCustomFieldValues(initialData.custom_fields);
+    }
+  }, [initialData]);
+
+  const handleCustomFieldChange = useCallback((slug: string, value: unknown) => {
+    setCustomFieldValues((prev) => ({ ...prev, [slug]: value }));
+    setCustomFieldErrors((prev) => {
+      const next = { ...prev };
+      delete next[slug];
+      return next;
+    });
+  }, []);
+
+  const validateCustomFields = useCallback((): boolean => {
+    const newErrors: Record<string, string> = {};
+    for (const field of customFields) {
+      if (isFieldRequired(field, customFieldValues)) {
+        const value = customFieldValues[field.slug];
+        if (value === null || value === undefined || value === '') {
+          newErrors[field.slug] = `${field.label} is required`;
+        }
+      }
+    }
+    setCustomFieldErrors(newErrors);
+    return Object.keys(newErrors).length === 0;
+  }, [customFields, customFieldValues]);
+
+  const handleSubmitWithCustomFields = handleSubmit((data) => {
+    if (!validateCustomFields()) return;
+    onSubmit({
+      ...data,
+      custom_fields: Object.keys(customFieldValues).reduce((acc, slug) => {
+        if (customFields.find((f) => f.slug === slug)?.can_edit) acc[slug] = customFieldValues[slug];
+        return acc;
+      }, {} as Record<string, unknown>),
+    });
+  });
+
   const fieldStyle = (hasError?: boolean): React.CSSProperties => ({
     borderColor: hasError ? 'rgba(239,68,68,0.5)' : undefined,
     boxShadow: hasError ? '0 0 0 3px rgba(239,68,68,0.08)' : undefined,
   });
 
   return (
-    <form id="work-schedule-form" onSubmit={handleSubmit(onSubmit)} className="space-y-5" noValidate>
+    <form id="work-schedule-form" onSubmit={(e) => { e.preventDefault(); handleSubmitWithCustomFields(); }} className="space-y-5" noValidate>
       {/* Name */}
       <div className="space-y-1.5">
         <label htmlFor="schedule-name" className="text-sm font-medium text-ink">
@@ -275,6 +332,16 @@ export const WorkScheduleForm: React.FC<WorkScheduleFormProps> = ({
           </p>
         </div>
       </div>
+
+      {/* ── Custom Fields ── */}
+      <DynamicCustomFields
+        fields={customFields}
+        values={customFieldValues}
+        onChange={handleCustomFieldChange}
+        errors={customFieldErrors}
+        disabled={isSubmitting}
+        readOnlySlugs={readOnlyCustomFieldSlugs}
+      />
 
       {/* Hidden submit trigger */}
       <button type="submit" id="work-schedule-form-submit" className="hidden" />

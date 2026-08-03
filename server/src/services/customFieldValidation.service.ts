@@ -522,7 +522,7 @@ export interface StandardFieldPermission {
  */
 export async function resolveStandardFieldPermissions(
   companyId: string | Types.ObjectId,
-  targetObject: 'user' | 'department' | 'policy',
+  targetObject: 'user' | 'department' | 'policy' | 'team' | 'location' | 'holiday' | 'holiday_calendar' | 'work_schedule',
   viewerUserId: string,
 ): Promise<StandardFieldPermission[]> {
   const { viewerRoleIds, viewerHasAdminAccess } = await resolveViewerAccess(companyId, viewerUserId);
@@ -571,7 +571,7 @@ export async function resolveStandardFieldPermissions(
  */
 export async function enforceStandardFieldPermissions(
   companyId: string | Types.ObjectId,
-  targetObject: 'user' | 'department' | 'policy',
+  targetObject: 'user' | 'department' | 'policy' | 'team' | 'location' | 'holiday' | 'holiday_calendar' | 'work_schedule',
   viewerUserId: string,
   updates: Record<string, unknown>,
 ): Promise<Record<string, unknown>> {
@@ -598,7 +598,7 @@ export async function enforceStandardFieldPermissions(
  */
 export async function enforceCustomFieldPermissions(
   companyId: string | Types.ObjectId,
-  targetObject: 'user' | 'department' | 'policy',
+  targetObject: 'user' | 'department' | 'policy' | 'team' | 'location' | 'holiday' | 'holiday_calendar' | 'work_schedule',
   viewerUserId: string,
   values: Record<string, unknown> | undefined,
 ): Promise<Record<string, unknown>> {

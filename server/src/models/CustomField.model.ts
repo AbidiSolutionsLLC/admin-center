@@ -11,7 +11,7 @@ import { Schema, model, Document, Types } from 'mongoose';
  */
 
 export type FieldType = 'text' | 'number' | 'date' | 'boolean' | 'select' | 'multi_select' | 'url' | 'email' | 'phone';
-export type TargetObject = 'user' | 'department' | 'policy';
+export type TargetObject = 'user' | 'department' | 'policy' | 'team' | 'location' | 'holiday' | 'holiday_calendar' | 'work_schedule';
 export type VisibilityRule = 'all' | 'admin_only' | 'role_specific';
 
 export interface IValidationRules {
@@ -94,7 +94,7 @@ const CustomFieldSchema = new Schema<ICustomField>({
   },
   target_object: {
     type: String,
-    enum: ['user', 'department', 'policy'],
+    enum: ['user', 'department', 'policy', 'team', 'location', 'holiday', 'holiday_calendar', 'work_schedule'],
     required: true,
     index: true,
   },

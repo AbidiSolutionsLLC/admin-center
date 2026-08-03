@@ -5,6 +5,7 @@ export interface IHolidayCalendar extends Document {
   company_id: Types.ObjectId;
   name: string;
   description?: string;
+  custom_fields: Record<string, unknown>;
   is_active: boolean;
   created_at: Date;
   updated_at: Date;
@@ -14,6 +15,7 @@ const HolidayCalendarSchema = new Schema<IHolidayCalendar>({
   company_id: { type: Schema.Types.ObjectId, ref: 'Company', required: true, index: true },
   name: { type: String, required: true },
   description: String,
+  custom_fields: { type: Schema.Types.Mixed, default: {} },
   is_active: { type: Boolean, default: true },
 }, { timestamps: { createdAt: 'created_at', updatedAt: 'updated_at' } });
 

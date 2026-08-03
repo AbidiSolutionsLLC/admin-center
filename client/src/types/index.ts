@@ -88,6 +88,7 @@ export interface Location {
     end: string;
     days: number[];
   };
+  custom_fields?: Record<string, unknown>;
   user_count?: number;
   created_at: string;
   updated_at: string;
@@ -168,7 +169,7 @@ export interface LocationEffectiveSettings {
 // ─────────────────────────────────────────────────────────────────────────────
 
 export type FieldType = 'text' | 'number' | 'date' | 'boolean' | 'select' | 'multi_select' | 'url' | 'email' | 'phone';
-export type TargetObject = 'user' | 'department' | 'policy';
+export type TargetObject = 'user' | 'department' | 'policy' | 'team' | 'location' | 'holiday' | 'holiday_calendar' | 'work_schedule';
 export type VisibilityRule = 'all' | 'admin_only' | 'role_specific';
 export type ConditionalOperator = 'equals' | 'not_equals' | 'contains' | 'greater_than' | 'less_than' | 'is_empty' | 'is_not_empty';
 export type ConditionalAction = 'show' | 'hide' | 'require' | 'optional';
@@ -426,6 +427,7 @@ export interface Team {
   department?: { _id: string; name: string; slug: string };
   team_lead_id?: string | null;
   team_lead?: { _id: string; full_name: string; avatar_url?: string; email: string };
+  custom_fields?: Record<string, unknown>;
   is_active: boolean;
   created_at: string;
   updated_at: string;
@@ -489,6 +491,7 @@ export interface WorkSchedule {
     start: string;
     end: string;
   };
+  custom_fields?: Record<string, unknown>;
   is_active: boolean;
   assignment_count?: number;
   created_at: string;
@@ -544,6 +547,7 @@ export interface HolidayCalendar {
   company_id: string;
   name: string;
   description?: string;
+  custom_fields?: Record<string, unknown>;
   is_active: boolean;
   created_at: string;
   updated_at: string;
@@ -575,6 +579,7 @@ export interface Holiday {
   calendar_id: string;
   holiday_code?: string;
   is_observed?: boolean;
+  custom_fields?: Record<string, unknown>;
   created_at: string;
   updated_at: string;
 }
@@ -1095,11 +1100,12 @@ export interface PolicyVersion {
   };
   published_at?: string;
   summary?: string;
-  assignment_rules?: PolicyAssignmentRule[]; // Populated on detail view
+  assignment_rules?: PolicyAssignmentRule[];
+  custom_fields?: Record<string, unknown>;
   is_active: boolean;
   created_at: string;
   updated_at: string;
-  version_count?: number; // Added when listing policies
+  version_count?: number;
 }
 
 export interface PolicyAcknowledgment {
@@ -1126,6 +1132,7 @@ export interface PublishPolicyInput {
   effective_date: string;
   expiry_date?: string;
   summary?: string;
+  custom_fields?: Record<string, unknown>;
   assignment_rules?: Array<{
     target_type: PolicyTargetType;
     target_id: string;
@@ -1139,6 +1146,7 @@ export interface UpdatePolicyDraftInput {
   effective_date?: string;
   expiry_date?: string;
   summary?: string;
+  custom_fields?: Record<string, unknown>;
 }
 
 export interface ArchivePolicyInput {
