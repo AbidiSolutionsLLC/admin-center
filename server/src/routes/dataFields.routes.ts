@@ -8,7 +8,9 @@ import {
   createCustomField,
   updateCustomField,
   deleteCustomField,
+  clearFieldData,
   reorderCustomFields,
+  getDependencyMap,
   getFieldUsage,
   getFieldDependents,
   getFieldVersions,
@@ -38,6 +40,7 @@ router.delete('/layouts/:id', requireRole(['Super Admin']), deleteProfileLayout)
 router.post('/seed-defaults', requireRole(['Super Admin']), seedDefaultFields);
 router.post('/validate', validateFieldValues);
 router.get('/effective', getEffectiveCustomFields);
+router.get('/dependency-map', getDependencyMap);
 
 // Standard CRUD
 router.get('/', getCustomFields);
@@ -48,6 +51,7 @@ router.get('/:id/usage', getFieldUsage);
 router.get('/:id/dependents', getFieldDependents);
 router.get('/:id/versions', getFieldVersions);
 router.post('/:id/rollback', requireRole(['Super Admin', 'Ops Admin']), rollbackFieldVersion);
+router.post('/:id/clear-data', requireRole(['Super Admin']), clearFieldData);
 
 // Mutations
 router.post('/', requireRole(['Super Admin', 'Ops Admin']), createCustomField);

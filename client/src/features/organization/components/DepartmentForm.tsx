@@ -7,7 +7,7 @@ import { UserSelect } from '@/components/ui/UserSelect';
 import { MultiUserSelect } from '@/components/ui/MultiUserSelect';
 import { DynamicCustomFields, isFieldRequired } from '@/features/data-fields/components/DynamicCustomFields';
 import { useEffectiveCustomFields } from '@/features/data-fields/hooks/useEffectiveCustomFields';
-import type { Department, CustomField } from '@/types';
+import type { Department } from '@/types';
 import { cn } from '@/utils/cn';
 
 const schema = z.object({
@@ -114,11 +114,22 @@ export const DepartmentForm: React.FC<DepartmentFormProps> = ({
 
   // ── Custom fields ──────────────────────────────────────────────────────
   const { data: effectiveFields } = useEffectiveCustomFields('department', []);
-  const customFields = effectiveFields?.fields ?? [];
+  const customFields = React.useMemo(
+    () => (effectiveFields?.fields ?? []).filter((f) => !f.is_system_field),
+    [effectiveFields],
+  );
   const readOnlyCustomFieldSlugs = React.useMemo(
     () => customFields.filter((f) => !f.can_edit).map((f) => f.slug),
     [customFields],
   );
+
+  // Story 113: standard (built-in) field permissions
+  const standardFieldPermissions = effectiveFields?.standard_field_permissions ?? [];
+  const readOnlyStandardFields = React.useMemo(
+    () => new Set(standardFieldPermissions.filter((p) => !p.can_edit).map((p) => p.field_name)),
+    [standardFieldPermissions],
+  );
+  const canEditStandardField = useCallback((name: string) => !readOnlyStandardFields.has(name), [readOnlyStandardFields]);
   const [customFieldValues, setCustomFieldValues] = useState<Record<string, unknown>>(
     initialData?.custom_fields ?? {}
   );
@@ -155,9 +166,17 @@ export const DepartmentForm: React.FC<DepartmentFormProps> = ({
 
   const handleSubmitWithCustomFields = handleSubmit((data) => {
     if (!validateCustomFields()) return;
+    // Strip standard fields the viewer cannot edit (server enforces this too)
+    const editableData = Object.keys(data).reduce((acc, key) => {
+      if (canEditStandardField(key)) acc[key] = (data as Record<string, unknown>)[key];
+      return acc;
+    }, {} as Record<string, unknown>);
     onSubmit({
-      ...data,
-      custom_fields: customFieldValues,
+      ...editableData,
+      custom_fields: Object.keys(customFieldValues).reduce((acc, slug) => {
+        if (customFields.find((f) => f.slug === slug)?.can_edit) acc[slug] = customFieldValues[slug];
+        return acc;
+      }, {} as Record<string, unknown>),
     });
   });
 
@@ -173,7 +192,7 @@ export const DepartmentForm: React.FC<DepartmentFormProps> = ({
             id="dept-name"
             {...register('name')}
             placeholder="e.g. Engineering"
-            disabled={isSubmitting}
+            disabled={isSubmitting || !canEditStandardField('name')}
             maxLength={100}
             style={{
   width: '100%', background: 'rgba(255,255,255,0.04)', backdropFilter: 'blur(8px)',
@@ -197,10 +216,10 @@ onBlur={(e) => { e.currentTarget.style.background = 'rgba(255,255,255,0.04)'; e.
         <label htmlFor="dept-type" className="text-sm font-medium text-ink">
           Type <span className="text-red-500">*</span>
         </label>
-        <select
-          id="dept-type"
-          {...register('type')}
-          disabled={isSubmitting}
+          <select
+            id="dept-type"
+            {...register('type')}
+            disabled={isSubmitting || !canEditStandardField('type')}
           style={{
   width: '100%', background: 'rgba(255,255,255,0.04)', backdropFilter: 'blur(8px)',
   border: !!errors.type ? '1px solid rgba(239,68,68,0.5)' : '1px solid rgba(255,255,255,0.08)',
@@ -225,10 +244,10 @@ onBlur={(e) => { e.currentTarget.style.background = 'rgba(255,255,255,0.04)'; e.
         <label htmlFor="dept-parent" className="text-sm font-medium text-ink">
           Parent Department {selectedType !== 'business_unit' && <span className="text-red-500">*</span>}
         </label>
-        <select
-          id="dept-parent"
-          {...register('parent_id')}
-          disabled={isSubmitting}
+          <select
+            id="dept-parent"
+            {...register('parent_id')}
+            disabled={isSubmitting || !canEditStandardField('parent_id')}
           style={{
   width: '100%', background: 'rgba(255,255,255,0.04)', backdropFilter: 'blur(8px)',
   border: !!errors.parent_id ? '1px solid rgba(239,68,68,0.5)' : '1px solid rgba(255,255,255,0.08)',
@@ -270,7 +289,7 @@ onBlur={(e) => { e.currentTarget.style.background = 'rgba(255,255,255,0.04)'; e.
             <UserSelect
               value={field.value}
               onChange={field.onChange}
-              disabled={isSubmitting}
+              disabled={isSubmitting || !canEditStandardField('primary_manager_id')}
               hasError={!!errors.primary_manager_id}
               placeholder="None"
               onlyActive={true}
@@ -297,7 +316,7 @@ onBlur={(e) => { e.currentTarget.style.background = 'rgba(255,255,255,0.04)'; e.
             <MultiUserSelect
               value={field.value}
               onChange={field.onChange}
-              disabled={isSubmitting}
+              disabled={isSubmitting || !canEditStandardField('secondary_manager_ids')}
               hasError={!!errors.secondary_manager_ids}
               placeholder="Select secondary managers..."
               onlyActive={true}

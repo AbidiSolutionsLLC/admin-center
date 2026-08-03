@@ -5,7 +5,7 @@ import { zodResolver } from '@hookform/resolvers/zod';
 import { z } from 'zod';
 import type { CustomField, TargetObject } from '@/types';
 import { cn } from '@/utils/cn';
-import { ChevronDown, Star } from 'lucide-react';
+import { Star, Eye, EyeOff } from 'lucide-react';
 
 const LayoutFieldSchema = z.object({
   field_id: z.string(),
@@ -66,7 +66,6 @@ export const ProfileLayoutForm: React.FC<ProfileLayoutFormProps> = ({
   isSubmitting = false,
   initialData,
 }) => {
-  const isEditMode = !!initialData;
   const [selectedFieldIds, setSelectedFieldIds] = useState<Set<string>>(new Set());
   const [fieldConfigs, setFieldConfigs] = useState<Record<string, FieldConfig>>({});
 
@@ -96,7 +95,7 @@ export const ProfileLayoutForm: React.FC<ProfileLayoutFormProps> = ({
       const ids = new Set<string>();
       const configs: Record<string, FieldConfig> = {};
       initialData.fields.forEach((f, index) => {
-        const fieldId = typeof f.field_id === 'string' ? f.field_id : (f.field_id as any)._id;
+        const fieldId = typeof f.field_id === 'string' ? f.field_id : f.field_id._id;
         ids.add(fieldId);
         configs[fieldId] = {
           display_order: f.display_order ?? index,
@@ -111,14 +110,14 @@ export const ProfileLayoutForm: React.FC<ProfileLayoutFormProps> = ({
 
   // Keep target_object in sync with prop
   useEffect(() => {
-    setValue('target_object' as any, targetObject);
+    setValue('target_object', targetObject);
   }, [targetObject, setValue]);
 
   const getFieldId = (field: CustomField): string => {
-    return typeof field._id === 'string' ? field._id : (field._id as any).toString();
+    return field._id;
   };
 
-  const toggleField = useCallback((fieldId: string, field: CustomField) => {
+  const toggleField = useCallback((fieldId: string) => {
     setSelectedFieldIds((prev) => {
       const next = new Set(prev);
       if (next.has(fieldId)) {
@@ -267,7 +266,7 @@ export const ProfileLayoutForm: React.FC<ProfileLayoutFormProps> = ({
                   <input
                     type="checkbox"
                     checked={isSelected}
-                    onChange={() => toggleField(fieldId, field)}
+                    onChange={() => toggleField(fieldId)}
                     disabled={isSubmitting}
                     className="h-4 w-4 rounded border-line text-primary focus:ring-primary/30"
                   />
@@ -275,51 +274,65 @@ export const ProfileLayoutForm: React.FC<ProfileLayoutFormProps> = ({
                     <span className="text-sm font-medium text-ink flex items-center gap-1.5">
                       {field.label}
                       {field.is_system_field && <Star className="w-3 h-3 text-primary" />}
+                      {isSelected && (
+                        <div className="relative group">
+                          <button
+                            type="button"
+                            onClick={() => updateFieldConfig(fieldId, 'is_visible', !config?.is_visible)}
+                            disabled={isSubmitting}
+                            className={cn(
+                              'p-0.5 rounded transition-colors',
+                              config?.is_visible
+                                ? 'text-primary hover:bg-surface-alt'
+                                : 'text-ink-muted hover:bg-surface-alt'
+                            )}
+                          >
+                            {config?.is_visible ? (
+                              <Eye className="w-3.5 h-3.5" />
+                            ) : (
+                              <EyeOff className="w-3.5 h-3.5" />
+                            )}
+                          </button>
+                          <span
+                            className="absolute top-full left-1/2 -translate-x-1/2 mt-2 px-2 py-1 text-xs text-ink bg-popover border border-line rounded-md shadow-md whitespace-nowrap z-10 opacity-0 group-hover:opacity-100 transition-opacity duration-150 ease-in-out delay-200"
+                          >
+                            Click to hide field from user profile view
+                          </span>
+                        </div>
+                      )}
                     </span>
                     <span className="ml-2 text-[10px] font-mono text-ink-muted">{field.name}</span>
                     <span className="ml-2 text-[10px] text-ink-muted">({field.field_type})</span>
                   </div>
                 </div>
 
-                {isSelected && config && (
-                  <div className="grid grid-cols-3 gap-4 ml-7">
-                    <div className="space-y-1">
-                      <label className="text-[10px] font-medium text-ink-secondary">Order</label>
-                      <input
-                        type="number"
-                        min={0}
-                        value={config.display_order}
-                        onChange={(e) => updateFieldConfig(fieldId, 'display_order', parseInt(e.target.value) || 0)}
-                        disabled={isSubmitting}
-                        className="w-full h-7 px-2 text-xs rounded border border-line bg-white text-ink focus:outline-none focus:ring-1 focus:border-primary/50"
-                      />
-                    </div>
-                    <div className="flex items-end">
-                      <label className="flex items-center gap-1.5 text-xs">
-                        <input
-                          type="checkbox"
-                          checked={config.is_visible}
-                          onChange={(e) => updateFieldConfig(fieldId, 'is_visible', e.target.checked)}
-                          disabled={isSubmitting}
-                          className="h-3.5 w-3.5 rounded border-line text-primary focus:ring-primary/30"
-                        />
-                        <span className="text-ink-secondary">Visible</span>
-                      </label>
-                    </div>
-                    <div className="flex items-end">
-                      <label className="flex items-center gap-1.5 text-xs">
-                        <input
-                          type="checkbox"
-                          checked={config.is_editable}
-                          onChange={(e) => updateFieldConfig(fieldId, 'is_editable', e.target.checked)}
-                          disabled={isSubmitting}
-                          className="h-3.5 w-3.5 rounded border-line text-primary focus:ring-primary/30"
-                        />
-                        <span className="text-ink-secondary">Editable</span>
-                      </label>
-                    </div>
-                  </div>
-                )}
+                 {isSelected && config && (
+                   <div className="grid grid-cols-2 gap-4 ml-7">
+                     <div className="space-y-1">
+                       <label className="text-[10px] font-medium text-ink-secondary">Order</label>
+                       <input
+                         type="number"
+                         min={0}
+                         value={config.display_order}
+                         onChange={(e) => updateFieldConfig(fieldId, 'display_order', parseInt(e.target.value) || 0)}
+                         disabled={isSubmitting}
+                         className="w-full h-7 px-2 text-xs rounded border border-line bg-white text-ink focus:outline-none focus:ring-1 focus:border-primary/50"
+                       />
+                     </div>
+                     <div className="flex items-end">
+                       <label className="flex items-center gap-1.5 text-xs">
+                         <input
+                           type="checkbox"
+                           checked={config.is_editable}
+                           onChange={(e) => updateFieldConfig(fieldId, 'is_editable', e.target.checked)}
+                           disabled={isSubmitting}
+                           className="h-3.5 w-3.5 rounded border-line text-primary focus:ring-primary/30"
+                         />
+                         <span className="text-ink-secondary">Editable</span>
+                       </label>
+                     </div>
+                   </div>
+                 )}
               </div>
             );
           })}

@@ -28,6 +28,7 @@ export * from './InviteToken.model';
 export * from './CustomField.model';
 export * from './CustomFieldVersion.model';
 export * from './ProfileLayout.model';
+export * from './FieldPermission.model';
 export * from './Integration.model';
 export * from './IntegrationSyncLog.model';
 

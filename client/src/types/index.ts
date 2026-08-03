@@ -180,8 +180,8 @@ export interface ValidationRules {
   max_length?: number;
   min?: number;
   max?: number;
-  pattern?: string;
-  pattern_message?: string;
+  pattern?: string | null;
+  pattern_message?: string | null;
 }
 
 export interface ConditionalRule {
@@ -239,7 +239,9 @@ export interface CreateCustomFieldInput {
   display_order?: number;
 }
 
-export interface UpdateCustomFieldInput extends Partial<Omit<CreateCustomFieldInput, 'field_type'>> {}
+export interface UpdateCustomFieldInput extends Partial<Omit<CreateCustomFieldInput, 'field_type'>> {
+  field_type?: FieldType;
+}
 
 export interface CustomFieldFilters {
   target_object: TargetObject | '';
@@ -268,6 +270,27 @@ export interface FieldUsageInfo {
     hasDependents: boolean;
     dependentFields: Array<{ _id: string; label: string }>;
   };
+  workflowDependencies: {
+    hasDependents: boolean;
+    dependentWorkflows: Array<{ _id: string; name: string; stepName: string }>;
+  };
+}
+
+export interface FieldDependentsInfo {
+  fieldDependents: Array<{ _id: string; label: string }>;
+  conditionalDependents: Array<{ _id: string; label: string }>;
+  workflowDependencies: {
+    hasDependents: boolean;
+    dependentWorkflows: Array<{ _id: string; name: string; stepName: string }>;
+  };
+}
+
+export interface FieldDependencyMapEntry {
+  fieldId: string;
+  outgoingDeps: number;
+  incomingDeps: number;
+  conditionalDeps: number;
+  workflowDeps: number;
 }
 
 export interface ProfileLayoutField {

@@ -3,14 +3,14 @@ import { useMutation, useQueryClient } from '@tanstack/react-query';
 import { apiClient } from '@/lib/apiClient';
 import { QUERY_KEYS } from '@/constants/queryKeys';
 import { toast } from 'sonner';
-import type { CustomField, CreateCustomFieldInput, TargetObject } from '@/types';
+import type { CustomField, CreateCustomFieldInput } from '@/types';
 
 /**
  * Creates a new custom field.
  * Used on: DataFieldsPage (field builder).
  * Invalidates custom field queries and shows toast on success.
  */
-export const useCreateCustomField = (targetObject?: TargetObject) => {
+export const useCreateCustomField = () => {
   const queryClient = useQueryClient();
 
   return useMutation<CustomField, Error, CreateCustomFieldInput>({
@@ -19,7 +19,7 @@ export const useCreateCustomField = (targetObject?: TargetObject) => {
       return data.data;
     },
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: QUERY_KEYS.CUSTOM_FIELDS(targetObject) });
+      queryClient.invalidateQueries({ queryKey: QUERY_KEYS.CUSTOM_FIELDS() });
       toast.success('Custom field created successfully');
     },
     onError: (error) => {

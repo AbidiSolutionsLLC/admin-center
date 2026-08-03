@@ -3,14 +3,13 @@ import { useMutation, useQueryClient } from '@tanstack/react-query';
 import { apiClient } from '@/lib/apiClient';
 import { QUERY_KEYS } from '@/constants/queryKeys';
 import { toast } from 'sonner';
-import type { TargetObject } from '@/types';
 
 /**
  * Deletes (deactivates) a custom field.
  * Used on: DataFieldsPage.
  * Invalidates custom field queries and shows toast on success.
  */
-export const useDeleteCustomField = (targetObject?: TargetObject) => {
+export const useDeleteCustomField = () => {
   const queryClient = useQueryClient();
 
   return useMutation<{ _id: string }, Error, string>({
@@ -19,7 +18,7 @@ export const useDeleteCustomField = (targetObject?: TargetObject) => {
       return data.data;
     },
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: QUERY_KEYS.CUSTOM_FIELDS(targetObject) });
+      queryClient.invalidateQueries({ queryKey: QUERY_KEYS.CUSTOM_FIELDS() });
       toast.success('Custom field deleted successfully');
     },
     onError: (error) => {
