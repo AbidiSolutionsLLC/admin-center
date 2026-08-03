@@ -191,7 +191,12 @@ interface CustomFieldInputProps {
   isRequired: boolean;
 }
 
-const CustomFieldInput: React.FC<CustomFieldInputProps> = ({
+/**
+ * Memoized custom field input component.
+ * Only re-renders when its specific field, value, error, or disabled state changes.
+ * This prevents the entire form from re-rendering when an unrelated field updates.
+ */
+const CustomFieldInput = React.memo<CustomFieldInputProps>(({
   field,
   value,
   onChange,
@@ -331,6 +336,7 @@ const CustomFieldInput: React.FC<CustomFieldInputProps> = ({
       {error && <p className="text-xs text-error">{error}</p>}
     </div>
   );
-};
+});
+CustomFieldInput.displayName = 'CustomFieldInput';
 
 export { validateField as validateCustomField };

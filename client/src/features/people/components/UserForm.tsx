@@ -11,7 +11,7 @@ import { DynamicCustomFields } from '@/features/data-fields/components/DynamicCu
 import { isFieldRequired } from '@/features/data-fields/components/DynamicCustomFields';
 import { useEffectiveCustomFields } from '@/features/data-fields/hooks/useEffectiveCustomFields';
 import { getLocalTime } from '@/lib/timezone';
-import type { User, EmploymentType, Department, CustomField, Location, UserRole } from '@/types';
+import type { User, EmploymentType, Department, Location, UserRole } from '@/types';
 import { cn } from '@/utils/cn';
 import { ROLES } from '@/constants/roles';
 
@@ -167,11 +167,22 @@ export const UserForm: React.FC<UserFormProps> = ({
     [initialData],
   );
   const { data: effectiveFields } = useEffectiveCustomFields('user', recordRoleIds);
-  const customFields = effectiveFields?.fields ?? [];
+  const customFields = React.useMemo(
+    () => (effectiveFields?.fields ?? []).filter((f) => !f.is_system_field),
+    [effectiveFields],
+  );
   const readOnlyCustomFieldSlugs = React.useMemo(
     () => customFields.filter((f) => !f.can_edit).map((f) => f.slug),
     [customFields],
   );
+
+  // Story 113: standard (built-in) field permissions
+  const standardFieldPermissions = effectiveFields?.standard_field_permissions ?? [];
+  const readOnlyStandardFields = React.useMemo(
+    () => new Set(standardFieldPermissions.filter((p) => !p.can_edit).map((p) => p.field_name)),
+    [standardFieldPermissions],
+  );
+  const canEditStandardField = useCallback((name: string) => !readOnlyStandardFields.has(name), [readOnlyStandardFields]);
   const [customFieldValues, setCustomFieldValues] = useState<Record<string, unknown>>(
     initialData?.custom_fields ?? {}
   );
@@ -232,9 +243,16 @@ export const UserForm: React.FC<UserFormProps> = ({
       onSubmit={handleSubmit(
         (data) => {
           if (!validateCustomFields()) return;
+          const editableData = Object.keys(data).reduce((acc, key) => {
+            if (canEditStandardField(key)) acc[key] = (data as Record<string, unknown>)[key];
+            return acc;
+          }, {} as Record<string, unknown>);
           onSubmit({
-            ...data,
-            custom_fields: customFieldValues,
+            ...editableData,
+            custom_fields: Object.keys(customFieldValues).reduce((acc, slug) => {
+              if (customFields.find((f) => f.slug === slug)?.can_edit) acc[slug] = customFieldValues[slug];
+              return acc;
+            }, {} as Record<string, unknown>),
           });
         },
         (errors) => {
@@ -252,7 +270,7 @@ export const UserForm: React.FC<UserFormProps> = ({
           id="user-name"
           {...register('full_name')}
           placeholder="e.g. John Doe"
-          disabled={isSubmitting}
+          disabled={isSubmitting || !canEditStandardField('full_name')}
           style={{
   width: '100%', background: 'rgba(255,255,255,0.04)', backdropFilter: 'blur(8px)',
   border: !!errors.full_name ? '1px solid rgba(239,68,68,0.5)' : '1px solid rgba(255,255,255,0.08)',
@@ -275,7 +293,7 @@ onBlur={(e) => { e.currentTarget.style.background = 'rgba(255,255,255,0.04)'; e.
           id="user-phone"
           {...register('phone')}
           placeholder="e.g. 1234567890"
-          disabled={isSubmitting}
+          disabled={isSubmitting || !canEditStandardField('phone')}
           style={{
   width: '100%', background: 'rgba(255,255,255,0.04)', backdropFilter: 'blur(8px)',
   border: !!errors.phone ? '1px solid rgba(239,68,68,0.5)' : '1px solid rgba(255,255,255,0.08)',
@@ -302,7 +320,7 @@ onBlur={(e) => { e.currentTarget.style.background = 'rgba(255,255,255,0.04)'; e.
         <select
           id="user-dept"
           {...register('department_id')}
-          disabled={isSubmitting}
+          disabled={isSubmitting || !canEditStandardField('department_id')}
           style={{
   width: '100%', background: 'rgba(255,255,255,0.04)', backdropFilter: 'blur(8px)',
   border: !!errors.department_id ? '1px solid rgba(239,68,68,0.5)' : '1px solid rgba(255,255,255,0.08)',
@@ -337,7 +355,7 @@ onBlur={(e) => { e.currentTarget.style.background = 'rgba(255,255,255,0.04)'; e.
             <MultiRoleSelect
               value={field.value}
               onChange={field.onChange}
-              disabled={isSubmitting}
+              disabled={isSubmitting || !canEditStandardField('role_ids')}
               hasError={!!errors.role_ids}
             />
           )}
@@ -358,7 +376,7 @@ onBlur={(e) => { e.currentTarget.style.background = 'rgba(255,255,255,0.04)'; e.
         <select
           id="user-location"
           {...register('location_id')}
-          disabled={isSubmitting}
+          disabled={isSubmitting || !canEditStandardField('location_id')}
           style={{
   width: '100%', background: 'rgba(255,255,255,0.04)', backdropFilter: 'blur(8px)',
   border: !!errors.location_id ? '1px solid rgba(239,68,68,0.5)' : '1px solid rgba(255,255,255,0.08)',
@@ -394,7 +412,7 @@ onBlur={(e) => { e.currentTarget.style.background = 'rgba(255,255,255,0.04)'; e.
             <UserSelect
               value={field.value}
               onChange={field.onChange}
-              disabled={isSubmitting}
+              disabled={isSubmitting || !canEditStandardField('manager_id')}
               hasError={!!errors.manager_id}
               placeholder="Select manager..."
               onlyActive={true}
@@ -421,7 +439,7 @@ onBlur={(e) => { e.currentTarget.style.background = 'rgba(255,255,255,0.04)'; e.
             <MultiUserSelect
               value={field.value}
               onChange={field.onChange}
-              disabled={isSubmitting}
+              disabled={isSubmitting || !canEditStandardField('secondary_manager_ids')}
               hasError={!!errors.secondary_manager_ids}
               placeholder="Select secondary managers..."
               onlyActive={true}
@@ -444,7 +462,7 @@ onBlur={(e) => { e.currentTarget.style.background = 'rgba(255,255,255,0.04)'; e.
         <select
           id="user-emp-type"
           {...register('employment_type')}
-          disabled={isSubmitting}
+          disabled={isSubmitting || !canEditStandardField('employment_type')}
           style={{
   width: '100%', background: 'rgba(255,255,255,0.04)', backdropFilter: 'blur(8px)',
   border: !!errors.employment_type ? '1px solid rgba(239,68,68,0.5)' : '1px solid rgba(255,255,255,0.08)',
@@ -476,7 +494,7 @@ onBlur={(e) => { e.currentTarget.style.background = 'rgba(255,255,255,0.04)'; e.
           id="user-hire-date"
           type="date"
           {...register('hire_date')}
-          disabled={isSubmitting}
+          disabled={isSubmitting || !canEditStandardField('hire_date')}
           style={{
   width: '100%', background: 'rgba(255,255,255,0.04)', backdropFilter: 'blur(8px)',
   border: !!errors.hire_date ? '1px solid rgba(239,68,68,0.5)' : '1px solid rgba(255,255,255,0.08)',
@@ -509,6 +527,7 @@ onBlur={(e) => { e.currentTarget.style.background = 'rgba(255,255,255,0.04)'; e.
           <button
             type="button"
             onClick={() => appendDelegate({ user_id: '', start_date: '', end_date: '' })}
+            disabled={!canEditStandardField('delegates')}
             className="flex items-center gap-1.5 px-2 py-1 text-xs font-medium bg-primary-light text-primary hover:bg-primary/20 rounded-md transition-colors"
           >
             <Plus className="w-3.5 h-3.5" />
@@ -541,7 +560,7 @@ onBlur={(e) => { e.currentTarget.style.background = 'rgba(255,255,255,0.04)'; e.
                       <UserSelect
                         value={value}
                         onChange={onChange}
-                        disabled={isSubmitting}
+                        disabled={isSubmitting || !canEditStandardField('delegates')}
                         placeholder="Select delegate..."
                         onlyActive={true}
                         hasError={!!errors.delegates?.[index]?.user_id}
@@ -554,28 +573,24 @@ onBlur={(e) => { e.currentTarget.style.background = 'rgba(255,255,255,0.04)'; e.
                 </div>
 
                 <div className="grid grid-cols-2 gap-3">
-                  <div>
-                    <label className="block text-xs font-medium text-ink mb-1">Start Date</label>
-                    <input
-                      type="date"
-                      {...register(`delegates.${index}.start_date`)}
-                      className="w-full h-8 px-2 text-xs rounded-md border border-line bg-white text-ink"
-                    />
-                    {errors.delegates?.[index]?.start_date && (
-                      <p className="text-[10px] text-error mt-1">{errors.delegates[index]?.start_date?.message}</p>
-                    )}
-                  </div>
-                  <div>
-                    <label className="block text-xs font-medium text-ink mb-1">End Date</label>
-                    <input
-                      type="date"
-                      {...register(`delegates.${index}.end_date`)}
-                      className="w-full h-8 px-2 text-xs rounded-md border border-line bg-white text-ink"
-                    />
-                    {errors.delegates?.[index]?.end_date && (
-                      <p className="text-[10px] text-error mt-1">{errors.delegates[index]?.end_date?.message}</p>
-                    )}
-                  </div>
+                   <div>
+                     <label className="block text-xs font-medium text-ink mb-1">Start Date</label>
+                     <input
+                       type="date"
+                       {...register(`delegates.${index}.start_date`)}
+                       disabled={isSubmitting || !canEditStandardField('delegates')}
+                       className="w-full h-8 px-2 text-xs rounded-md border border-line bg-white text-ink"
+                     />
+                   </div>
+                   <div>
+                     <label className="block text-xs font-medium text-ink mb-1">End Date</label>
+                     <input
+                       type="date"
+                       {...register(`delegates.${index}.end_date`)}
+                       disabled={isSubmitting || !canEditStandardField('delegates')}
+                       className="w-full h-8 px-2 text-xs rounded-md border border-line bg-white text-ink"
+                     />
+                   </div>
                 </div>
               </div>
             ))}

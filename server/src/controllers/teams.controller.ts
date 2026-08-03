@@ -10,6 +10,7 @@ import { auditLogger } from '../lib/auditLogger';
 import { AppError } from '../utils/AppError';
 import { slugify } from '../utils/slugify';
 import { Types } from 'mongoose';
+import { validateAndSanitizeCustomFields, enforceStandardFieldPermissions, enforceCustomFieldPermissions } from '../services/customFieldValidation.service';
 
 // ── Types & Interfaces ───────────────────────────────────────────────────────
 
@@ -34,6 +35,7 @@ const CreateTeamSchema = z.object({
   description: z.string().max(500).optional(),
   department_id: z.string().min(1, 'Department is required'),
   team_lead_id: z.string().min(1, 'Team manager (lead) is required'),
+  custom_fields: z.record(z.string(), z.unknown()).optional(),
 });
 
 const UpdateTeamSchema = CreateTeamSchema.partial().extend({
@@ -159,28 +161,50 @@ export const createTeam = asyncHandler(async (req: Request, res: Response) => {
     throw new AppError('Department not found, inactive, or belonging to another company', 404, 'NOT_FOUND');
   }
 
-  // 2. Validate team lead (if provided)
-  if (input.team_lead_id) {
-    const lead = await User.findOne({
-      _id: input.team_lead_id,
-      company_id: req.user.company_id,
-    });
-    if (!lead) {
-      throw new AppError('Team lead user not found or belonging to another company', 404, 'NOT_FOUND');
-    }
-    if (lead.lifecycle_state === 'deactivated') throw new AppError('User is not active. Cannot assign as manager', 400, 'INVALID_USER_STATE');
-    if (lead.lifecycle_state === 'archived') throw new AppError('User is archived. Cannot assign as manager', 400, 'INVALID_USER_STATE');
-    if (lead.lifecycle_state === 'terminated') throw new AppError('User is terminated. Cannot assign as manager', 400, 'INVALID_USER_STATE');
-    if (lead.lifecycle_state === 'on_leave') throw new AppError('User is on leave. Cannot assign as manager', 400, 'INVALID_USER_STATE');
-    if (lead.lifecycle_state === 'invited') throw new AppError('User has not activated account yet', 400, 'INVALID_USER_STATE');
-  }
+   // 2. Validate team lead (if provided)
+   if (input.team_lead_id) {
+     const lead = await User.findOne({
+       _id: input.team_lead_id,
+       company_id: req.user.company_id,
+     });
+     if (!lead) {
+       throw new AppError('Team lead user not found or belonging to another company', 404, 'NOT_FOUND');
+     }
+     if (lead.lifecycle_state === 'deactivated') throw new AppError('User is not active. Cannot assign as manager', 400, 'INVALID_USER_STATE');
+     if (lead.lifecycle_state === 'archived') throw new AppError('User is archived. Cannot assign as manager', 400, 'INVALID_USER_STATE');
+     if (lead.lifecycle_state === 'terminated') throw new AppError('User is terminated. Cannot assign as manager', 400, 'INVALID_USER_STATE');
+     if (lead.lifecycle_state === 'on_leave') throw new AppError('User is on leave. Cannot assign as manager', 400, 'INVALID_USER_STATE');
+     if (lead.lifecycle_state === 'invited') throw new AppError('User has not activated account yet', 400, 'INVALID_USER_STATE');
+   }
 
-  const team = await Team.create({
-    ...input,
-    department_id: input.department_id,
-    team_lead_id: input.team_lead_id || undefined,
-    company_id: req.user.company_id,
-  });
+   // Validate and sanitize custom fields
+   const validatedCustomFields = await validateAndSanitizeCustomFields(
+     req.user.company_id,
+     'team',
+     input.custom_fields,
+   );
+   const permissionedCustomFields = await enforceCustomFieldPermissions(
+     req.user.company_id,
+     'team',
+     req.user.userId,
+     validatedCustomFields,
+   );
+
+   // Enforce standard field edit permissions
+   const filteredInput = await enforceStandardFieldPermissions(
+     req.user.company_id,
+     'team',
+     req.user.userId,
+     { ...input } as unknown as Record<string, unknown>,
+   );
+
+   const team = await Team.create({
+     ...filteredInput,
+     department_id: input.department_id,
+     team_lead_id: input.team_lead_id || undefined,
+     company_id: req.user.company_id,
+     custom_fields: permissionedCustomFields,
+   });
 
   await auditLogger.log({
     req,
@@ -252,28 +276,52 @@ export const updateTeam = asyncHandler(async (req: Request, res: Response) => {
     }
   }
 
-  // 2. If team_lead_id is being updated, validate it
-  if (input.team_lead_id) {
-    const lead = await User.findOne({
-      _id: input.team_lead_id,
-      company_id: req.user.company_id,
-    });
-    if (!lead) {
-      throw new AppError('Team lead user not found or access denied', 404, 'NOT_FOUND');
-    }
-    if (lead.lifecycle_state === 'deactivated') throw new AppError('User is not active. Cannot assign as manager', 400, 'INVALID_USER_STATE');
-    if (lead.lifecycle_state === 'archived') throw new AppError('User is archived. Cannot assign as manager', 400, 'INVALID_USER_STATE');
-    if (lead.lifecycle_state === 'terminated') throw new AppError('User is terminated. Cannot assign as manager', 400, 'INVALID_USER_STATE');
-    if (lead.lifecycle_state === 'on_leave') throw new AppError('User is on leave. Cannot assign as manager', 400, 'INVALID_USER_STATE');
-    if (lead.lifecycle_state === 'invited') throw new AppError('User has not activated account yet', 400, 'INVALID_USER_STATE');
-  }
+   // 2. If team_lead_id is being updated, validate it
+   if (input.team_lead_id) {
+     const lead = await User.findOne({
+       _id: input.team_lead_id,
+       company_id: req.user.company_id,
+     });
+     if (!lead) {
+       throw new AppError('Team lead user not found or access denied', 404, 'NOT_FOUND');
+     }
+     if (lead.lifecycle_state === 'deactivated') throw new AppError('User is not active. Cannot assign as manager', 400, 'INVALID_USER_STATE');
+     if (lead.lifecycle_state === 'archived') throw new AppError('User is archived. Cannot assign as manager', 400, 'INVALID_USER_STATE');
+     if (lead.lifecycle_state === 'terminated') throw new AppError('User is terminated. Cannot assign as manager', 400, 'INVALID_USER_STATE');
+     if (lead.lifecycle_state === 'on_leave') throw new AppError('User is on leave. Cannot assign as manager', 400, 'INVALID_USER_STATE');
+     if (lead.lifecycle_state === 'invited') throw new AppError('User has not activated account yet', 400, 'INVALID_USER_STATE');
+   }
 
-  const updates: Record<string, unknown> = { ...input };
-  // No longer allowing department_id to be empty/null
-  if (updates.team_lead_id === '') updates.team_lead_id = null;
+   // Validate and sanitize custom fields
+   const validatedCustomFields = await validateAndSanitizeCustomFields(
+     req.user.company_id,
+     'team',
+     input.custom_fields,
+   );
+   const permissionedCustomFields = await enforceCustomFieldPermissions(
+     req.user.company_id,
+     'team',
+     req.user.userId,
+     validatedCustomFields,
+   );
 
-  Object.assign(team, updates);
-  await team.save();
+   // Enforce standard field edit permissions
+   const filteredInput = await enforceStandardFieldPermissions(
+     req.user.company_id,
+     'team',
+     req.user.userId,
+     { ...input } as unknown as Record<string, unknown>,
+   );
+
+   const updates: Record<string, unknown> = { ...filteredInput };
+   // No longer allowing department_id to be empty/null
+   if (updates.team_lead_id === '') updates.team_lead_id = null;
+   if (input.custom_fields !== undefined) {
+     updates.custom_fields = permissionedCustomFields;
+   }
+
+   Object.assign(team, updates);
+   await team.save();
 
   await auditLogger.log({
     req,

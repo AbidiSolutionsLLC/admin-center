@@ -9,6 +9,7 @@ export interface ITeam extends Document {
   description?: string;
   department_id: Types.ObjectId | string;
   team_lead_id?: Types.ObjectId | string | null;
+  custom_fields: Record<string, unknown>;
   is_active: boolean;
   created_at: Date;
   updated_at: Date;
@@ -21,6 +22,7 @@ const TeamSchema = new Schema<ITeam>({
   description: { type: String },
   department_id: { type: Schema.Types.ObjectId, ref: 'Department', required: true },
   team_lead_id: { type: Schema.Types.ObjectId, ref: 'User' },
+  custom_fields: { type: Schema.Types.Mixed, default: {} },
   is_active: { type: Boolean, default: true },
 }, { timestamps: { createdAt: 'created_at', updatedAt: 'updated_at' } });
 

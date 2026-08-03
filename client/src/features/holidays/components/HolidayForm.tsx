@@ -1,11 +1,13 @@
 // client/src/features/holidays/components/HolidayForm.tsx
-import React from 'react';
+import React, { useState, useCallback } from 'react';
 import { useForm, Controller } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { z } from 'zod';
 import { Calendar as CalendarIcon, Clock, Hash, CheckCircle } from 'lucide-react';
 import { COMMON_TIMEZONES, formatTimezoneLabel } from '@/constants/timezones';
 import { getLocalTime, getTimezoneOffset } from '@/lib/timezone';
+import { DynamicCustomFields, isFieldRequired } from '@/features/data-fields/components/DynamicCustomFields';
+import { useEffectiveCustomFields } from '@/features/data-fields/hooks/useEffectiveCustomFields';
 import type { Holiday, HolidayCalendar } from '@/types';
 
 const schema = z.object({
@@ -29,7 +31,7 @@ export type HolidayFormData = z.infer<typeof schema>;
 
 interface HolidayFormProps {
   initialData?: Holiday;
-  onSubmit: (data: HolidayFormData) => void;
+  onSubmit: (data: HolidayFormData & { custom_fields?: Record<string, unknown> }) => void;
   calendars: HolidayCalendar[];
   isSubmitting?: boolean;
   isEdit?: boolean;
@@ -64,6 +66,61 @@ export const HolidayForm: React.FC<HolidayFormProps> = ({
   const selectedRecurringType = watch('recurring_type');
   const isObserved = watch('is_observed');
 
+  // ── Custom fields ──
+  const { data: effectiveFields } = useEffectiveCustomFields('holiday', []);
+  const customFields = React.useMemo(
+    () => (effectiveFields?.fields ?? []).filter((f) => !f.is_system_field),
+    [effectiveFields],
+  );
+  const readOnlyCustomFieldSlugs = React.useMemo(
+    () => customFields.filter((f) => !f.can_edit).map((f) => f.slug),
+    [customFields],
+  );
+  const [customFieldValues, setCustomFieldValues] = useState<Record<string, unknown>>(
+    initialData?.custom_fields ?? {}
+  );
+  const [customFieldErrors, setCustomFieldErrors] = useState<Record<string, string>>({});
+
+  React.useEffect(() => {
+    if (initialData?.custom_fields) {
+      setCustomFieldValues(initialData.custom_fields);
+    }
+  }, [initialData]);
+
+  const handleCustomFieldChange = useCallback((slug: string, value: unknown) => {
+    setCustomFieldValues((prev) => ({ ...prev, [slug]: value }));
+    setCustomFieldErrors((prev) => {
+      const next = { ...prev };
+      delete next[slug];
+      return next;
+    });
+  }, []);
+
+  const validateCustomFields = useCallback((): boolean => {
+    const newErrors: Record<string, string> = {};
+    for (const field of customFields) {
+      if (isFieldRequired(field, customFieldValues)) {
+        const value = customFieldValues[field.slug];
+        if (value === null || value === undefined || value === '') {
+          newErrors[field.slug] = `${field.label} is required`;
+        }
+      }
+    }
+    setCustomFieldErrors(newErrors);
+    return Object.keys(newErrors).length === 0;
+  }, [customFields, customFieldValues]);
+
+  const handleSubmitWithCustomFields = handleSubmit((data) => {
+    if (!validateCustomFields()) return;
+    onSubmit({
+      ...data,
+      custom_fields: Object.keys(customFieldValues).reduce((acc, slug) => {
+        if (customFields.find((f) => f.slug === slug)?.can_edit) acc[slug] = customFieldValues[slug];
+        return acc;
+      }, {} as Record<string, unknown>),
+    });
+  });
+
   const fieldStyle = (hasError?: boolean): React.CSSProperties => ({
     borderColor: hasError ? 'rgba(239,68,68,0.5)' : undefined,
     boxShadow: hasError ? '0 0 0 3px rgba(239,68,68,0.08)' : undefined,
@@ -74,7 +131,7 @@ export const HolidayForm: React.FC<HolidayFormProps> = ({
   };
 
   return (
-    <form id="holiday-form" onSubmit={handleSubmit(onSubmit)} className="space-y-5" noValidate>
+    <form id="holiday-form" onSubmit={(e) => { e.preventDefault(); handleSubmitWithCustomFields(); }} className="space-y-5" noValidate>
       {/* Name */}
       <div className="space-y-1.5">
         <label htmlFor="holiday-name">
@@ -174,6 +231,16 @@ export const HolidayForm: React.FC<HolidayFormProps> = ({
           </p>
         </div>
       </div>
+
+      {/* ── Custom Fields ── */}
+      <DynamicCustomFields
+        fields={customFields}
+        values={customFieldValues}
+        onChange={handleCustomFieldChange}
+        errors={customFieldErrors}
+        disabled={isSubmitting}
+        readOnlySlugs={readOnlyCustomFieldSlugs}
+      />
 
       {/* Hidden submit trigger */}
       <button type="submit" id="holiday-form-submit" className="hidden" />

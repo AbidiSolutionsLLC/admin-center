@@ -29,6 +29,8 @@ import { useRoles } from '@/features/roles/useRoles';
 import { useGroups } from '@/features/groups/useGroups';
 import { useUsers } from '@/features/people/hooks/useUsers';
 import { useLocations } from '@/features/locations/hooks/useLocations';
+import { DynamicCustomFields, isFieldRequired } from '@/features/data-fields/components/DynamicCustomFields';
+import { useEffectiveCustomFields } from '@/features/data-fields/hooks/useEffectiveCustomFields';
 import { TableSkeleton } from '@/components/ui/TableSkeleton';
 import { ErrorState } from '@/components/ui/ErrorState';
 import { EmptyState } from '@/components/ui/EmptyState';
@@ -721,6 +723,20 @@ function PublishPolicyModal({
   updateDraftMutation,
   initialData,
 }: PublishPolicyModalProps) {
+  const { data: effectiveFields } = useEffectiveCustomFields('policy', []);
+  const customFields = React.useMemo(
+    () => (effectiveFields?.fields ?? []).filter((f) => !f.is_system_field),
+    [effectiveFields],
+  );
+  const readOnlyCustomFieldSlugs = React.useMemo(
+    () => customFields.filter((f) => !f.can_edit).map((f) => f.slug),
+    [customFields],
+  );
+  const [customFieldValues, setCustomFieldValues] = useState<Record<string, unknown>>(
+    initialData?.custom_fields ?? {}
+  );
+  const [customFieldErrors, setCustomFieldErrors] = useState<Record<string, string>>({});
+
   const [formData, setFormData] = useState({
     title: initialData?.title || '',
     content: initialData?.content || '',
@@ -740,6 +756,7 @@ function PublishPolicyModal({
         expiry_date: initialData.expiry_date ? new Date(initialData.expiry_date).toISOString().split('T')[0] : '',
         summary: initialData.summary || '',
       });
+      setCustomFieldValues(initialData.custom_fields ?? {});
     } else {
       setFormData({
         title: '',
@@ -749,10 +766,35 @@ function PublishPolicyModal({
         expiry_date: '',
         summary: '',
       });
+      setCustomFieldValues({});
     }
   }, [initialData, isOpen]);
 
+  const handleCustomFieldChange = useCallback((slug: string, value: unknown) => {
+    setCustomFieldValues((prev) => ({ ...prev, [slug]: value }));
+    setCustomFieldErrors((prev) => {
+      const next = { ...prev };
+      delete next[slug];
+      return next;
+    });
+  }, []);
+
+  const validateCustomFields = useCallback((): boolean => {
+    const newErrors: Record<string, string> = {};
+    for (const field of customFields) {
+      if (isFieldRequired(field, customFieldValues)) {
+        const value = customFieldValues[field.slug];
+        if (value === null || value === undefined || value === '') {
+          newErrors[field.slug] = `${field.label} is required`;
+        }
+      }
+    }
+    setCustomFieldErrors(newErrors);
+    return Object.keys(newErrors).length === 0;
+  }, [customFields, customFieldValues]);
+
   const handleSubmit = () => {
+    if (!validateCustomFields()) return;
     publishMutation.mutate(
       {
         title: formData.title,
@@ -761,6 +803,10 @@ function PublishPolicyModal({
         effective_date: formData.effective_date,
         expiry_date: formData.expiry_date || undefined,
         summary: formData.summary || undefined,
+        custom_fields: Object.keys(customFieldValues).reduce((acc, slug) => {
+          if (customFields.find((f) => f.slug === slug)?.can_edit) acc[slug] = customFieldValues[slug];
+          return acc;
+        }, {} as Record<string, unknown>),
       },
       {
         onSuccess: () => {
@@ -773,12 +819,14 @@ function PublishPolicyModal({
             expiry_date: '',
             summary: '',
           });
+          setCustomFieldValues({});
         },
       }
     );
   };
 
   const handleSaveDraft = () => {
+    if (!validateCustomFields()) return;
     const payload = {
       title: formData.title,
       content: formData.content,
@@ -786,8 +834,12 @@ function PublishPolicyModal({
       effective_date: formData.effective_date,
       expiry_date: formData.expiry_date || undefined,
       summary: formData.summary || undefined,
+      custom_fields: Object.keys(customFieldValues).reduce((acc, slug) => {
+        if (customFields.find((f) => f.slug === slug)?.can_edit) acc[slug] = customFieldValues[slug];
+        return acc;
+      }, {} as Record<string, unknown>),
     };
-    
+
     if (initialData && updateDraftMutation) {
       updateDraftMutation.mutate(payload, {
         onSuccess: () => {
@@ -945,6 +997,16 @@ function PublishPolicyModal({
             onChange={(html) => setFormData({ ...formData, content: html })}
           />
         </div>
+
+        {/* ── Custom Fields ── */}
+        <DynamicCustomFields
+          fields={customFields}
+          values={customFieldValues}
+          onChange={handleCustomFieldChange}
+          errors={customFieldErrors}
+          disabled={publishMutation.isPending || draftMutation.isPending || updateDraftMutation?.isPending}
+          readOnlySlugs={readOnlyCustomFieldSlugs}
+        />
       </div>
     </Modal>
   );
@@ -1124,6 +1186,21 @@ function PolicyContentView({ policy }: { policy: PolicyVersion }) {
           readOnly
         />
       </div>
+
+      {/* Custom Fields */}
+      {policy.custom_fields && Object.keys(policy.custom_fields).length > 0 && (
+        <div className="pt-4 border-t border-line mt-4">
+          <h4 className="text-sm font-semibold text-ink mb-2">Custom Fields</h4>
+          <div className="space-y-2">
+            {Object.entries(policy.custom_fields).map(([key, value]) => (
+              <div key={key} className="flex items-start gap-3 text-sm">
+                <span className="font-medium text-ink-secondary min-w-[120px]">{key}</span>
+                <span className="text-ink">{String(value)}</span>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
 
       <div className="grid grid-cols-2 gap-4 text-sm">
         <div>

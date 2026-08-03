@@ -14,6 +14,8 @@
     "test-overview": "ts-node -T src/scripts/test-overview.ts",
     "test-integration": "ts-node -T src/scripts/test-integration.ts",
     "test-employee-id": "ts-node -T src/scripts/test-employee-id.ts",
+    "test-datafield-validation": "ts-node -T src/scripts/test-datafield-validation.ts",
+    "test-datafield-api": "ts-node -T src/scripts/test-datafield-api.ts",
     "seed:first": "ts-node -T src/scripts/seed-first-user.ts"
   },
   "dependencies": {

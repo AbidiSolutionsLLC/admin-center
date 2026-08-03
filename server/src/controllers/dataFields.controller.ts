@@ -2,16 +2,22 @@
 import { Request, Response } from 'express';
 import { z } from 'zod';
 import { asyncHandler } from '../utils/asyncHandler';
-import { CustomField } from '../models/CustomField.model';
+import { CustomField, ICustomField, FieldType } from '../models/CustomField.model';
 import { CustomFieldVersion } from '../models/CustomFieldVersion.model';
 import { ProfileLayout } from '../models/ProfileLayout.model';
 import { User } from '../models/User.model';
 import { Department } from '../models/Department.model';
 import { PolicyVersion } from '../models/PolicyVersion.model';
+import { Team } from '../models/Team.model';
+import { Location } from '../models/Location.model';
+import { Holiday } from '../models/Holiday.model';
+import { HolidayCalendar } from '../models/HolidayCalendar.model';
+import { WorkSchedule } from '../models/WorkSchedule.model';
+import { WorkflowStep } from '../models/WorkflowStep.model';
 import { auditLogger } from '../lib/auditLogger';
 import { AppError } from '../utils/AppError';
 import { Types } from 'mongoose';
-import { validateFieldValue, validateAndSanitizeCustomFields, resolveEffectiveCustomFields } from '../services/customFieldValidation.service';
+import { validateFieldValue, validateAndSanitizeCustomFields, resolveEffectiveCustomFields, resolveStandardFieldPermissions, coerceFieldValue } from '../services/customFieldValidation.service';
 
 // ── Zod Schemas ──────────────────────────────────────────────────────────────
 
@@ -33,7 +39,7 @@ const ConditionalRuleSchema = z.object({
 });
 
 const FIELD_TYPES = ['text', 'number', 'date', 'boolean', 'select', 'multi_select', 'url', 'email', 'phone'] as const;
-const TARGET_OBJECTS = ['user', 'department', 'policy'] as const;
+const TARGET_OBJECTS = ['user', 'department', 'policy', 'team', 'location', 'holiday', 'holiday_calendar', 'work_schedule'] as const;
 const VISIBILITY_RULES = ['all', 'admin_only', 'role_specific'] as const;
 
 const CreateCustomFieldSchema = z.object({
@@ -58,6 +64,7 @@ const CreateCustomFieldSchema = z.object({
 
 const UpdateCustomFieldSchema = z.object({
   name: z.string().min(1).max(100).regex(/^[a-z0-9_]+$/, 'Lowercase letters, numbers, and underscores only').optional(),
+  field_type: z.enum(FIELD_TYPES).optional(),
   label: z.string().min(1).max(150).optional(),
   placeholder: z.string().optional().nullable(),
   description: z.string().optional().nullable(),
@@ -134,6 +141,69 @@ async function assertUniqueSlug(companyId: string, targetObject: string, slug: s
   }
 }
 
+/**
+ * Validates the conditional_logic array on a custom field definition.
+ * Ensures that every referenced field_slug corresponds to an existing active field
+ * on the same target_object, and prevents self-referencing rules (circular dependencies).
+ * System field slugs (e.g. full_name, email) are always considered valid references.
+ */
+const SYSTEM_FIELD_SLUGS = new Set<string>([
+  'full_name', 'email', 'phone', 'department', 'location', 'job_title',
+  'employee_id', 'hire_date', 'employment_type',
+]);
+
+async function validateConditionalLogic(
+  companyId: string,
+  targetObject: string,
+  conditionalLogic: unknown,
+  currentFieldSlug?: string,
+): Promise<void> {
+  if (!Array.isArray(conditionalLogic) || conditionalLogic.length === 0) return;
+
+  const existingSlugs = await CustomField.find({
+    company_id: companyId,
+    target_object: targetObject,
+    is_active: true,
+  })
+    .select('slug label')
+    .lean();
+
+  const validSlugs = new Set<string>(existingSlugs.map((f) => f.slug));
+  const slugToField = new Map<string, string>();
+  for (const f of existingSlugs) {
+    slugToField.set(f.slug, f.label);
+  }
+
+  for (const [i, rule] of conditionalLogic.entries()) {
+    const r = rule as { field_slug?: string; operator?: string };
+    if (!r.field_slug) {
+      throw new AppError(
+        `Conditional rule #${i + 1}: field reference is required.`,
+        400,
+        'INVALID_CONDITIONAL_RULE',
+      );
+    }
+
+    if (currentFieldSlug && r.field_slug === currentFieldSlug) {
+      throw new AppError(
+        `Conditional rule #${i + 1}: "${r.field_slug}" — a field cannot reference itself.`,
+        400,
+        'SELF_REFERENCING_RULE',
+      );
+    }
+
+    const isSystemSlug = SYSTEM_FIELD_SLUGS.has(r.field_slug);
+    const isCustomSlug = validSlugs.has(r.field_slug);
+    if (!isSystemSlug && !isCustomSlug) {
+      throw new AppError(
+        `Conditional rule #${i + 1}: field "${r.field_slug}" does not exist for this object. Select a valid field from the list.`,
+        400,
+        'INVALID_CONDITIONAL_RULE',
+      );
+    }
+  }
+}
+
 async function saveVersionSnapshot(
   fieldId: string,
   companyId: string,
@@ -188,6 +258,35 @@ async function checkFieldExistsWithData(fieldId: string, companyId: string, targ
         [`custom_fields.${field.slug}`]: { $exists: true, $ne: null },
       });
       break;
+    case 'team':
+      count = await Team.countDocuments({
+        company_id: companyId,
+        [`custom_fields.${field.slug}`]: { $exists: true, $ne: null },
+      });
+      break;
+    case 'location':
+      count = await Location.countDocuments({
+        company_id: companyId,
+        [`custom_fields.${field.slug}`]: { $exists: true, $ne: null },
+      });
+      break;
+    case 'holiday':
+      count = await Holiday.countDocuments({
+        [`custom_fields.${field.slug}`]: { $exists: true, $ne: null },
+      });
+      break;
+    case 'holiday_calendar':
+      count = await HolidayCalendar.countDocuments({
+        company_id: companyId,
+        [`custom_fields.${field.slug}`]: { $exists: true, $ne: null },
+      });
+      break;
+    case 'work_schedule':
+      count = await WorkSchedule.countDocuments({
+        company_id: companyId,
+        [`custom_fields.${field.slug}`]: { $exists: true, $ne: null },
+      });
+      break;
   }
 
   return { hasData: count > 0, recordCount: count };
@@ -226,19 +325,279 @@ async function checkConditionalDependencies(fieldId: string, companyId: string):
   };
 }
 
+/**
+ * Checks if any active workflow steps reference the given custom field slug
+ * in their conditions or action_config.
+ */
+async function checkWorkflowDependencies(fieldSlug: string, companyId: string): Promise<{ hasDependents: boolean; dependentWorkflows: Array<{ _id: string; name: string; stepName: string }> }> {
+  const steps = await WorkflowStep.find({
+    company_id: companyId,
+    is_active: true,
+  })
+    .or([
+      { 'conditions.field': fieldSlug },
+      { 'action_config.field_slug': fieldSlug },
+      { 'action_config.custom_field': fieldSlug },
+      { 'action_config.field': fieldSlug },
+    ])
+    .populate('workflow_id', 'name')
+    .select('name workflow_id')
+    .lean();
+
+  if (steps.length === 0) {
+    return { hasDependents: false, dependentWorkflows: [] };
+  }
+
+  const seen = new Set<string>();
+  const workflows: Array<{ _id: string; name: string; stepName: string }> = [];
+
+  for (const step of steps) {
+    const wfId = ((step.workflow_id as any)?._id?.toString()) || String(step.workflow_id);
+    const key = `${wfId}-${step._id.toString()}`;
+    if (seen.has(key)) continue;
+    seen.add(key);
+    workflows.push({
+      _id: wfId,
+      name: (step.workflow_id as any)?.name || 'Unknown Workflow',
+      stepName: step.name || 'Unnamed Step',
+    });
+  }
+
+  return { hasDependents: workflows.length > 0, dependentWorkflows: workflows };
+}
+
 // Field value validation is shared via services/customFieldValidation.service.ts
 // (validateFieldValue / validateAndSanitizeCustomFields).
 
-const SYSTEM_DEFAULT_FIELDS = [
-  { name: 'full_name', field_type: 'text' as const, label: 'Full Name', description: 'Employee full legal name', required: true, is_system_field: true },
-  { name: 'email', field_type: 'email' as const, label: 'Email Address', description: 'Corporate email address', required: true, is_system_field: true },
-  { name: 'phone', field_type: 'phone' as const, label: 'Phone Number', description: 'Contact phone number', is_system_field: true },
-  { name: 'department', field_type: 'text' as const, label: 'Department', description: 'Primary department assignment', is_system_field: true },
-  { name: 'location', field_type: 'text' as const, label: 'Location', description: 'Office or work location', is_system_field: true },
-  { name: 'job_title', field_type: 'text' as const, label: 'Job Title', description: 'Employee job title', is_system_field: true },
-  { name: 'employee_id', field_type: 'text' as const, label: 'Employee ID', description: 'Unique employee identifier', is_system_field: true },
-  { name: 'hire_date', field_type: 'date' as const, label: 'Hire Date', description: 'Date of employment start', is_system_field: true },
-  { name: 'employment_type', field_type: 'select' as const, label: 'Employment Type', description: 'Full-time, part-time, contractor, etc.', select_options: ['Full-time', 'Part-time', 'Contractor', 'Intern'], is_system_field: true },
+/**
+ * Result of a data migration operation, returned to the client so the UI can
+ * report what happened.
+ */
+interface MigrationResult {
+  old_slug: string;
+  new_slug: string;
+  records_migrated: number;
+}
+
+interface TypeChangeResult {
+  old_type: FieldType;
+  new_type: FieldType;
+  values_coerced: number;
+  records_migrated: number;
+}
+
+/**
+ * Migrates custom field data from an old slug to a new slug across all records
+ * of the target object type. Uses MongoDB's $rename operator to atomically move
+ * the key within the custom_fields map — data is preserved, not deleted.
+ */
+async function migrateFieldRename(
+  companyId: string,
+  targetObject: string,
+  oldSlug: string,
+  newSlug: string,
+): Promise<MigrationResult> {
+  let result: { modifiedCount: number } | undefined;
+
+  if (targetObject === 'user') {
+    result = (await User.updateMany(
+      { company_id: companyId, [`custom_fields.${oldSlug}`]: { $exists: true } },
+      { $rename: { [`custom_fields.${oldSlug}`]: `custom_fields.${newSlug}` } },
+    )) as unknown as { modifiedCount: number };
+  } else if (targetObject === 'department') {
+    result = (await Department.updateMany(
+      { company_id: companyId, [`custom_fields.${oldSlug}`]: { $exists: true } },
+      { $rename: { [`custom_fields.${oldSlug}`]: `custom_fields.${newSlug}` } },
+    )) as unknown as { modifiedCount: number };
+  } else if (targetObject === 'policy') {
+    result = (await PolicyVersion.updateMany(
+      { company_id: companyId, [`custom_fields.${oldSlug}`]: { $exists: true } },
+      { $rename: { [`custom_fields.${oldSlug}`]: `custom_fields.${newSlug}` } },
+    )) as unknown as { modifiedCount: number };
+  } else if (targetObject === 'team') {
+    result = (await Team.updateMany(
+      { company_id: companyId, [`custom_fields.${oldSlug}`]: { $exists: true } },
+      { $rename: { [`custom_fields.${oldSlug}`]: `custom_fields.${newSlug}` } },
+    )) as unknown as { modifiedCount: number };
+  } else if (targetObject === 'location') {
+    result = (await Location.updateMany(
+      { company_id: companyId, [`custom_fields.${oldSlug}`]: { $exists: true } },
+      { $rename: { [`custom_fields.${oldSlug}`]: `custom_fields.${newSlug}` } },
+    )) as unknown as { modifiedCount: number };
+  } else if (targetObject === 'holiday') {
+    result = (await Holiday.updateMany(
+      { [`custom_fields.${oldSlug}`]: { $exists: true } },
+      { $rename: { [`custom_fields.${oldSlug}`]: `custom_fields.${newSlug}` } },
+    )) as unknown as { modifiedCount: number };
+  } else if (targetObject === 'holiday_calendar') {
+    result = (await HolidayCalendar.updateMany(
+      { company_id: companyId, [`custom_fields.${oldSlug}`]: { $exists: true } },
+      { $rename: { [`custom_fields.${oldSlug}`]: `custom_fields.${newSlug}` } },
+    )) as unknown as { modifiedCount: number };
+  } else if (targetObject === 'work_schedule') {
+    result = (await WorkSchedule.updateMany(
+      { company_id: companyId, [`custom_fields.${oldSlug}`]: { $exists: true } },
+      { $rename: { [`custom_fields.${oldSlug}`]: `custom_fields.${newSlug}` } },
+    )) as unknown as { modifiedCount: number };
+  }
+
+  return {
+    old_slug: oldSlug,
+    new_slug: newSlug,
+    records_migrated: result?.modifiedCount ?? 0,
+  };
+}
+
+/**
+ * Updates conditional_logic references to a renamed field slug across all
+ * other active custom fields in the same company + target_object.
+ * This ensures that rules referencing the old slug continue to work after rename.
+ */
+async function updateConditionalLogicReferences(
+  companyId: string,
+  targetObject: string,
+  oldSlug: string,
+  newSlug: string,
+): Promise<{ fields_updated: number }> {
+  const result = await CustomField.updateMany(
+    {
+      company_id: companyId,
+      target_object: targetObject,
+      is_active: true,
+      'conditional_logic.field_slug': oldSlug,
+    },
+    {
+      $set: { 'conditional_logic.$[elem].field_slug': newSlug },
+    },
+    {
+      arrayFilters: [{ 'elem.field_slug': oldSlug }],
+    },
+  );
+
+  return { fields_updated: result.modifiedCount };
+}
+
+/**
+ * Validates and migrates existing field data when the field_type changes.
+ *
+ * 1. Fetches all records that have a value for this field.
+ * 2. For each value, attempts to coerce it from the old type to the new type.
+ * 3. Also validates the coerced value against the new field's rules (range, options, etc.).
+ * 4. If ANY value cannot be coerced or fails validation, throws an AppError listing the
+ *    first failures so the admin knows which data is blocking the change.
+ * 5. If all values pass, applies the coerced values in a single batch.
+ *
+ * Returns the count of records migrated.
+ */
+async function migrateFieldTypeChange(
+  companyId: string,
+  targetObject: string,
+  field: ICustomField,
+  newType: FieldType,
+): Promise<TypeChangeResult> {
+  // Fetch all documents that have a value for this field slug
+  const query: Record<string, unknown> = {
+    company_id: companyId,
+    [`custom_fields.${field.slug}`]: { $exists: true, $ne: null },
+  };
+
+  let Model;
+  if (targetObject === 'user') Model = User;
+  else if (targetObject === 'department') Model = Department;
+  else if (targetObject === 'policy') Model = PolicyVersion;
+  else if (targetObject === 'team') Model = Team;
+  else if (targetObject === 'location') Model = Location;
+  else if (targetObject === 'holiday') Model = Holiday;
+  else if (targetObject === 'holiday_calendar') Model = HolidayCalendar;
+  else if (targetObject === 'work_schedule') Model = WorkSchedule;
+  else throw new AppError('Unknown target object for migration', 400, 'INVALID_TARGET_OBJECT');
+
+  const docs = await (Model as typeof User).find(query).select('custom_fields').lean();
+
+  const errors: string[] = [];
+  const updates: Array<{ filter: { _id: Types.ObjectId }; value: unknown }> = [];
+  let valuesCoerced = 0;
+
+  for (const doc of docs as Array<{ _id: Types.ObjectId; custom_fields: Record<string, unknown> }>) {
+    const raw = doc.custom_fields?.[field.slug];
+    const coerced = coerceFieldValue(raw, field.field_type, newType);
+
+    if (!coerced.ok) {
+      errors.push(`Record ${_truncateId(doc._id)}: ${coerced.error}`);
+      continue;
+    }
+
+    // Validate the coerced value against the new field definition
+    const newFieldDef = {
+      ...field.toObject(),
+      field_type: newType,
+    } as unknown as Record<string, unknown>;
+    const validationError = validateFieldValue(newFieldDef, coerced.value);
+    if (validationError) {
+      errors.push(`Record ${_truncateId(doc._id)}: ${validationError}`);
+      continue;
+    }
+
+    if (coerced.value !== raw) {
+      valuesCoerced++;
+      updates.push({ filter: { _id: doc._id }, value: coerced.value });
+    }
+  }
+
+  // If any value cannot be coerced, block the entire type change
+  if (errors.length > 0) {
+    const preview = errors.slice(0, 5).join('; ');
+    const moreCount = errors.length - 5;
+    throw new AppError(
+      `Cannot change field type from "${field.field_type}" to "${newType}" — ${errors.length} record(s) have data that cannot be converted. First issues: ${preview}${moreCount > 0 ? `…and ${moreCount} more` : ''}.`,
+      400,
+      'FIELD_TYPE_CONVERSION_FAILED',
+    );
+  }
+
+  // Apply coerced values via bulk write
+  if (updates.length > 0) {
+    const bulkOps = updates.map((u) => ({
+      updateOne: {
+        filter: u.filter,
+        update: { $set: { [`custom_fields.${field.slug}`]: u.value } },
+      },
+    }));
+    await (Model as typeof User).bulkWrite(bulkOps);
+  }
+
+  return {
+    old_type: field.field_type,
+    new_type: newType,
+    values_coerced: valuesCoerced,
+    records_migrated: docs.length,
+  };
+}
+
+function _truncateId(id: Types.ObjectId | string): string {
+  return id.toString().slice(0, 8);
+}
+
+interface SystemDefaultField {
+  name: string;
+  field_type: FieldType;
+  label: string;
+  description?: string;
+  required?: boolean;
+  is_system_field: boolean;
+  select_options?: string[];
+}
+
+const SYSTEM_DEFAULT_FIELDS: SystemDefaultField[] = [
+  { name: 'full_name', field_type: 'text', label: 'Full Name', description: 'Employee full legal name', required: true, is_system_field: true },
+  { name: 'email', field_type: 'email', label: 'Email Address', description: 'Corporate email address', required: true, is_system_field: true },
+  { name: 'phone', field_type: 'phone', label: 'Phone Number', description: 'Contact phone number', is_system_field: true },
+  { name: 'department', field_type: 'text', label: 'Department', description: 'Primary department assignment', is_system_field: true },
+  { name: 'location', field_type: 'text', label: 'Location', description: 'Office or work location', is_system_field: true },
+  { name: 'job_title', field_type: 'text', label: 'Job Title', description: 'Employee job title', is_system_field: true },
+  { name: 'employee_id', field_type: 'text', label: 'Employee ID', description: 'Unique employee identifier', is_system_field: true },
+  { name: 'hire_date', field_type: 'date', label: 'Hire Date', description: 'Date of employment start', is_system_field: true },
+  { name: 'employment_type', field_type: 'select', label: 'Employment Type', description: 'Full-time, part-time, contractor, etc.', select_options: ['Full-time', 'Part-time', 'Contractor', 'Intern'], is_system_field: true },
 ];
 
 // ── Field CRUD ───────────────────────────────────────────────────────────────
@@ -259,7 +618,7 @@ export const getCustomFields = asyncHandler(async (req: Request, res: Response) 
     query.is_active = true;
   }
 
-  if (target_object && TARGET_OBJECTS.includes(target_object as any)) {
+  if (target_object && TARGET_OBJECTS.includes(target_object as (typeof TARGET_OBJECTS)[number])) {
     query.target_object = target_object;
   }
 
@@ -303,6 +662,11 @@ export const createCustomField = asyncHandler(async (req: Request, res: Response
 
   const slug = generateSlug(input.name);
   await assertUniqueSlug(req.user.company_id, input.target_object, slug);
+
+  // Validate conditional logic references before persisting
+  if (input.conditional_logic) {
+    await validateConditionalLogic(req.user.company_id, input.target_object, input.conditional_logic, slug);
+  }
 
   // Auto-assign display_order
   const maxOrderField = await CustomField.findOne({
@@ -372,30 +736,119 @@ export const updateCustomField = asyncHandler(async (req: Request, res: Response
     throw new AppError('Custom field not found', 404, 'NOT_FOUND');
   }
 
-  if (field.is_system_field && input.name) {
+  // Block renaming a system field — only applies if the name is actually changing
+  if (field.is_system_field && input.name && input.name !== field.name) {
     throw new AppError('System fields cannot be renamed', 400, 'CANNOT_MODIFY_SYSTEM_FIELD');
   }
 
   const beforeState = field.toObject();
 
-  // Check if field rename would affect existing data
+  // Track whether a migration happened so we can include it in the response
+  let renameMigration: MigrationResult | null = null;
+  let typeChangeResult: TypeChangeResult | null = null;
+
+  // ── Field rename: migrate existing data via $rename, update conditional references ──
   if (input.name && input.name !== field.name) {
+    if (field.is_system_field) {
+      throw new AppError('System fields cannot be renamed', 400, 'CANNOT_MODIFY_SYSTEM_FIELD');
+    }
+    const oldSlug = field.slug;
     const newSlug = generateSlug(input.name);
     await assertUniqueSlug(req.user.company_id, field.target_object, newSlug, field._id.toString());
 
+    // If there is existing data, migrate it rather than blocking the rename
     const { hasData } = await checkFieldExistsWithData(field._id.toString(), req.user.company_id, field.target_object);
     if (hasData) {
-      throw new AppError(
-        `Cannot rename field "${field.label}" because it already has data. The old slug "${field.slug}" is referenced in existing records.`,
-        400,
-        'FIELD_HAS_DATA',
-      );
+      renameMigration = await migrateFieldRename(req.user.company_id, field.target_object, oldSlug, newSlug);
+
+      // Update conditional_logic references that point to the old slug across other fields
+      await updateConditionalLogicReferences(req.user.company_id, field.target_object, oldSlug, newSlug);
     }
-    // Update slug if name changed
-    (field as any).slug = newSlug;
+
+    field.slug = newSlug;
   }
 
-  // Normalize empty strings
+  // ── Field type change: validate and coerce existing data ──
+  if (input.field_type && input.field_type !== field.field_type) {
+    if (field.is_system_field) {
+      throw new AppError('System fields cannot change type', 400, 'CANNOT_MODIFY_SYSTEM_FIELD');
+    }
+
+    // Check if any existing data would be incompatible with the new type
+    const { hasData } = await checkFieldExistsWithData(field._id.toString(), req.user.company_id, field.target_object);
+    if (hasData) {
+      // This validates + coerces existing values. Throws if any cannot be converted.
+      typeChangeResult = await migrateFieldTypeChange(req.user.company_id, field.target_object, field, input.field_type);
+    }
+
+    field.field_type = input.field_type;
+  }
+
+  // Validate conditional logic references before persisting
+  if (input.conditional_logic !== undefined) {
+    await validateConditionalLogic(req.user.company_id, field.target_object, input.conditional_logic, field.slug);
+  }
+
+  // Validate required change: cannot make a field required if existing records have null values
+  if (input.required === true && field.required === false) {
+    let nullCount = 0;
+    switch (field.target_object) {
+      case 'user':
+        nullCount = await User.countDocuments({
+          company_id: req.user.company_id,
+           [`custom_fields.${field.slug}`]: { $exists: false } },
+        );
+        break;
+      case 'department':
+        nullCount = await Department.countDocuments({
+          company_id: req.user.company_id,
+           [`custom_fields.${field.slug}`]: { $exists: false } },
+        );
+        break;
+      case 'policy':
+        nullCount = await PolicyVersion.countDocuments({
+          company_id: req.user.company_id,
+           [`custom_fields.${field.slug}`]: { $exists: false } },
+        );
+        break;
+      case 'team':
+        nullCount = await Team.countDocuments({
+          company_id: req.user.company_id,
+           [`custom_fields.${field.slug}`]: { $exists: false } },
+        );
+        break;
+      case 'location':
+        nullCount = await Location.countDocuments({
+          company_id: req.user.company_id,
+           [`custom_fields.${field.slug}`]: { $exists: false } },
+        );
+        break;
+      case 'holiday':
+        nullCount = await Holiday.countDocuments({
+           [`custom_fields.${field.slug}`]: { $exists: false } },
+        );
+        break;
+      case 'holiday_calendar':
+        nullCount = await HolidayCalendar.countDocuments({
+          company_id: req.user.company_id,
+           [`custom_fields.${field.slug}`]: { $exists: false } },
+        );
+        break;
+      case 'work_schedule':
+        nullCount = await WorkSchedule.countDocuments({
+          company_id: req.user.company_id,
+           [`custom_fields.${field.slug}`]: { $exists: false } },
+        );
+        break;
+    }
+    if (nullCount > 0) {
+      throw new AppError(
+        `Cannot make "${field.label}" required because ${nullCount} record${nullCount !== 1 ? 's' : ''} have no value for this field. Clear or populate the data first, or keep the field optional.`,
+        400,
+        'REQUIRED_CHANGE_WOULD_BREAK_RECORDS',
+      );
+    }
+  }
   const updates: Record<string, unknown> = { ...input };
   if (updates.placeholder === '') updates.placeholder = null;
   if (updates.description === '') updates.description = null;
@@ -432,14 +885,19 @@ export const updateCustomField = asyncHandler(async (req: Request, res: Response
     after_state: afterState,
   });
 
-  res.status(200).json({ success: true, data: field });
+   res.status(200).json({
+     success: true,
+     data: field,
+     ...(renameMigration ? { rename_migration: renameMigration } : {}),
+     ...(typeChangeResult ? { type_change: typeChangeResult } : {}),
+   });
 });
 
 /**
  * DELETE /data-fields/:id
  * Soft-deletes (deactivates) a custom field.
- * Blocks deletion if field has dependent fields or conditional dependents.
- * Does not remove values from existing records.
+ * Blocks deletion if field has dependent fields, conditional dependents, or existing data.
+ * When data exists, returns usage info so the client can offer a "clear data first" flow.
  */
 export const deleteCustomField = asyncHandler(async (req: Request, res: Response) => {
   const field = await CustomField.findOne({
@@ -452,8 +910,10 @@ export const deleteCustomField = asyncHandler(async (req: Request, res: Response
     throw new AppError('Custom field not found', 404, 'NOT_FOUND');
   }
 
+  // System fields cannot be deleted — they back core profile data. This mirrors the
+  // rename and rollback guards above so all mutating operations treat system fields alike.
   if (field.is_system_field) {
-    throw new AppError('System fields cannot be deleted', 400, 'CANNOT_DELETE_SYSTEM_FIELD');
+    throw new AppError('System fields cannot be deleted', 400, 'CANNOT_MODIFY_SYSTEM_FIELD');
   }
 
   // Check for dependent fields
@@ -473,6 +933,30 @@ export const deleteCustomField = asyncHandler(async (req: Request, res: Response
       `Cannot delete "${field.label}" because it is used in conditional rules by: ${conditionalDeps.dependentFields.map((d) => d.label).join(', ')}. Remove these conditions first.`,
       400,
       'HAS_CONDITIONAL_DEPENDENTS',
+    );
+  }
+
+  // Check for workflow dependencies — workflows may reference this field in conditions or action config
+  const workflowDeps = await checkWorkflowDependencies(field.slug, req.user.company_id);
+  if (workflowDeps.hasDependents) {
+    const workflowNames = workflowDeps.dependentWorkflows
+      .map((w) => `"${w.name}" (step: "${w.stepName}")`)
+      .join(', ');
+    throw new AppError(
+      `Cannot delete "${field.label}" because it is referenced by workflows: ${workflowNames}. Remove or update these workflow references before deleting.`,
+      400,
+      'HAS_WORKFLOW_DEPENDENTS',
+    );
+  }
+
+  // Check for existing data — block deletion and return usage info so the client
+  // can offer a "clear data first" flow instead of silently losing data.
+  const dataUsage = await checkFieldExistsWithData(field._id.toString(), req.user.company_id, field.target_object);
+  if (dataUsage.hasData) {
+    throw new AppError(
+      `Cannot delete "${field.label}" because it has data in ${dataUsage.recordCount} record${dataUsage.recordCount !== 1 ? 's' : ''}. Clear the data first before deleting this field.`,
+      400,
+      'FIELD_HAS_DATA',
     );
   }
 
@@ -502,6 +986,115 @@ export const deleteCustomField = asyncHandler(async (req: Request, res: Response
   });
 
   res.status(200).json({ success: true, data: { _id: field._id } });
+});
+
+/**
+ * POST /data-fields/:id/clear-data
+ * Removes the custom field's values from all records of the target object type.
+ * This is a destructive but non-blocking operation: it unsets the field's slug
+ * from the custom_fields map on every matching document.
+ * Used before deletion when a field has existing data.
+ */
+export const clearFieldData = asyncHandler(async (req: Request, res: Response) => {
+  const field = await CustomField.findOne({
+    _id: req.params.id,
+    company_id: req.user.company_id,
+    is_active: true,
+  });
+
+  if (!field) {
+    throw new AppError('Custom field not found', 404, 'NOT_FOUND');
+  }
+
+  if (field.is_system_field) {
+    throw new AppError('System fields cannot have their data cleared', 400, 'CANNOT_MODIFY_SYSTEM_FIELD');
+  }
+
+  const beforeState = field.toObject();
+  let clearedCount = 0;
+
+  switch (field.target_object) {
+    case 'user': {
+      const result = await User.updateMany(
+        { company_id: req.user.company_id, [`custom_fields.${field.slug}`]: { $exists: true } },
+        { $unset: { [`custom_fields.${field.slug}`]: '' } },
+      );
+      clearedCount = result.modifiedCount;
+      break;
+    }
+    case 'department': {
+      const result = await Department.updateMany(
+        { company_id: req.user.company_id, [`custom_fields.${field.slug}`]: { $exists: true } },
+        { $unset: { [`custom_fields.${field.slug}`]: '' } },
+      );
+      clearedCount = result.modifiedCount;
+      break;
+    }
+    case 'policy': {
+      const result = await PolicyVersion.updateMany(
+        { company_id: req.user.company_id, [`custom_fields.${field.slug}`]: { $exists: true } },
+        { $unset: { [`custom_fields.${field.slug}`]: '' } },
+      );
+      clearedCount = result.modifiedCount;
+      break;
+    }
+    case 'team': {
+      const result = await Team.updateMany(
+        { company_id: req.user.company_id, [`custom_fields.${field.slug}`]: { $exists: true } },
+        { $unset: { [`custom_fields.${field.slug}`]: '' } },
+      );
+      clearedCount = result.modifiedCount;
+      break;
+    }
+    case 'location': {
+      const result = await Location.updateMany(
+        { company_id: req.user.company_id, [`custom_fields.${field.slug}`]: { $exists: true } },
+        { $unset: { [`custom_fields.${field.slug}`]: '' } },
+      );
+      clearedCount = result.modifiedCount;
+      break;
+    }
+    case 'holiday': {
+      const result = await Holiday.updateMany(
+        { [`custom_fields.${field.slug}`]: { $exists: true } },
+        { $unset: { [`custom_fields.${field.slug}`]: '' } },
+      );
+      clearedCount = result.modifiedCount;
+      break;
+    }
+    case 'holiday_calendar': {
+      const result = await HolidayCalendar.updateMany(
+        { company_id: req.user.company_id, [`custom_fields.${field.slug}`]: { $exists: true } },
+        { $unset: { [`custom_fields.${field.slug}`]: '' } },
+      );
+      clearedCount = result.modifiedCount;
+      break;
+    }
+    case 'work_schedule': {
+      const result = await WorkSchedule.updateMany(
+        { company_id: req.user.company_id, [`custom_fields.${field.slug}`]: { $exists: true } },
+        { $unset: { [`custom_fields.${field.slug}`]: '' } },
+      );
+      clearedCount = result.modifiedCount;
+      break;
+    }
+  }
+
+  await auditLogger.log({
+    req,
+    action: 'custom_field.data_cleared',
+    module: 'data_fields',
+    object_type: 'CustomField',
+    object_id: field._id.toString(),
+    object_label: field.label,
+    before_state: beforeState,
+    after_state: { ...beforeState, cleared_records: clearedCount } as unknown as Record<string, unknown>,
+  });
+
+  res.status(200).json({
+    success: true,
+    data: { cleared_count: clearedCount },
+  });
 });
 
 /**
@@ -550,6 +1143,120 @@ export const reorderCustomFields = asyncHandler(async (req: Request, res: Respon
 // ── Field Usage & Dependency ─────────────────────────────────────────────────
 
 /**
+ * GET /data-fields/dependency-map
+ * Returns dependency counts for all fields of a given target_object.
+ * Used by the table view to show at-a-glance dependency info.
+ *
+ * Response shape:
+ * {
+ *   fieldId: string,
+ *   outgoingDeps: number,   // fields this field depends on (field_dependencies.length)
+ *   incomingDeps: number,   // other fields that list this field in their field_dependencies
+ *   conditionalDeps: number,// other fields with conditional_logic.field_slug referencing this field's slug
+ *   workflowDeps: number,   // workflow steps referencing this field's slug
+ * }[]
+ */
+export const getDependencyMap = asyncHandler(async (req: Request, res: Response) => {
+  const { target_object } = req.query;
+
+  if (!target_object || !TARGET_OBJECTS.includes(target_object as (typeof TARGET_OBJECTS)[number])) {
+    throw new AppError('target_object is required (user, department, policy, team, location, holiday, holiday_calendar, or work_schedule)', 400, 'INVALID_INPUT');
+  }
+
+  const companyId = req.user.company_id;
+  const targetObj = target_object as (typeof TARGET_OBJECTS)[number];
+
+  const fields = await CustomField.find({
+    company_id: companyId,
+    target_object: targetObj,
+    is_active: true,
+  })
+    .select('_id slug field_dependencies')
+    .lean();
+
+  // Build a slug→id map for conditional dependency lookups
+  const slugToId = new Map<string, string>();
+  for (const f of fields) {
+    slugToId.set(f.slug, f._id.toString());
+  }
+
+  // ── Incoming field dependencies (reverse lookup) ──
+  // Count how many times each field ID appears in other fields' field_dependencies arrays
+  const incomingDepsResult = await CustomField.aggregate([
+    { $match: { company_id: new Types.ObjectId(companyId), target_object: targetObj, is_active: true } },
+    { $unwind: '$field_dependencies' },
+    { $group: { _id: '$field_dependencies', count: { $sum: 1 } } },
+  ]);
+
+  const incomingDepsMap = new Map<string, number>();
+  for (const row of incomingDepsResult) {
+    incomingDepsMap.set(row._id.toString(), row.count);
+  }
+
+  // ── Conditional dependencies (reverse lookup) ──
+  // Count how many other fields have conditional_logic referencing each field's slug
+  const allActiveFields = await CustomField.find({
+    company_id: companyId,
+    target_object: targetObj,
+    is_active: true,
+  })
+    .select('_id slug conditional_logic')
+    .lean();
+
+  const conditionalDepsMap = new Map<string, number>();
+  for (const f of allActiveFields) {
+    if (!f.conditional_logic || f.conditional_logic.length === 0) continue;
+    for (const rule of f.conditional_logic) {
+      const referencedSlug = (rule as { field_slug?: string }).field_slug;
+      if (!referencedSlug) continue;
+      const referencedId = slugToId.get(referencedSlug);
+      if (referencedId && referencedId !== f._id.toString()) {
+        conditionalDepsMap.set(referencedId, (conditionalDepsMap.get(referencedId) || 0) + 1);
+      }
+    }
+  }
+
+  // ── Workflow dependencies ──
+  const workflowSteps = await WorkflowStep.find({
+    company_id: companyId,
+    is_active: true,
+  })
+    .select('conditions.field action_config.field_slug action_config.custom_field action_config.field')
+    .lean();
+
+  const workflowDepsMap = new Map<string, number>();
+  for (const step of workflowSteps) {
+    const refs = new Set<string>();
+    const conds = (step as { conditions?: Array<{ field?: string }> }).conditions || [];
+    for (const c of conds) {
+      if (c.field) refs.add(c.field);
+    }
+    const ac = (step as { action_config?: Record<string, string> }).action_config || {};
+    if (ac.field_slug) refs.add(ac.field_slug);
+    if (ac.custom_field) refs.add(ac.custom_field);
+    if (ac.field) refs.add(ac.field);
+
+    for (const ref of refs) {
+      const fieldId = slugToId.get(ref);
+      if (fieldId) {
+        workflowDepsMap.set(fieldId, (workflowDepsMap.get(fieldId) || 0) + 1);
+      }
+    }
+  }
+
+  // ── Assemble response ──
+  const dependencyMap = fields.map((f) => ({
+    fieldId: f._id.toString(),
+    outgoingDeps: f.field_dependencies?.length || 0,
+    incomingDeps: incomingDepsMap.get(f._id.toString()) || 0,
+    conditionalDeps: conditionalDepsMap.get(f._id.toString()) || 0,
+    workflowDeps: workflowDepsMap.get(f._id.toString()) || 0,
+  }));
+
+  res.status(200).json({ success: true, data: dependencyMap });
+});
+
+/**
  * GET /data-fields/:id/usage
  * Checks if a custom field has data stored in existing records.
  */
@@ -566,6 +1273,7 @@ export const getFieldUsage = asyncHandler(async (req: Request, res: Response) =>
   const usage = await checkFieldExistsWithData(field._id.toString(), req.user.company_id, field.target_object);
   const dependencies = await checkFieldDependencies(field._id.toString(), req.user.company_id);
   const conditionalDeps = await checkConditionalDependencies(field._id.toString(), req.user.company_id);
+  const workflowDeps = await checkWorkflowDependencies(field.slug, req.user.company_id);
 
   res.status(200).json({
     success: true,
@@ -574,6 +1282,7 @@ export const getFieldUsage = asyncHandler(async (req: Request, res: Response) =>
       recordCount: usage.recordCount,
       fieldDependencies: dependencies,
       conditionalDependents: conditionalDeps,
+      workflowDependencies: workflowDeps,
     },
   });
 });
@@ -594,12 +1303,14 @@ export const getFieldDependents = asyncHandler(async (req: Request, res: Respons
 
   const dependencyCheck = await checkFieldDependencies(field._id.toString(), req.user.company_id);
   const conditionalCheck = await checkConditionalDependencies(field._id.toString(), req.user.company_id);
+  const workflowCheck = await checkWorkflowDependencies(field.slug, req.user.company_id);
 
   res.status(200).json({
     success: true,
     data: {
       fieldDependents: dependencyCheck.dependentFields,
       conditionalDependents: conditionalCheck.dependentFields,
+      workflowDependencies: workflowCheck,
     },
   });
 });
@@ -676,7 +1387,7 @@ export const rollbackFieldVersion = asyncHandler(async (req: Request, res: Respo
 
   for (const key of restoreFields) {
     if (snapshot[key] !== undefined) {
-      (field as any)[key] = snapshot[key];
+      (field as unknown as ICustomField & Record<string, unknown>)[key] = snapshot[key];
     }
   }
 
@@ -753,7 +1464,7 @@ export const seedDefaultFields = asyncHandler(async (req: Request, res: Response
       label: defaultField.label,
       description: defaultField.description,
       required: defaultField.required || false,
-      select_options: (defaultField as any).select_options || undefined,
+      select_options: defaultField.select_options || undefined,
       is_system_field: true,
       display_order: displayOrder,
       visibility: 'all',
@@ -833,22 +1544,35 @@ export const validateFieldValues = asyncHandler(async (req: Request, res: Respon
 export const getEffectiveCustomFields = asyncHandler(async (req: Request, res: Response) => {
   const { target_object, role_ids } = req.query;
 
-  if (!target_object || !TARGET_OBJECTS.includes(target_object as any)) {
-    throw new AppError('target_object is required (user, department, or policy)', 400, 'INVALID_INPUT');
+  if (!target_object || !TARGET_OBJECTS.includes(target_object as (typeof TARGET_OBJECTS)[number])) {
+    throw new AppError('target_object is required (user, department, policy, team, location, holiday, holiday_calendar, or work_schedule)', 400, 'INVALID_INPUT');
   }
 
   const recordRoleIds = typeof role_ids === 'string' && role_ids.length > 0
     ? role_ids.split(',').filter(Boolean)
     : [];
 
-  const result = await resolveEffectiveCustomFields(
-    req.user.company_id,
-    target_object as any,
-    req.user.userId,
-    recordRoleIds,
-  );
+  const [result, standardFields] = await Promise.all([
+    resolveEffectiveCustomFields(
+      req.user.company_id,
+      target_object as (typeof TARGET_OBJECTS)[number],
+      req.user.userId,
+      recordRoleIds,
+    ),
+    resolveStandardFieldPermissions(
+      req.user.company_id,
+      target_object as 'user' | 'department' | 'policy' | 'team' | 'location' | 'holiday' | 'holiday_calendar' | 'work_schedule',
+      req.user.userId,
+    ),
+  ]);
 
-  res.status(200).json({ success: true, data: result });
+  res.status(200).json({
+    success: true,
+    data: {
+      ...result,
+      standard_field_permissions: standardFields,
+    },
+  });
 });
 
 // ── Profile Layouts ──────────────────────────────────────────────────────────
@@ -866,7 +1590,7 @@ export const getProfileLayouts = asyncHandler(async (req: Request, res: Response
     is_active: true,
   };
 
-  if (target_object && TARGET_OBJECTS.includes(target_object as any)) {
+  if (target_object && TARGET_OBJECTS.includes(target_object as (typeof TARGET_OBJECTS)[number])) {
     query.target_object = target_object;
   }
   if (role_id) {

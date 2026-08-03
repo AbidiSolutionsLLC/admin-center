@@ -10,6 +10,7 @@ import { User } from '../models/User.model';
 import { auditLogger } from '../lib/auditLogger';
 import { AppError } from '../utils/AppError';
 import { hasPermission } from '../lib/rbac';
+import { validateAndSanitizeCustomFields, enforceStandardFieldPermissions, enforceCustomFieldPermissions } from '../services/customFieldValidation.service';
 
 // ── Zod Schemas ──────────────────────────────────────────────────────────────
 
@@ -17,6 +18,7 @@ const CreateHolidayCalendarSchema = z.object({
   name: z.string().min(1, 'Name is required').max(150),
   description: z.string().optional().nullable(),
   is_active: z.boolean().default(true),
+  custom_fields: z.record(z.string(), z.unknown()).optional(),
 });
 
 const UpdateHolidayCalendarSchema = CreateHolidayCalendarSchema.partial();
@@ -36,6 +38,7 @@ const CreateHolidaySchema = z.object({
   }).optional().nullable(),
   holiday_code: z.string().optional().nullable(),
   is_observed: z.boolean().default(false),
+  custom_fields: z.record(z.string(), z.unknown()).optional(),
 });
 
 const UpdateHolidaySchema = CreateHolidaySchema.partial();
@@ -188,27 +191,49 @@ export const getHolidayCalendarById = asyncHandler(async (req: Request, res: Res
  * POST /holidays/calendars
  * Creates a new holiday calendar
  */
-export const createHolidayCalendar = asyncHandler(async (req: Request, res: Response) => {
-  const input = CreateHolidayCalendarSchema.parse(req.body);
+ export const createHolidayCalendar = asyncHandler(async (req: Request, res: Response) => {
+   const input = CreateHolidayCalendarSchema.parse(req.body);
 
-  // Check for duplicate calendar name within the same company
-  const existing = await HolidayCalendar.findOne({
-    company_id: req.user.company_id,
-    name: input.name,
-  });
+   // Check for duplicate calendar name within the same company
+   const existing = await HolidayCalendar.findOne({
+     company_id: req.user.company_id,
+     name: input.name,
+   });
 
-  if (existing) {
-    throw new AppError(
-      `A holiday calendar with the name "${input.name}" already exists.`,
-      400,
-      'DUPLICATE_HOLIDAY_CALENDAR_NAME'
-    );
-  }
+   if (existing) {
+     throw new AppError(
+       `A holiday calendar with the name "${input.name}" already exists.`,
+       400,
+       'DUPLICATE_HOLIDAY_CALENDAR_NAME'
+     );
+   }
 
-  const calendar = await HolidayCalendar.create({
-    ...input,
-    company_id: req.user.company_id,
-  });
+   // Validate and sanitize custom fields
+   const validatedCustomFields = await validateAndSanitizeCustomFields(
+     req.user.company_id,
+     'holiday_calendar',
+     input.custom_fields,
+   );
+   const permissionedCustomFields = await enforceCustomFieldPermissions(
+     req.user.company_id,
+     'holiday_calendar',
+     req.user.userId,
+     validatedCustomFields,
+   );
+
+   // Enforce standard field edit permissions
+   const filteredInput = await enforceStandardFieldPermissions(
+     req.user.company_id,
+     'holiday_calendar',
+     req.user.userId,
+     { ...input } as unknown as Record<string, unknown>,
+   );
+
+   const calendar = await HolidayCalendar.create({
+     ...filteredInput,
+     company_id: req.user.company_id,
+     custom_fields: permissionedCustomFields,
+   });
 
   await auditLogger.log({
     req,
@@ -257,10 +282,35 @@ export const updateHolidayCalendar = asyncHandler(async (req: Request, res: Resp
     }
   }
 
-  const beforeState = calendar.toObject();
+   const beforeState = calendar.toObject();
 
-  Object.assign(calendar, input);
-  await calendar.save();
+   // Validate and sanitize custom fields
+   const validatedCustomFields = await validateAndSanitizeCustomFields(
+     req.user.company_id,
+     'holiday_calendar',
+     input.custom_fields,
+   );
+   const permissionedCustomFields = await enforceCustomFieldPermissions(
+     req.user.company_id,
+     'holiday_calendar',
+     req.user.userId,
+     validatedCustomFields,
+   );
+
+   // Enforce standard field edit permissions
+   const filteredInput = await enforceStandardFieldPermissions(
+     req.user.company_id,
+     'holiday_calendar',
+     req.user.userId,
+     { ...input } as unknown as Record<string, unknown>,
+   );
+
+   if (input.custom_fields !== undefined) {
+     filteredInput.custom_fields = permissionedCustomFields;
+   }
+
+   Object.assign(calendar, filteredInput);
+   await calendar.save();
 
   await auditLogger.log({
     req,
@@ -426,12 +476,12 @@ export const createHoliday = asyncHandler(async (req: Request, res: Response) =>
     }
   }
 
-  const holiday = await Holiday.create({
-    ...input,
-    date: new Date(input.date),
-    recurring_details: input.recurring_details || undefined,
-    calendar_id: calendar._id,
-  });
+   const holiday = await Holiday.create({
+     ...input,
+     date: new Date(input.date),
+     recurring_details: input.recurring_details || undefined,
+     calendar_id: calendar._id,
+   });
 
   await auditLogger.log({
     req,
@@ -466,16 +516,31 @@ export const updateHoliday = asyncHandler(async (req: Request, res: Response) =>
     throw new AppError('Holiday not found', 404, 'NOT_FOUND');
   }
 
-  const input = UpdateHolidaySchema.parse(req.body);
+   const input = UpdateHolidaySchema.parse(req.body);
 
-  const beforeState = holiday.toObject();
+   const beforeState = holiday.toObject();
 
-  if (input.date) {
-    input.date = new Date(input.date);
-  }
+   if (input.date) {
+     input.date = new Date(input.date);
+   }
 
-  Object.assign(holiday, input);
-  await holiday.save();
+   if (input.custom_fields !== undefined) {
+     const validatedCustomFields = await validateAndSanitizeCustomFields(
+       req.user.company_id,
+       'holiday',
+       input.custom_fields,
+     );
+     const permissionedCustomFields = await enforceCustomFieldPermissions(
+       req.user.company_id,
+       'holiday',
+       req.user.userId,
+       validatedCustomFields,
+     );
+     input.custom_fields = permissionedCustomFields;
+   }
+
+   Object.assign(holiday, input);
+   await holiday.save();
 
   await auditLogger.log({
     req,

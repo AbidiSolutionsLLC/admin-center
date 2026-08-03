@@ -17,6 +17,7 @@ export interface IHoliday extends Document {
   calendar_id: Types.ObjectId;
   holiday_code?: string;
   is_observed?: boolean;
+  custom_fields: Record<string, unknown>;
   created_at: Date;
   updated_at: Date;
 }
@@ -40,6 +41,7 @@ const HolidaySchema = new Schema<IHoliday>({
   calendar_id: { type: Schema.Types.ObjectId, ref: 'HolidayCalendar', required: true, index: true },
   holiday_code: String,
   is_observed: { type: Boolean, default: false },
+  custom_fields: { type: Schema.Types.Mixed, default: {} },
 }, { timestamps: { createdAt: 'created_at', updatedAt: 'updated_at' } });
 
 HolidaySchema.index({ calendar_id: 1, date: 1 });

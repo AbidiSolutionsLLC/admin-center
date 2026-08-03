@@ -13,7 +13,7 @@ import { auditLogger } from '../lib/auditLogger';
 import { runIntelligenceRules } from '../lib/intelligence';
 import { AppError } from '../utils/AppError';
 import { slugify } from '../utils/slugify';
-import { validateAndSanitizeCustomFields } from '../services/customFieldValidation.service';
+import { validateAndSanitizeCustomFields, enforceStandardFieldPermissions, enforceCustomFieldPermissions } from '../services/customFieldValidation.service';
 
 // ── Types & Interfaces ───────────────────────────────────────────────────────
 
@@ -277,22 +277,36 @@ export const createDepartment = asyncHandler(async (req: Request, res: Response)
     }
   }
 
-  // Validate custom field values against the field schema (story 107/114).
-  // Required fields are enforced only when the caller supplies custom field data.
+  // Validate custom field values against the field schema + enforce edit permissions
   const validatedCustomFields = await validateAndSanitizeCustomFields(
     req.user.company_id,
     'department',
     input.custom_fields,
     { enforceRequired: input.custom_fields !== undefined && Object.keys(input.custom_fields).length > 0 },
   );
+  const permissionedCustomFields = await enforceCustomFieldPermissions(
+    req.user.company_id,
+    'department',
+    req.user.userId,
+    validatedCustomFields,
+  );
+
+  // Enforce standard field edit permissions (story 113): strip fields
+  // the viewer cannot edit before creating the record.
+  const filteredInput = await enforceStandardFieldPermissions(
+    req.user.company_id,
+    'department',
+    req.user.userId,
+    { ...input } as unknown as Record<string, unknown>,
+  );
 
   const dept = await Department.create({
-    ...input,
+    ...filteredInput,
     // Normalize empty strings → undefined so Mongoose doesn't store ''
     parent_id: input.parent_id || undefined,
     primary_manager_id: input.primary_manager_id || undefined,
     secondary_manager_ids: input.secondary_manager_ids || [],
-    custom_fields: validatedCustomFields,
+    custom_fields: permissionedCustomFields,
     company_id: req.user.company_id,
   });
 
@@ -407,17 +421,35 @@ export const updateDepartment = asyncHandler(async (req: Request, res: Response)
     );
   }
 
-  // Merge custom_fields if provided (validated against the field schema)
+  // Validate + permission-enforce custom field values against the field schema
   if (input.custom_fields !== undefined) {
-    dept.custom_fields = await validateAndSanitizeCustomFields(
+    const validatedCustomFields = await validateAndSanitizeCustomFields(
       req.user.company_id,
       'department',
       input.custom_fields,
       { enforceRequired: true },
     );
+    const permissionedCustomFields = await enforceCustomFieldPermissions(
+      req.user.company_id,
+      'department',
+      req.user.userId,
+      validatedCustomFields,
+    );
+    updates.custom_fields = permissionedCustomFields;
+    dept.custom_fields = permissionedCustomFields;
   }
 
-  Object.assign(dept, updates);
+  // Enforce standard field edit permissions (story 113): strip standard
+  // fields the viewer cannot edit from the update payload. This is the
+  // server-side security boundary — the frontend may be tampered with.
+  const permissionedUpdates = await enforceStandardFieldPermissions(
+    req.user.company_id,
+    'department',
+    req.user.userId,
+    updates,
+  );
+
+  Object.assign(dept, permissionedUpdates);
   await dept.save();
 
   await auditLogger.log({

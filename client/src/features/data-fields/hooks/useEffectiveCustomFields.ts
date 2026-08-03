@@ -11,10 +11,17 @@ import type { CustomField, TargetObject } from '@/types';
  */
 export type EffectiveCustomField = CustomField & { can_view: boolean; can_edit: boolean };
 
+export interface StandardFieldPermission {
+  field_name: string;
+  can_view: boolean;
+  can_edit: boolean;
+}
+
 export interface EffectiveCustomFieldsResult {
   fields: EffectiveCustomField[];
   layout_name: string | null;
   layout_id: string | null;
+  standard_field_permissions: StandardFieldPermission[];
 }
 
 /**

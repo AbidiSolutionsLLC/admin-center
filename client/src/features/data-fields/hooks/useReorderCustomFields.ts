@@ -23,8 +23,7 @@ export const useReorderCustomFields = (targetObject?: TargetObject) => {
       toast.success('Field order updated successfully');
     },
     onError: (error) => {
-      console.error('Field reorder failed:', error);
-      toast.error('Failed to reorder fields. Please try again.');
+      toast.error(error instanceof Error ? error.message : 'Failed to reorder fields. Please try again.');
     },
   });
 };

@@ -9,6 +9,7 @@ import { User } from '../models/User.model';
 import { auditLogger } from '../lib/auditLogger';
 import { AppError } from '../utils/AppError';
 import { isValidTimezone } from '../constants/timezones';
+import { validateAndSanitizeCustomFields, enforceStandardFieldPermissions, enforceCustomFieldPermissions } from '../services/customFieldValidation.service';
 
 // ── Zod Schemas ──────────────────────────────────────────────────────────────
 
@@ -35,6 +36,7 @@ const CreateWorkScheduleSchema = z.object({
     end: z.string().regex(/^([01]\d|2[0-3]):([0-5]\d)$/, 'Invalid time format (HH:mm)'),
   }).optional().nullable(),
   is_active: z.boolean().default(true),
+  custom_fields: z.record(z.string(), z.unknown()).optional(),
 });
 
 const UpdateWorkScheduleSchema = CreateWorkScheduleSchema.partial();
@@ -137,10 +139,10 @@ export const createWorkSchedule = asyncHandler(async (req: Request, res: Respons
     );
   }
 
-  const schedule = await WorkSchedule.create({
-    ...input,
-    company_id: req.user.company_id,
-  });
+   const schedule = await WorkSchedule.create({
+     ...input,
+     company_id: req.user.company_id,
+   });
 
   await auditLogger.log({
     req,
@@ -188,10 +190,33 @@ export const updateWorkSchedule = asyncHandler(async (req: Request, res: Respons
     }
   }
 
-  const beforeState = schedule.toObject();
+   const beforeState = schedule.toObject();
 
-  Object.assign(schedule, input);
-  await schedule.save();
+   if (input.custom_fields !== undefined) {
+     const validatedCustomFields = await validateAndSanitizeCustomFields(
+       req.user.company_id,
+       'work_schedule',
+       input.custom_fields,
+     );
+     const permissionedCustomFields = await enforceCustomFieldPermissions(
+       req.user.company_id,
+       'work_schedule',
+       req.user.userId,
+       validatedCustomFields,
+     );
+     input.custom_fields = permissionedCustomFields;
+   }
+
+   // Enforce standard field edit permissions
+   const filteredInput = await enforceStandardFieldPermissions(
+     req.user.company_id,
+     'work_schedule',
+     req.user.userId,
+     { ...input } as unknown as Record<string, unknown>,
+   );
+
+   Object.assign(schedule, filteredInput);
+   await schedule.save();
 
   await auditLogger.log({
     req,
