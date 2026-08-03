@@ -21,7 +21,7 @@ export interface IApprovalRequest extends Document {
   status: ApprovalStatus;
   decisions: IDecision[];
   decided_by?: Types.ObjectId;
-  delegated_for?: Types.OCbjectId;
+  delegated_for?: Types.ObjectId;
   decided_at?: Date;
   comments?: string;
   sla_alert_sent?: boolean;

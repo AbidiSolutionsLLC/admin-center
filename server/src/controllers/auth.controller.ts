@@ -79,12 +79,12 @@ async function logSecurityEvent(params: {
         }
 
         if (shouldAlert) {
-          await sendSecurityAlert(
+          sendSecurityAlert(
             params.company_id.toString(),
             params.event_type,
             alertDetail,
             alerts.alert_emails
-          );
+          ).catch(err => console.error('[logSecurityEvent] Failed to send security alert:', err));
         }
       }
     } catch (err) {
@@ -289,12 +289,12 @@ export const login = asyncHandler(async (req: Request, res: Response) => {
 
     const company = await Company.findById(user.company_id);
     
-    await sendMfaOtpEmail({
+    sendMfaOtpEmail({
       email: user.email,
       full_name: user.full_name,
       otp_code: otpCode,
       company_name: company?.name || 'Our Company',
-    });
+    }).catch(err => console.error('[Auth] Failed to send MFA OTP email:', err));
 
     await logSecurityEvent({
       company_id: user.company_id,
