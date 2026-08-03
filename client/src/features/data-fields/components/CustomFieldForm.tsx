@@ -598,25 +598,27 @@ export const CustomFieldForm: React.FC<CustomFieldFormProps> = ({
         />
       </div>
 
-      <div className="flex items-center justify-between p-3 rounded-lg border border-line bg-surface-alt">
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between p-3 rounded-lg border border-line bg-surface-alt gap-3">
         <div className="space-y-0.5">
           <label htmlFor="cf-required" className="text-sm font-medium text-ink cursor-pointer">
             Required field
           </label>
           <p className="text-xs text-ink-muted">Force users to fill this field before saving</p>
         </div>
-        <Controller
-          name="required"
-          control={control}
-          render={({ field }) => (
-            <Switch
-              id="cf-required"
-              checked={field.value}
-              onCheckedChange={field.onChange}
-              disabled={isSubmitting}
-            />
-          )}
-        />
+        <div className="flex-shrink-0 self-start sm:self-auto">
+          <Controller
+            name="required"
+            control={control}
+            render={({ field }) => (
+              <Switch
+                id="cf-required"
+                checked={field.value}
+                onCheckedChange={field.onChange}
+                disabled={isSubmitting}
+              />
+            )}
+          />
+        </div>
       </div>
 
       {showValidationRules && (

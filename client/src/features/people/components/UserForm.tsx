@@ -1,6 +1,6 @@
 // src/features/people/components/UserForm.tsx
 import React, { useState, useEffect, useCallback } from 'react';
-import { useForm, Controller, useFieldArray } from 'react-hook-form';
+import { useForm, Controller, useFieldArray, useWatch } from 'react-hook-form';
 import { Plus, X } from 'lucide-react';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { z } from 'zod';
@@ -162,11 +162,8 @@ export const UserForm: React.FC<UserFormProps> = ({
   });
 
   // ── Custom fields ──────────────────────────────────────────────────────
-  const recordRoleIds = React.useMemo(
-    () => initialData?.roles?.map((r) => (typeof r === 'string' ? r : r._id)) ?? [],
-    [initialData],
-  );
-  const { data: effectiveFields } = useEffectiveCustomFields('user', recordRoleIds);
+  const formRoleIds = useWatch({ control, name: 'role_ids' });
+  const { data: effectiveFields } = useEffectiveCustomFields('user', formRoleIds || []);
   const customFields = React.useMemo(
     () => (effectiveFields?.fields ?? []).filter((f) => !f.is_system_field),
     [effectiveFields],
@@ -222,12 +219,15 @@ export const UserForm: React.FC<UserFormProps> = ({
     });
   }, []);
 
+  const formValues = useWatch({ control });
+  const allValues = React.useMemo(() => ({ ...formValues, ...customFieldValues }), [formValues, customFieldValues]);
+
   // Validate required custom fields before submit
    const validateCustomFields = useCallback((): boolean => {
      const newErrors: Record<string, string> = {};
      for (const field of customFields) {
-       if (isFieldRequired(field, customFieldValues)) {
-         const value = customFieldValues[field.slug];
+       if (isFieldRequired(field, allValues)) {
+         const value = customFieldValues[field.slug] ?? field.default_value;
          if (value === null || value === undefined || value === '') {
            newErrors[field.slug] = `${field.label} is required`;
          }
@@ -235,7 +235,7 @@ export const UserForm: React.FC<UserFormProps> = ({
      }
      setCustomFieldErrors(newErrors);
      return Object.keys(newErrors).length === 0;
-   }, [customFields, customFieldValues]);
+   }, [customFields, customFieldValues, allValues]);
 
   return (
     <form
@@ -249,8 +249,10 @@ export const UserForm: React.FC<UserFormProps> = ({
           }, {} as Record<string, unknown>);
           onSubmit({
             ...editableData,
-            custom_fields: Object.keys(customFieldValues).reduce((acc, slug) => {
-              if (customFields.find((f) => f.slug === slug)?.can_edit) acc[slug] = customFieldValues[slug];
+            custom_fields: customFields.reduce((acc, field) => {
+              if (field.can_edit) {
+                acc[field.slug] = customFieldValues[field.slug] ?? (field.default_value ?? null);
+              }
               return acc;
             }, {} as Record<string, unknown>),
           });
@@ -513,7 +515,7 @@ onBlur={(e) => { e.currentTarget.style.background = 'rgba(255,255,255,0.04)'; e.
 
       <DynamicCustomFields
         fields={customFields}
-        values={customFieldValues}
+        values={allValues}
         onChange={handleCustomFieldChange}
         errors={customFieldErrors}
         disabled={isSubmitting}

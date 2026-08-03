@@ -96,11 +96,14 @@ export const HolidayForm: React.FC<HolidayFormProps> = ({
     });
   }, []);
 
+  const formValues = watch();
+  const allValues = React.useMemo(() => ({ ...formValues, ...customFieldValues }), [formValues, customFieldValues]);
+
   const validateCustomFields = useCallback((): boolean => {
     const newErrors: Record<string, string> = {};
     for (const field of customFields) {
-      if (isFieldRequired(field, customFieldValues)) {
-        const value = customFieldValues[field.slug];
+      if (isFieldRequired(field, allValues)) {
+        const value = customFieldValues[field.slug] ?? field.default_value;
         if (value === null || value === undefined || value === '') {
           newErrors[field.slug] = `${field.label} is required`;
         }
@@ -108,14 +111,16 @@ export const HolidayForm: React.FC<HolidayFormProps> = ({
     }
     setCustomFieldErrors(newErrors);
     return Object.keys(newErrors).length === 0;
-  }, [customFields, customFieldValues]);
+  }, [customFields, customFieldValues, allValues]);
 
   const handleSubmitWithCustomFields = handleSubmit((data) => {
     if (!validateCustomFields()) return;
     onSubmit({
       ...data,
-      custom_fields: Object.keys(customFieldValues).reduce((acc, slug) => {
-        if (customFields.find((f) => f.slug === slug)?.can_edit) acc[slug] = customFieldValues[slug];
+      custom_fields: customFields.reduce((acc, field) => {
+        if (field.can_edit) {
+          acc[field.slug] = customFieldValues[field.slug] ?? (field.default_value ?? null);
+        }
         return acc;
       }, {} as Record<string, unknown>),
     });
@@ -235,7 +240,7 @@ export const HolidayForm: React.FC<HolidayFormProps> = ({
       {/* ── Custom Fields ── */}
       <DynamicCustomFields
         fields={customFields}
-        values={customFieldValues}
+        values={allValues}
         onChange={handleCustomFieldChange}
         errors={customFieldErrors}
         disabled={isSubmitting}

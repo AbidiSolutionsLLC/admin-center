@@ -144,6 +144,8 @@ export const updateDomainEnforcement = asyncHandler(async (req: Request, res: Re
   res.json({ success: true, data: company });
 });
 
+import { CustomField } from '../models/CustomField.model';
+
 /**
  * Resets company settings to factory defaults.
  */
@@ -151,20 +153,32 @@ export const resetCompanySettings = asyncHandler(async (req: Request, res: Respo
   const before = await Company.findById(req.user.company_id).lean();
   if (!before) throw new AppError('Company not found', 404, 'COMPANY_NOT_FOUND');
 
-  const defaults = {
-    employee_id_format: 'EMP-{counter:5}',
-    'settings.required_user_fields': ['email', 'full_name'],
-    'settings.is_domain_enforcement_active': false,
-    'settings.allowed_domains': [],
-    'settings.timezone': 'UTC',
-    'settings.locale': 'en-US',
+  const defaultSettings = {
+    required_user_fields: ['email', 'full_name'],
+    employee_id_format: 'EMP-####',
+    is_domain_enforcement_active: false,
+    allowed_domains: [],
+    timezone: 'UTC',
+    locale: 'en-US',
+    default_location_id: null,
   };
 
   const company = await Company.findByIdAndUpdate(
     req.user.company_id,
-    defaults,
+    {
+      $set: {
+        employee_id_format: 'EMP-{counter:5}',
+        settings: defaultSettings
+      }
+    },
     { new: true, runValidators: true }
   );
+
+  // Align with frontend: Purge all non-system custom fields
+  await CustomField.deleteMany({
+    company_id: req.user.company_id,
+    is_system_field: false,
+  });
 
   await auditLogger.log({
     req,

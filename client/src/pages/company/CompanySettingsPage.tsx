@@ -379,18 +379,20 @@ function DomainEnforcementSection() {
       <CardContent>
         <div className="space-y-6">
           {/* Toggle */}
-          <div className="flex items-center justify-between bg-surface-alt p-4 rounded-lg border border-line">
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between bg-surface-alt p-4 rounded-lg border border-line gap-3">
             <div className="flex flex-col gap-1">
               <span className="text-sm font-semibold text-ink">Strict Domain Enforcement</span>
               <p className="text-xs text-ink-secondary">
                 Only users with email addresses from the allowed domains below will be able to join.
               </p>
             </div>
-            <Switch
-              checked={isEnabled}
-              onCheckedChange={handleToggle}
-              disabled={updateDomainEnforcement.isPending}
-            />
+            <div className="flex-shrink-0 self-start sm:self-auto">
+              <Switch
+                checked={isEnabled}
+                onCheckedChange={handleToggle}
+                disabled={updateDomainEnforcement.isPending}
+              />
+            </div>
           </div>
 
           {/* Domain List */}

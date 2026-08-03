@@ -796,49 +796,81 @@ export const updateCustomField = asyncHandler(async (req: Request, res: Response
       case 'user':
         nullCount = await User.countDocuments({
           company_id: req.user.company_id,
-           [`custom_fields.${field.slug}`]: { $exists: false } },
-        );
+          $or: [
+            { [`custom_fields.${field.slug}`]: { $exists: false } },
+            { [`custom_fields.${field.slug}`]: null },
+            { [`custom_fields.${field.slug}`]: '' }
+          ]
+        });
         break;
       case 'department':
         nullCount = await Department.countDocuments({
           company_id: req.user.company_id,
-           [`custom_fields.${field.slug}`]: { $exists: false } },
-        );
+          $or: [
+            { [`custom_fields.${field.slug}`]: { $exists: false } },
+            { [`custom_fields.${field.slug}`]: null },
+            { [`custom_fields.${field.slug}`]: '' }
+          ]
+        });
         break;
       case 'policy':
         nullCount = await PolicyVersion.countDocuments({
           company_id: req.user.company_id,
-           [`custom_fields.${field.slug}`]: { $exists: false } },
-        );
+          $or: [
+            { [`custom_fields.${field.slug}`]: { $exists: false } },
+            { [`custom_fields.${field.slug}`]: null },
+            { [`custom_fields.${field.slug}`]: '' }
+          ]
+        });
         break;
       case 'team':
         nullCount = await Team.countDocuments({
           company_id: req.user.company_id,
-           [`custom_fields.${field.slug}`]: { $exists: false } },
-        );
+          $or: [
+            { [`custom_fields.${field.slug}`]: { $exists: false } },
+            { [`custom_fields.${field.slug}`]: null },
+            { [`custom_fields.${field.slug}`]: '' }
+          ]
+        });
         break;
       case 'location':
         nullCount = await Location.countDocuments({
           company_id: req.user.company_id,
-           [`custom_fields.${field.slug}`]: { $exists: false } },
-        );
+          $or: [
+            { [`custom_fields.${field.slug}`]: { $exists: false } },
+            { [`custom_fields.${field.slug}`]: null },
+            { [`custom_fields.${field.slug}`]: '' }
+          ]
+        });
         break;
       case 'holiday':
         nullCount = await Holiday.countDocuments({
-           [`custom_fields.${field.slug}`]: { $exists: false } },
-        );
+          $or: [
+            { [`custom_fields.${field.slug}`]: { $exists: false } },
+            { [`custom_fields.${field.slug}`]: null },
+            { [`custom_fields.${field.slug}`]: '' }
+          ]
+        });
         break;
       case 'holiday_calendar':
         nullCount = await HolidayCalendar.countDocuments({
           company_id: req.user.company_id,
-           [`custom_fields.${field.slug}`]: { $exists: false } },
-        );
+          $or: [
+            { [`custom_fields.${field.slug}`]: { $exists: false } },
+            { [`custom_fields.${field.slug}`]: null },
+            { [`custom_fields.${field.slug}`]: '' }
+          ]
+        });
         break;
       case 'work_schedule':
         nullCount = await WorkSchedule.countDocuments({
           company_id: req.user.company_id,
-           [`custom_fields.${field.slug}`]: { $exists: false } },
-        );
+          $or: [
+            { [`custom_fields.${field.slug}`]: { $exists: false } },
+            { [`custom_fields.${field.slug}`]: null },
+            { [`custom_fields.${field.slug}`]: '' }
+          ]
+        });
         break;
     }
     if (nullCount > 0) {
