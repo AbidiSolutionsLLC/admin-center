@@ -115,7 +115,14 @@ export function AuditEventDetail({ event, isOpen, onClose }: AuditEventDetailPro
             <h4 className="text-xs font-semibold text-ink-secondary uppercase tracking-wider">
               Before State
             </h4>
-            <pre className="bg-surface-alt rounded-md border border-line p-4 text-xs font-mono text-ink overflow-auto max-h-80">
+            <pre
+              className="p-4 text-xs font-mono text-[#f8fafc] overflow-auto max-h-80"
+              style={{
+                background: 'rgba(255,255,255,0.03)',
+                border: '1px solid rgba(255,255,255,0.08)',
+                borderRadius: 12,
+              }}
+            >
               {formatState(event.before_state)}
             </pre>
           </div>
@@ -124,7 +131,14 @@ export function AuditEventDetail({ event, isOpen, onClose }: AuditEventDetailPro
             <h4 className="text-xs font-semibold text-ink-secondary uppercase tracking-wider">
               After State
             </h4>
-            <pre className="bg-surface-alt rounded-md border border-line p-4 text-xs font-mono text-ink overflow-auto max-h-80">
+            <pre
+              className="p-4 text-xs font-mono text-[#f8fafc] overflow-auto max-h-80"
+              style={{
+                background: 'rgba(255,255,255,0.03)',
+                border: '1px solid rgba(255,255,255,0.08)',
+                borderRadius: 12,
+              }}
+            >
               {formatState(event.after_state)}
             </pre>
           </div>

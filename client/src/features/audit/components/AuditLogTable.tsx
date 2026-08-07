@@ -40,11 +40,11 @@ export function AuditLogTable({ events, isLoading, onRowClick }: AuditLogTablePr
 
   if (isLoading) {
     return (
-      <div className="bg-white rounded-lg border border-line shadow-card overflow-hidden">
+      <div className="glass-card" style={{ borderRadius: 20, overflow: 'hidden' }}>
         <div className="p-12 text-center">
           <div className="animate-pulse space-y-3">
             {Array.from({ length: 8 }).map((_, i) => (
-              <div key={i} className="h-14 bg-skeleton rounded" />
+              <div key={i} className="h-14 bg-white/5 rounded" />
             ))}
           </div>
         </div>
@@ -54,8 +54,8 @@ export function AuditLogTable({ events, isLoading, onRowClick }: AuditLogTablePr
 
   if (!events.length) {
     return (
-      <div className="bg-white rounded-lg border border-line shadow-card p-16 text-center">
-        <div className="w-12 h-12 rounded-xl bg-primary-light flex items-center justify-center mx-auto mb-4">
+      <div className="glass-card p-16 text-center" style={{ borderRadius: 20 }}>
+        <div className="w-12 h-12 rounded-xl bg-white/5 flex items-center justify-center mx-auto mb-4">
           <ExternalLink className="w-6 h-6 text-primary" />
         </div>
         <h3 className="text-sm font-semibold text-ink mb-1">No audit events</h3>
@@ -66,32 +66,35 @@ export function AuditLogTable({ events, isLoading, onRowClick }: AuditLogTablePr
     );
   }
 
+  const thStyle = {
+    padding: '14px 20px',
+    fontWeight: 900,
+    fontSize: 10,
+    textTransform: 'uppercase' as const,
+    letterSpacing: '0.18em',
+    color: '#94a3b8',
+    textAlign: 'left' as const,
+  };
+
+  const tdStyle = {
+    padding: '18px 20px',
+    borderBottom: '1px solid rgba(255,255,255,0.06)',
+  };
+
   return (
-    <div className="bg-white rounded-lg border border-line shadow-card overflow-hidden">
-      <table className="w-full">
+    <div className="glass-card" style={{ borderRadius: 20, overflow: 'hidden' }}>
+      <table className="glass-table w-full" style={{ borderCollapse: 'separate', borderSpacing: '0 3px' }}>
         <thead>
-          <tr className="bg-surface-alt border-b border-line">
-            <th className="h-10 px-4 text-left text-[11px] font-semibold text-ink-secondary uppercase tracking-wider w-10">
+          <tr style={{ background: 'rgba(255,255,255,0.02)' }}>
+            <th style={{ ...thStyle, width: 40 }}>
               {/* Expand chevron */}
             </th>
-            <th className="h-10 px-4 text-left text-[11px] font-semibold text-ink-secondary uppercase tracking-wider">
-              Timestamp
-            </th>
-            <th className="h-10 px-4 text-left text-[11px] font-semibold text-ink-secondary uppercase tracking-wider">
-              Actor
-            </th>
-            <th className="h-10 px-4 text-left text-[11px] font-semibold text-ink-secondary uppercase tracking-wider">
-              Action
-            </th>
-            <th className="h-10 px-4 text-left text-[11px] font-semibold text-ink-secondary uppercase tracking-wider">
-              Module
-            </th>
-            <th className="h-10 px-4 text-left text-[11px] font-semibold text-ink-secondary uppercase tracking-wider">
-              Object
-            </th>
-            <th className="h-10 px-4 text-left text-[11px] font-semibold text-ink-secondary uppercase tracking-wider">
-              IP Address
-            </th>
+            <th style={thStyle}>Timestamp</th>
+            <th style={thStyle}>Actor</th>
+            <th style={thStyle}>Action</th>
+            <th style={thStyle}>Module</th>
+            <th style={thStyle}>Object</th>
+            <th style={thStyle}>IP Address</th>
           </tr>
         </thead>
         <tbody>
@@ -102,18 +105,31 @@ export function AuditLogTable({ events, isLoading, onRowClick }: AuditLogTablePr
               <>
                 <tr
                   key={event._id}
-                  className={cn(
-                    'border-b border-line last:border-0 transition-colors duration-100 cursor-pointer',
-                    isExpanded ? 'bg-primary-light' : 'hover:bg-surface-alt'
-                  )}
+                  style={{
+                    cursor: 'pointer',
+                    transition: 'all 0.15s ease',
+                    background: isExpanded ? 'rgba(245,176,42,0.08)' : 'transparent',
+                  }}
+                  onMouseEnter={e => {
+                    if (!isExpanded) {
+                      (e.currentTarget as HTMLTableRowElement).style.background = 'rgba(255,255,255,0.03)';
+                      (e.currentTarget as HTMLTableRowElement).style.transform = 'translateY(-1px)';
+                    }
+                  }}
+                  onMouseLeave={e => {
+                    if (!isExpanded) {
+                      (e.currentTarget as HTMLTableRowElement).style.background = 'transparent';
+                      (e.currentTarget as HTMLTableRowElement).style.transform = 'translateY(0)';
+                    }
+                  }}
                 >
-                  <td className="h-14 px-4">
+                  <td style={tdStyle}>
                     <button
                       onClick={(e) => {
                         e.stopPropagation();
                         toggleRow(event._id);
                       }}
-                      className="h-6 w-6 flex items-center justify-center rounded hover:bg-surface-alt transition-colors"
+                      className="h-6 w-6 flex items-center justify-center rounded hover:bg-white/10 transition-colors"
                     >
                       {event.before_state || event.after_state ? (
                         isExpanded ? (
@@ -124,56 +140,41 @@ export function AuditLogTable({ events, isLoading, onRowClick }: AuditLogTablePr
                       ) : null}
                     </button>
                   </td>
-                  <td
-                    className="h-14 px-4 text-sm text-ink"
-                    onClick={() => onRowClick(event)}
-                  >
+                  <td style={tdStyle} onClick={() => onRowClick(event)}>
                     <div className="text-sm text-ink">{formatDate(event.created_at)}</div>
                   </td>
-                  <td
-                    className="h-14 px-4 text-sm"
-                    onClick={() => onRowClick(event)}
-                  >
+                  <td style={tdStyle} onClick={() => onRowClick(event)}>
                     <div className="text-sm text-ink">{event.actor_name || event.actor_email}</div>
                     <div className="text-xs text-ink-secondary font-mono">{event.actor_email}</div>
                   </td>
-                  <td className="h-14 px-4 text-sm">
-                    <span className="inline-flex items-center font-mono text-xs bg-primary-light text-primary border border-primary/20 rounded-md px-2 py-0.5">
+                  <td style={tdStyle}>
+                    <span className="inline-flex items-center font-mono text-xs bg-white/5 text-primary border border-primary/20 rounded-md px-2 py-0.5">
                       {event.action}
                     </span>
                   </td>
-                  <td
-                    className="h-14 px-4 text-sm text-ink-secondary capitalize"
-                    onClick={() => onRowClick(event)}
-                  >
-                    {event.module.replace('_', ' ')}
+                  <td style={tdStyle} onClick={() => onRowClick(event)}>
+                    <div className="text-sm text-ink-secondary capitalize">{event.module.replace('_', ' ')}</div>
                   </td>
-                  <td
-                    className="h-14 px-4 text-sm"
-                    onClick={() => onRowClick(event)}
-                  >
+                  <td style={tdStyle} onClick={() => onRowClick(event)}>
                     <div className="text-sm text-ink">{event.object_label}</div>
                     <div className="text-xs text-ink-secondary">{event.object_type}</div>
                   </td>
-                  <td
-                    className="h-14 px-4 text-sm font-mono text-ink-secondary"
-                    onClick={() => onRowClick(event)}
-                  >
-                    {event.ip_address || '—'}
+                  <td style={tdStyle} onClick={() => onRowClick(event)}>
+                    <div className="text-sm font-mono text-ink-secondary">{event.ip_address || '—'}</div>
                   </td>
                 </tr>
 
                 {/* Expanded row with before/after state */}
                 {isExpanded && (event.before_state || event.after_state) && (
-                  <tr className="bg-surface-alt border-b border-line">
-                    <td colSpan={7} className="px-4 py-4">
+                  <tr style={{ background: 'rgba(255,255,255,0.02)' }}>
+                    <td colSpan={7} className="px-4 py-4" style={{ borderBottom: '1px solid rgba(255,255,255,0.06)' }}>
                       <div className="grid grid-cols-2 gap-4">
                         {/* Before State */}
                         <div className="space-y-2">
                           <h4 className="text-xs font-semibold text-ink-secondary uppercase tracking-wider">
                             Before
                           </h4>
-                          <pre className="bg-white rounded-md border border-line p-3 text-xs font-mono text-ink overflow-auto max-h-64">
+                          <pre className="rounded-xl border border-[rgba(255,255,255,0.08)] p-4 text-xs font-mono text-ink overflow-auto max-h-64" style={{ background: 'rgba(255,255,255,0.03)' }}>
                             {formatState(event.before_state)}
                           </pre>
                         </div>
@@ -183,7 +184,7 @@ export function AuditLogTable({ events, isLoading, onRowClick }: AuditLogTablePr
                           <h4 className="text-xs font-semibold text-ink-secondary uppercase tracking-wider">
                             After
                           </h4>
-                          <pre className="bg-white rounded-md border border-line p-3 text-xs font-mono text-ink overflow-auto max-h-64">
+                          <pre className="rounded-xl border border-[rgba(255,255,255,0.08)] p-4 text-xs font-mono text-ink overflow-auto max-h-64" style={{ background: 'rgba(255,255,255,0.03)' }}>
                             {formatState(event.after_state)}
                           </pre>
                         </div>

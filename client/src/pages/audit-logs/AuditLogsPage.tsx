@@ -81,7 +81,22 @@ export default function AuditLogsPage() {
             <button
               onClick={handleExport}
               disabled={exportMutation.isPending}
-              className="h-9 px-4 text-sm font-medium rounded-md border border-line bg-white text-ink hover:bg-surface-alt transition-colors flex items-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed"
+              style={{
+                height: 38,
+                padding: '0 18px',
+                background: 'rgba(255,255,255,0.04)',
+                border: '1px solid rgba(255,255,255,0.10)',
+                borderRadius: 12,
+                color: '#f8fafc',
+                fontWeight: 600,
+                fontSize: 13,
+                cursor: exportMutation.isPending ? 'not-allowed' : 'pointer',
+                transition: 'all 0.2s ease',
+                display: 'flex',
+                alignItems: 'center',
+                gap: 8,
+                opacity: exportMutation.isPending ? 0.5 : 1,
+              }}
             >
               <Download className="w-4 h-4" />
               {exportMutation.isPending ? 'Exporting...' : 'Export CSV'}
@@ -92,7 +107,7 @@ export default function AuditLogsPage() {
 
       {/* Error State */}
       {error && (
-        <div className="bg-white rounded-lg border border-line shadow-card p-12 text-center">
+        <div className="glass-card p-12 text-center" style={{ borderRadius: 20 }}>
           <p className="text-sm text-error mb-3">Failed to load audit logs</p>
           <p className="text-sm text-ink-secondary mb-4">
             Something went wrong. Check your connection and try again.
@@ -126,7 +141,7 @@ export default function AuditLogsPage() {
 
       {/* Pagination */}
       {data && data.pagination.totalPages > 1 && (
-        <div className="border-t border-line px-4 py-3 flex items-center justify-between bg-surface-alt rounded-lg">
+        <div className="glass-card px-4 py-3 flex items-center justify-between mt-4" style={{ borderRadius: 20 }}>
           <span className="text-xs text-ink-secondary">
             Showing {(data.pagination.page - 1) * data.pagination.limit + 1}–
             {Math.min(data.pagination.page * data.pagination.limit, data.pagination.total)} of{' '}
@@ -136,14 +151,36 @@ export default function AuditLogsPage() {
             <button
               onClick={() => setPage((p) => Math.max(1, p - 1))}
               disabled={page === 1}
-              className="h-8 px-3 text-xs font-medium rounded-md border border-line bg-white text-ink hover:bg-surface-alt disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+              style={{
+                padding: '6px 12px',
+                background: 'rgba(255,255,255,0.04)',
+                border: '1px solid rgba(255,255,255,0.10)',
+                borderRadius: 8,
+                color: '#f8fafc',
+                fontWeight: 600,
+                fontSize: 12,
+                cursor: page === 1 ? 'not-allowed' : 'pointer',
+                transition: 'all 0.2s ease',
+                opacity: page === 1 ? 0.5 : 1,
+              }}
             >
               Previous
             </button>
             <button
               onClick={() => setPage((p) => Math.min(data.pagination.totalPages, p + 1))}
               disabled={page === data.pagination.totalPages}
-              className="h-8 px-3 text-xs font-medium rounded-md border border-line bg-white text-ink hover:bg-surface-alt disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+              style={{
+                padding: '6px 12px',
+                background: 'rgba(255,255,255,0.04)',
+                border: '1px solid rgba(255,255,255,0.10)',
+                borderRadius: 8,
+                color: '#f8fafc',
+                fontWeight: 600,
+                fontSize: 12,
+                cursor: page === data.pagination.totalPages ? 'not-allowed' : 'pointer',
+                transition: 'all 0.2s ease',
+                opacity: page === data.pagination.totalPages ? 0.5 : 1,
+              }}
             >
               Next
             </button>

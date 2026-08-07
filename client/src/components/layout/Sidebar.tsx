@@ -15,6 +15,7 @@ import {
   CheckSquare,
   MapPin,
   Database,
+  ClipboardList,
 } from 'lucide-react';
 import { useAuthStore } from '@/store/useAuthStore';
 import { useUIStore } from '@/store/useUIStore';
@@ -62,6 +63,7 @@ const navGroups = [
     items: [
       { label: 'Company settings', href: ROUTES.COMPANY_SETTINGS, icon: Settings },
       { label: 'Security', href: ROUTES.SECURITY, icon: Shield },
+      { label: 'Audit Logs', href: ROUTES.AUDIT_LOGS, icon: ClipboardList },
     ],
   },
 ];
