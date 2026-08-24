@@ -1,5 +1,5 @@
 // client/src/features/overview/RecentActivityFeed.tsx
-import { Clock, User, Building2, Shield, Package, Settings } from 'lucide-react';
+import { Clock, User, Building2, Shield, Package, Settings, Users, FileText, Database, Activity } from 'lucide-react';
 import type { AuditEvent } from '@/types';
 
 interface RecentActivityFeedProps {
@@ -59,6 +59,19 @@ export const RecentActivityFeed: React.FC<RecentActivityFeedProps> = ({
         return Shield;
       case 'apps':
         return Package;
+      case 'group':
+      case 'groups':
+        return Users;
+      case 'policy':
+      case 'policies':
+        return FileText;
+      case 'custom_field':
+      case 'custom_fields':
+      case 'data_fields':
+        return Database;
+      case 'workflow':
+      case 'workflows':
+        return Activity;
       default:
         return Settings;
     }
@@ -79,12 +92,22 @@ export const RecentActivityFeed: React.FC<RecentActivityFeedProps> = ({
         return 'bg-primary-light text-primary';
       case 'organization':
       case 'departments':
+      case 'group':
+      case 'groups':
         return 'bg-info/10 text-info';
       case 'roles':
       case 'permissions':
+      case 'custom_field':
+      case 'custom_fields':
+      case 'data_fields':
         return 'bg-warning/10 text-warning';
       case 'apps':
+      case 'workflow':
+      case 'workflows':
         return 'bg-success/10 text-success';
+      case 'policy':
+      case 'policies':
+        return 'bg-error/10 text-error';
       default:
         return 'bg-surface-alt text-ink-secondary';
     }

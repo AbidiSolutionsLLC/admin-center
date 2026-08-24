@@ -108,7 +108,7 @@ export const getTeams = asyncHandler(async (req: Request, res: Response) => {
  */
 export const getTeamById = asyncHandler(async (req: Request, res: Response) => {
   const filter: TeamFilter = {
-    _id: req.params.id,
+    _id: (req.params.id as string) as string,
     company_id: req.user.company_id,
     is_active: true,
   };
@@ -233,7 +233,7 @@ export const updateTeam = asyncHandler(async (req: Request, res: Response) => {
     const filter: TeamFilter = {
       company_id: req.user.company_id,
       slug,
-      _id: { $ne: req.params.id },
+      _id: { $ne: (req.params.id as string) },
       is_active: true,
     };
 
@@ -249,7 +249,7 @@ export const updateTeam = asyncHandler(async (req: Request, res: Response) => {
   }
 
   const teamFilter: TeamFilter = {
-    _id: req.params.id,
+    _id: (req.params.id as string) as string,
     company_id: req.user.company_id,
     is_active: true,
   };
@@ -343,7 +343,7 @@ export const updateTeam = asyncHandler(async (req: Request, res: Response) => {
  */
 export const deleteTeam = asyncHandler(async (req: Request, res: Response) => {
   const filter: TeamFilter = {
-    _id: req.params.id,
+    _id: (req.params.id as string) as string,
     company_id: req.user.company_id,
     is_active: true,
   };
@@ -395,7 +395,7 @@ export const deleteTeam = asyncHandler(async (req: Request, res: Response) => {
  */
 export const getTeamMembers = asyncHandler(async (req: Request, res: Response) => {
   const teamFilter: TeamFilter = {
-    _id: req.params.id,
+    _id: (req.params.id as string) as string,
     company_id: req.user.company_id,
     is_active: true,
   };
@@ -433,7 +433,7 @@ export const addTeamMember = asyncHandler(async (req: Request, res: Response) =>
   const input = AddMemberSchema.parse(req.body);
 
   const teamFilter: TeamFilter = {
-    _id: req.params.id,
+    _id: (req.params.id as string) as string,
     company_id: req.user.company_id,
     is_active: true,
   };
@@ -504,7 +504,7 @@ export const updateTeamMember = asyncHandler(async (req: Request, res: Response)
   const input = UpdateMemberSchema.parse(req.body);
 
   const teamFilter: TeamFilter = {
-    _id: req.params.id,
+    _id: (req.params.id as string) as string,
     company_id: req.user.company_id,
     is_active: true,
   };
@@ -516,6 +516,7 @@ export const updateTeamMember = asyncHandler(async (req: Request, res: Response)
   }
 
   const memberFilter: TeamMemberFilter = {
+    // @ts-ignore
     _id: req.params.memberId,
     company_id: req.user.company_id,
     team_id: team._id,
@@ -561,7 +562,7 @@ export const updateTeamMember = asyncHandler(async (req: Request, res: Response)
  */
 export const removeTeamMember = asyncHandler(async (req: Request, res: Response) => {
   const teamFilter: TeamFilter = {
-    _id: req.params.id,
+    _id: (req.params.id as string) as string,
     company_id: req.user.company_id,
     is_active: true,
   };
@@ -573,6 +574,7 @@ export const removeTeamMember = asyncHandler(async (req: Request, res: Response)
   }
 
   const memberFilter: TeamMemberFilter = {
+    // @ts-ignore
     _id: req.params.memberId,
     company_id: req.user.company_id,
     team_id: team._id,
@@ -622,7 +624,7 @@ export const removeBulkTeamMembers = asyncHandler(async (req: Request, res: Resp
   }).parse(req.body);
 
   const teamFilter: TeamFilter = {
-    _id: req.params.id,
+    _id: (req.params.id as string) as string,
     company_id: req.user.company_id,
     is_active: true,
   };

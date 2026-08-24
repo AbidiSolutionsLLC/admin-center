@@ -7,12 +7,14 @@ import type { AuditEvent } from '@/types';
 interface UseAuditEventsParams {
   page?: number;
   limit?: number;
+  category?: string;
   module?: string;
   action?: string;
   search?: string;
   actor_email?: string;
   date_from?: string;
   date_to?: string;
+  isLive?: boolean;
 }
 
 interface AuditEventsResponse {
@@ -33,17 +35,20 @@ export const useAuditEvents = (params: UseAuditEventsParams = {}) => {
   const {
     page = 1,
     limit = 50,
+    category,
     module,
     action,
     search,
     actor_email,
     date_from,
     date_to,
+    isLive,
   } = params;
 
   const queryKey = QUERY_KEYS.AUDIT_EVENTS({
     page,
     limit,
+    category,
     module,
     action,
     search,
@@ -58,6 +63,7 @@ export const useAuditEvents = (params: UseAuditEventsParams = {}) => {
       const searchParams = new URLSearchParams();
       searchParams.set('page', page.toString());
       searchParams.set('limit', limit.toString());
+      if (category) searchParams.set('category', category);
       if (module) searchParams.set('module', module);
       if (action) searchParams.set('action', action);
       if (search) searchParams.set('search', search);
@@ -69,6 +75,7 @@ export const useAuditEvents = (params: UseAuditEventsParams = {}) => {
       return data.data;
     },
     staleTime: 1000 * 30, // 30 seconds
+    refetchInterval: isLive ? 3000 : false,
     retry: 2,
   });
 };

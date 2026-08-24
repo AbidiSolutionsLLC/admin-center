@@ -253,7 +253,7 @@ async function main() {
   // ═══ 11e. SYSTEM field rename should be blocked ═══
   await api('POST', '/data-fields/seed-defaults', adminToken, { target_object: 'user' });
   const sysFieldList = await api('GET', '/data-fields?target_object=user&include_inactive=true', adminToken);
-  const sysFieldForRename = sysFieldList.json?.data?.find((f) => f.is_system_field);
+  const sysFieldForRename = sysFieldList.json?.data?.find((f: any) => f.is_system_field);
   if (sysFieldForRename) {
   const sysRename = await api('PUT', `/data-fields/${sysFieldForRename._id}`, adminToken, { name: 'try_rename' });
   check('system field rename rejected 400', sysRename.status, 400);
@@ -264,7 +264,7 @@ async function main() {
 
   // ═══ 12. system fields cannot be deleted ═══
   const sfList = await api('GET', '/data-fields?target_object=user&include_inactive=true', adminToken);
-  const sysField = sfList.json?.data?.find((f) => f.is_system_field);
+  const sysField = sfList.json?.data?.find((f: any) => f.is_system_field);
   const delSystem = sysField ? await api('DELETE', `/data-fields/${sysField._id}`, adminToken) : { status: 'no-groups', json: {} };
   check('system field delete rejected 400', delSystem.status, 400);
   check('system field delete code', delSystem.json?.code, 'CANNOT_MODIFY_SYSTEM_FIELD');

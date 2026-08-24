@@ -34,7 +34,7 @@ const MVP_CONNECTORS: { type: IntegrationType; label: string; description: strin
  * - "Sync Now" triggers sync endpoint and shows result toast
  * - Sync log viewer after every sync
  * - Disconnect wipes credentials_enc field
- * - All mutations produce audit events
+ * - All mutaztions produce audit events
  * - All 4 states: loading, error, empty, data
  */
 export default function IntegrationsPage() {

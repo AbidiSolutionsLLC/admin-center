@@ -13,6 +13,7 @@ import {
   updateTimezone,
   updateLocale,
   updateDefaultLocation,
+  updateAuditLogRetention,
 } from '../controllers/company.controller';
 
 const router = Router();
@@ -29,5 +30,6 @@ router.put('/settings/company-name',              updateCompanyName);
 router.put('/settings/timezone',                  updateTimezone);
 router.put('/settings/locale',                    updateLocale);
 router.put('/settings/default-location',           updateDefaultLocation);
+router.put('/settings/audit-log-retention',        updateAuditLogRetention);
 
 export default router;

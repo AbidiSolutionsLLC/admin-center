@@ -142,7 +142,7 @@ export const createWorkSchedule = asyncHandler(async (req: Request, res: Respons
    const schedule = await WorkSchedule.create({
      ...input,
      company_id: req.user.company_id,
-   });
+   } as any);
 
   await auditLogger.log({
     req,

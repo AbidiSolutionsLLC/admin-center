@@ -4,12 +4,14 @@ import { apiClient } from '@/lib/apiClient';
 import { toast } from 'sonner';
 
 interface ExportFilters {
+  category?: string;
   module?: string;
   action?: string;
   search?: string;
   actor_email?: string;
   date_from?: string;
   date_to?: string;
+  format?: 'csv' | 'json';
 }
 
 /**
@@ -21,6 +23,7 @@ export const useExportAuditLog = () => {
   return useMutation<unknown, Error, ExportFilters>({
     mutationFn: async (filters) => {
       const searchParams = new URLSearchParams();
+      if (filters.category) searchParams.set('category', filters.category);
       if (filters.module) searchParams.set('module', filters.module);
       if (filters.action) searchParams.set('action', filters.action);
       if (filters.search) searchParams.set('search', filters.search);
@@ -28,20 +31,23 @@ export const useExportAuditLog = () => {
       if (filters.date_from) searchParams.set('date_from', filters.date_from);
       if (filters.date_to) searchParams.set('date_to', filters.date_to);
 
+      const format = filters.format || 'csv';
+
       // Use fetch blob for file download
-      const response = await apiClient.get(`/audit-logs/export/csv?${searchParams.toString()}`, {
+      const response = await apiClient.get(`/audit-logs/export/${format}?${searchParams.toString()}`, {
         responseType: 'blob',
       });
 
       // Create blob and download
-      const blob = new Blob([response.data], { type: 'text/csv' });
+      const type = format === 'csv' ? 'text/csv' : 'application/json';
+      const blob = new Blob([response.data], { type });
       const url = window.URL.createObjectURL(blob);
       const link = document.createElement('a');
       link.href = url;
 
       // Extract filename from Content-Disposition header
       const contentDisposition = response.headers['content-disposition'];
-      let filename = 'audit-log-export.csv';
+      let filename = `audit-log-export.${format}`;
       if (contentDisposition) {
         const match = contentDisposition.match(/filename="?(.+)"?/i);
         if (match) {

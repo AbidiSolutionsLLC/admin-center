@@ -26,6 +26,34 @@ export function AuditEventDetail({ event, isOpen, onClose }: AuditEventDetailPro
     return JSON.stringify(state, null, 2);
   };
 
+  const getModuleTagColor = (module: string) => {
+    switch (module) {
+      case 'people':
+      case 'users':
+        return 'bg-primary-light text-primary border-primary/20';
+      case 'organization':
+      case 'departments':
+      case 'group':
+      case 'groups':
+        return 'bg-info/10 text-info border-info/20';
+      case 'roles':
+      case 'permissions':
+      case 'custom_field':
+      case 'custom_fields':
+      case 'data_fields':
+        return 'bg-warning/10 text-warning border-warning/20';
+      case 'apps':
+      case 'workflow':
+      case 'workflows':
+        return 'bg-success/10 text-success border-success/20';
+      case 'policy':
+      case 'policies':
+        return 'bg-error/10 text-error border-error/20';
+      default:
+        return 'bg-surface-alt text-ink-secondary border-line';
+    }
+  };
+
   return (
     <Modal
       isOpen={isOpen}
@@ -38,14 +66,14 @@ export function AuditEventDetail({ event, isOpen, onClose }: AuditEventDetailPro
         {/* Event Metadata */}
         <div className="grid grid-cols-2 gap-4">
           <div>
-            <label className="text-xs font-semibold text-ink-secondary uppercase tracking-wider">
+            <label className="text-[11px] font-semibold text-ink-secondary uppercase tracking-wider">
               Timestamp
             </label>
             <p className="mt-1 text-sm text-ink">{formatDate(event.created_at)}</p>
           </div>
 
           <div>
-            <label className="text-xs font-semibold text-ink-secondary uppercase tracking-wider">
+            <label className="text-[11px] font-semibold text-ink-secondary uppercase tracking-wider">
               Actor
             </label>
             <p className="mt-1 text-sm text-ink">{event.actor_name || event.actor_email}</p>
@@ -53,46 +81,53 @@ export function AuditEventDetail({ event, isOpen, onClose }: AuditEventDetailPro
           </div>
 
           <div>
-            <label className="text-xs font-semibold text-ink-secondary uppercase tracking-wider">
+            <label className="text-[11px] font-semibold text-ink-secondary uppercase tracking-wider">
+              Category
+            </label>
+            <p className="mt-1 text-sm text-ink font-medium">{event.category || 'System'}</p>
+          </div>
+
+          <div>
+            <label className="text-[11px] font-semibold text-ink-secondary uppercase tracking-wider">
               Module
             </label>
             <p className="mt-1 text-sm text-ink capitalize">{event.module.replace('_', ' ')}</p>
           </div>
 
           <div>
-            <label className="text-xs font-semibold text-ink-secondary uppercase tracking-wider">
+            <label className="text-[11px] font-semibold text-ink-secondary uppercase tracking-wider">
               Action
             </label>
             <p className="mt-1">
-              <span className="inline-flex items-center font-mono text-xs bg-accent-light text-accent border border-indigo-200 rounded-md px-2 py-0.5">
+              <span className={`inline-flex items-center font-mono text-xs border rounded-md px-2 py-0.5 ${getModuleTagColor(event.module)}`}>
                 {event.action}
               </span>
             </p>
           </div>
 
           <div>
-            <label className="text-xs font-semibold text-ink-secondary uppercase tracking-wider">
+            <label className="text-[11px] font-semibold text-ink-secondary uppercase tracking-wider">
               Object Type
             </label>
             <p className="mt-1 text-sm text-ink">{event.object_type}</p>
           </div>
 
           <div>
-            <label className="text-xs font-semibold text-ink-secondary uppercase tracking-wider">
+            <label className="text-[11px] font-semibold text-ink-secondary uppercase tracking-wider">
               Object Label
             </label>
             <p className="mt-1 text-sm text-ink">{event.object_label}</p>
           </div>
 
           <div>
-            <label className="text-xs font-semibold text-ink-secondary uppercase tracking-wider">
+            <label className="text-[11px] font-semibold text-ink-secondary uppercase tracking-wider">
               Object ID
             </label>
             <p className="mt-1 text-sm font-mono text-ink-secondary">{event.object_id}</p>
           </div>
 
           <div>
-            <label className="text-xs font-semibold text-ink-secondary uppercase tracking-wider">
+            <label className="text-[11px] font-semibold text-ink-secondary uppercase tracking-wider">
               IP Address
             </label>
             <p className="mt-1 text-sm font-mono text-ink-secondary">{event.ip_address || '—'}</p>
@@ -102,43 +137,41 @@ export function AuditEventDetail({ event, isOpen, onClose }: AuditEventDetailPro
         {/* User Agent */}
         {event.user_agent && (
           <div>
-            <label className="text-xs font-semibold text-ink-secondary uppercase tracking-wider">
+            <label className="text-[11px] font-semibold text-ink-secondary uppercase tracking-wider">
               User Agent
             </label>
             <p className="mt-1 text-xs font-mono text-ink-secondary break-all">{event.user_agent}</p>
           </div>
         )}
 
+        {/* Integrity Hash */}
+        {event.hash && (
+          <div>
+            <label className="text-[11px] font-semibold text-ink-secondary uppercase tracking-wider">
+              Integrity Checksum (SHA-256)
+            </label>
+            <p className="mt-1 text-xs font-mono text-ink-secondary break-all p-2 bg-surface-alt rounded border border-line">
+              {event.hash}
+            </p>
+          </div>
+        )}
+
         {/* Before/After State */}
-        <div className="grid grid-cols-2 gap-4">
+        <div className="grid grid-cols-2 gap-6">
           <div className="space-y-2">
-            <h4 className="text-xs font-semibold text-ink-secondary uppercase tracking-wider">
+            <h4 className="text-[11px] font-semibold text-ink-secondary uppercase tracking-wider">
               Before State
             </h4>
-            <pre
-              className="p-4 text-xs font-mono text-[#f8fafc] overflow-auto max-h-80"
-              style={{
-                background: 'rgba(255,255,255,0.03)',
-                border: '1px solid rgba(255,255,255,0.08)',
-                borderRadius: 12,
-              }}
-            >
+            <pre className="rounded-lg border border-line p-4 text-xs font-mono text-ink overflow-auto max-h-80 bg-surface-alt shadow-sm">
               {formatState(event.before_state)}
             </pre>
           </div>
 
           <div className="space-y-2">
-            <h4 className="text-xs font-semibold text-ink-secondary uppercase tracking-wider">
+            <h4 className="text-[11px] font-semibold text-ink-secondary uppercase tracking-wider">
               After State
             </h4>
-            <pre
-              className="p-4 text-xs font-mono text-[#f8fafc] overflow-auto max-h-80"
-              style={{
-                background: 'rgba(255,255,255,0.03)',
-                border: '1px solid rgba(255,255,255,0.08)',
-                borderRadius: 12,
-              }}
-            >
+            <pre className="rounded-lg border border-line p-4 text-xs font-mono text-ink overflow-auto max-h-80 bg-surface-alt shadow-sm">
               {formatState(event.after_state)}
             </pre>
           </div>

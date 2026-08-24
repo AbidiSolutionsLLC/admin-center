@@ -1,5 +1,5 @@
 // src/features/audit/components/AuditLogTable.tsx
-import { useState } from 'react';
+import React, { useState } from 'react';
 import { ChevronDown, ChevronRight, ExternalLink } from 'lucide-react';
 import { cn } from '@/utils/cn';
 import type { AuditEvent } from '@/types';
@@ -38,24 +38,61 @@ export function AuditLogTable({ events, isLoading, onRowClick }: AuditLogTablePr
     return JSON.stringify(state, null, 2);
   };
 
+  const getModuleTagColor = (module: string) => {
+    switch (module) {
+      case 'people':
+      case 'users':
+        return 'bg-primary-light text-primary border-primary/20';
+      case 'organization':
+      case 'departments':
+      case 'group':
+      case 'groups':
+        return 'bg-info/10 text-info border-info/20';
+      case 'roles':
+      case 'permissions':
+      case 'custom_field':
+      case 'custom_fields':
+      case 'data_fields':
+        return 'bg-warning/10 text-warning border-warning/20';
+      case 'apps':
+      case 'workflow':
+      case 'workflows':
+        return 'bg-success/10 text-success border-success/20';
+      case 'policy':
+      case 'policies':
+        return 'bg-error/10 text-error border-error/20';
+      default:
+        return 'bg-surface-alt text-ink-secondary border-line';
+    }
+  };
+
   if (isLoading) {
     return (
-      <div className="glass-card" style={{ borderRadius: 20, overflow: 'hidden' }}>
-        <div className="p-12 text-center">
-          <div className="animate-pulse space-y-3">
-            {Array.from({ length: 8 }).map((_, i) => (
-              <div key={i} className="h-14 bg-white/5 rounded" />
-            ))}
-          </div>
+      <div className="w-full">
+        <div className="h-10 px-4 border-b border-line bg-surface-alt flex items-center gap-6">
+          {Array.from({ length: 6 }).map((_, i) => (
+            <div key={i} className="h-3 bg-surface rounded animate-pulse" style={{ width: `${60 + i * 20}px` }} />
+          ))}
         </div>
+        {Array.from({ length: 8 }).map((_, i) => (
+          <div key={i} className="h-14 px-4 border-b border-line last:border-0 flex items-center gap-6">
+            <div className="w-8 h-8 rounded-full bg-surface animate-pulse flex-shrink-0" />
+            <div className="flex-1 space-y-1.5">
+              <div className="h-3 bg-surface rounded animate-pulse w-1/3" />
+              <div className="h-2.5 bg-surface rounded animate-pulse w-1/4" />
+            </div>
+            <div className="h-3 bg-surface rounded animate-pulse w-20" />
+            <div className="h-5 bg-surface rounded-full animate-pulse w-16" />
+          </div>
+        ))}
       </div>
     );
   }
 
   if (!events.length) {
     return (
-      <div className="glass-card p-16 text-center" style={{ borderRadius: 20 }}>
-        <div className="w-12 h-12 rounded-xl bg-white/5 flex items-center justify-center mx-auto mb-4">
+      <div className="flex flex-col items-center justify-center py-16 px-4 text-center">
+        <div className="w-12 h-12 rounded-xl bg-primary-light flex items-center justify-center mb-4">
           <ExternalLink className="w-6 h-6 text-primary" />
         </div>
         <h3 className="text-sm font-semibold text-ink mb-1">No audit events</h3>
@@ -66,35 +103,18 @@ export function AuditLogTable({ events, isLoading, onRowClick }: AuditLogTablePr
     );
   }
 
-  const thStyle = {
-    padding: '14px 20px',
-    fontWeight: 900,
-    fontSize: 10,
-    textTransform: 'uppercase' as const,
-    letterSpacing: '0.18em',
-    color: '#94a3b8',
-    textAlign: 'left' as const,
-  };
-
-  const tdStyle = {
-    padding: '18px 20px',
-    borderBottom: '1px solid rgba(255,255,255,0.06)',
-  };
-
   return (
-    <div className="glass-card" style={{ borderRadius: 20, overflow: 'hidden' }}>
-      <table className="glass-table w-full" style={{ borderCollapse: 'separate', borderSpacing: '0 3px' }}>
+    <div className="w-full">
+      <table className="w-full text-left">
         <thead>
-          <tr style={{ background: 'rgba(255,255,255,0.02)' }}>
-            <th style={{ ...thStyle, width: 40 }}>
-              {/* Expand chevron */}
-            </th>
-            <th style={thStyle}>Timestamp</th>
-            <th style={thStyle}>Actor</th>
-            <th style={thStyle}>Action</th>
-            <th style={thStyle}>Module</th>
-            <th style={thStyle}>Object</th>
-            <th style={thStyle}>IP Address</th>
+          <tr className="bg-surface-alt border-b border-line">
+            <th className="h-10 px-4 w-10"></th>
+            <th className="h-10 px-4 text-[11px] font-semibold text-ink-secondary uppercase tracking-wider">Timestamp</th>
+            <th className="h-10 px-4 text-[11px] font-semibold text-ink-secondary uppercase tracking-wider">Actor</th>
+            <th className="h-10 px-4 text-[11px] font-semibold text-ink-secondary uppercase tracking-wider">Action</th>
+            <th className="h-10 px-4 text-[11px] font-semibold text-ink-secondary uppercase tracking-wider">Category / Module</th>
+            <th className="h-10 px-4 text-[11px] font-semibold text-ink-secondary uppercase tracking-wider">Object</th>
+            <th className="h-10 px-4 text-[11px] font-semibold text-ink-secondary uppercase tracking-wider">IP Address</th>
           </tr>
         </thead>
         <tbody>
@@ -102,34 +122,21 @@ export function AuditLogTable({ events, isLoading, onRowClick }: AuditLogTablePr
             const isExpanded = expandedRows.has(event._id);
 
             return (
-              <>
+              <React.Fragment key={event._id}>
                 <tr
-                  key={event._id}
-                  style={{
-                    cursor: 'pointer',
-                    transition: 'all 0.15s ease',
-                    background: isExpanded ? 'rgba(245,176,42,0.08)' : 'transparent',
-                  }}
-                  onMouseEnter={e => {
-                    if (!isExpanded) {
-                      (e.currentTarget as HTMLTableRowElement).style.background = 'rgba(255,255,255,0.03)';
-                      (e.currentTarget as HTMLTableRowElement).style.transform = 'translateY(-1px)';
-                    }
-                  }}
-                  onMouseLeave={e => {
-                    if (!isExpanded) {
-                      (e.currentTarget as HTMLTableRowElement).style.background = 'transparent';
-                      (e.currentTarget as HTMLTableRowElement).style.transform = 'translateY(0)';
-                    }
-                  }}
+                  className={cn(
+                    "border-b border-line cursor-pointer transition-colors duration-100",
+                    isExpanded ? "bg-primary-light" : "hover:bg-surface-alt"
+                  )}
+                  onClick={() => onRowClick(event)}
                 >
-                  <td style={tdStyle}>
+                  <td className="h-14 px-4">
                     <button
                       onClick={(e) => {
                         e.stopPropagation();
                         toggleRow(event._id);
                       }}
-                      className="h-6 w-6 flex items-center justify-center rounded hover:bg-white/10 transition-colors"
+                      className="h-6 w-6 flex items-center justify-center rounded hover:bg-surface-alt transition-colors"
                     >
                       {event.before_state || event.after_state ? (
                         isExpanded ? (
@@ -140,51 +147,51 @@ export function AuditLogTable({ events, isLoading, onRowClick }: AuditLogTablePr
                       ) : null}
                     </button>
                   </td>
-                  <td style={tdStyle} onClick={() => onRowClick(event)}>
+                  <td className="h-14 px-4">
                     <div className="text-sm text-ink">{formatDate(event.created_at)}</div>
                   </td>
-                  <td style={tdStyle} onClick={() => onRowClick(event)}>
+                  <td className="h-14 px-4">
                     <div className="text-sm text-ink">{event.actor_name || event.actor_email}</div>
                     <div className="text-xs text-ink-secondary font-mono">{event.actor_email}</div>
                   </td>
-                  <td style={tdStyle}>
-                    <span className="inline-flex items-center font-mono text-xs bg-white/5 text-primary border border-primary/20 rounded-md px-2 py-0.5">
+                  <td className="h-14 px-4">
+                    <span className={`inline-flex items-center font-mono text-xs border rounded-md px-2 py-0.5 ${getModuleTagColor(event.module)}`}>
                       {event.action}
                     </span>
                   </td>
-                  <td style={tdStyle} onClick={() => onRowClick(event)}>
+                  <td className="h-14 px-4">
                     <div className="text-sm text-ink-secondary capitalize">{event.module.replace('_', ' ')}</div>
                   </td>
-                  <td style={tdStyle} onClick={() => onRowClick(event)}>
+                  <td className="h-14 px-4">
                     <div className="text-sm text-ink">{event.object_label}</div>
                     <div className="text-xs text-ink-secondary">{event.object_type}</div>
                   </td>
-                  <td style={tdStyle} onClick={() => onRowClick(event)}>
+                  <td className="h-14 px-4">
                     <div className="text-sm font-mono text-ink-secondary">{event.ip_address || '—'}</div>
                   </td>
                 </tr>
 
                 {/* Expanded row with before/after state */}
                 {isExpanded && (event.before_state || event.after_state) && (
-                  <tr style={{ background: 'rgba(255,255,255,0.02)' }}>
-                    <td colSpan={7} className="px-4 py-4" style={{ borderBottom: '1px solid rgba(255,255,255,0.06)' }}>
-                      <div className="grid grid-cols-2 gap-4">
+                  <tr className="bg-surface-alt border-b border-line">
+                    <td colSpan={7} className="px-6 py-5">
+                      <div className="grid grid-cols-2 gap-6">
                         {/* Before State */}
                         <div className="space-y-2">
-                          <h4 className="text-xs font-semibold text-ink-secondary uppercase tracking-wider">
+                          <h4 className="text-[11px] font-semibold text-ink-secondary uppercase tracking-wider">
                             Before
                           </h4>
-                          <pre className="rounded-xl border border-[rgba(255,255,255,0.08)] p-4 text-xs font-mono text-ink overflow-auto max-h-64" style={{ background: 'rgba(255,255,255,0.03)' }}>
+                          <pre className="rounded-lg border border-line p-4 text-xs font-mono text-ink overflow-auto max-h-64 bg-surface-alt shadow-sm">
                             {formatState(event.before_state)}
                           </pre>
                         </div>
 
                         {/* After State */}
                         <div className="space-y-2">
-                          <h4 className="text-xs font-semibold text-ink-secondary uppercase tracking-wider">
+                          <h4 className="text-[11px] font-semibold text-ink-secondary uppercase tracking-wider">
                             After
                           </h4>
-                          <pre className="rounded-xl border border-[rgba(255,255,255,0.08)] p-4 text-xs font-mono text-ink overflow-auto max-h-64" style={{ background: 'rgba(255,255,255,0.03)' }}>
+                          <pre className="rounded-lg border border-line p-4 text-xs font-mono text-ink overflow-auto max-h-64 bg-surface-alt shadow-sm">
                             {formatState(event.after_state)}
                           </pre>
                         </div>
@@ -192,7 +199,7 @@ export function AuditLogTable({ events, isLoading, onRowClick }: AuditLogTablePr
                     </td>
                   </tr>
                 )}
-              </>
+              </React.Fragment>
             );
           })}
         </tbody>

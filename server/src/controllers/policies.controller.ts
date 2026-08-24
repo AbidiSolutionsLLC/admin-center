@@ -40,9 +40,9 @@ const PublishPolicySchema = z.object({
     )
     .min(1, 'At least one assignment rule is required'),
   settings: z.object({
-    identity: z.record(z.unknown()).optional(),
-    access: z.record(z.unknown()).optional(),
-    apps: z.record(z.unknown()).optional(),
+    identity: z.record(z.string(), z.unknown()).optional(),
+    access: z.record(z.string(), z.unknown()).optional(),
+    apps: z.record(z.string(), z.unknown()).optional(),
   }).optional(),
 }).superRefine((data, ctx) => {
   if (data.expiry_date && data.effective_date) {
@@ -84,9 +84,9 @@ const UpdateDraftPolicySchema = z.object({
     .optional(),
   summary: z.string().trim().optional(),
   settings: z.object({
-    identity: z.record(z.unknown()).optional(),
-    access: z.record(z.unknown()).optional(),
-    apps: z.record(z.unknown()).optional(),
+    identity: z.record(z.string(), z.unknown()).optional(),
+    access: z.record(z.string(), z.unknown()).optional(),
+    apps: z.record(z.string(), z.unknown()).optional(),
   }).optional(),
   custom_fields: z.record(z.string(), z.unknown()).optional(),
 }).superRefine((data, ctx) => {
@@ -536,7 +536,7 @@ export const publishPolicy = asyncHandler(async (req: Request, res: Response) =>
     object_type: 'PolicyVersion',
     object_id: policyVersion._id.toString(),
     object_label: `${policyVersion.title} v${policyVersion.version_number}`,
-    before_state: null,
+    before_state: latestVersion ? latestVersion.toObject() : null,
     after_state: {
       policy_key: policyVersion.policy_key,
       title: policyVersion.title,
@@ -984,7 +984,7 @@ export const archivePolicy = asyncHandler(async (req: Request, res: Response) =>
     throw new AppError('Only published policies can be archived', 400, 'INVALID_STATUS');
   }
 
-  const beforeState = { status: policyVersion.status, is_active: policyVersion.is_active };
+  const beforeState = policyVersion.toObject();
 
   policyVersion.status = 'archived';
   policyVersion.is_active = false;
@@ -1049,7 +1049,7 @@ export const deletePolicy = asyncHandler(async (req: Request, res: Response) => 
     object_type: 'PolicyVersion',
     object_id: policyVersion._id.toString(),
     object_label: policyVersion.title,
-    before_state: { title: policyVersion.title, status: policyVersion.status },
+    before_state: policyVersion.toObject(),
     after_state: null,
   });
 
@@ -1145,7 +1145,7 @@ export const rollbackPolicy = asyncHandler(async (req: Request, res: Response) =
     object_type: 'PolicyVersion',
     object_id: policyVersion._id.toString(),
     object_label: `${policyVersion.title} v${policyVersion.version_number}`,
-    before_state: null,
+    before_state: latestVersion ? latestVersion.toObject() : null,
     after_state: {
       policy_key: policyVersion.policy_key,
       title: policyVersion.title,

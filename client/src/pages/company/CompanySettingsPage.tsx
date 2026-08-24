@@ -11,7 +11,7 @@ import { useEmployeeIdFormat, useUpdateEmployeeIdFormat } from '@/hooks/useEmplo
 import { useRequiredUserFields, useUpdateRequiredUserFields } from '@/hooks/useRequiredUserFields';
 import { useDomainEnforcement, useUpdateDomainEnforcement } from '@/hooks/useDomainEnforcement';
 import { useResetCompanySettings } from '@/hooks/useResetCompanySettings';
-import { useUpdateCompanyName, useUpdateTimezone, useUpdateLocale, useUpdateDefaultLocation } from '@/hooks/useCompanyProfile';
+import { useUpdateCompanyName, useUpdateTimezone, useUpdateLocale, useUpdateDefaultLocation, useUpdateAuditLogRetention } from '@/hooks/useCompanyProfile';
 import { useLocations } from '@/features/locations/hooks/useLocations';
 import { AVAILABLE_USER_FIELDS } from '@/types';
 import { COMMON_TIMEZONES, formatTimezoneLabel } from '@/constants/timezones';
@@ -470,6 +470,95 @@ function DomainEnforcementSection() {
   );
 }
 
+function AuditLogRetentionSection() {
+  const { data: settings, isLoading } = useEmployeeIdFormat(); // reusing this to fetch settings since it gets 'settings' field too. Wait, getCompanySettings returns name, employee_id_format, settings. Let's use it.
+  const updateAuditLogRetention = useUpdateAuditLogRetention();
+  
+  const [retentionDays, setRetentionDays] = useState<number>(90);
+  
+  useEffect(() => {
+    if (settings?.settings?.audit_log_retention_days !== undefined) {
+      setRetentionDays(settings.settings.audit_log_retention_days);
+    }
+  }, [settings]);
+
+  const handleSave = () => {
+    updateAuditLogRetention.mutate({ audit_log_retention_days: retentionDays });
+  };
+
+  if (isLoading) {
+    return (
+      <Card className="shadow-card">
+        <CardHeader>
+          <CardTitle>Audit Log Retention</CardTitle>
+          <CardDescription>Loading...</CardDescription>
+        </CardHeader>
+      </Card>
+    );
+  }
+
+  const RETENTION_OPTIONS = [
+    { label: '30 Days', value: 30 },
+    { label: '90 Days', value: 90 },
+    { label: '365 Days (1 Year)', value: 365 },
+    { label: 'Keep Forever', value: 0 },
+  ];
+
+  return (
+    <Card className="bg-white border-line shadow-card">
+      <CardHeader>
+        <CardTitle>Audit Log Retention</CardTitle>
+        <CardDescription>
+          Configure how long audit events should be retained before they are automatically deleted. 
+          Keeping logs forever may impact storage and performance.
+        </CardDescription>
+      </CardHeader>
+      <CardContent>
+        <div className="space-y-4">
+          <div className="flex flex-col gap-3 sm:flex-row sm:items-center justify-between">
+            <div className="flex-1">
+              <label className="block text-sm font-medium text-ink mb-2">
+                Retention Period
+              </label>
+              <select
+                value={retentionDays}
+                onChange={(e) => setRetentionDays(Number(e.target.value))}
+                className="w-full sm:w-64 h-10 pl-3 pr-8 text-sm rounded-md border border-line bg-white text-ink focus:outline-none focus:ring-2 focus:ring-primary/30 focus:border-primary transition-all appearance-none"
+              >
+                {RETENTION_OPTIONS.map((opt) => (
+                  <option key={opt.value} value={opt.value}>{opt.label}</option>
+                ))}
+              </select>
+            </div>
+            
+            <div className="self-start sm:self-end">
+              <Button
+                onClick={handleSave}
+                disabled={
+                  updateAuditLogRetention.isPending || 
+                  retentionDays === (settings?.settings?.audit_log_retention_days ?? 0)
+                }
+              >
+                {updateAuditLogRetention.isPending ? 'Saving...' : 'Save Settings'}
+              </Button>
+            </div>
+          </div>
+          
+          {retentionDays > 0 ? (
+            <p className="text-xs text-amber-600 bg-amber-50 p-2 rounded border border-amber-200">
+              Note: Logs older than {retentionDays} days will be permanently deleted and cannot be recovered.
+            </p>
+          ) : (
+            <p className="text-xs text-blue-600 bg-blue-50 p-2 rounded border border-blue-200">
+              Logs will be kept indefinitely.
+            </p>
+          )}
+        </div>
+      </CardContent>
+    </Card>
+  );
+}
+
 /**
  * Generates a preview string based on the format and current counter value.
  * Supports {counter:N}, {YYYY}, {YY}, {MM}, {DD}, and {DEPT}.
@@ -629,6 +718,8 @@ export default function CompanySettingsPage() {
       <RequiredUserFieldsSection />
 
       <DomainEnforcementSection />
+
+      <AuditLogRetentionSection />
 
       <ResetToFactorySection />
     </div>

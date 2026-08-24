@@ -50,6 +50,10 @@ const UpdateDomainEnforcementSchema = z.object({
   is_domain_enforcement_active: z.boolean(),
 });
 
+const UpdateAuditLogRetentionSchema = z.object({
+  audit_log_retention_days: z.number().min(0).max(3650),
+});
+
 export const getCompanySettings = asyncHandler(async (req: Request, res: Response) => {
   const company = await Company.findById(req.user.company_id)
     .select('name employee_id_format employee_id_counter settings');
@@ -327,6 +331,36 @@ export const updateDefaultLocation = asyncHandler(async (req: Request, res: Resp
     object_label: company?.name || 'company',
     before_state: { default_location_id: before.settings?.default_location_id ?? null },
     after_state: { default_location_id: input.default_location_id },
+  });
+
+  res.json({ success: true, data: company });
+});
+
+/**
+ * PUT /settings/audit-log-retention
+ * Updates the company-wide audit log retention policy.
+ */
+export const updateAuditLogRetention = asyncHandler(async (req: Request, res: Response) => {
+  const input = UpdateAuditLogRetentionSchema.parse(req.body);
+
+  const before = await Company.findById(req.user.company_id).lean();
+  if (!before) throw new AppError('Company not found', 404, 'COMPANY_NOT_FOUND');
+
+  const company = await Company.findByIdAndUpdate(
+    req.user.company_id,
+    { 'settings.audit_log_retention_days': input.audit_log_retention_days },
+    { new: true, runValidators: true },
+  );
+
+  await auditLogger.log({
+    req,
+    action: 'company.audit_log_retention_updated',
+    module: 'company',
+    object_type: 'company',
+    object_id: req.user.company_id,
+    object_label: company?.name || 'company',
+    before_state: { audit_log_retention_days: before.settings?.audit_log_retention_days || 0 },
+    after_state: { audit_log_retention_days: input.audit_log_retention_days },
   });
 
   res.json({ success: true, data: company });

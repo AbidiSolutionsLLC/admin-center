@@ -1,4 +1,5 @@
 // src/features/audit/components/AuditFilters.tsx
+import React from 'react';
 import { Search, X } from 'lucide-react';
 
 interface AuditFiltersProps {
@@ -82,32 +83,29 @@ export function AuditFilters({
             placeholder="Search events..."
             value={search}
             onChange={(e) => onSearchChange(e.target.value)}
-            className="w-full h-9 pl-8 pr-4 text-sm rounded-md focus:outline-none focus:ring-2 focus:ring-primary/30 transition-all duration-150"
-            style={{ background: 'rgba(255,255,255,0.03)', border: '1px solid rgba(255,255,255,0.08)', color: '#f8fafc' }}
+            className="w-full h-9 pl-8 pr-4 text-sm rounded-md border border-line bg-surface-alt text-ink placeholder:text-ink-muted focus:outline-none focus:ring-2 focus:ring-primary/30 focus:border-primary transition-all duration-150"
           />
         </div>
 
         <select
           value={module}
           onChange={(e) => onModuleChange(e.target.value)}
-          className="h-9 px-3 text-sm rounded-md focus:outline-none focus:ring-2 focus:ring-primary/30 transition-all duration-150 min-w-[140px]"
-          style={{ background: 'rgba(255,255,255,0.03)', border: '1px solid rgba(255,255,255,0.08)', color: '#f8fafc' }}
+          className="h-9 px-3 text-sm rounded-md border border-line bg-surface-alt text-ink focus:outline-none focus:ring-2 focus:ring-primary/30 focus:border-primary transition-all duration-150 min-w-[140px]"
         >
-          <option value="" style={{ color: '#000' }}>All Modules</option>
+          <option value="">All Modules</option>
           {MODULES.map((m) => (
-            <option key={m} value={m} style={{ color: '#000' }}>{m.replace('_', ' ').replace(/\b\w/g, (l) => l.toUpperCase())}</option>
+            <option key={m} value={m}>{m.replace('_', ' ').replace(/\b\w/g, (l) => l.toUpperCase())}</option>
           ))}
         </select>
 
         <select
           value={action}
           onChange={(e) => onActionChange(e.target.value)}
-          className="h-9 px-3 text-sm rounded-md focus:outline-none focus:ring-2 focus:ring-primary/30 transition-all duration-150 min-w-[140px]"
-          style={{ background: 'rgba(255,255,255,0.03)', border: '1px solid rgba(255,255,255,0.08)', color: '#f8fafc' }}
+          className="h-9 px-3 text-sm rounded-md border border-line bg-surface-alt text-ink focus:outline-none focus:ring-2 focus:ring-primary/30 focus:border-primary transition-all duration-150 min-w-[140px]"
         >
-          <option value="" style={{ color: '#000' }}>All Actions</option>
+          <option value="">All Actions</option>
           {ACTIONS.map((a) => (
-            <option key={a} value={a} style={{ color: '#000' }}>{a.replace(/_/g, ' ')}</option>
+            <option key={a} value={a}>{a.replace(/_/g, ' ')}</option>
           ))}
         </select>
 
@@ -131,8 +129,7 @@ export function AuditFilters({
             placeholder="Filter by actor email..."
             value={actorEmail}
             onChange={(e) => onActorEmailChange(e.target.value)}
-            className="w-full h-9 px-3 text-sm rounded-md focus:outline-none focus:ring-2 focus:ring-primary/30 transition-all duration-150"
-            style={{ background: 'rgba(255,255,255,0.03)', border: '1px solid rgba(255,255,255,0.08)', color: '#f8fafc' }}
+            className="w-full h-9 px-3 text-sm rounded-md border border-line bg-surface-alt text-ink placeholder:text-ink-muted focus:outline-none focus:ring-2 focus:ring-primary/30 focus:border-primary transition-all duration-150"
           />
         </div>
 
@@ -142,8 +139,7 @@ export function AuditFilters({
             type="date"
             value={dateFrom}
             onChange={(e) => onDateFromChange(e.target.value)}
-            className="h-9 px-3 text-sm rounded-md focus:outline-none focus:ring-2 focus:ring-primary/30 transition-all duration-150"
-            style={{ background: 'rgba(255,255,255,0.03)', border: '1px solid rgba(255,255,255,0.08)', color: '#f8fafc' }}
+            className="h-9 px-3 text-sm rounded-md border border-line bg-surface-alt text-ink focus:outline-none focus:ring-2 focus:ring-primary/30 focus:border-primary transition-all duration-150"
           />
         </div>
 
@@ -153,8 +149,7 @@ export function AuditFilters({
             type="date"
             value={dateTo}
             onChange={(e) => onDateToChange(e.target.value)}
-            className="h-9 px-3 text-sm rounded-md focus:outline-none focus:ring-2 focus:ring-primary/30 transition-all duration-150"
-            style={{ background: 'rgba(255,255,255,0.03)', border: '1px solid rgba(255,255,255,0.08)', color: '#f8fafc' }}
+            className="h-9 px-3 text-sm rounded-md border border-line bg-surface-alt text-ink focus:outline-none focus:ring-2 focus:ring-primary/30 focus:border-primary transition-all duration-150"
           />
         </div>
       </div>

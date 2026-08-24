@@ -1,13 +1,15 @@
 // src/pages/audit-logs/AuditLogsPage.tsx
-import { useState } from 'react';
-import { Download } from 'lucide-react';
+import React, { useState } from 'react';
+import { Download, AlertTriangle, ShieldCheck } from 'lucide-react';
 import { useAuditEvents } from '@/features/audit/hooks/useAuditEvents';
 import { useExportAuditLog } from '@/features/audit/hooks/useExportAuditLog';
+import { useVerifyAuditLogs } from '@/features/audit/hooks/useVerifyAuditLogs';
 import { useAuditEventDetail } from '@/features/audit/hooks/useAuditEventDetail';
 import { AuditFilters } from '@/features/audit/components/AuditFilters';
 import { AuditLogTable } from '@/features/audit/components/AuditLogTable';
 import { AuditEventDetail } from '@/features/audit/components/AuditEventDetail';
 import { PermissionGate } from '@/components/ui/PermissionGate';
+import { Switch } from '@/components/ui/switch';
 import type { AuditEvent } from '@/types';
 
 /**
@@ -28,14 +30,17 @@ export default function AuditLogsPage() {
 
   const [selectedEvent, setSelectedEvent] = useState<AuditEvent | null>(null);
   const [isDetailOpen, setIsDetailOpen] = useState(false);
+  const [isLive, setIsLive] = useState(false);
 
   const { data, isLoading, error } = useAuditEvents({
     page,
     limit: 50,
+    isLive,
     ...filters,
   });
 
   const exportMutation = useExportAuditLog();
+  const verifyMutation = useVerifyAuditLogs();
   const { data: detailEvent } = useAuditEventDetail(selectedEvent?._id || null);
 
   const handleFilterChange = (key: string, value: string) => {
@@ -60,8 +65,8 @@ export default function AuditLogsPage() {
     setIsDetailOpen(true);
   };
 
-  const handleExport = () => {
-    exportMutation.mutate(filters);
+  const handleExport = (format: 'csv' | 'json') => {
+    exportMutation.mutate({ ...filters, format });
   };
 
   return (
@@ -76,40 +81,52 @@ export default function AuditLogsPage() {
             Track all actions and changes across your organization
           </p>
         </div>
-        <div className="flex items-center gap-2">
-          <PermissionGate module="audit" action="export">
+        <div className="flex items-center gap-4">
+          <div className="flex items-center gap-2 border-r border-line pr-4">
+            <div className="flex flex-col items-end">
+              <span className="text-sm font-medium text-ink">Live updates</span>
+              <span className="text-[10px] text-ink-secondary">Auto-refresh latest events</span>
+            </div>
+            <Switch checked={isLive} onCheckedChange={setIsLive} />
+          </div>
+          <div className="flex items-center gap-2">
+            <PermissionGate module="audit" action="export">
             <button
-              onClick={handleExport}
+              onClick={() => handleExport('csv')}
               disabled={exportMutation.isPending}
-              style={{
-                height: 38,
-                padding: '0 18px',
-                background: 'rgba(255,255,255,0.04)',
-                border: '1px solid rgba(255,255,255,0.10)',
-                borderRadius: 12,
-                color: '#f8fafc',
-                fontWeight: 600,
-                fontSize: 13,
-                cursor: exportMutation.isPending ? 'not-allowed' : 'pointer',
-                transition: 'all 0.2s ease',
-                display: 'flex',
-                alignItems: 'center',
-                gap: 8,
-                opacity: exportMutation.isPending ? 0.5 : 1,
-              }}
+              className="h-9 px-4 text-sm font-medium rounded-md border border-line bg-surface-alt text-ink hover:bg-surface-hover transition-colors duration-150 flex items-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed"
             >
               <Download className="w-4 h-4" />
-              {exportMutation.isPending ? 'Exporting...' : 'Export CSV'}
+              CSV
+            </button>
+            <button
+              onClick={() => handleExport('json')}
+              disabled={exportMutation.isPending}
+              className="h-9 px-4 text-sm font-medium rounded-md border border-line bg-surface-alt text-ink hover:bg-surface-hover transition-colors duration-150 flex items-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed"
+            >
+              <Download className="w-4 h-4" />
+              JSON
+            </button>
+            <button
+              onClick={() => verifyMutation.mutate()}
+              disabled={verifyMutation.isPending}
+              className="h-9 px-4 text-sm font-medium rounded-md border border-line bg-surface-alt text-ink hover:bg-surface-hover transition-colors duration-150 flex items-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed"
+            >
+              <ShieldCheck className="w-4 h-4" />
+              {verifyMutation.isPending ? 'Verifying...' : 'Verify Integrity'}
             </button>
           </PermissionGate>
         </div>
       </div>
-
+    </div>
       {/* Error State */}
       {error && (
-        <div className="glass-card p-12 text-center" style={{ borderRadius: 20 }}>
-          <p className="text-sm text-error mb-3">Failed to load audit logs</p>
-          <p className="text-sm text-ink-secondary mb-4">
+        <div className="flex flex-col items-center justify-center py-16 px-4 text-center bg-surface backdrop-blur-glass rounded-2xl border border-line shadow-card">
+          <div className="w-12 h-12 rounded-xl bg-error/10 flex items-center justify-center mb-4">
+            <AlertTriangle className="w-6 h-6 text-error" />
+          </div>
+          <h3 className="text-sm font-semibold text-ink mb-1">Failed to load audit logs</h3>
+          <p className="text-sm text-ink-secondary mb-5">
             Something went wrong. Check your connection and try again.
           </p>
         </div>
@@ -132,61 +149,41 @@ export default function AuditLogsPage() {
         onClearAll={handleClearAll}
       />
 
-      {/* Table */}
-      <AuditLogTable
-        events={data?.events || []}
-        isLoading={isLoading}
-        onRowClick={handleRowClick}
-      />
+      {/* Main Content Card with Table and Pagination */}
+      <div className="bg-surface backdrop-blur-glass rounded-2xl border border-line shadow-card overflow-hidden">
+        <AuditLogTable
+          events={data?.events || []}
+          isLoading={isLoading}
+          onRowClick={handleRowClick}
+        />
 
-      {/* Pagination */}
-      {data && data.pagination.totalPages > 1 && (
-        <div className="glass-card px-4 py-3 flex items-center justify-between mt-4" style={{ borderRadius: 20 }}>
-          <span className="text-xs text-ink-secondary">
-            Showing {(data.pagination.page - 1) * data.pagination.limit + 1}–
-            {Math.min(data.pagination.page * data.pagination.limit, data.pagination.total)} of{' '}
-            {data.pagination.total}
-          </span>
-          <div className="flex items-center gap-1">
-            <button
-              onClick={() => setPage((p) => Math.max(1, p - 1))}
-              disabled={page === 1}
-              style={{
-                padding: '6px 12px',
-                background: 'rgba(255,255,255,0.04)',
-                border: '1px solid rgba(255,255,255,0.10)',
-                borderRadius: 8,
-                color: '#f8fafc',
-                fontWeight: 600,
-                fontSize: 12,
-                cursor: page === 1 ? 'not-allowed' : 'pointer',
-                transition: 'all 0.2s ease',
-                opacity: page === 1 ? 0.5 : 1,
-              }}
-            >
-              Previous
-            </button>
-            <button
-              onClick={() => setPage((p) => Math.min(data.pagination.totalPages, p + 1))}
-              disabled={page === data.pagination.totalPages}
-              style={{
-                padding: '6px 12px',
-                background: 'rgba(255,255,255,0.04)',
-                border: '1px solid rgba(255,255,255,0.10)',
-                borderRadius: 8,
-                color: '#f8fafc',
-                fontWeight: 600,
-                fontSize: 12,
-                cursor: page === data.pagination.totalPages ? 'not-allowed' : 'pointer',
-                transition: 'all 0.2s ease',
-                opacity: page === data.pagination.totalPages ? 0.5 : 1,
-              }}
-            >
-              Next
-            </button>
+        {/* Pagination */}
+        {data && data.pagination.totalPages > 1 && (
+          <div className="border-t border-line px-4 py-3 flex items-center justify-between bg-surface-alt">
+            <span className="text-xs text-ink-secondary">
+              Showing {(data.pagination.page - 1) * data.pagination.limit + 1}–
+              {Math.min(data.pagination.page * data.pagination.limit, data.pagination.total)} of{' '}
+              {data.pagination.total}
+            </span>
+            <div className="flex items-center gap-1">
+              <button
+                onClick={() => setPage((p) => Math.max(1, p - 1))}
+                disabled={page === 1}
+                className="h-8 px-3 text-sm font-medium rounded-md border border-line bg-surface-alt text-ink hover:bg-surface-hover transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+              >
+                Previous
+              </button>
+              <button
+                onClick={() => setPage((p) => Math.min(data.pagination.totalPages, p + 1))}
+                disabled={page === data.pagination.totalPages}
+                className="h-8 px-3 text-sm font-medium rounded-md border border-line bg-surface-alt text-ink hover:bg-surface-hover transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+              >
+                Next
+              </button>
+            </div>
           </div>
-        </div>
-      )}
+        )}
+      </div>
 
       {/* Event Detail Modal */}
       <AuditEventDetail

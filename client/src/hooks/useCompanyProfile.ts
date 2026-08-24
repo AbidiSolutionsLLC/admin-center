@@ -101,3 +101,26 @@ export const useUpdateLocale = () => {
     },
   });
 };
+
+// ── Update audit log retention ───────────────────────────────────────────────
+export const useUpdateAuditLogRetention = () => {
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: async (payload: { audit_log_retention_days: number }) => {
+      const response = await apiClient.put<ApiResponse<CompanySettings>>(
+        '/company/settings/audit-log-retention',
+        payload
+      );
+      return response.data.data;
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: QUERY_KEYS.COMPANY_EMPLOYEE_ID_FORMAT });
+      toast.success('Audit log retention updated successfully');
+    },
+    onError: (error: any) => {
+      const message = error.response?.data?.error || 'Failed to update audit log retention';
+      toast.error(message);
+    },
+  });
+};

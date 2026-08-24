@@ -25,6 +25,7 @@ export interface ICompany extends Document {
     timezone: string;                 // Company default timezone (e.g. 'America/New_York')
     locale: string;                   // Company locale (e.g. 'en-US')
     default_location_id?: string;     // Default location for users without location assignment
+    audit_log_retention_days: number; // 0 for infinite, otherwise days to retain
   };
   plan: 'free' | 'starter' | 'pro';
   is_active: boolean;
@@ -79,6 +80,10 @@ const CompanySchema = new Schema<ICompany>({
     default_location_id: {
       type: String,
       default: null,
+    },
+    audit_log_retention_days: {
+      type: Number,
+      default: 0,
     },
   },
   plan: { type: String, enum: ['free', 'starter', 'pro'], default: 'free' },

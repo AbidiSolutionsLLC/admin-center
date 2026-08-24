@@ -939,6 +939,7 @@ export interface AuditEvent {
   actor_id: string;
   actor_email: string;
   actor_name?: string;
+  category?: string;
   action: string;
   module: string;
   object_type: string;
@@ -948,6 +949,7 @@ export interface AuditEvent {
   after_state?: unknown;
   ip_address?: string;
   user_agent?: string;
+  hash?: string;
   created_at: string;
   time_ago?: string;
 }

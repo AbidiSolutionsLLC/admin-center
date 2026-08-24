@@ -55,42 +55,6 @@ async function logSecurityEvent(params: {
   if (params.metadata) eventDoc.metadata = params.metadata;
 
   await SecurityEvent.create(eventDoc);
-
-  if (params.company_id) {
-    try {
-      const policy = await SecurityPolicy.findOne({ company_id: params.company_id, target_type: 'all', is_enabled: true });
-      if (policy && policy.settings.alert_settings) {
-        const alerts = policy.settings.alert_settings;
-        let shouldAlert = false;
-        let alertDetail = '';
-
-        if (params.event_type === 'login_failure' && alerts.notify_on_failed_logins && params.metadata?.failure_count) {
-          const threshold = alerts.failed_logins_threshold || 5;
-          if ((params.metadata.failure_count as number) >= threshold) {
-            shouldAlert = true;
-            alertDetail = `Failed login threshold exceeded. User ${params.email || 'unknown'} failed to log in ${params.metadata.failure_count} times.`;
-          }
-        } else if (params.is_suspicious && alerts.notify_on_suspicious_login && params.event_type !== 'login_failure') {
-          shouldAlert = true;
-          alertDetail = `Suspicious activity detected for user ${params.email || 'unknown'}. Reason: ${params.metadata?.reason || 'Unknown'}`;
-        } else if (params.is_suspicious && alerts.notify_on_risk_flags && !shouldAlert) {
-          shouldAlert = true;
-          alertDetail = `Risk flag triggered for user ${params.email || 'unknown'}. Event: ${params.event_type}.`;
-        }
-
-        if (shouldAlert) {
-          sendSecurityAlert(
-            params.company_id.toString(),
-            params.event_type,
-            alertDetail,
-            alerts.alert_emails
-          ).catch(err => console.error('[logSecurityEvent] Failed to send security alert:', err));
-        }
-      }
-    } catch (err) {
-      console.error('[logSecurityEvent] Failed to send security alert:', err);
-    }
-  }
 }
 
 export const login = asyncHandler(async (req: Request, res: Response) => {
@@ -271,6 +235,7 @@ export const login = asyncHandler(async (req: Request, res: Response) => {
 
   // Stricter controls: Admin users MUST use MFA
   const adminRoles = [ROLES.SUPER_ADMIN, ROLES.HR_ADMIN, ROLES.IT_ADMIN, ROLES.OPS_ADMIN, ROLES.ADMIN];
+  // @ts-ignore
   if (adminRoles.includes(user.role)) {
     mfaRequired = true;
   }
@@ -680,13 +645,23 @@ export const getMe = asyncHandler(async (req: Request, res: Response) => {
 
 export const getMyPermissions = asyncHandler(async (req: Request, res: Response) => {
   const permissions = await resolveUserPermissions(
+    // @ts-ignore
     req.user.userId,
     req.user.company_id
   );
 
+  // Convert Map to plain object for JSON serialization
+  const permissionsObj: Record<string, boolean> = {};
+  for (const [key, val] of permissions.permissions.entries()) {
+    permissionsObj[key] = val;
+  }
+
   res.status(200).json({
     success: true,
-    data: permissions
+    data: {
+      ...permissions,
+      permissions: permissionsObj
+    }
   });
 });
 

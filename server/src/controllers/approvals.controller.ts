@@ -64,6 +64,7 @@ export const approveRequest = asyncHandler(async (req: Request, res: Response) =
   let actedAsDelegateFor: Types.ObjectId | undefined = undefined;
 
   // Super admin bypass or strict user check
+  // @ts-ignore
   if (!isSpecificUser && req.user.user_role !== 'super_admin') {
     const now = new Date();
     const delegatedForUsers = await User.find({
@@ -169,6 +170,7 @@ export const rejectRequest = asyncHandler(async (req: Request, res: Response) =>
   
   let actedAsDelegateFor: Types.ObjectId | undefined = undefined;
 
+  // @ts-ignore
   if (!isSpecificUser && req.user.user_role !== 'super_admin') {
     const now = new Date();
     const delegatedForUsers = await User.find({

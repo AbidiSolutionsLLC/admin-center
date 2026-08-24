@@ -59,7 +59,7 @@ const setProp = (obj: any, path: string, value: any) => {
  * Gets the roles assigned to a user.
  */
 const getUserRoles = async (userId: string, companyId: string): Promise<string[]> => {
-  const userRoles = await UserRole.find({ user_id: userId, company_id }).lean();
+  const userRoles = await UserRole.find({ user_id: userId, company_id: companyId }).lean();
   return userRoles.map(ur => ur.role_id.toString());
 };
 
@@ -89,7 +89,7 @@ export const applyDataGovernanceRead = async (
   if (policies.length === 0) return data;
 
   const userRoleIds = await getUserRoles(user.userId, companyId);
-  const isSuperAdmin = user.user_role === 'super_admin';
+  const isSuperAdmin = (user.user_role as unknown as string) === 'super_admin';
 
   for (const item of items) {
     for (const policy of policies) {
@@ -144,7 +144,7 @@ export const applyDataGovernanceWrite = async (
   if (policies.length === 0) return data;
 
   const userRoleIds = await getUserRoles(user.userId, companyId);
-  const isSuperAdmin = user.user_role === 'super_admin';
+  const isSuperAdmin = (user.user_role as unknown as string) === 'super_admin';
 
   for (const policy of policies) {
     const targetRoles = policy.applied_to?.roles?.map(r => r.toString()) || [];

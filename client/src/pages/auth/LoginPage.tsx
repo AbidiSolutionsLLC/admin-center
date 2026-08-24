@@ -120,7 +120,7 @@ export default function LoginPage() {
                 className="w-full bg-primary hover:bg-primary-hover/90 text-white shadow-sm"
                 disabled={isLoginPending}
               >
-                {isLoginPending ? 'Signing in...' : 'Sign In'}
+{isLoginPending ? 'Signing in...' : 'Sign In'}
               </Button>
             </form>
           ) : (

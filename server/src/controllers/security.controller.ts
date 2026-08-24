@@ -331,7 +331,7 @@ export const forceLogoutUser = asyncHandler(async (req: Request, res: Response) 
     object_type: 'User',
     object_id: user._id.toString(),
     object_label: user.full_name,
-    before_state: null,
+    before_state: { session_status: 'active' },
     after_state: { session_status: 'terminated', refresh_tokens_revoked: true },
   });
 
@@ -431,8 +431,8 @@ export const terminateSession = asyncHandler(async (req: Request, res: Response)
     object_type: 'User',
     object_id: user._id.toString(),
     object_label: user.full_name,
-    before_state: null,
-    after_state: { session_terminated: true, token_id: token._id.toString() },
+    before_state: { session_status: 'active', token_id: token._id.toString() },
+    after_state: { session_status: 'terminated', token_id: token._id.toString() },
   });
 
   res.status(200).json({ success: true, message: 'Session terminated successfully' });

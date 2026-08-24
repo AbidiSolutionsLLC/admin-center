@@ -4,6 +4,7 @@ dotenv.config();
 import { connectDB } from './config/db';
 import app from './app';
 import { processEscalations } from './lib/escalationEngine';
+import { processAuditRetention } from './lib/auditRetention';
 
 const PORT = process.env.PORT || 5000;
 
@@ -15,7 +16,15 @@ connectDB().then(() => {
     setInterval(() => {
       processEscalations().catch(console.error);
     }, 5 * 60 * 1000); // 5 minutes
+    
+    setInterval(() => {
+      processAuditRetention().catch(console.error);
+    }, 24 * 60 * 60 * 1000); // 24 hours
+    
     console.log('[EscalationEngine] Escalation polling started.');
+    
+    // Run once on startup
+    processAuditRetention().catch(console.error);
   });
 }).catch((err) => {
   console.error("Failed to connect to MongoDB", err);

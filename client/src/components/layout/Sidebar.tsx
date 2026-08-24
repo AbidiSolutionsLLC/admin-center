@@ -63,15 +63,18 @@ const navGroups = [
     items: [
       { label: 'Company settings', href: ROUTES.COMPANY_SETTINGS, icon: Settings },
       { label: 'Security', href: ROUTES.SECURITY, icon: Shield },
-      { label: 'Audit Logs', href: ROUTES.AUDIT_LOGS, icon: ClipboardList },
+      { label: 'Audit Logs', href: ROUTES.AUDIT_LOGS, icon: ClipboardList, requiredPermission: 'audit:read:all', roles: [...PERMISSION_GROUPS.IT_ADMINS, 'super_admin'] },
     ],
   },
 ];
+
+import { useMyPermissions } from '@/hooks/useMyPermissions';
 
 export const Sidebar = ({ className }: SidebarProps) => {
   const { clearAuth, userName, userRole, companyName } = useAuthStore();
   const { closeSidebar } = useUIStore();
   const location = useLocation();
+  const { data: myPermissions } = useMyPermissions();
 
   const userInitials = userName?.charAt(0)?.toUpperCase() || 'U';
   const displayCompanyName = companyName || 'Sowaye';
@@ -130,9 +133,27 @@ export const Sidebar = ({ className }: SidebarProps) => {
       {/* NAV MENU */}
       <nav style={{ flex: 1, padding: '8px 0' }}>
         {navGroups.map((group, idx) => {
-          if (group.roles && userRole && !group.roles.includes(userRole)) {
+          // Filter items based on global role or granular permissions
+          const visibleItems = group.items.filter((item: any) => {
+            // Check granular permission if defined
+            if (item.requiredPermission && myPermissions?.permissions[item.requiredPermission]) {
+              return true;
+            }
+            // Check item-specific roles if defined
+            if (item.roles && userRole && item.roles.includes(userRole)) {
+              return true;
+            }
+            // Fallback to group-level role checking if no item-specific requirements exist
+            if (!item.requiredPermission && !item.roles) {
+              return group.roles && userRole && group.roles.includes(userRole);
+            }
+            return false;
+          });
+
+          if (visibleItems.length === 0) {
             return null;
           }
+
           return (
             <div key={idx} style={{ marginBottom: 8 }}>
               {group.label && (
@@ -148,7 +169,7 @@ export const Sidebar = ({ className }: SidebarProps) => {
                 </p>
               )}
 
-              {group.items.map(item => {
+              {visibleItems.map(item => {
                 const hrefPath = item.href.split('?')[0];
                 const hrefHasTab = item.href.includes('?tab=');
                 const isActive = hrefHasTab
