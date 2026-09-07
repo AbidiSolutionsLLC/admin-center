@@ -42,7 +42,10 @@ export async function processEscalations() {
             affected_object_id: approval._id.toString(),
             affected_object_label: 'SLA Breach',
             remediation_url: `/workflows`,
-            remediation_action: 'review_approvals',
+          remediation_action: 'review_approvals',
+          recommendations: [
+            { action: 'Review Approvals', url: `/workflows` }
+          ],
             is_resolved: false,
             detected_at: new Date(),
           });
@@ -130,7 +133,7 @@ export async function processEscalations() {
           await Insight.create({
             company_id: approval.company_id,
             category: 'health',
-            severity: 'warning',
+            severity: 'high',
             title: `Approval Request Escalated`,
             description: `Approval request in step "${step.name}" was escalated after ${timeoutHours} hours.`,
             reasoning: 'Fallback approvers have been notified and assigned.',
@@ -138,7 +141,10 @@ export async function processEscalations() {
             affected_object_id: approval._id.toString(),
             affected_object_label: 'Pending Approval',
             remediation_url: `/workflows`,
-            remediation_action: 'review_approvals',
+          remediation_action: 'review_approvals',
+          recommendations: [
+            { action: 'Review Approvals', url: `/workflows` }
+          ],
             is_resolved: false,
             detected_at: new Date(),
           });

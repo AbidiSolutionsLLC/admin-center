@@ -365,3 +365,37 @@ export const updateAuditLogRetention = asyncHandler(async (req: Request, res: Re
 
   res.json({ success: true, data: company });
 });
+
+const UpdateInsightSensitivitySchema = z.object({
+  insight_sensitivity: z.enum(['low', 'medium', 'high']),
+});
+
+/**
+ * PUT /settings/insight-sensitivity
+ * Updates the company-wide insight sensitivity policy.
+ */
+export const updateInsightSensitivity = asyncHandler(async (req: Request, res: Response) => {
+  const input = UpdateInsightSensitivitySchema.parse(req.body);
+
+  const before = await Company.findById(req.user.company_id).lean();
+  if (!before) throw new AppError('Company not found', 404, 'COMPANY_NOT_FOUND');
+
+  const company = await Company.findByIdAndUpdate(
+    req.user.company_id,
+    { 'settings.insight_sensitivity': input.insight_sensitivity },
+    { new: true, runValidators: true },
+  );
+
+  await auditLogger.log({
+    req,
+    action: 'company.insight_sensitivity_updated',
+    module: 'company',
+    object_type: 'company',
+    object_id: req.user.company_id,
+    object_label: company?.name || 'company',
+    before_state: { insight_sensitivity: (before.settings as any)?.insight_sensitivity || 'medium' },
+    after_state: { insight_sensitivity: input.insight_sensitivity },
+  });
+
+  res.json({ success: true, data: company });
+});

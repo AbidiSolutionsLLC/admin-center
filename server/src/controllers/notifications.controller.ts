@@ -19,6 +19,8 @@ const CreateTemplateSchema = z.object({
   channel: z.enum(['email', 'in_app', 'both']),
   severity: z.enum(['info', 'warning', 'critical']).default('info'),
   digest_mode: z.enum(['immediate', 'hourly', 'daily']).default('immediate'),
+  target_type: z.enum(['all', 'role', 'department', 'group', 'user', 'location']).default('all'),
+  target_id: z.string().min(1).default('all'),
   subject: z.string().min(1).max(300),
   body: z.string().min(1),
   trigger_event: z.string().min(1),

@@ -1,12 +1,10 @@
-// client/src/features/apps/AssignmentRuleBuilder.tsx
-import { useState } from 'react';
 import { AlertTriangle, Check, Shield, Loader2 } from 'lucide-react';
 import { useCheckAppDependencies } from './useApps';
 
 interface AssignmentRuleBuilderProps {
   appId: string;
   appName: string;
-  targetType: 'role' | 'department' | 'group' | 'user' | 'attribute';
+  targetType: 'role' | 'department' | 'group' | 'user' | 'attribute' | 'location';
   targetId: string;
   attributeName?: string;
   attributeValue?: string;

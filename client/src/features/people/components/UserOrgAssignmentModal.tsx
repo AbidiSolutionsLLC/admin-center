@@ -1,12 +1,10 @@
-// src/features/people/components/UserOrgAssignmentModal.tsx
-import React, { useState, useMemo } from 'react';
+import React, { useState } from 'react';
 import { Modal } from '@/components/ui/Modal';
 import { Button } from '@/components/ui/button';
 import { useAssignUserOrg } from '../hooks/useAssignUserOrg';
 import { useDepartments } from '@/features/organization/hooks/useDepartments';
-import { useTeams } from '@/features/teams/hooks/useTeams';
 import { cn } from '@/utils/cn';
-import type { User, Department, Team } from '@/types';
+import type { User, Department } from '@/types';
 
 interface UserOrgAssignmentModalProps {
   user: User | null;
@@ -35,7 +33,6 @@ export const UserOrgAssignmentModal: React.FC<UserOrgAssignmentModalProps> = ({
   requiredFields = [],
 }) => {
   const { data: departments } = useDepartments();
-  const { data: teams } = useTeams();
   const assignMutation = useAssignUserOrg();
 
   const [selectedDeptId, setSelectedDeptId] = useState<string>('');

@@ -21,7 +21,7 @@ export function PermissionSimulator({ isOpen, onClose }: SimulatorProps) {
   // TC_006: track whether results may be stale
   const [isStale, setIsStale] = useState(false);
 
-  const { data: users, isLoading: isLoadingUsers } = useUsers({ search: userSearch });
+  const { data: users, isLoading: isLoadingUsers } = useUsers();
   const { data: roles, isLoading: isLoadingRoles } = useRoles();
   const simulateMutation = useSimulatePermissions();
 

@@ -8,7 +8,7 @@ import { useBulkInvite } from '../hooks/useBulkInvite';
 import { UserSelect } from '@/components/ui/UserSelect';
 import { MultiUserSelect } from '@/components/ui/MultiUserSelect';
 import { MultiRoleSelect } from '@/components/ui/MultiRoleSelect';
-import type { InviteUserInput, Department, BulkInviteRow, EmploymentType, UserRole } from '@/types';
+import type { InviteUserInput, Department, BulkInviteRow, EmploymentType, UserRole, Location } from '@/types';
 import { cn } from '@/utils/cn';
 import { ROLES } from '@/constants/roles';
 
@@ -16,7 +16,7 @@ interface InviteModalProps {
   isOpen: boolean;
   onClose: () => void;
   departments: Department[];
-  teams: any[];
+  teams?: any[];
   locations: Location[];
   requiredFields?: string[];
 }
@@ -27,24 +27,6 @@ const EMPLOYMENT_TYPE_OPTIONS: { value: EmploymentType; label: string }[] = [
   { value: 'contractor', label: 'Contractor' },
   { value: 'intern', label: 'Intern' },
 ];
-
-const ROLE_OPTIONS: { value: UserRole; label: string }[] = [
-  { value: ROLES.SUPER_ADMIN, label: 'Super Admin' },
-  { value: ROLES.ADMIN, label: 'Admin' },
-  { value: ROLES.HR, label: 'HR' },
-  { value: ROLES.MANAGER, label: 'Manager' },
-  { value: ROLES.EMPLOYEE, label: 'Employee' },
-  { value: ROLES.TECHNICIAN, label: 'Technician' },
-];
-
-const inputClass = (hasError?: boolean) =>
-  cn(
-    'w-full h-10 px-3 text-sm rounded-md border bg-white/5 text-slate-200 border-white/10',
-    'placeholder:text-slate-500 transition-all duration-150',
-    'focus:outline-none focus:ring-1 focus:border-primary/50 focus:ring-primary/50',
-    'disabled:bg-black/20 disabled:text-slate-500 disabled:cursor-not-allowed',
-    hasError ? 'border-error focus:border-error focus:ring-error/50' : 'hover:border-white/20'
-  );
 
 /**
  * InviteModal Component

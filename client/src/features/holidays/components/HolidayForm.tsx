@@ -1,10 +1,7 @@
-// client/src/features/holidays/components/HolidayForm.tsx
 import React, { useState, useCallback } from 'react';
 import { useForm, Controller } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { z } from 'zod';
-import { Calendar as CalendarIcon, Clock, Hash, CheckCircle } from 'lucide-react';
-import { COMMON_TIMEZONES, formatTimezoneLabel } from '@/constants/timezones';
 import { getLocalTime, getTimezoneOffset } from '@/lib/timezone';
 import { DynamicCustomFields, isFieldRequired } from '@/features/data-fields/components/DynamicCustomFields';
 import { useEffectiveCustomFields } from '@/features/data-fields/hooks/useEffectiveCustomFields';
@@ -32,7 +29,7 @@ export type HolidayFormData = z.infer<typeof schema>;
 interface HolidayFormProps {
   initialData?: Holiday;
   onSubmit: (data: HolidayFormData & { custom_fields?: Record<string, unknown> }) => void;
-  calendars: HolidayCalendar[];
+  calendars?: HolidayCalendar[];
   isSubmitting?: boolean;
   isEdit?: boolean;
 }
@@ -40,9 +37,7 @@ interface HolidayFormProps {
 export const HolidayForm: React.FC<HolidayFormProps> = ({
   initialData,
   onSubmit,
-  calendars,
   isSubmitting = false,
-  isEdit = false,
 }) => {
   const {
     register,
@@ -51,7 +46,7 @@ export const HolidayForm: React.FC<HolidayFormProps> = ({
     handleSubmit,
     formState: { errors },
   } = useForm<HolidayFormData>({
-    resolver: zodResolver(schema),
+    resolver: zodResolver(schema) as any,
     defaultValues: {
       name: initialData?.name ?? '',
       date: initialData?.date ? new Date(initialData.date).toISOString().split('T')[0] : '',
@@ -63,7 +58,6 @@ export const HolidayForm: React.FC<HolidayFormProps> = ({
   });
 
   const selectedDate = watch('date');
-  const selectedRecurringType = watch('recurring_type');
   const isObserved = watch('is_observed');
 
   // ── Custom fields ──
@@ -123,17 +117,13 @@ export const HolidayForm: React.FC<HolidayFormProps> = ({
         }
         return acc;
       }, {} as Record<string, unknown>),
-    });
+    } as any);
   });
 
   const fieldStyle = (hasError?: boolean): React.CSSProperties => ({
     borderColor: hasError ? 'rgba(239,68,68,0.5)' : undefined,
     boxShadow: hasError ? '0 0 0 3px rgba(239,68,68,0.08)' : undefined,
   });
-
-  const getDaysInMonth = (year: number, month: number): number => {
-    return new Date(year, month + 1, 0).getDate();
-  };
 
   return (
     <form id="holiday-form" onSubmit={(e) => { e.preventDefault(); handleSubmitWithCustomFields(); }} className="space-y-5" noValidate>

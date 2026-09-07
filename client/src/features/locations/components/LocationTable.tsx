@@ -5,7 +5,6 @@ import { useDeleteLocation } from '../hooks/useDeleteLocation';
 import { EmptyState } from '@/components/ui/EmptyState';
 import { ErrorState } from '@/components/ui/ErrorState';
 import { TableSkeleton } from '@/components/ui/TableSkeleton';
-import { cn } from '@/utils/cn';
 import { formatTimeInTimezone, getTimezoneOffset } from '@/lib/timezone';
 import type { Location, LocationType } from '@/types';
 

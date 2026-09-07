@@ -1,11 +1,10 @@
 import { useState } from 'react';
-import { Plus, Shield, Settings, Trash2 } from 'lucide-react';
+import { Plus, Shield, Trash2 } from 'lucide-react';
 import { useAccessControlPolicies, useCreateAccessControlPolicy, useDeleteAccessControlPolicy } from '@/features/policies/hooks/useAdvancedPolicies';
 import { Modal } from '@/components/ui/Modal';
 import { ConfirmDialog } from '@/components/ui/ConfirmDialog';
 import { TableSkeleton } from '@/components/ui/TableSkeleton';
 import { EmptyState } from '@/components/ui/EmptyState';
-import { formatDate } from '@/utils/formatDate';
 import type { AccessControlPolicy } from '@/types';
 
 export const AccessControlPoliciesView = () => {

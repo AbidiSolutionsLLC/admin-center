@@ -8,6 +8,7 @@ import {
   exportAuditLogCSV,
   exportAuditLogJSON,
   verifyAuditLogs,
+  streamAuditEvents,
 } from '../controllers/auditLogs.controller';
 
 const router = Router();
@@ -15,8 +16,16 @@ const router = Router();
 // All audit log routes require authentication
 router.use(requireAuth);
 
+// Require appropriate roles for audit logs (Super Admin or IT Admin)
+import { requireRole } from '../middleware/requireRole';
+import { ROLES } from '../constants/roles';
+router.use(requireRole([ROLES.SUPER_ADMIN, ROLES.IT_ADMIN]));
+
 // Get audit events with pagination and filters
 router.get('/', getAuditEvents);
+
+// Stream audit events (SSE) (must be before /:id)
+router.get('/stream', streamAuditEvents);
 
 // Export to CSV/JSON (must be before /:id route to avoid conflict)
 router.get('/export/csv', exportAuditLogCSV);

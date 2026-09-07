@@ -69,7 +69,7 @@ export const BUForm: React.FC<BUFormProps> = ({
     watch,
     formState: { errors },
   } = useForm<BUFormData>({
-    resolver: zodResolver(schema),
+    resolver: zodResolver(schema) as any,
     defaultValues: {
       name: initialData?.name ?? '',
       parent_id: (typeof initialData?.parent_id === 'object' && initialData?.parent_id !== null) ? initialData.parent_id._id : (initialData?.parent_id as string ?? ''),
@@ -142,7 +142,7 @@ export const BUForm: React.FC<BUFormProps> = ({
         }
         return acc;
       }, {} as Record<string, unknown>),
-    });
+    } as any);
   });
 
   // Business Units can only have other Business Units as parents

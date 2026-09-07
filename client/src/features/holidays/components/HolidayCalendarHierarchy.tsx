@@ -1,6 +1,5 @@
-// client/src/features/holidays/components/HolidayCalendarHierarchy.tsx
 import React, { useState } from 'react';
-import { ChevronRight, ChevronDown, Calendar, MapPin, Globe2, Building2, Crown, Users, Clock } from 'lucide-react';
+import { ChevronRight, ChevronDown, Calendar, MapPin, Globe2, Building2, Crown, Clock } from 'lucide-react';
 import { formatTimeInTimezone, getTimezoneOffset } from '@/lib/timezone';
 import type { HolidayCalendarTreeNode } from '@/types';
 import { cn } from '@/utils/cn';
@@ -63,11 +62,14 @@ interface HolidayCalendarNodeProps {
 
 const HolidayCalendarNode: React.FC<HolidayCalendarNodeProps> = ({ node, depth, onNodeClick }) => {
   const [isExpanded, setIsExpanded] = useState(depth === 0);
-  const hasChildren = node.locations && node.locations.length > 0;
-  const TypeIcon = TYPE_ICONS[node.type] ?? MapPin;
-  const iconColor = TYPE_ICON_COLORS[node.type] ?? '#94a3b8';
-  const badge = TYPE_BADGE_STYLES[node.type] ?? TYPE_BADGE_STYLES.office;
+  const hasChildren = Boolean(node.locations && node.locations.length > 0);
+  const nodeType = node.type || 'office';
+  const TypeIcon = TYPE_ICONS[nodeType] ?? MapPin;
+  const iconColor = TYPE_ICON_COLORS[nodeType] ?? '#94a3b8';
+  const badge = TYPE_BADGE_STYLES[nodeType] ?? TYPE_BADGE_STYLES.office;
   const ds = DEPTH_STYLES[Math.min(depth, DEPTH_STYLES.length - 1)];
+  const calCount = Array.isArray(node.holiday_calendars) ? node.holiday_calendars.length : (typeof node.holiday_calendars === 'number' ? node.holiday_calendars : 0);
+  const tz = node.timezone || 'UTC';
 
   return (
     <div className="space-y-2">
@@ -125,26 +127,26 @@ const HolidayCalendarNode: React.FC<HolidayCalendarNodeProps> = ({ node, depth, 
             {/* Type badge */}
             <span className="inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-bold capitalize flex-shrink-0"
               style={{ background: badge.bg, color: badge.color, border: `1px solid ${badge.border}` }}>
-              {node.type}
+              {nodeType}
             </span>
 
             {/* Holiday calendars count */}
-            {(node.holiday_calendars ?? 0) > 0 && (
+            {calCount > 0 && (
               <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-bold flex-shrink-0"
                 style={{ background: 'rgba(245,176,42,0.12)', color: '#f5b02a', border: '1px solid rgba(245,176,42,0.25)' }}>
                 <Calendar className="w-2.5 h-2.5" />
-                {node.holiday_calendars} {node.holiday_calendars === 1 ? 'calendar' : 'calendars'}
+                {calCount} {calCount === 1 ? 'calendar' : 'calendars'}
               </span>
             )}
           </div>
 
           {/* Timezone + local time */}
           <div className="flex items-center gap-2 mt-1">
-            <span className="text-xs font-mono" style={{ color: 'var(--text-muted)' }}>{node.timezone}</span>
-            <span className="text-[10px]" style={{ color: 'rgba(148,163,184,0.4)' }}>{getTimezoneOffset(node.timezone)}</span>
+            <span className="text-xs font-mono" style={{ color: 'var(--text-muted)' }}>{tz}</span>
+            <span className="text-[10px]" style={{ color: 'rgba(148,163,184,0.4)' }}>{getTimezoneOffset(tz)}</span>
             <span className="flex items-center gap-1 text-[10px] font-mono" style={{ color: 'rgba(148,163,184,0.6)' }}>
               <Clock className="w-2.5 h-2.5" />
-              {formatTimeInTimezone(new Date(), node.timezone, 'time')}
+              {formatTimeInTimezone(new Date(), tz, 'time')}
             </span>
           </div>
         </div>
@@ -163,7 +165,7 @@ const HolidayCalendarNode: React.FC<HolidayCalendarNodeProps> = ({ node, depth, 
           className="space-y-2 ml-4 pl-4 border-l-2"
           style={{ borderColor: ds.indentBorder }}
         >
-          {node.locations!.map((child) => (
+          {node.locations!.map((child: any) => (
             <HolidayCalendarNode
               key={child._id}
               node={child as HolidayCalendarTreeNode}

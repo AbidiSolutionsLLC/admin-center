@@ -2,7 +2,7 @@
 import { useState, useMemo } from 'react';
 import {
   Bell, Plus, Eye, Search, X, ChevronDown, Trash2, FlaskConical,
-  Mail, Monitor, AlertTriangle, CheckCircle, Clock,
+  Mail, AlertTriangle, CheckCircle, Clock,
 } from 'lucide-react';
 import {
   useNotificationTemplates,
@@ -462,6 +462,8 @@ function TemplateFormModal({ isOpen, onClose, template, createMutation }: Templa
     channel: template?.channel ?? 'email' as NotificationChannel,
     severity: template?.severity ?? 'info' as NotificationSeverity,
     digest_mode: template?.digest_mode ?? 'immediate' as NotificationDigestMode,
+    target_type: template?.target_type ?? 'all' as import('@/types').NotificationTargetType,
+    target_id: template?.target_id ?? 'all',
     subject: template?.subject ?? '',
     body: template?.body ?? '',
     trigger_event: template?.trigger_event ?? '',
@@ -491,7 +493,7 @@ function TemplateFormModal({ isOpen, onClose, template, createMutation }: Templa
           </button>
           <button
             onClick={handleSubmit}
-            disabled={isPending || !formData.name || !formData.key || !formData.subject || !formData.body || !formData.trigger_event}
+            disabled={isPending || !formData.name || !formData.key || !formData.subject || !formData.body || !formData.trigger_event || !formData.target_id}
             className="h-9 px-4 text-sm font-medium rounded-md bg-primary hover:bg-primary-hover text-white transition-colors disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2"
           >
             {isPending ? 'Saving...' : isEditing ? 'Save Changes' : 'Create Template'}
@@ -535,6 +537,26 @@ function TemplateFormModal({ isOpen, onClose, template, createMutation }: Templa
               {Object.entries(DIGEST_LABELS).map(([k, v]) => <option key={k} value={k}>{v}</option>)}
             </select>
           </div>
+        </div>
+
+        <div className="grid grid-cols-2 gap-4">
+          <div>
+            <label className="text-sm font-medium text-ink block mb-1.5">Target Type <span className="text-error">*</span></label>
+            <select value={formData.target_type} onChange={(e) => setFormData({ ...formData, target_type: e.target.value as import('@/types').NotificationTargetType, target_id: e.target.value === 'all' ? 'all' : '' })} className="w-full h-9 px-3 text-sm rounded-md border border-line bg-white text-ink focus:outline-none focus:ring-2 focus:ring-primary/30 focus:border-primary transition-all duration-150">
+              <option value="all">All Users</option>
+              <option value="role">Role</option>
+              <option value="department">Department</option>
+              <option value="group">Group</option>
+              <option value="location">Location</option>
+              <option value="user">Specific User</option>
+            </select>
+          </div>
+          {formData.target_type !== 'all' && (
+            <div>
+              <label className="text-sm font-medium text-ink block mb-1.5">Target ID <span className="text-error">*</span></label>
+              <input type="text" value={formData.target_id} onChange={(e) => setFormData({ ...formData, target_id: e.target.value })} placeholder="Target Object ID or Role code" className="w-full h-9 px-3 text-sm rounded-md border border-line bg-white text-ink placeholder:text-ink-muted focus:outline-none focus:ring-2 focus:ring-primary/30 focus:border-primary transition-all duration-150" />
+            </div>
+          )}
         </div>
 
         <div>

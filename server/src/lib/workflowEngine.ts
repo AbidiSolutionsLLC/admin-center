@@ -445,7 +445,10 @@ export async function executeWorkflow(
       affected_object_id: workflow._id.toString(),
       affected_object_label: workflow.name,
       remediation_url: `/workflows/${workflow._id}`,
-      remediation_action: 'review_workflow_steps',
+          remediation_action: 'review_workflow_steps',
+          recommendations: [
+            { action: 'Review Workflow Steps', url: `/workflows/${workflow._id}` }
+          ],
       is_resolved: false,
       detected_at: new Date(),
     });
@@ -520,7 +523,10 @@ export async function resumeWorkflow(runId: string, approved: boolean, decidedBy
       affected_object_id: workflow._id.toString(),
       affected_object_label: workflow.name,
       remediation_url: `/workflows/${workflow._id}`,
-      remediation_action: 'review_rejection',
+          remediation_action: 'review_rejection',
+          recommendations: [
+            { action: 'Review Rejection', url: `/workflows/${workflow._id}` }
+          ],
       is_resolved: false,
       detected_at: new Date(),
     });
@@ -623,7 +629,10 @@ export async function handleLifecycleEvent(event: LifecycleEvent): Promise<Workf
         affected_object_id: workflow._id.toString(),
         affected_object_label: workflow.name,
         remediation_url: `/workflows/${workflow._id}`,
-        remediation_action: 'review_workflow_steps',
+          remediation_action: 'review_workflow_steps',
+          recommendations: [
+            { action: 'Review Workflow Steps', url: `/workflows/${workflow._id}` }
+          ],
         is_resolved: false,
         detected_at: new Date(),
       });

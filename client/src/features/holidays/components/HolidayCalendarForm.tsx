@@ -1,6 +1,5 @@
-// client/src/features/holidays/components/HolidayCalendarForm.tsx
 import React, { useState, useCallback } from 'react';
-import { useForm, Controller } from 'react-hook-form';
+import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { z } from 'zod';
 import { DynamicCustomFields, isFieldRequired } from '@/features/data-fields/components/DynamicCustomFields';
@@ -26,16 +25,14 @@ export const HolidayCalendarForm: React.FC<HolidayCalendarFormProps> = ({
   initialData,
   onSubmit,
   isSubmitting = false,
-  isEdit = false,
 }) => {
   const {
     register,
-    control,
     watch,
     handleSubmit,
     formState: { errors },
   } = useForm<HolidayCalendarFormData>({
-    resolver: zodResolver(schema),
+    resolver: zodResolver(schema) as any,
     defaultValues: {
       name: initialData?.name ?? '',
       description: initialData?.description ?? '',
@@ -100,7 +97,7 @@ export const HolidayCalendarForm: React.FC<HolidayCalendarFormProps> = ({
         }
         return acc;
       }, {} as Record<string, unknown>),
-    });
+    } as any);
   });
 
   const fieldStyle = (hasError?: boolean): React.CSSProperties => ({

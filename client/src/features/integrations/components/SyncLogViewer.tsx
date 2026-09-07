@@ -28,6 +28,16 @@ const STATUS_CONFIG = {
     class: 'bg-warningLight text-warning border-warningBorder',
     icon: AlertCircle,
   },
+  idle: {
+    label: 'Idle',
+    class: 'bg-surface-alt text-ink-muted border-line',
+    icon: Clock,
+  },
+  syncing: {
+    label: 'Syncing',
+    class: 'bg-sky-50 text-sky-600 border-sky-200',
+    icon: Clock,
+  },
 };
 
 /**

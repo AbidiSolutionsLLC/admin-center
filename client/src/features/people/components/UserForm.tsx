@@ -11,18 +11,8 @@ import { DynamicCustomFields } from '@/features/data-fields/components/DynamicCu
 import { isFieldRequired } from '@/features/data-fields/components/DynamicCustomFields';
 import { useEffectiveCustomFields } from '@/features/data-fields/hooks/useEffectiveCustomFields';
 import { getLocalTime } from '@/lib/timezone';
-import type { User, EmploymentType, Department, Location, UserRole } from '@/types';
-import { cn } from '@/utils/cn';
+import type { User, EmploymentType, Department, Location } from '@/types';
 import { ROLES } from '@/constants/roles';
-
-const ROLE_OPTIONS: { value: UserRole; label: string }[] = [
-  { value: ROLES.SUPER_ADMIN, label: 'Super Admin' },
-  { value: ROLES.ADMIN, label: 'Admin' },
-  { value: ROLES.HR, label: 'HR' },
-  { value: ROLES.MANAGER, label: 'Manager' },
-  { value: ROLES.EMPLOYEE, label: 'Employee' },
-  { value: ROLES.TECHNICIAN, label: 'Technician' },
-];
 
 const createSchema = (requiredFields: string[], editingUserId?: string) => z.object({
   full_name: z.string().min(1, 'Full name is required').max(150, 'Name too long'),
@@ -87,7 +77,6 @@ interface UserFormProps {
   initialData?: Partial<User>;
   onSubmit: (data: UserFormData & { custom_fields?: Record<string, unknown> }) => void;
   departments?: Department[];
-  teams?: any[];
   locations?: Location[];
   isSubmitting?: boolean;
   requiredFields?: string[];
@@ -100,17 +89,6 @@ const EMPLOYMENT_TYPE_OPTIONS: { value: EmploymentType; label: string }[] = [
   { value: 'intern', label: 'Intern' },
 ];
 
-const inputClass = (hasError?: boolean) =>
-  cn(
-    'w-full h-10 px-3 text-sm rounded-md border bg-white/5 text-slate-200 border-white/10',
-    'placeholder:text-slate-500 transition-all duration-150',
-    'focus:outline-none focus:ring-1 focus:border-primary/50 focus:ring-primary/50',
-    'disabled:bg-black/20 disabled:text-slate-500 disabled:cursor-not-allowed',
-    hasError
-      ? 'border-error focus:border-error focus:ring-error/50'
-      : 'hover:border-white/20'
-  );
-
 /**
  * UserForm Component
  * Profile edit form for users with employment details, department, manager, etc.
@@ -122,7 +100,6 @@ export const UserForm: React.FC<UserFormProps> = ({
   initialData,
   onSubmit,
   departments,
-  teams = [],
   locations = [],
   isSubmitting = false,
   requiredFields = [],
@@ -136,7 +113,7 @@ export const UserForm: React.FC<UserFormProps> = ({
     reset,
     formState: { errors },
   } = useForm<UserFormData>({
-    resolver: zodResolver(schema),
+    resolver: zodResolver(schema) as any,
     defaultValues: {
       full_name: initialData?.full_name ?? '',
       phone: initialData?.phone?.replace(/\D/g, '') ?? '',
@@ -255,7 +232,7 @@ export const UserForm: React.FC<UserFormProps> = ({
               }
               return acc;
             }, {} as Record<string, unknown>),
-          });
+          } as any);
         },
         (errors) => {
           console.error('UserForm validation errors:', errors);
@@ -332,7 +309,7 @@ onFocus={(e) => { e.currentTarget.style.background = 'rgba(255,255,255,0.07)'; e
 onBlur={(e) => { e.currentTarget.style.background = 'rgba(255,255,255,0.04)'; e.currentTarget.style.borderColor = !!errors.department_id ? 'rgba(239,68,68,0.5)' : 'rgba(255,255,255,0.08)'; e.currentTarget.style.boxShadow = 'none'; }}
         >
           <option value="">No department</option>
-          {departments.map((d) => (
+          {departments?.map((d) => (
             <option key={d._id} value={d._id}>
               {d.name}
             </option>

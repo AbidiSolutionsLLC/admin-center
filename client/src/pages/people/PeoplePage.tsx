@@ -19,7 +19,6 @@ import { UserTable } from '@/features/people/components/UserTable';
 import { InviteModal } from '@/features/people/components/InviteModal';
 import { UserOrgAssignmentModal } from '@/features/people/components/UserOrgAssignmentModal';
 import { UserLocationAssignmentModal } from '@/features/people/components/UserLocationAssignmentModal';
-import { useTeams } from '@/features/teams/hooks/useTeams';
 import { UserForm, type UserFormData } from '@/features/people/components/UserForm';
 import { UserHistoryPanel } from '@/features/people/components/UserHistoryPanel';
 import { LifecycleStateSelector } from '@/features/people/components/LifecycleStateSelector';
@@ -29,9 +28,8 @@ import { ErrorState } from '@/components/ui/ErrorState';
 import { EmptyState } from '@/components/ui/EmptyState';
 import { PermissionGate } from '@/components/ui/PermissionGate';
 import { Modal } from '@/components/ui/Modal';
-import type { User, LifecycleState, EmploymentType, Department, Location } from '@/types';
+import type { User, LifecycleState, EmploymentType, Department, Location as ModelLocation, UserRole } from '@/types';
 import { cn } from '@/utils/cn';
-import { toast } from 'sonner';
 import { Checkbox } from '@/components/ui/checkbox';
 
 const LIFECYCLE_STATE_OPTIONS: { value: LifecycleState | ''; label: string }[] = [
@@ -87,7 +85,6 @@ export default function PeoplePage() {
   // ── Server data ──────────────────────────────────────────────────────
   const { data: users, isLoading, isError, refetch } = useUsers();
   const { data: departments = [] } = useDepartments();
-  const { data: teams = [] } = useTeams();
   const { data: locations = [] } = useLocations();
   const { data: roles = [] } = useRoles();
   const { data: stats, isLoading: statsLoading } = useUserStats();
@@ -612,7 +609,7 @@ interface FilterBarProps {
   onClearFilters: () => void;
   activeFilterCount: number;
   departments: Department[];
-  locations: Location[];
+  locations: ModelLocation[];
 }
 
 function FilterBar({
@@ -755,7 +752,7 @@ interface EditUserModalProps {
   isOpen: boolean;
   onClose: () => void;
   departments: Department[];
-  locations: Location[];
+  locations: ModelLocation[];
   requiredFields?: string[];
 }
 
@@ -767,8 +764,9 @@ function EditUserModal({ user, isOpen, onClose, departments, locations, required
     (formData: UserFormData & { custom_fields?: Record<string, unknown> }) => {
       const normalized = {
         ...formData,
+        role: formData.role as UserRole | undefined,
         department_id: formData.department_id || null,
-        team_id: formData.team_id || null,
+        team_id: (formData as any).team_id || null,
         manager_id: formData.manager_id || null,
         location_id: formData.location_id || null,
         hire_date: formData.hire_date || null,

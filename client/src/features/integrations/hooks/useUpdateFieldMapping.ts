@@ -18,7 +18,7 @@ export const useUpdateFieldMapping = () => {
       const { data } = await apiClient.put(`/integrations/${id}/field-mapping`, { field_mapping });
       return data.data;
     },
-    onSuccess: (_, variables) => {
+    onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: QUERY_KEYS.INTEGRATIONS });
       toast.success('Field mapping updated successfully');
     },

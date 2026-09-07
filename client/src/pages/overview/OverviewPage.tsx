@@ -1,36 +1,29 @@
 // client/src/pages/overview/OverviewPage.tsx
-import { Users, Building2, Package, Shield, AlertTriangle } from 'lucide-react';
+import { Users, Building2, Package, Shield } from 'lucide-react';
 import {
   useDashboardStats,
   useSetupProgress,
   useRecentActivity,
-  useOverviewInsights,
-  useDismissInsight,
 } from '@/features/overview/useDashboard';
 import { StatCard } from '@/features/overview/StatCard';
-import { InsightCard } from '@/features/overview/InsightCard';
+import { HealthInsightsDashboard } from '@/features/overview/HealthInsightsDashboard';
 import { SetupProgressCard } from '@/features/overview/SetupProgressCard';
 import { RecentActivityFeed } from '@/features/overview/RecentActivityFeed';
 import { ErrorState } from '@/components/ui/ErrorState';
-import { EmptyState } from '@/components/ui/EmptyState';
 
 /**
  * OverviewPage Component
  * Main dashboard page showing:
  * - 4 stat cards (users, departments, apps, roles)
+ * - Centralized System Health Insights (Issues, Warnings, Informational) with drill-down
  * - Setup progress reflecting actual completion state
- * - Insights sorted by severity (critical first), grouped visually
  * - Recent activity feed showing last 10 events
  */
 export default function OverviewPage() {
   // ── Server data ──────────────────────────────────────────────────────
-  const { data: stats, isLoading: isLoadingStats, isError: isErrorStats } = useDashboardStats();
+  const { data: stats, isLoading: isLoadingStats, isError: isErrorStats, refetch: refetchStats } = useDashboardStats();
   const { data: setupProgress, isLoading: isLoadingSetup } = useSetupProgress();
   const { data: activity, isLoading: isLoadingActivity } = useRecentActivity();
-  const { data: insights, isLoading: isLoadingInsights } = useOverviewInsights();
-
-  // Mutations
-  const dismissInsightMutation = useDismissInsight();
 
   // ── Loading State ────────────────────────────────────────────────────
   if (isLoadingStats) {
@@ -48,8 +41,8 @@ export default function OverviewPage() {
           ))}
         </div>
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-          <div className="lg:col-span-2 h-64 bg-surface animate-pulse rounded-lg" />
-          <div className="h-64 bg-surface animate-pulse rounded-lg" />
+          <div className="lg:col-span-2 h-96 bg-surface animate-pulse rounded-lg" />
+          <div className="h-96 bg-surface animate-pulse rounded-lg" />
         </div>
       </div>
     );
@@ -60,8 +53,8 @@ export default function OverviewPage() {
     return (
       <ErrorState
         title="Failed to load dashboard"
-        description="Please try again."
-        onRetry={() => window.location.reload()}
+        description="Unable to fetch dashboard statistics. Please try again."
+        onRetry={refetchStats}
       />
     );
   }
@@ -76,12 +69,12 @@ export default function OverviewPage() {
             Overview
           </h1>
           <p className="mt-0.5 text-sm text-ink-secondary">
-            Welcome to the Sowaye Dashboard.
+            Welcome to the Sowaye Administration Center.
           </p>
         </div>
       </div>
 
-      {/* Stat Cards */}
+      {/* High-Level Stat Cards */}
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
         <StatCard
           title="Total Users"
@@ -109,78 +102,11 @@ export default function OverviewPage() {
         />
       </div>
 
-      {/* Main Grid: Insights + Setup Progress */}
+      {/* Main Grid: Health Insights Dashboard + Setup Progress & Activity */}
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-        {/* Insights Column (2/3 width) */}
-        <div className="lg:col-span-2 space-y-4">
-          <div className="flex items-center justify-between">
-            <h2 className="text-sm font-semibold text-ink">Insights & Recommendations</h2>
-            {insights && insights.length > 0 && (
-              <span className="text-xs text-ink-muted">
-                {insights.length} active insight{insights.length !== 1 ? 's' : ''}
-              </span>
-            )}
-          </div>
-
-          {isLoadingInsights ? (
-            <div className="space-y-3">
-              {[1, 2, 3].map((i) => (
-                <div key={i} className="h-32 bg-surface animate-pulse rounded-lg" />
-              ))}
-            </div>
-          ) : !insights || insights.length === 0 ? (
-            <EmptyState
-              icon={AlertTriangle}
-              title="No insights"
-              description="Your system is running smoothly. No issues detected."
-            />
-          ) : (
-            <div className="space-y-3">
-              {/* Group insights by severity */}
-              {['critical', 'warning', 'info'].map((severity) => {
-                const severityInsights = insights.filter((i) => i.severity === severity);
-                if (severityInsights.length === 0) return null;
-
-                return (
-                  <div key={severity} className="space-y-2">
-                    {severity === 'critical' && severityInsights.length > 0 && (
-                      <div className="flex items-center gap-2 px-1">
-                        <div className="h-2 w-2 rounded-full bg-error" />
-                        <span className="text-xs font-semibold text-error uppercase tracking-wide">
-                          Critical ({severityInsights.length})
-                        </span>
-                      </div>
-                    )}
-                    {severity === 'warning' && severityInsights.length > 0 && (
-                      <div className="flex items-center gap-2 px-1">
-                        <div className="h-2 w-2 rounded-full bg-warning" />
-                        <span className="text-xs font-semibold text-warning uppercase tracking-wide">
-                          Warnings ({severityInsights.length})
-                        </span>
-                      </div>
-                    )}
-                    {severity === 'info' && severityInsights.length > 0 && (
-                      <div className="flex items-center gap-2 px-1">
-                        <div className="h-2 w-2 rounded-full bg-info" />
-                        <span className="text-xs font-semibold text-info uppercase tracking-wide">
-                          Info ({severityInsights.length})
-                        </span>
-                      </div>
-                    )}
-
-                    {severityInsights.map((insight, index) => (
-                      <InsightCard
-                        key={`${insight._id}-${index}`}
-                        insight={insight}
-                        onDismiss={() => dismissInsightMutation.mutate(insight._id)}
-                        isDismissing={dismissInsightMutation.isPending}
-                      />
-                    ))}
-                  </div>
-                );
-              })}
-            </div>
-          )}
+        {/* Centralized System Health Insights (2/3 width) */}
+        <div className="lg:col-span-2">
+          <HealthInsightsDashboard />
         </div>
 
         {/* Right Column: Setup Progress + Recent Activity (1/3 width) */}
@@ -193,7 +119,7 @@ export default function OverviewPage() {
             />
           )}
 
-          {/* Recent Activity */}
+          {/* Recent Activity Feed */}
           <RecentActivityFeed
             events={activity ?? []}
             isLoading={isLoadingActivity}
@@ -203,3 +129,4 @@ export default function OverviewPage() {
     </div>
   );
 }
+

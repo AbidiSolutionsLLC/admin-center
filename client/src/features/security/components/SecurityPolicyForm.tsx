@@ -61,7 +61,7 @@ export function SecurityPolicyForm() {
     watch,
     setValue,
   } = useForm<PolicyFormValues>({
-    resolver: zodResolver(policyFormSchema),
+    resolver: zodResolver(policyFormSchema) as any,
     defaultValues: {
       policy_name: 'Default Security Policy',
       description: '',
@@ -182,7 +182,7 @@ export function SecurityPolicyForm() {
             </button>
             <button
               type="button"
-              onClick={handleSubmit(onSubmit)}
+              onClick={handleSubmit((data) => onSubmit(data as any))}
               className="h-9 px-4 text-sm font-medium rounded-md bg-primary hover:bg-primary-hover text-white transition-colors disabled:opacity-70"
               disabled={isSubmitting}
             >
@@ -194,7 +194,7 @@ export function SecurityPolicyForm() {
       </div>
 
       {/* Form Content */}
-      <form onSubmit={handleSubmit(onSubmit)} className="p-6 space-y-6">
+      <form onSubmit={handleSubmit((data) => onSubmit(data as any))} className="p-6 space-y-6">
         {/* Policy Info */}
         <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
           <div className="space-y-1.5">

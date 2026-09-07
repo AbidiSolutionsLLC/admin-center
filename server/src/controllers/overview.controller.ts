@@ -9,11 +9,47 @@ import { Role } from '../models/Role.model';
 import { AuditEvent } from '../models/AuditEvent.model';
 import { Insight } from '../models/Insight.model';
 import { Company } from '../models/Company.model';
-import { Types } from 'mongoose';
+
+/**
+ * Resolves or standardizes the affected_area of an insight.
+ * Ensures consistent areas: Identity, Access, Workflow, Organization, Security, Configuration.
+ */
+export function resolveAffectedArea(insight: {
+  affected_area?: string;
+  affected_object_type?: string;
+  title?: string;
+  category?: string;
+}): string {
+  if (insight.affected_area && insight.affected_area !== 'General') {
+    return insight.affected_area;
+  }
+  const title = (insight.title || '').toLowerCase();
+  const objType = (insight.affected_object_type || '').toLowerCase();
+
+  if (title.includes('mfa') || title.includes('security') || title.includes('risky') || title.includes('suspicious') || objType.includes('security')) {
+    return 'Security';
+  }
+  if (title.includes('workflow') || objType.includes('workflow')) {
+    return 'Workflow';
+  }
+  if (title.includes('permission') || title.includes('role') || objType === 'role') {
+    return 'Access';
+  }
+  if (title.includes('department') || title.includes('team') || title.includes('business unit') || objType === 'department' || objType === 'team') {
+    return 'Organization';
+  }
+  if (title.includes('policy') || title.includes('location') || title.includes('calendar') || title.includes('schedule') || title.includes('setup') || title.includes('configuration') || objType === 'company' || objType === 'location' || objType.includes('policy')) {
+    return 'Configuration';
+  }
+  if (objType === 'user' || objType === 'employee') {
+    return 'Identity';
+  }
+  return 'Identity';
+}
 
 /**
  * GET /api/v1/overview/stats
- * Returns dashboard statistics: user count, department count, app count, role count
+ * Returns dashboard statistics: user count, department count, app count, role count, open insights
  */
 export const getDashboardStats = asyncHandler(async (req: Request, res: Response) => {
   const companyId = req.user!.company_id;
@@ -28,6 +64,11 @@ export const getDashboardStats = asyncHandler(async (req: Request, res: Response
     activeApps,
     totalRoles,
     customRoles,
+    totalInsights,
+    criticalInsights,
+    highInsights,
+    mediumInsights,
+    lowInsights,
   ] = await Promise.all([
     User.countDocuments({ company_id: companyId }),
     User.countDocuments({ company_id: companyId, lifecycle_state: 'active', is_active: true }),
@@ -37,6 +78,11 @@ export const getDashboardStats = asyncHandler(async (req: Request, res: Response
     App.countDocuments({ company_id: companyId, is_active: true, status: 'active' }),
     Role.countDocuments({ company_id: companyId }),
     Role.countDocuments({ company_id: companyId, type: 'custom' }),
+    Insight.countDocuments({ company_id: companyId, is_resolved: false, is_dismissed: false }),
+    Insight.countDocuments({ company_id: companyId, is_resolved: false, is_dismissed: false, severity: 'critical' }),
+    Insight.countDocuments({ company_id: companyId, is_resolved: false, is_dismissed: false, severity: 'high' }),
+    Insight.countDocuments({ company_id: companyId, is_resolved: false, is_dismissed: false, severity: 'medium' }),
+    Insight.countDocuments({ company_id: companyId, is_resolved: false, is_dismissed: false, severity: 'low' }),
   ]);
 
   res.status(200).json({
@@ -57,6 +103,13 @@ export const getDashboardStats = asyncHandler(async (req: Request, res: Response
       roles: {
         total: totalRoles,
         custom: customRoles,
+      },
+      insights: {
+        total: totalInsights,
+        critical: criticalInsights,
+        high: highInsights,
+        medium: mediumInsights,
+        low: lowInsights,
       },
     },
   });
@@ -170,29 +223,82 @@ export const getRecentActivity = asyncHandler(async (req: Request, res: Response
 /**
  * GET /api/v1/overview/insights
  * Returns active insights sorted by severity (critical first)
- * This is a dedicated endpoint for the overview page
+ * Supports filtering by severity, area, category, and search query
  */
 export const getOverviewInsights = asyncHandler(async (req: Request, res: Response) => {
   const companyId = req.user!.company_id;
+  const { severity, area, category, search } = req.query;
 
-  const insights = await Insight.find({
+  const filter: Record<string, unknown> = {
     company_id: companyId,
     is_resolved: false,
-  })
-    .lean();
+    is_dismissed: false,
+  };
+
+  if (severity && severity !== 'all') {
+    filter.severity = severity;
+  }
+
+  if (category && category !== 'all') {
+    filter.category = category;
+  }
+
+  if (area && area !== 'all') {
+    filter.affected_area = area;
+  }
+
+  if (search && typeof search === 'string' && search.trim()) {
+    const searchRegex = new RegExp(search.trim(), 'i');
+    filter.$or = [
+      { title: searchRegex },
+      { description: searchRegex },
+      { affected_object_label: searchRegex },
+      { reasoning: searchRegex },
+    ];
+  }
+
+  const rawInsights = await Insight.find(filter).lean();
+
+  // Enrich with affected_area if not set
+  const enrichedInsights = rawInsights.map((insight) => ({
+    ...insight,
+    affected_area: resolveAffectedArea(insight),
+  }));
 
   // Sort by severity (critical first) then by detected_at
-  const severityOrder = { critical: 1, warning: 2, info: 3 };
-  insights.sort((a, b) => {
+  const severityOrder = { critical: 1, high: 2, medium: 3, low: 4 };
+  enrichedInsights.sort((a, b) => {
     const orderA = severityOrder[a.severity as keyof typeof severityOrder] ?? 99;
     const orderB = severityOrder[b.severity as keyof typeof severityOrder] ?? 99;
     if (orderA !== orderB) return orderA - orderB;
     return new Date(b.detected_at).getTime() - new Date(a.detected_at).getTime();
   });
 
+  // Calculate summary counts across all active insights for the company
+  const allCompanyInsights = await Insight.find({ company_id: companyId, is_resolved: false, is_dismissed: false }).lean();
+  const counts = {
+    total: allCompanyInsights.length,
+    critical: allCompanyInsights.filter((i) => i.severity === 'critical').length,
+    high: allCompanyInsights.filter((i) => i.severity === 'high').length,
+    medium: allCompanyInsights.filter((i) => i.severity === 'medium').length,
+    low: allCompanyInsights.filter((i) => i.severity === 'low').length,
+    misconfiguration: allCompanyInsights.filter((i) => i.category === 'misconfiguration').length,
+    health: allCompanyInsights.filter((i) => i.category === 'health').length,
+  };
+
+  const areaCounts: Record<string, number> = {};
+  for (const ins of allCompanyInsights) {
+    const a = resolveAffectedArea(ins);
+    areaCounts[a] = (areaCounts[a] || 0) + 1;
+  }
+
   res.status(200).json({
     success: true,
-    data: insights,
+    data: enrichedInsights,
+    summary: {
+      counts,
+      area_counts: areaCounts,
+    },
   });
 });
 

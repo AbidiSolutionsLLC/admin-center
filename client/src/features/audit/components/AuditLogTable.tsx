@@ -172,7 +172,7 @@ export function AuditLogTable({ events, isLoading, onRowClick }: AuditLogTablePr
                 </tr>
 
                 {/* Expanded row with before/after state */}
-                {isExpanded && (event.before_state || event.after_state) && (
+                {isExpanded && Boolean(event.before_state || event.after_state) && (
                   <tr className="bg-surface-alt border-b border-line">
                     <td colSpan={7} className="px-6 py-5">
                       <div className="grid grid-cols-2 gap-6">

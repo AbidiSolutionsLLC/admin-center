@@ -39,7 +39,8 @@ export const QUERY_KEYS = {
   DASHBOARD_STATS: ['overview', 'stats'] as const,
   SETUP_PROGRESS: ['overview', 'setup-progress'] as const,
   RECENT_ACTIVITY: ['overview', 'recent-activity'] as const,
-  OVERVIEW_INSIGHTS: ['overview', 'insights'] as const,
+  OVERVIEW_INSIGHTS: (filters?: Record<string, unknown>) =>
+    filters ? ['overview', 'insights', filters] as const : ['overview', 'insights'] as const,
   // Security
   SECURITY_POLICY: ['security', 'policy'] as const,
   SECURITY_EVENTS: (filters?: Record<string, unknown>) =>

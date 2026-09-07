@@ -2,7 +2,7 @@
 // Shared timezone utility functions for consistent time formatting across the app.
 // Uses Intl.DateTimeFormat which automatically handles DST for IANA timezone strings.
 
-import type { User, Location } from '@/types';
+import type { User } from '@/types';
 
 /**
  * Formats a date in the given timezone.

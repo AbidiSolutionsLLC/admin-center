@@ -11,6 +11,8 @@ import {
   getInsights,
   runIntelligence,
   resolveInsight,
+  dismissInsight,
+  executeAutoFix,
 } from '../controllers/intelligence.controller';
 
 const router = Router();
@@ -34,5 +36,7 @@ router.get('/insights', getOverviewInsights);
 router.get('/intelligence', getInsights);
 router.post('/intelligence/run', runIntelligence);
 router.put('/intelligence/:id/resolve', resolveInsight);
+router.put('/intelligence/:id/dismiss', dismissInsight);
+router.post('/intelligence/:id/auto-fix', executeAutoFix);
 
 export default router;

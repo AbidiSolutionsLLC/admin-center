@@ -1,27 +1,25 @@
 // client/src/hooks/useLocationPolicies.ts
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import { locationsApi } from '@/services/api';
-import { useNotification } from './useNotification';
-import type { AssignmentRulesForm } from '../services/api';
+import { locationsApi, type AssignmentRulesForm } from '@/services/locationsApi';
+import { toast } from 'sonner';
 
 export interface UseLocationPoliciesOptions {
   policyVersionId: string;
-  companyId: string;
+  companyId?: string;
   enabled?: boolean;
 }
 
 export const useLocationPolicies = (options: UseLocationPoliciesOptions) => {
   const queryClient = useQueryClient();
-  const { showNotification } = useNotification();
 
   const {
-    assignments,
+    data: assignments,
     isLoading,
     error,
     refetch,
   } = useQuery({
     queryKey: ['location-policies', options.policyVersionId, options.companyId],
-    queryFn: () => locationsApi.getLocationAssignments(options.policyVersionId, options.companyId),
+    queryFn: () => locationsApi.getLocationAssignments(options.policyVersionId),
     enabled: options.enabled !== false,
   });
 
@@ -36,13 +34,13 @@ export const useLocationPolicies = (options: UseLocationPoliciesOptions) => {
       await locationsApi.assignPolicyToLocations(options.policyVersionId, rules);
     },
     onSuccess: () => {
-      showNotification('Policies assigned to locations successfully', 'success');
+      toast.success('Policies assigned to locations successfully');
       queryClient.invalidateQueries({
         queryKey: ['location-policies', options.policyVersionId, options.companyId],
       });
     },
     onError: (error: any) => {
-      showNotification(error.message || 'Failed to assign policies', 'error');
+      toast.error(error?.message || 'Failed to assign policies');
     },
   });
 
@@ -51,13 +49,13 @@ export const useLocationPolicies = (options: UseLocationPoliciesOptions) => {
       await locationsApi.removeLocationAssignment(options.policyVersionId, locationId);
     },
     onSuccess: () => {
-      showNotification('Policy assignment removed successfully', 'success');
+      toast.success('Policy assignment removed successfully');
       queryClient.invalidateQueries({
         queryKey: ['location-policies', options.policyVersionId, options.companyId],
       });
     },
     onError: (error: any) => {
-      showNotification(error.message || 'Failed to remove assignment', 'error');
+      toast.error(error?.message || 'Failed to remove assignment');
     },
   });
 

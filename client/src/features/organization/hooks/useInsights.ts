@@ -6,7 +6,7 @@ import type { Insight } from '@/types';
 
 interface UseInsightsParams {
   module?: string;
-  severity?: 'critical' | 'warning' | 'info';
+  severity?: 'critical' | 'high' | 'medium' | 'low';
   affected_object_id?: string;
 }
 

@@ -1,5 +1,4 @@
 import { AlertCircle, Monitor, ArrowDownLeft } from 'lucide-react';
-import { cn } from '@/utils/cn';
 import { useTargetApps } from '@/features/apps/useApps';
 
 interface TargetAppAccessPanelProps {

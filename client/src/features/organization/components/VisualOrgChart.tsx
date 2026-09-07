@@ -8,13 +8,11 @@ import {
   ZoomOut, 
   RotateCcw, 
   ChevronDown, 
-  ChevronRight,
-  ChevronUp,
-  User,
-  Users,
-  MoreVertical,
-  Edit2,
-  Trash2
+  ChevronUp, 
+  User, 
+  Users, 
+  MoreVertical, 
+  Edit2 
 } from 'lucide-react';
 import * as DropdownMenu from '@radix-ui/react-dropdown-menu';
 import { cn } from '@/utils/cn';

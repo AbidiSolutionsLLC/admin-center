@@ -15,7 +15,6 @@ import { useUpdateCompanyName, useUpdateTimezone, useUpdateLocale, useUpdateDefa
 import { useLocations } from '@/features/locations/hooks/useLocations';
 import { AVAILABLE_USER_FIELDS } from '@/types';
 import { COMMON_TIMEZONES, formatTimezoneLabel } from '@/constants/timezones';
-import { cn } from '@/utils/cn';
 import { toast } from 'sonner';
 
 type FormValues = {
@@ -721,8 +720,94 @@ export default function CompanySettingsPage() {
 
       <AuditLogRetentionSection />
 
+      <InsightSensitivitySection />
+
       <ResetToFactorySection />
     </div>
+  );
+}
+
+import { useUpdateInsightSensitivity } from '@/hooks/useCompanyProfile';
+
+function InsightSensitivitySection() {
+  const { data: settings, isLoading } = useEmployeeIdFormat(); // reusing this query to fetch company settings
+  const updateInsightSensitivity = useUpdateInsightSensitivity();
+  
+  const [sensitivity, setSensitivity] = useState<'low' | 'medium' | 'high'>('medium');
+  
+  useEffect(() => {
+    if (settings?.settings?.insight_sensitivity) {
+      setSensitivity(settings.settings.insight_sensitivity as 'low' | 'medium' | 'high');
+    }
+  }, [settings]);
+
+  const handleSave = () => {
+    updateInsightSensitivity.mutate({ insight_sensitivity: sensitivity });
+  };
+
+  if (isLoading) {
+    return (
+      <Card className="shadow-card">
+        <CardHeader>
+          <CardTitle>Insight Sensitivity</CardTitle>
+          <CardDescription>Loading...</CardDescription>
+        </CardHeader>
+      </Card>
+    );
+  }
+
+  const SENSITIVITY_OPTIONS = [
+    { label: 'Low (Only Critical & High issues)', value: 'low' },
+    { label: 'Medium (Includes Medium issues)', value: 'medium' },
+    { label: 'High (Includes Low issues)', value: 'high' },
+  ];
+
+  return (
+    <Card className="bg-white border-line shadow-card">
+      <CardHeader>
+        <CardTitle>Insight Sensitivity</CardTitle>
+        <CardDescription>
+          Configure the sensitivity level for system insights and alerts to avoid being overwhelmed by unnecessary notifications.
+        </CardDescription>
+      </CardHeader>
+      <CardContent>
+        <div className="space-y-4">
+          <div className="flex flex-col gap-3 sm:flex-row sm:items-center justify-between">
+            <div className="flex-1">
+              <label className="block text-sm font-medium text-ink mb-2">
+                Sensitivity Level
+              </label>
+              <select
+                value={sensitivity}
+                onChange={(e) => setSensitivity(e.target.value as 'low' | 'medium' | 'high')}
+                className="w-full sm:w-80 h-10 pl-3 pr-8 text-sm rounded-md border border-line bg-white text-ink focus:outline-none focus:ring-2 focus:ring-primary/30 focus:border-primary transition-all appearance-none"
+              >
+                {SENSITIVITY_OPTIONS.map((opt) => (
+                  <option key={opt.value} value={opt.value}>{opt.label}</option>
+                ))}
+              </select>
+            </div>
+            
+            <div className="self-start sm:self-end">
+              <Button
+                onClick={handleSave}
+                disabled={
+                  updateInsightSensitivity.isPending || 
+                  sensitivity === (settings?.settings?.insight_sensitivity || 'medium')
+                }
+              >
+                {updateInsightSensitivity.isPending ? 'Saving...' : 'Save Settings'}
+              </Button>
+            </div>
+          </div>
+          
+          <p className="text-xs text-ink-secondary bg-surface-alt p-3 rounded-md border border-line">
+            <strong>What this means:</strong> When set to <span className="font-semibold">Low</span>, the system suppresses minor configuration warnings and only shows critical health or security alerts. 
+            Duplicate and dismissed insights are automatically suppressed regardless of this setting.
+          </p>
+        </div>
+      </CardContent>
+    </Card>
   );
 }
 

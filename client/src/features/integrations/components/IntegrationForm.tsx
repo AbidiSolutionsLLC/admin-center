@@ -74,7 +74,7 @@ export const IntegrationForm: React.FC<IntegrationFormProps> = ({
     reset,
     formState: { errors },
   } = useForm<IntegrationFormData>({
-    resolver: zodResolver(schema),
+    resolver: zodResolver(schema) as any,
     defaultValues: {
       credentials: {},
       sync_enabled: initialData?.sync_enabled ?? false,
@@ -102,7 +102,7 @@ export const IntegrationForm: React.FC<IntegrationFormProps> = ({
   };
 
   return (
-    <form id="integration-form" onSubmit={handleSubmit(handleFormSubmit)} className="space-y-5" noValidate>
+    <form id="integration-form" onSubmit={handleSubmit((data) => handleFormSubmit(data as any))} className="space-y-5" noValidate>
       {/* Credential Fields */}
       <div>
         <h3 className="text-sm font-semibold text-ink mb-3">Credentials</h3>
@@ -166,18 +166,15 @@ export const IntegrationForm: React.FC<IntegrationFormProps> = ({
             id="sync-frequency"
             {...register('sync_frequency')}
             disabled={isSubmitting}
-            className={inputClass(false)}
+            className={inputClass(!!errors.sync_frequency)}
           >
-            <option value="manual">Manual Only</option>
+            <option value="manual">Manual only</option>
             <option value="hourly">Hourly</option>
             <option value="daily">Daily</option>
             <option value="weekly">Weekly</option>
           </select>
         </div>
       </div>
-
-      {/* Hidden submit button for modal footer trigger */}
-      <button type="submit" id="integration-form-submit" className="hidden" />
     </form>
   );
 };

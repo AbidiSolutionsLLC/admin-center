@@ -10,7 +10,7 @@ import { TeamMember } from '../models/TeamMember.model';
 import { AuditEvent } from '../models/AuditEvent.model';
 import { Insight } from '../models/Insight.model';
 import { auditLogger } from '../lib/auditLogger';
-import { runIntelligenceRules } from '../lib/intelligence';
+import { triggerIntelligenceRules } from '../lib/intelligence';
 import { AppError } from '../utils/AppError';
 import { slugify } from '../utils/slugify';
 import { validateAndSanitizeCustomFields, enforceStandardFieldPermissions, enforceCustomFieldPermissions } from '../services/customFieldValidation.service';
@@ -325,9 +325,7 @@ export const createDepartment = asyncHandler(async (req: Request, res: Response)
   });
 
   // Trigger intelligence rules after department creation
-  runIntelligenceRules(req.user.company_id).catch(err => {
-    console.error('Intelligence rules failed:', err);
-  });
+  triggerIntelligenceRules(req.user.company_id);
 
   res.status(201).json({ success: true, data: dept });
 });
@@ -468,9 +466,7 @@ export const updateDepartment = asyncHandler(async (req: Request, res: Response)
   });
 
   // Trigger intelligence rules after department update
-  runIntelligenceRules(req.user.company_id).catch(err => {
-    console.error('Intelligence rules failed:', err);
-  });
+  triggerIntelligenceRules(req.user.company_id);
 
   res.status(200).json({ success: true, data: dept });
 });
@@ -557,9 +553,7 @@ export const deleteDepartment = asyncHandler(async (req: Request, res: Response)
   });
 
   // Trigger intelligence rules after department deletion
-  runIntelligenceRules(req.user.company_id).catch(err => {
-    console.error('Intelligence rules failed:', err);
-  });
+  triggerIntelligenceRules(req.user.company_id);
 
   res.status(200).json({ success: true, data: {} });
 });
@@ -668,9 +662,7 @@ export const moveDepartment = asyncHandler(async (req: Request, res: Response) =
     after_state: { parent_id: dept.parent_id?.toString() ?? null },
   });
 
-  runIntelligenceRules(req.user.company_id).catch(err => {
-    console.error('Intelligence rules failed:', err);
-  });
+  triggerIntelligenceRules(req.user.company_id);
 
   res.status(200).json({ success: true, data: dept });
 });
@@ -1002,9 +994,7 @@ export const deleteBusinessUnit = asyncHandler(async (req: Request, res: Respons
     after_state: bu.toObject(),
   });
 
-  runIntelligenceRules(req.user.company_id).catch(err => {
-    console.error('Intelligence rules failed:', err);
-  });
+  triggerIntelligenceRules(req.user.company_id);
 
   res.status(200).json({ success: true, data: {} });
 });
@@ -1127,8 +1117,9 @@ export const getOrgHealth = asyncHandler(async (req: Request, res: Response) => 
   // Group by severity
   const grouped = {
     critical: insights.filter((i) => i.severity === 'critical'),
-    warning: insights.filter((i) => i.severity === 'warning'),
-    info: insights.filter((i) => i.severity === 'info'),
+    high: insights.filter((i) => i.severity === 'high'),
+    medium: insights.filter((i) => i.severity === 'medium'),
+    low: insights.filter((i) => i.severity === 'low'),
   };
 
   res.status(200).json({
@@ -1137,8 +1128,9 @@ export const getOrgHealth = asyncHandler(async (req: Request, res: Response) => 
       insights: grouped,
       counts: {
         critical: grouped.critical.length,
-        warning: grouped.warning.length,
-        info: grouped.info.length,
+        high: grouped.high.length,
+        medium: grouped.medium.length,
+        low: grouped.low.length,
         total: insights.length,
       },
     },
@@ -1206,3 +1198,4 @@ export const getOrgHistory = asyncHandler(async (req: Request, res: Response) =>
 
   res.status(200).json({ success: true, data: enrichedEvents });
 });
+

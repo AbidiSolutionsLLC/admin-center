@@ -3,7 +3,6 @@ import { useMutation, useQueryClient } from '@tanstack/react-query';
 import { apiClient } from '@/lib/apiClient';
 import { QUERY_KEYS } from '@/constants/queryKeys';
 import { toast } from 'sonner';
-import axios from 'axios';
 import type { OrgTreeNode } from '@/types';
 
 interface MoveDepartmentVariables {

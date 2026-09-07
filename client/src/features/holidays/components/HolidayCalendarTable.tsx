@@ -1,11 +1,9 @@
-// client/src/features/holidays/components/HolidayCalendarTable.tsx
 import React, { useState } from 'react';
-import { Calendar, MapPin, Pencil, Trash2, Crown, Users, Plus } from 'lucide-react';
+import { Calendar, MapPin, Pencil, Trash2, Plus } from 'lucide-react';
 import { useDeleteHolidayCalendar } from '../hooks/useDeleteHolidayCalendar';
 import { EmptyState } from '@/components/ui/EmptyState';
 import { ErrorState } from '@/components/ui/ErrorState';
 import { TableSkeleton } from '@/components/ui/TableSkeleton';
-import { cn } from '@/utils/cn';
 import type { HolidayCalendar } from '@/types';
 
 interface HolidayCalendarTableProps {
@@ -45,7 +43,7 @@ export const HolidayCalendarTable: React.FC<HolidayCalendarTableProps> = ({
         title="No holiday calendars found"
         description="Create your first holiday calendar to get started."
         icon={Calendar}
-        action={<button onClick={() => onEdit({} as any)} className="px-4 py-2 bg-primary text-white rounded-lg">Create Calendar</button>}
+        action={{ label: 'Create Calendar', onClick: () => onEdit({} as any) }}
       />
     );
   }

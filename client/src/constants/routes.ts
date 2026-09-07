@@ -1,6 +1,7 @@
 // src/constants/routes.ts
 export const ROUTES = {
   OVERVIEW: '/overview',
+  INSIGHT_HISTORY: '/overview/insight-history',
   ORGANIZATION: '/organization',
   DEPARTMENT_DETAIL: (id: string) => `/organization/${id}`,
   TEAMS: '/teams',

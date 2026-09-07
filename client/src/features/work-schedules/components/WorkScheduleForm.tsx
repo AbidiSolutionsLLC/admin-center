@@ -29,7 +29,7 @@ const schema = z.object({
     start: z.string(),
     end: z.string(),
   }).optional().nullable(),
-  is_active: z.boolean().default(true),
+  is_active: z.boolean(),
 });
 
 export type WorkScheduleFormData = z.infer<typeof schema>;
@@ -56,7 +56,7 @@ export const WorkScheduleForm: React.FC<WorkScheduleFormProps> = ({
   initialData,
   onSubmit,
   isSubmitting = false,
-  isEdit = false,
+  onDirtyChange,
 }) => {
   const {
     register,
@@ -65,7 +65,7 @@ export const WorkScheduleForm: React.FC<WorkScheduleFormProps> = ({
     handleSubmit,
     formState: { errors, isDirty },
   } = useForm<WorkScheduleFormData>({
-    resolver: zodResolver(schema),
+    resolver: zodResolver(schema) as any,
     defaultValues: {
       name: initialData?.name ?? '',
       description: initialData?.description ?? '',
@@ -76,8 +76,6 @@ export const WorkScheduleForm: React.FC<WorkScheduleFormProps> = ({
       is_active: initialData?.is_active ?? true,
     },
   });
-
-  const isSaveDisabled = !isDirty || isSubmitting || Object.keys(errors).length > 0;
 
   useEffect(() => {
     onDirtyChange?.(isDirty);

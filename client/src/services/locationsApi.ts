@@ -11,8 +11,7 @@ export interface AssignmentRulesForm {
 export const locationsApi = {
   // Get policy assignments for a specific policy version
   getLocationAssignments: async (
-    policyVersionId: string,
-    companyId: string
+    policyVersionId: string
   ): Promise<Array<{ _id: string; target_label: string; created_at: string }>> => {
     const response = await apiClient.get(
       `/policies/${policyVersionId}/assignments`

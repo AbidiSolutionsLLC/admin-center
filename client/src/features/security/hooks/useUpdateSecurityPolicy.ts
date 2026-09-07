@@ -12,7 +12,7 @@ import type { SecurityPolicy, UpdateSecurityPolicyInput } from '@/types';
 export const useUpdateSecurityPolicy = () => {
   const queryClient = useQueryClient();
 
-  return useMutation<SecurityPolicy, Error, UpdateSecurityPolicyInput>({
+  return useMutation<SecurityPolicy, Error, UpdateSecurityPolicyInput & { _id: string }>({
     mutationFn: async (input: UpdateSecurityPolicyInput & { _id: string }) => {
       const { data } = await apiClient.put(`/security/policies/${input._id}`, input);
       return data.data;

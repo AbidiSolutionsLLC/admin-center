@@ -41,6 +41,7 @@ const schema = z.object({
     action: z.enum(['show', 'hide', 'require', 'optional']),
   })).optional().nullable(),
   field_dependencies: z.array(z.string()).optional().nullable(),
+  display_order: z.number().optional(),
 });
 
 export type CustomFieldFormData = z.input<typeof schema>;
@@ -249,7 +250,7 @@ export const CustomFieldForm: React.FC<CustomFieldFormProps> = ({
             className={baseClasses}
           >
             <option value="">Any value</option>
-            {referencedField.select_options?.map((opt) => (
+            {referencedField?.select_options?.map((opt) => (
               <option key={opt} value={opt}>{opt}</option>
             ))}
           </select>
@@ -263,7 +264,7 @@ export const CustomFieldForm: React.FC<CustomFieldFormProps> = ({
             className={baseClasses}
           >
             <option value="">Any value</option>
-            {referencedField.select_options?.map((opt) => (
+            {referencedField?.select_options?.map((opt) => (
               <option key={opt} value={opt}>{opt}</option>
             ))}
           </select>
@@ -364,15 +365,13 @@ export const CustomFieldForm: React.FC<CustomFieldFormProps> = ({
       cleaned.conditional_logic = null;
     } else {
       const operatorsNoValue = ['is_empty', 'is_not_empty'];
-      cleaned.conditional_logic = cleaned.conditional_logic
+      const validRules = ((cleaned.conditional_logic as any[]) || [])
         .filter((r: { field_slug: string }) => r.field_slug)
         .map((r: ConditionalRule) => ({
           ...r,
           value: operatorsNoValue.includes(r.operator) ? null : r.value,
         }));
-      if (cleaned.conditional_logic.length === 0) {
-        cleaned.conditional_logic = null;
-      }
+      cleaned.conditional_logic = validRules.length > 0 ? validRules : null;
     }
     // Role fields are comma-separated text inputs -> normalize to arrays for the server.
     for (const key of ['visible_roles', 'edit_visible_roles'] as const) {
@@ -828,7 +827,7 @@ export const CustomFieldForm: React.FC<CustomFieldFormProps> = ({
           {fieldDependencies.length > 0 && (
             <div className="flex flex-wrap gap-1.5">
               {fieldDependencies.map((depId) => {
-                const depField = availableFields.find((f) => f._id === depId);
+                const depField = availableFields?.find((f) => f._id === depId);
                 return (
                   <span
                     key={depId}

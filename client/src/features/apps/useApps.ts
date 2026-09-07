@@ -88,14 +88,14 @@ export const useRevokeApp = () => {
 
       return { previousApp, appId };
     },
-    onError: (error: any, variables, context) => {
+    onError: (error: any, _variables, context) => {
       if (context?.previousApp) {
         queryClient.setQueryData(QUERY_KEYS.APP_DETAIL(context.appId), context.previousApp);
       }
       const message = error.response?.data?.error || 'Failed to revoke assignment';
       toast.error(message);
     },
-    onSettled: (data, error, variables) => {
+    onSettled: (_data, _error, variables) => {
       queryClient.invalidateQueries({ queryKey: QUERY_KEYS.APPS });
       queryClient.invalidateQueries({ queryKey: QUERY_KEYS.APP_DETAIL(variables.appId) });
       queryClient.invalidateQueries({ queryKey: QUERY_KEYS.APP_ASSIGNMENTS(variables.appId) });
@@ -159,7 +159,7 @@ export const useUpdateApp = () => {
       const response = await apiClient.put(`/apps/${appId}`, data);
       return response.data.data;
     },
-    onSuccess: (data, { appId }) => {
+    onSuccess: (_data, { appId }) => {
       queryClient.invalidateQueries({ queryKey: QUERY_KEYS.APPS });
       queryClient.invalidateQueries({ queryKey: QUERY_KEYS.APP_DETAIL(appId) });
       toast.success('App updated successfully');

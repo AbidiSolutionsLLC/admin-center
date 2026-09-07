@@ -102,7 +102,6 @@ export function UserDelegatesPanel({ userId }: UserDelegatesPanelProps) {
             
             if (end) end.setHours(23, 59, 59, 999);
             
-            const isActive = now >= start && (!end || now <= end);
             const isPast = end ? now > end : false;
             const isFuture = now < start;
 

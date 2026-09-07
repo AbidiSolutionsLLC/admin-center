@@ -72,6 +72,11 @@ export const auditLogger = {
           alertDetail
         ).catch(err => console.error('[AuditLog] Failed to send admin change alert:', err));
       }
+
+      // Trigger intelligence rules on every admin write operation to ensure near real-time updates
+      const { triggerIntelligenceRules } = await import('./intelligence');
+      triggerIntelligenceRules(company_id);
+
     } catch (error) {
       console.error('Audit Log failed to write:', error);
       // We don't throw here to avoid failing the user action if audit logging fails

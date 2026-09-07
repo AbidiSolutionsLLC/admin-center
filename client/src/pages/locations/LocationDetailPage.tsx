@@ -53,32 +53,17 @@ function PolicyStatusBadge({ isOverridden }: { isOverridden: boolean }) {
   );
 }
 
-function PolicySourceBadge({ source }: { source: string }) {
-  const config: Record<string, { bg: string; color: string; border: string; label: string }> = {
-    global: { bg: 'rgba(59,130,246,0.12)', color: '#60a5fa', border: 'rgba(59,130,246,0.3)', label: 'Global' },
-    location: { bg: 'rgba(59,130,246,0.12)', color: '#60a5fa', border: 'rgba(59,130,246,0.3)', label: 'Regional' },
-    direct: { bg: 'rgba(168,85,247,0.12)', color: '#c084fc', border: 'rgba(168,85,247,0.3)', label: 'Direct' },
-  };
-  const c = config[source] || config.direct;
-  return (
-    <span className="inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-bold policy-badge-regional"
-      style={{ background: c.bg, color: c.color, border: `1px solid ${c.border}` }}>
-      {c.label}
-    </span>
-  );
-}
-
 export default function LocationDetailPage() {
   const { id } = useParams<{ id: string }>();
   const navigate = useNavigate();
   const [activeTab, setActiveTab] = useState<TabType>('overview');
 
-  const { data: location, isLoading, isError, refetch } = useLocationDetail(id);
+  const { data: location, isLoading, isError, refetch } = useLocationDetail(id || '');
   const { data: companySettings } = useEmployeeIdFormat();
   const isDefaultLocation = companySettings?.settings?.default_location_id === id;
-  const { data: users, isLoading: usersLoading } = useLocationUsers(id);
-  const { data: policiesView, isLoading: policiesLoading } = useLocationPoliciesView(id);
-  const { data: effectiveSettings, isLoading: settingsLoading } = useLocationEffectiveSettings(id);
+  const { data: users, isLoading: usersLoading } = useLocationUsers(id || '');
+  const { data: policiesView, isLoading: policiesLoading } = useLocationPoliciesView(id || '');
+  const { data: effectiveSettings } = useLocationEffectiveSettings(id || '');
 
   const assignPolicy = useAssignPolicyToLocation(id!);
   const removePolicy = useRemovePolicyFromLocation(id!);

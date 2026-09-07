@@ -1,7 +1,7 @@
-import React, { useState } from 'react';
+import { useState } from 'react';
 import { TransformWrapper, TransformComponent } from 'react-zoom-pan-pinch';
 import { Tree, TreeNode } from 'react-organizational-chart';
-import { Shield, Users, Building, Key, Maximize2, ZoomIn, ZoomOut, RotateCcw } from 'lucide-react';
+import { Shield, Users, Building, Key, ZoomIn, ZoomOut, RotateCcw } from 'lucide-react';
 import { useAccessMap } from './useAccessMap';
 import { TableSkeleton } from '@/components/ui/TableSkeleton';
 import { ErrorState } from '@/components/ui/ErrorState';

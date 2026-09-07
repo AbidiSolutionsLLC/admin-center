@@ -1,4 +1,3 @@
-import { useState } from 'react';
 import { NavLink, useLocation, Link } from 'react-router-dom';
 import { cn } from '@/utils/cn';
 import { ROUTES } from '@/constants/routes';
@@ -71,7 +70,7 @@ const navGroups = [
 import { useMyPermissions } from '@/hooks/useMyPermissions';
 
 export const Sidebar = ({ className }: SidebarProps) => {
-  const { clearAuth, userName, userRole, companyName } = useAuthStore();
+  const { clearAuth, userName, userRole, companyName } = useAuthStore() as any;
   const { closeSidebar } = useUIStore();
   const location = useLocation();
   const { data: myPermissions } = useMyPermissions();

@@ -53,7 +53,7 @@ export const WorkScheduleTable: React.FC<WorkScheduleTableProps> = ({
         title="No work schedules found"
         description="Create your first work schedule to define working hours for locations."
         icon={Clock}
-        action={<button onClick={() => onEdit({} as any)} className="h-9 px-4 text-sm font-medium rounded-md bg-primary hover:bg-primary-hover text-white transition-colors">Create Schedule</button>}
+        action={{ label: 'Create Schedule', onClick: () => onEdit({} as any) }}
       />
     );
   }

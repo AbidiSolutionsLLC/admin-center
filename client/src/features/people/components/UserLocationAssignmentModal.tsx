@@ -4,7 +4,7 @@ import { Button } from '@/components/ui/button';
 import { useAssignUserLocation } from '../hooks/useAssignUserLocation';
 import { useLocations } from '@/features/locations/hooks/useLocations';
 import { cn } from '@/utils/cn';
-import { Clock, CalendarDays, AlertTriangle } from 'lucide-react';
+import { Clock, CalendarDays } from 'lucide-react';
 import { toast } from 'sonner';
 import type { User, Location } from '@/types';
 

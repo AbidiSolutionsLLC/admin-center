@@ -1,10 +1,9 @@
 import { useState, useRef, useEffect } from 'react';
 import { Bell, CheckCheck, Search, Settings } from 'lucide-react';
-import { useAuthStore } from '@/store/useAuthStore';
 import { cn } from '@/utils/cn';
 import { useInAppNotifications, useUnreadNotificationCount, useMarkAsRead, useMarkAllAsRead } from '@/features/notifications/hooks/useNotifications';
 import { formatDate } from '@/utils/formatDate';
-import { useLocation, useNavigate } from 'react-router-dom';
+import { useLocation } from 'react-router-dom';
 import { ROUTES } from '@/constants/routes';
 
 interface TopBarProps {

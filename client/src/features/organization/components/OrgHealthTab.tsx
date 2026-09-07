@@ -1,10 +1,10 @@
-// src/features/organization/components/OrgHealthTab.tsx
 import React from 'react';
-import { AlertTriangle, AlertCircle, Info, X } from 'lucide-react';
-import { useOrgHealth, useDismissInsight } from '../hooks/useOrgHealth';
+import { AlertTriangle, AlertCircle, Info, X, Check } from 'lucide-react';
+import { useOrgHealth, useDismissInsight, useResolveInsight, useAutoFixInsight } from '../hooks/useOrgHealth';
 import { TableSkeleton } from '@/components/ui/TableSkeleton';
 import { ErrorState } from '@/components/ui/ErrorState';
 import { EmptyState } from '@/components/ui/EmptyState';
+import { ConfirmDialog } from '@/components/ui/ConfirmDialog';
 import { cn } from '@/utils/cn';
 import type { Insight } from '@/types';
 
@@ -14,6 +14,9 @@ interface OrgHealthTabProps {
 
 const severityConfig = {
   critical: { icon: AlertTriangle, bg: 'bg-error/10', border: 'border-error/30', text: 'text-error', badge: 'bg-error/20 text-error border border-error/30', label: 'Critical' },
+  high: { icon: AlertCircle, bg: 'bg-warning/10', border: 'border-warning/30', text: 'text-warning', badge: 'bg-warning/20 text-warning border border-warning/30', label: 'High' },
+  medium: { icon: AlertCircle, bg: 'bg-warning/10', border: 'border-warning/30', text: 'text-warning', badge: 'bg-warning/20 text-warning border border-warning/30', label: 'Medium' },
+  low: { icon: Info, bg: 'bg-info/10', border: 'border-info/30', text: 'text-info', badge: 'bg-info/20 text-info border border-info/30', label: 'Low' },
   warning: { icon: AlertCircle, bg: 'bg-warning/10', border: 'border-warning/30', text: 'text-warning', badge: 'bg-warning/20 text-warning border border-warning/30', label: 'Warning' },
   info: { icon: Info, bg: 'bg-info/10', border: 'border-info/30', text: 'text-info', badge: 'bg-info/20 text-info border border-info/30', label: 'Info' },
 };
@@ -30,6 +33,9 @@ const severityConfig = {
 export const OrgHealthTab: React.FC<OrgHealthTabProps> = ({ onNavigateToRecord }) => {
   const { data, isLoading, isError, refetch } = useOrgHealth();
   const dismissMutation = useDismissInsight();
+  const resolveMutation = useResolveInsight();
+  const autoFixMutation = useAutoFixInsight();
+  const [autoFixInsight, setAutoFixInsight] = React.useState<Insight | null>(null);
 
   if (isLoading) return <TableSkeleton rows={6} columns={5} />;
 
@@ -57,8 +63,16 @@ export const OrgHealthTab: React.FC<OrgHealthTabProps> = ({ onNavigateToRecord }
     dismissMutation.mutate(insight._id);
   };
 
+  const handleResolve = (insight: Insight) => {
+    resolveMutation.mutate(insight._id);
+  };
+
   const renderInsight = (insight: Insight) => {
-    const config = severityConfig[insight.severity as keyof typeof severityConfig];
+    const config = severityConfig[insight.severity as keyof typeof severityConfig] || severityConfig.info;
+
+    const handleAutoFix = (insight: Insight) => {
+      setAutoFixInsight(insight);
+    };
 
     return (
       <div
@@ -82,7 +96,14 @@ export const OrgHealthTab: React.FC<OrgHealthTabProps> = ({ onNavigateToRecord }
           <p className="mt-1 text-sm text-ink-secondary">{insight.description}</p>
           <p className="mt-1 text-xs text-ink-muted italic">{insight.reasoning}</p>
           <div className="mt-2 flex items-center gap-3">
-            {insight.remediation_url && (
+            {insight.auto_fix_available ? (
+              <button
+                onClick={() => handleAutoFix(insight)}
+                className="text-xs font-semibold text-emerald-500 hover:text-emerald-600 flex items-center gap-1"
+              >
+                Auto Fix Issue ✨
+              </button>
+            ) : insight.remediation_url && (
               <button
                 onClick={() => onNavigateToRecord(insight)}
                 className="text-xs font-semibold text-accent hover:text-accent-hover flex items-center gap-1"
@@ -92,11 +113,19 @@ export const OrgHealthTab: React.FC<OrgHealthTabProps> = ({ onNavigateToRecord }
             )}
             <button
               onClick={() => handleDismiss(insight)}
-              className="text-xs text-ink-muted hover:text-ink flex items-center gap-1"
-              disabled={dismissMutation.isPending}
+              className="text-xs text-ink-muted hover:text-error flex items-center gap-1"
+              disabled={dismissMutation.isPending || resolveMutation.isPending || autoFixMutation.isPending}
             >
               <X className="w-3 h-3" />
               Dismiss
+            </button>
+            <button
+              onClick={() => handleResolve(insight)}
+              className="text-xs text-ink-muted hover:text-emerald-500 flex items-center gap-1"
+              disabled={dismissMutation.isPending || resolveMutation.isPending || autoFixMutation.isPending}
+            >
+              <Check className="w-3 h-3" />
+              Resolve
             </button>
           </div>
         </div>
@@ -107,8 +136,8 @@ export const OrgHealthTab: React.FC<OrgHealthTabProps> = ({ onNavigateToRecord }
   return (
     <div className="space-y-6">
       {/* Summary cards */}
-      <div className="grid grid-cols-3 gap-4">
-        {(['critical', 'warning', 'info'] as const).map((severity) => {
+      <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
+        {(['critical', 'high', 'medium', 'low'] as const).map((severity) => {
           const config = severityConfig[severity];
           const count = data.counts[severity];
           return (
@@ -118,7 +147,7 @@ export const OrgHealthTab: React.FC<OrgHealthTabProps> = ({ onNavigateToRecord }
             )}>
               {/* Subtle top border gradient glow on hover */}
               <div className={cn("absolute top-0 left-0 right-0 h-[2px] bg-gradient-to-r from-transparent to-transparent transition-all duration-500", 
-                 severity === 'critical' ? 'group-hover:via-error/50' : severity === 'warning' ? 'group-hover:via-warning/50' : 'group-hover:via-info/50'
+                 severity === 'critical' ? 'group-hover:via-error/50' : (severity === 'high' || severity === 'medium') ? 'group-hover:via-warning/50' : 'group-hover:via-info/50'
               )} />
               
               <div className="relative z-10 flex items-start justify-between">
@@ -136,7 +165,7 @@ export const OrgHealthTab: React.FC<OrgHealthTabProps> = ({ onNavigateToRecord }
       </div>
 
       {/* Insights grouped by severity */}
-      {(['critical', 'warning', 'info'] as const).map((severity) => {
+      {(['critical', 'high', 'medium', 'low'] as const).map((severity) => {
         const insights = data.insights[severity];
         if (insights.length === 0) return null;
         const config = severityConfig[severity];
@@ -153,6 +182,23 @@ export const OrgHealthTab: React.FC<OrgHealthTabProps> = ({ onNavigateToRecord }
           </div>
         );
       })}
+
+      <ConfirmDialog
+        isOpen={!!autoFixInsight}
+        onClose={() => setAutoFixInsight(null)}
+        onConfirm={() => {
+          if (autoFixInsight) {
+            autoFixMutation.mutate(autoFixInsight._id, {
+              onSuccess: () => setAutoFixInsight(null)
+            });
+          }
+        }}
+        title="Apply Automated Fix"
+        description="Are you sure you want to apply this automated fix? This will immediately modify the affected record."
+        confirmLabel="Apply Fix"
+        variant="warning"
+        isLoading={autoFixMutation.isPending}
+      />
     </div>
   );
 };

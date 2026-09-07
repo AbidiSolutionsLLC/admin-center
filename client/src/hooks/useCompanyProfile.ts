@@ -124,3 +124,27 @@ export const useUpdateAuditLogRetention = () => {
     },
   });
 };
+
+// ── Update insight sensitivity ───────────────────────────────────────────────
+export const useUpdateInsightSensitivity = () => {
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: async (payload: { insight_sensitivity: 'low' | 'medium' | 'high' }) => {
+      const response = await apiClient.put<ApiResponse<CompanySettings>>(
+        '/company/settings/insight-sensitivity',
+        payload
+      );
+      return response.data.data;
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: QUERY_KEYS.COMPANY_EMPLOYEE_ID_FORMAT });
+      queryClient.invalidateQueries({ queryKey: ['insights'] as any }); // Also invalidate insights
+      toast.success('Insight sensitivity updated successfully');
+    },
+    onError: (error: any) => {
+      const message = error.response?.data?.error || 'Failed to update insight sensitivity';
+      toast.error(message);
+    },
+  });
+};

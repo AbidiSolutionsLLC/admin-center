@@ -3,7 +3,7 @@ import { useMutation, useQueryClient } from '@tanstack/react-query';
 import { apiClient } from '@/lib/apiClient';
 import { QUERY_KEYS } from '@/constants/queryKeys';
 import { toast } from 'sonner';
-import type { Integration, IntegrationSyncLog } from '@/types';
+import type { IntegrationSyncLog } from '@/types';
 
 interface SyncResult {
   sync_log: IntegrationSyncLog;

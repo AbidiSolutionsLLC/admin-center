@@ -1010,11 +1010,10 @@ function EditWorkflowModal({ isOpen, onClose, workflow }: EditWorkflowModalProps
           <input
             type="text"
             value={formData.name}
-            onChange={(e) => { setFormData({ ...formData, name: e.target.value }); setFormErrors(prev => ({ ...prev, step_name: '' })); }}
+            onChange={(e) => setFormData({ ...formData, name: e.target.value })}
             placeholder="e.g., Send termination email"
-            className={cn("w-full h-9 px-3 text-sm rounded-md border bg-white text-ink placeholder:text-ink-muted focus:outline-none focus:ring-2 focus:ring-primary/30 focus:border-primary transition-all duration-150", formErrors.step_name ? 'border-error' : 'border-line')}
+            className="w-full h-9 px-3 text-sm rounded-md border border-line bg-white text-ink placeholder:text-ink-muted focus:outline-none focus:ring-2 focus:ring-primary/30 focus:border-primary transition-all duration-150"
           />
-          {formErrors.step_name && <p className="mt-1 text-xs text-error">{formErrors.step_name}</p>}
         </div>
           <div className="col-span-2">
             <label className="text-sm font-medium text-ink block mb-1.5">

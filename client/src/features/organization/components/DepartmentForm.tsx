@@ -8,7 +8,6 @@ import { MultiUserSelect } from '@/components/ui/MultiUserSelect';
 import { DynamicCustomFields, isFieldRequired } from '@/features/data-fields/components/DynamicCustomFields';
 import { useEffectiveCustomFields } from '@/features/data-fields/hooks/useEffectiveCustomFields';
 import type { Department } from '@/types';
-import { cn } from '@/utils/cn';
 
 const schema = z.object({
   name: z.string().trim().min(1, 'Department name is required').max(100, 'Name too long').regex(/^[^<>]+$/, 'HTML tags not allowed'),
@@ -52,17 +51,6 @@ const DEPT_TYPE_OPTIONS: { value: 'business_unit' | 'division' | 'department' | 
   { value: 'cost_center', label: 'Cost Center' },
 ];
 
-const inputClass = (hasError?: boolean) =>
-  cn(
-    'w-full h-10 px-3 text-sm rounded-md border bg-white/5 text-slate-200 border-white/10',
-    'placeholder:text-slate-500 transition-all duration-150',
-    'focus:outline-none focus:ring-1 focus:border-primary/50 focus:ring-primary/50',
-    'disabled:bg-black/20 disabled:text-slate-500 disabled:cursor-not-allowed',
-    hasError
-      ? 'border-error focus:border-error focus:ring-error/50'
-      : 'hover:border-white/20'
-  );
-
 /**
  * DepartmentForm Component
  * Create/edit form for departments with full Zod validation.
@@ -85,7 +73,7 @@ export const DepartmentForm: React.FC<DepartmentFormProps> = ({
     watch,
     formState: { errors },
   } = useForm<DepartmentFormData>({
-    resolver: zodResolver(schema),
+    resolver: zodResolver(schema) as any,
     defaultValues: {
       name: initialData?.name ?? '',
       type: initialData?.type ?? 'department',
@@ -182,7 +170,7 @@ export const DepartmentForm: React.FC<DepartmentFormProps> = ({
         }
         return acc;
       }, {} as Record<string, unknown>),
-    });
+    } as any);
   });
 
   return (

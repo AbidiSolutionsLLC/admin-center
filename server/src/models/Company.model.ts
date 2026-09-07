@@ -26,6 +26,7 @@ export interface ICompany extends Document {
     locale: string;                   // Company locale (e.g. 'en-US')
     default_location_id?: string;     // Default location for users without location assignment
     audit_log_retention_days: number; // 0 for infinite, otherwise days to retain
+    insight_sensitivity: 'low' | 'medium' | 'high'; // low: critical/high, medium: +medium, high: all
   };
   plan: 'free' | 'starter' | 'pro';
   is_active: boolean;
@@ -84,6 +85,11 @@ const CompanySchema = new Schema<ICompany>({
     audit_log_retention_days: {
       type: Number,
       default: 0,
+    },
+    insight_sensitivity: {
+      type: String,
+      enum: ['low', 'medium', 'high'],
+      default: 'medium',
     },
   },
   plan: { type: String, enum: ['free', 'starter', 'pro'], default: 'free' },

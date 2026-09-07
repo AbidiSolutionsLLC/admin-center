@@ -53,7 +53,7 @@ export default function GroupsPage() {
     isUsersModalOpen ? (selectedGroup?._id ?? '') : ''
   );
 
-  const { data: people } = useUsers({ search: userSearchQuery });
+  const { data: people } = useUsers();
 
   const filteredGroups = useMemo(() => {
     if (!groups) return [];
@@ -500,7 +500,7 @@ export default function GroupsPage() {
         title="Delete Group"
         description={`Are you sure you want to delete the group "${groupToDelete?.name}"? This action cannot be undone.`}
         confirmLabel="Delete Group"
-        variant="error"
+        variant="danger"
         isLoading={deleteMutation.isPending}
       />
     </div>

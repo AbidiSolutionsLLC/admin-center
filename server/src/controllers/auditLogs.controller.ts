@@ -16,6 +16,46 @@ import { escapeRegExp } from '../utils/regex';
 import { hasPermission } from '../lib/rbac';
 
 /**
+ * GET /api/v1/audit-logs/stream
+ * Server-Sent Events (SSE) endpoint for real-time audit logs.
+ * Multi-tenant isolated via req.user.company_id.
+ */
+export const streamAuditEvents = (req: Request, res: Response) => {
+  res.setHeader('Content-Type', 'text/event-stream');
+  res.setHeader('Cache-Control', 'no-cache');
+  res.setHeader('Connection', 'keep-alive');
+  res.flushHeaders();
+
+  const companyId = req.user.company_id;
+
+  const changeStream = AuditEvent.watch([
+    { $match: { 'fullDocument.company_id': new Types.ObjectId(companyId), operationType: 'insert' } }
+  ]);
+
+  changeStream.on('change', (change) => {
+    if (change.operationType === 'insert') {
+      const event = change.fullDocument;
+      res.write(`data: ${JSON.stringify(event)}\n\n`);
+    }
+  });
+
+  changeStream.on('error', (err) => {
+    console.error('[AuditLog SSE] Change stream error:', err);
+    res.write(`event: error\ndata: ${JSON.stringify({ message: 'Stream error' })}\n\n`);
+    res.end();
+  });
+
+  const heartbeat = setInterval(() => {
+    res.write(':\n\n');
+  }, 30000);
+
+  req.on('close', () => {
+    clearInterval(heartbeat);
+    changeStream.close();
+  });
+};
+
+/**
  * GET /api/v1/audit-logs
  * Returns audit events for the current company with pagination and filters.
  * Query params: page, limit, category, module, action, search, actor_email, date_from, date_to

@@ -55,6 +55,15 @@ async function logSecurityEvent(params: {
   if (params.metadata) eventDoc.metadata = params.metadata;
 
   await SecurityEvent.create(eventDoc);
+
+  if (params.is_suspicious) {
+    const detail = `Suspicious security event: ${params.event_type}.\nUser: ${params.email || params.user_id}\nIP: ${params.ip_address || 'Unknown'}\nLocation: ${params.metadata?.location || 'Unknown'}`;
+    sendSecurityAlert(
+      params.company_id.toString(),
+      params.event_type,
+      detail
+    ).catch(err => console.error('[SecurityEvent] Failed to send security alert:', err));
+  }
 }
 
 export const login = asyncHandler(async (req: Request, res: Response) => {

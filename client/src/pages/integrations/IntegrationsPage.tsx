@@ -1,6 +1,6 @@
 // src/pages/integrations/IntegrationsPage.tsx
 import { useState } from 'react';
-import { Plug, Plus, Clock } from 'lucide-react';
+import { Plug, Plus } from 'lucide-react';
 import { useIntegrations } from '@/features/integrations/hooks/useIntegrations';
 import { useConnectIntegration } from '@/features/integrations/hooks/useConnectIntegration';
 import { useSyncLogs } from '@/features/integrations/hooks/useSyncLogs';
@@ -9,7 +9,6 @@ import { IntegrationCard } from '@/features/integrations/components/IntegrationC
 import { IntegrationForm, type IntegrationFormData } from '@/features/integrations/components/IntegrationForm';
 import { SyncLogViewer } from '@/features/integrations/components/SyncLogViewer';
 import { FieldMappingTable } from '@/features/integrations/components/FieldMappingTable';
-import { TableSkeleton } from '@/components/ui/TableSkeleton';
 import { ErrorState } from '@/components/ui/ErrorState';
 import { EmptyState } from '@/components/ui/EmptyState';
 import { Modal } from '@/components/ui/Modal';

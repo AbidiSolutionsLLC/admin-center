@@ -6,17 +6,8 @@ import { toast } from 'sonner';
 import type { Insight } from '@/types';
 
 interface OrgHealthData {
-  insights: {
-    critical: Insight[];
-    warning: Insight[];
-    info: Insight[];
-  };
-  counts: {
-    critical: number;
-    warning: number;
-    info: number;
-    total: number;
-  };
+  insights: { critical: Insight[]; high: Insight[]; medium: Insight[]; low: Insight[]; };
+  counts: { critical: number; high: number; medium: number; low: number; total: number; };
 }
 
 /**
@@ -36,7 +27,7 @@ export const useOrgHealth = () => {
 };
 
 /**
- * Dismisses (resolves) an insight.
+ * Dismisses an insight.
  * Used on: OrganizationPage (Health tab).
  */
 export const useDismissInsight = () => {
@@ -44,7 +35,7 @@ export const useDismissInsight = () => {
 
   return useMutation<void, Error, string>({
     mutationFn: async (insightId) => {
-      await apiClient.put(`/intelligence/${insightId}/resolve`);
+      await apiClient.put(`/intelligence/${insightId}/dismiss`);
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: QUERY_KEYS.ORG_HEALTH });
@@ -54,6 +45,52 @@ export const useDismissInsight = () => {
     onError: (error) => {
       console.error('Failed to dismiss insight', error);
       toast.error('Failed to dismiss insight. Please try again.');
+    },
+  });
+};
+
+/**
+ * Resolves an insight.
+ * Used on: OrganizationPage (Health tab).
+ */
+export const useResolveInsight = () => {
+  const queryClient = useQueryClient();
+
+  return useMutation<void, Error, string>({
+    mutationFn: async (insightId) => {
+      await apiClient.put(`/intelligence/${insightId}/resolve`);
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: QUERY_KEYS.ORG_HEALTH });
+      queryClient.invalidateQueries({ queryKey: QUERY_KEYS.INSIGHTS() });
+      toast.success('Insight resolved');
+    },
+    onError: (error) => {
+      console.error('Failed to resolve insight', error);
+      toast.error('Failed to resolve insight. Please try again.');
+    },
+  });
+};
+
+/**
+ * Automatically fixes an insight.
+ * Used on: OrganizationPage (Health tab).
+ */
+export const useAutoFixInsight = () => {
+  const queryClient = useQueryClient();
+
+  return useMutation<void, Error, string>({
+    mutationFn: async (insightId) => {
+      await apiClient.post(`/intelligence/${insightId}/auto-fix`);
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: QUERY_KEYS.ORG_HEALTH });
+      queryClient.invalidateQueries({ queryKey: QUERY_KEYS.INSIGHTS() });
+      toast.success('Issue automatically fixed and resolved');
+    },
+    onError: (error) => {
+      console.error('Failed to auto-fix insight', error);
+      toast.error('Failed to apply auto-fix. Please try again.');
     },
   });
 };

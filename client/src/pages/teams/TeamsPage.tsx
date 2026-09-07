@@ -16,9 +16,8 @@ import { Modal } from '@/components/ui/Modal';
 import { ConfirmDialog } from '@/components/ui/ConfirmDialog';
 import { Button } from '@/components/ui/button';
 import { cn } from '@/utils/cn';
-import type { Team } from '@/types';
 import { useDepartments } from '@/features/organization/hooks/useDepartments';
-import { toast } from 'sonner';
+import type { Team } from '@/types';
 
 interface TeamsFilters {
   search: string;

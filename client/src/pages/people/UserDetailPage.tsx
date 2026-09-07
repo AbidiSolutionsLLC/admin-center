@@ -21,6 +21,7 @@ import { useFormMetadata } from '@/features/people/hooks/useFormMetadata';
 import { UserForm, type UserFormData } from '@/features/people/components/UserForm';
 import { UserLocationAssignmentModal } from '@/features/people/components/UserLocationAssignmentModal';
 import { Modal } from '@/components/ui/Modal';
+import type { UserRole } from '@/types';
 
 import { ErrorState } from '@/components/ui/ErrorState';
 import { EmptyState } from '@/components/ui/EmptyState';
@@ -59,8 +60,9 @@ export default function UserDetailPage() {
     (formData: UserFormData & { custom_fields?: Record<string, unknown> }) => {
       const normalized = {
         ...formData,
+        role: formData.role as UserRole | undefined,
         department_id: formData.department_id || null,
-        team_id: formData.team_id || null,
+        team_id: (formData as any).team_id || null,
         manager_id: formData.manager_id || null,
         location_id: formData.location_id || null,
         hire_date: formData.hire_date || null,

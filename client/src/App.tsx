@@ -13,6 +13,7 @@ import ForgotPasswordPage from './pages/auth/ForgotPasswordPage';
 import ResetPasswordPage from './pages/auth/ResetPasswordPage';
 import OnboardingPage from './pages/auth/OnboardingPage';
 import OverviewPage from './pages/overview/OverviewPage';
+import InsightHistoryPage from './pages/overview/InsightHistoryPage';
 import OrganizationPage from './pages/organization/OrganizationPage';
 import CompanySettingsPage from './pages/company/CompanySettingsPage';
 import TeamsPage from './pages/teams/TeamsPage';
@@ -49,6 +50,7 @@ function App() {
             <Route path="/" element={<AdminShell />}>
               <Route index element={<Navigate to={ROUTES.OVERVIEW} replace />} />
               <Route path={ROUTES.OVERVIEW} element={<OverviewPage />} />
+              <Route path={ROUTES.INSIGHT_HISTORY} element={<InsightHistoryPage />} />
               <Route path={ROUTES.ORGANIZATION} element={<OrganizationPage />} />
               <Route path="/organization/:id" element={<OrganizationPage />} />
               <Route path={ROUTES.COMPANY_SETTINGS} element={<CompanySettingsPage />} />

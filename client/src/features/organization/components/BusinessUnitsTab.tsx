@@ -290,7 +290,7 @@ export const BusinessUnitsTab: React.FC<BusinessUnitsTabProps> = ({ allDepartmen
                   <td className="h-14 px-4">
                     {bu.secondary_managers && bu.secondary_managers.length > 0 ? (
                       <div className="flex items-center -space-x-2">
-                        {bu.secondary_managers.slice(0, 3).map((sm, i) => (
+                        {bu.secondary_managers.slice(0, 3).map((sm) => (
                           <div 
                             key={sm._id} 
                             className="w-7 h-7 rounded-full border-2 border-white bg-slate-100 flex items-center justify-center flex-shrink-0 overflow-hidden"

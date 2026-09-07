@@ -277,6 +277,44 @@ export async function deliverNotification(payload: NotificationPayload): Promise
     return results;
   }
 
+  // --- Dynamic Targeting Evaluation ---
+  // If the template has a specific target, evaluate if the user satisfies it.
+  if (template.target_type && template.target_type !== 'all' && payload.user_id) {
+    const user = await User.findById(payload.user_id);
+    if (!user) return results;
+
+    let isMatch = false;
+    switch (template.target_type) {
+      case 'user':
+        isMatch = user._id.toString() === template.target_id;
+        break;
+      case 'role':
+        isMatch = user.role === template.target_id;
+        break;
+      case 'department':
+        isMatch = user.department_id?.toString() === template.target_id;
+        break;
+      case 'location':
+        isMatch = user.location_id?.toString() === template.target_id;
+        break;
+      case 'group': {
+        const { GroupMember } = await import('../models/GroupMember.model');
+        const membership = await GroupMember.findOne({
+          group_id: new Types.ObjectId(template.target_id),
+          user_id: user._id
+        });
+        isMatch = !!membership;
+        break;
+      }
+    }
+
+    if (!isMatch) {
+      console.log(`[NotificationEngine] User ${payload.user_id} does not match targeting criteria (${template.target_type}:${template.target_id}) for template ${payload.templateKey}`);
+      return results;
+    }
+  }
+  // -------------------------------------
+
   // Resolve variables
   const variables = resolveVariables(payload);
   const renderedSubject = substituteVariables(template.subject, variables);
@@ -382,6 +420,8 @@ export async function sendSecurityAlert(
       channel: 'both',
       severity: 'critical',
       digest_mode: 'immediate',
+      target_type: 'role',
+      target_id: 'Super Admin',
       subject: 'Security Alert: {{company_name}}',
       body: 'Hello {{user_name}},\n\nA security event requires your attention.\n\nEvent Type: ' + eventType + '\nDetails: {{detail}}\n\nPlease review the Access Logs immediately.',
       trigger_event: 'security.alert',
@@ -428,6 +468,80 @@ export async function sendSecurityAlert(
       detail,
       triggered_by_event: 'security.alert',
       triggered_by_object_type: 'SecurityEvent',
+    });
+    results.push(...res);
+  }
+
+  return results;
+}
+
+/**
+ * Sends a critical insight alert to all active Admins of a company.
+ * Creates the 'insight_critical' template if it doesn't exist.
+ */
+export async function sendInsightAlert(
+  companyId: string,
+  insightTitle: string,
+  insightDetail: string,
+  insightId: string
+): Promise<DeliveryResult[]> {
+  const templateKey = 'insight_critical';
+  let template = await NotificationTemplate.findOne({
+    company_id: new Types.ObjectId(companyId),
+    key: templateKey,
+  });
+
+  if (!template) {
+    // Create the default critical insight alert template
+    const adminUser = await User.findOne({ company_id: companyId, role: { $in: PERMISSION_GROUPS.SUPER_ADMINS } });
+    template = await NotificationTemplate.create({
+      company_id: new Types.ObjectId(companyId),
+      name: 'Critical Insight Alert',
+      key: templateKey,
+      description: 'Triggered when a critical misconfiguration or health issue is detected.',
+      channel: 'both',
+      severity: 'critical',
+      digest_mode: 'immediate',
+      target_type: 'all', // We will fetch the admins explicitly, so 'all' here means all provided recipients
+      target_id: 'all',
+      subject: 'Critical Insight: {{company_name}}',
+      body: 'Hello {{user_name}},\n\nA critical insight has been detected in your organization.\n\nIssue: {{detail}}\n\nPlease review this issue in the Overview Dashboard immediately.',
+      trigger_event: 'insight.critical',
+      is_active: true,
+      created_by: adminUser?._id || new Types.ObjectId(),
+    });
+  }
+
+  if (!template.is_active) {
+    return [];
+  }
+
+  const company = await Company.findById(companyId);
+  const companyName = company?.name || 'Admin Center';
+
+  // Target all types of admins for insights
+  const recipients = await User.find({
+    company_id: companyId,
+    role: { $in: ['super_admin', 'Super Admin', 'it_admin', 'IT Admin', ...PERMISSION_GROUPS.SUPER_ADMINS] },
+    is_active: true,
+    email: { $exists: true, $ne: '' },
+  });
+
+  const results: DeliveryResult[] = [];
+
+  for (const admin of recipients) {
+    const res = await deliverNotification({
+      companyId,
+      templateKey,
+      user_id: admin._id.toString(),
+      user_name: admin.full_name.split(' ')[0],
+      user_full_name: admin.full_name,
+      user_email: admin.email,
+      company_name: companyName,
+      detail: `${insightTitle}\n${insightDetail}`,
+      triggered_by_event: 'insight.critical',
+      triggered_by_object_type: 'Insight',
+      triggered_by_object_id: insightId,
     });
     results.push(...res);
   }

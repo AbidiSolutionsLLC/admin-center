@@ -77,7 +77,7 @@ export const LocationForm: React.FC<LocationFormProps> = ({
     handleSubmit,
     formState: { errors },
   } = useForm<LocationFormData>({
-    resolver: zodResolver(schema),
+    resolver: zodResolver(schema) as any,
     defaultValues: {
       name: initialData?.name ?? '',
       type: initialData?.type ?? 'region',
@@ -165,7 +165,7 @@ export const LocationForm: React.FC<LocationFormProps> = ({
         }
         return acc;
       }, {} as Record<string, unknown>),
-    });
+    } as any);
   });
 
   const selectedType = watch('type');

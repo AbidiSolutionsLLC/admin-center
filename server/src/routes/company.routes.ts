@@ -14,6 +14,7 @@ import {
   updateLocale,
   updateDefaultLocation,
   updateAuditLogRetention,
+  updateInsightSensitivity,
 } from '../controllers/company.controller';
 
 const router = Router();
@@ -31,5 +32,6 @@ router.put('/settings/timezone',                  updateTimezone);
 router.put('/settings/locale',                    updateLocale);
 router.put('/settings/default-location',           updateDefaultLocation);
 router.put('/settings/audit-log-retention',        updateAuditLogRetention);
+router.put('/settings/insight-sensitivity',        updateInsightSensitivity);
 
 export default router;

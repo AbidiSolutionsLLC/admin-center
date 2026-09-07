@@ -24,12 +24,6 @@ const FIELD_TYPE_LABELS: Record<string, string> = {
   phone: 'Phone',
 };
 
-const VISIBILITY_LABELS: Record<string, string> = {
-  all: 'Everyone',
-  admin_only: 'Admins Only',
-  role_specific: 'Specific Roles',
-};
-
 const CHANGE_TYPE_LABELS: Record<VersionChangeType, string> = {
   created: 'Created',
   updated: 'Updated',
@@ -234,7 +228,7 @@ export function FieldHistoryDialog({ isOpen, onClose, fieldId, field }: FieldHis
                           </div>
                           <div className="flex items-center gap-2 text-xs text-ink-muted">
                             <span className="inline-flex items-center text-[10px] font-semibold border rounded-full px-2 py-0.5 bg-accent-light/20 text-accent border-accent/20">
-                              {FIELD_TYPE_LABELS[String(snapshot.field_type)] || snapshot.field_type}
+                              {FIELD_TYPE_LABELS[String(snapshot.field_type)] || String(snapshot.field_type || '')}
                             </span>
                             {snapshot.required ? (
                               <span className="text-success">Required</span>
@@ -304,16 +298,9 @@ export function FieldHistoryDialog({ isOpen, onClose, fieldId, field }: FieldHis
         isOpen={!!versionToRollback}
         title={`Rollback to v${versionToRollback?.number}`}
         description={
-          versionToRollback && (
-            <>
-              <p>
-                Are you sure you want to rollback <strong>"{field?.label}"</strong> to version {versionToRollback.number}?
-              </p>
-              <p className="mt-2 text-xs text-ink-secondary">
-                A new version will be created based on the selected snapshot. The current configuration will be replaced.
-              </p>
-            </>
-          )
+          versionToRollback
+            ? `Are you sure you want to rollback "${field?.label}" to version ${versionToRollback.number}? A new version will be created based on the selected snapshot. The current configuration will be replaced.`
+            : ''
         }
         confirmLabel="Rollback"
         isLoading={rollbackMutation.isPending}

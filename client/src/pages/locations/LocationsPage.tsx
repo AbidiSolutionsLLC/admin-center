@@ -14,7 +14,6 @@ import { LocationHierarchy } from '@/features/locations/components/LocationHiera
 import { LocationForm } from '@/features/locations/components/LocationForm';
 import { useHolidayCalendars } from '@/features/holidays/hooks/useHolidayCalendars';
 import { useHolidays } from '@/features/holidays/hooks/useHolidays';
-import { useHolidayAssignments } from '@/features/holidays/hooks/useHolidayAssignments';
 import { HolidayCalendarTable } from '@/features/holidays/components/HolidayCalendarTable';
 import { HolidayCalendarForm } from '@/features/holidays/components/HolidayCalendarForm';
 import { LocationCalendarAssignment } from '@/features/holidays/components/LocationCalendarAssignment';
@@ -323,7 +322,6 @@ function HolidaysTab() {
   const [isAssignmentModalOpen, setIsAssignmentModalOpen] = useState(false);
   const [isHolidayFormModalOpen, setIsHolidayFormModalOpen] = useState(false);
   const [editingCalendar, setEditingCalendar] = useState<HolidayCalendar | null>(null);
-  const [selectedLocation, setSelectedLocation] = useState<Location | null>(null);
   const [selectedCalendar, setSelectedCalendar] = useState<HolidayCalendar | null>(null);
   const [selectedHoliday, setSelectedHoliday] = useState<Holiday | null>(null);
 
@@ -348,8 +346,6 @@ function HolidaysTab() {
     delete: deleteHoliday,
     isCreating: isCreatingHoliday,
   } = useHolidays({ calendarId: selectedCalendar?._id });
-
-  const { create: createAssignment } = useHolidayAssignments();
 
   const handleCreateCalendar = () => {
     setEditingCalendar(null);
@@ -388,7 +384,6 @@ function HolidaysTab() {
 
   const closeAssignmentModal = () => {
     setIsAssignmentModalOpen(false);
-    setSelectedLocation(null);
     setSelectedCalendar(null);
   };
 
@@ -404,18 +399,6 @@ function HolidaysTab() {
       await createCalendar(data);
     }
     closeCalendarFormModal();
-  };
-
-  const handleAssignmentSubmit = async (data: { calendar_id: string; is_primary: boolean; effective_date: Date; expiry_date?: Date }) => {
-    if (!selectedLocation) return;
-    await createAssignment({
-      location_id: selectedLocation._id,
-      calendar_id: data.calendar_id,
-      is_primary: data.is_primary,
-      effective_date: data.effective_date.toISOString(),
-      expiry_date: data.expiry_date?.toISOString(),
-    });
-    closeAssignmentModal();
   };
 
   const handleHolidayFormSubmit = async (data: HolidayFormData) => {
@@ -692,7 +675,7 @@ function HolidaysTab() {
       >
         <HolidayCalendarForm
           initialData={editingCalendar ?? undefined}
-          onSubmit={handleCalendarFormSubmit}
+          onSubmit={(data) => handleCalendarFormSubmit(data as any)}
           isSubmitting={isCreatingCalendar || isUpdatingCalendar}
           isEdit={!!editingCalendar}
         />
@@ -745,7 +728,7 @@ function HolidaysTab() {
       >
         <HolidayForm
           initialData={selectedHoliday ?? undefined}
-          onSubmit={handleHolidayFormSubmit}
+          onSubmit={(data) => handleHolidayFormSubmit(data as any)}
           calendars={calendars ?? []}
           isSubmitting={isCreatingHoliday}
           isEdit={!!selectedHoliday}
@@ -858,7 +841,7 @@ function WorkSchedulesTab() {
                 const btn = document.getElementById('work-schedule-form-submit') as HTMLButtonElement;
                 btn?.click();
               }}
-              disabled={isCreating || isUpdating || (editingSchedule && !isFormDirty)}
+              disabled={isCreating || isUpdating || Boolean(editingSchedule && !isFormDirty)}
               className="btn-primary-glow px-4 py-2 text-sm font-bold rounded-xl disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2"
               style={editingSchedule && !isFormDirty ? { cursor: 'not-allowed', opacity: 0.5 } : {}}
             >

@@ -13,8 +13,12 @@ interface LifecycleStateSelectorProps {
 
 const VALID_TRANSITIONS: Record<LifecycleState, LifecycleState[]> = {
   invited: ['onboarding', 'active', 'archived'],
-  active: ['deactivated', 'archived'],
+  onboarding: ['active', 'archived', 'terminated'],
+  active: ['on_leave', 'probation', 'deactivated', 'terminated', 'archived'],
+  probation: ['active', 'terminated', 'archived'],
+  on_leave: ['active', 'terminated', 'archived'],
   deactivated: ['active', 'archived'],
+  terminated: ['archived'],
   archived: ['invited'],
 };
 
@@ -70,6 +74,7 @@ const buttonVariantMap: Record<LifecycleState, string> = {
   active: 'bg-emerald-500 hover:bg-emerald-600 text-white',
   probation: 'bg-amber-500 hover:bg-amber-600 text-white',
   on_leave: 'bg-amber-500 hover:bg-amber-600 text-white',
+  deactivated: 'bg-red-500 hover:bg-red-600 text-white',
   terminated: 'bg-red-500 hover:bg-red-600 text-white',
   archived: 'bg-gray-500 hover:bg-gray-600 text-white',
 };

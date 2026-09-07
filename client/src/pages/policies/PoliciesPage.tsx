@@ -23,7 +23,6 @@ import {
   useUpdatePolicyDraft,
   useRollbackPolicy,
 } from '@/features/policies/hooks/usePolicies';
-import { useUserStats } from '@/features/people/hooks/useUserStats';
 import { useDepartments } from '@/features/organization/hooks/useDepartments';
 import { useRoles } from '@/features/roles/useRoles';
 import { useGroups } from '@/features/groups/useGroups';
@@ -46,7 +45,6 @@ import type {
   PolicyVersion,
   PolicyCategory,
   PolicyTargetType,
-  PolicyAssignmentRule,
 } from '@/types';
 
 // ── Constants ────────────────────────────────────────────────────────────────
@@ -1826,7 +1824,7 @@ function TargetingModal({ isOpen, policyId, onClose, saveMutation, onSaved }: Ta
               const validRules = rules.filter((r) => r.target_id && r.target_id !== '');
               simulateMutation.mutate(validRules, {
                 onSuccess: (data) => setSimulationResult(data),
-                onError: (err) => {
+                onError: () => {
                   setSimulationError('Preview failed: Unable to connect to the server or simulation error occurred.');
                   setSimulationResult(null);
                 }

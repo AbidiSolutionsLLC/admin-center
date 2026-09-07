@@ -17,7 +17,7 @@ import { ErrorState } from '@/components/ui/ErrorState';
 import { EmptyState } from '@/components/ui/EmptyState';
 import { useAuthStore } from '@/store/useAuthStore';
 import { cn } from '@/utils/cn';
-import { ROLES, PERMISSION_GROUPS } from '@/constants/roles';
+import { PERMISSION_GROUPS } from '@/constants/roles';
 import type { Role, PermissionUpdate, CreateRoleInput, UpdateRoleInput } from '@/types';
 
 const MAX_NAME_LENGTH = 100;
@@ -81,8 +81,8 @@ export default function RolesPage() {
     isUsersModalOpen ? (selectedRole?._id ?? '') : ''
   );
 
-  // For adding new users: fetch all users (filtered by search)
-  const { data: people } = useUsers({ search: userSearchQuery });
+  // For adding new users: fetch all users
+  const { data: people } = useUsers();
 
   // ── Handlers ─────────────────────────────────────────────────────────
   const handleOpenCreateModal = () => {
@@ -531,7 +531,6 @@ export default function RolesPage() {
             permissions={allPermissions}
             rolePermissions={rolePermissions}
             onUpdate={handleSavePermissions}
-            isLoading={updatePermissionsMutation.isPending}
           />
         ) : (
           <div className="py-20 text-center">
@@ -690,7 +689,7 @@ export default function RolesPage() {
         title="Delete Role"
         description={`Are you sure you want to delete the role "${roleToDelete?.name}"? This action cannot be undone and will fail if users are still assigned to this role.`}
         confirmLabel="Delete Role"
-        variant="error"
+        variant="danger"
         isLoading={deleteMutation.isPending}
       />
 

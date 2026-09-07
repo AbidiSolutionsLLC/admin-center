@@ -1,5 +1,5 @@
 // src/pages/audit-logs/AuditLogsPage.tsx
-import React, { useState } from 'react';
+import { useState } from 'react';
 import { Download, AlertTriangle, ShieldCheck } from 'lucide-react';
 import { useAuditEvents } from '@/features/audit/hooks/useAuditEvents';
 import { useExportAuditLog } from '@/features/audit/hooks/useExportAuditLog';

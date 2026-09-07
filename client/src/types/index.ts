@@ -48,6 +48,8 @@ export interface CompanySettings {
     timezone?: string;
     locale?: string;
     default_location_id?: string | null;
+    audit_log_retention_days?: number;
+    insight_sensitivity?: 'low' | 'medium' | 'high';
   };
 }
 
@@ -401,6 +403,13 @@ export interface Insight {
   affected_object_label?: string;
   remediation_url?: string;
   remediation_action?: string;
+  auto_fix_available?: boolean;
+  auto_fix_action?: string;
+  auto_fix_payload?: any;
+  recommendations?: Array<{
+    action: string;
+    url: string;
+  }>;
   is_resolved: boolean;
   detected_at: string;
   resolved_at?: string;

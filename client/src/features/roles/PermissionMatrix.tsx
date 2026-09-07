@@ -202,7 +202,7 @@ export const PermissionMatrix: React.FC<PermissionMatrixProps> = ({
             </tr>
           </thead>
           <tbody>
-            {modules.map((module, moduleIdx) => (
+            {modules.map((module) => (
               <tr
                 key={module}
                 style={{ borderBottom: '1px solid rgba(255,255,255,0.06)', transition: 'background 0.15s ease', background: 'transparent' }}

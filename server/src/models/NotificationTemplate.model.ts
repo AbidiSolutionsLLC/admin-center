@@ -4,6 +4,7 @@ import { Schema, model, Document, Types } from 'mongoose';
 export type NotificationChannel = 'email' | 'in_app' | 'both';
 export type NotificationDigestMode = 'immediate' | 'hourly' | 'daily';
 export type NotificationSeverity = 'info' | 'warning' | 'critical';
+export type NotificationTargetType = 'all' | 'role' | 'department' | 'group' | 'user' | 'location';
 
 /**
  * Supported variable tokens for template substitution.
@@ -25,6 +26,8 @@ export interface INotificationTemplate extends Document {
   channel: NotificationChannel;
   severity: NotificationSeverity;
   digest_mode: NotificationDigestMode;
+  target_type: NotificationTargetType;
+  target_id: string;
   subject: string;                  // Email subject (supports variables)
   body: string;                     // Email body / in-app message (supports variables)
   trigger_event: string;            // e.g., 'workflow.failure', 'user.lifecycle_changed'
@@ -43,6 +46,13 @@ const NotificationTemplateSchema = new Schema<INotificationTemplate>({
   channel: { type: String, enum: ['email', 'in_app', 'both'], required: true },
   severity: { type: String, enum: ['info', 'warning', 'critical'], required: true, default: 'info' },
   digest_mode: { type: String, enum: ['immediate', 'hourly', 'daily'], required: true, default: 'immediate' },
+  target_type: { 
+    type: String, 
+    enum: ['all', 'role', 'department', 'group', 'user', 'location'], 
+    default: 'all',
+    required: true
+  },
+  target_id: { type: String, default: 'all', required: true },
   subject: { type: String, required: true, maxlength: 300 },
   body: { type: String, required: true },
   trigger_event: { type: String, required: true, index: true },

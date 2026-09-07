@@ -3,7 +3,7 @@ import { Types } from 'mongoose';
 import { User } from '../models/User.model';
 import { Location } from '../models/Location.model';
 import { locationSettingsService } from './locationSettings.service';
-import { runIntelligenceRules } from '../lib/intelligence';
+import { triggerIntelligenceRules } from '../lib/intelligence';
 
 export interface ContextChangeEvent {
   userId: string;
@@ -39,9 +39,7 @@ export const contextEngine = {
       companyId
     );
 
-    runIntelligenceRules(companyId).catch((err) => {
-      console.error(`[ContextEngine] Intelligence rules failed for company ${companyId}:`, err);
-    });
+    triggerIntelligenceRules(companyId);
 
     return {
       applied: true,
@@ -86,3 +84,4 @@ export const contextEngine = {
     return results;
   },
 };
+

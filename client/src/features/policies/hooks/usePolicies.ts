@@ -185,7 +185,7 @@ export const useDeletePolicy = () => {
     mutationFn: async ({ policy_id }: { policy_id: string }) => {
       await apiClient.delete(`/policies/${policy_id}`);
     },
-    onSuccess: (_, vars) => {
+    onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: QUERY_KEYS.POLICIES });
       toast.success('Policy deleted successfully');
     },
