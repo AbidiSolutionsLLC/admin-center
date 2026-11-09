@@ -8,6 +8,7 @@ import { AppError } from '../utils/AppError';
 import { auditLogger } from '../lib/auditLogger';
 import { resumeWorkflow } from '../lib/workflowEngine';
 import { Types } from 'mongoose';
+import { ROLES } from '../constants/roles';
 
 const DecisionSchema = z.object({
   comments: z.string().max(1000).optional(),
@@ -65,7 +66,7 @@ export const approveRequest = asyncHandler(async (req: Request, res: Response) =
 
   // Super admin bypass or strict user check
   // @ts-ignore
-  if (!isSpecificUser && req.user.user_role !== 'super_admin') {
+  if (!isSpecificUser && req.user.user_role !== ROLES.SUPER_ADMIN) {
     const now = new Date();
     const delegatedForUsers = await User.find({
       _id: { $in: approval.approver_user_ids },
@@ -171,7 +172,7 @@ export const rejectRequest = asyncHandler(async (req: Request, res: Response) =>
   let actedAsDelegateFor: Types.ObjectId | undefined = undefined;
 
   // @ts-ignore
-  if (!isSpecificUser && req.user.user_role !== 'super_admin') {
+  if (!isSpecificUser && req.user.user_role !== ROLES.SUPER_ADMIN) {
     const now = new Date();
     const delegatedForUsers = await User.find({
       _id: { $in: approval.approver_user_ids },

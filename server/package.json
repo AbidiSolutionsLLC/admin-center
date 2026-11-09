@@ -7,16 +7,11 @@
     "dev": "ts-node-dev --respawn --transpile-only src/index.ts",
     "build": "tsc",
     "start": "node dist/index.js",
-    "seed": "ts-node -T src/scripts/seed.ts",
-    "verify-seed": "ts-node -T src/scripts/verify-seed.ts",
-    "test-roles": "ts-node -T src/scripts/test-roles.ts",
-    "test-apps": "ts-node -T src/scripts/test-apps.ts",
-    "test-overview": "ts-node -T src/scripts/test-overview.ts",
-    "test-integration": "ts-node -T src/scripts/test-integration.ts",
-    "test-employee-id": "ts-node -T src/scripts/test-employee-id.ts",
     "test-datafield-validation": "ts-node -T src/scripts/test-datafield-validation.ts",
     "test-datafield-api": "ts-node -T src/scripts/test-datafield-api.ts",
-    "seed:first": "ts-node -T src/scripts/seed-first-user.ts"
+    "seed:first": "ts-node -T src/scripts/seed-first-user.ts",
+    "prestart": "npm run build",
+    "test": "node --require ts-node/register/transpile-only --test \"src/**/__tests__/*.test.ts\""
   },
   "dependencies": {
     "@azure/communication-email": "^1.1.0",

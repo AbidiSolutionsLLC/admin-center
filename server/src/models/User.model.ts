@@ -37,6 +37,7 @@ export interface IUser extends Document {
   mfa_enabled: boolean;
   mfa_otp?: string;
   mfa_otp_expires_at?: Date;
+  mfa_otp_attempts?: number;
   refresh_token_hash?: string;
   is_flagged: boolean; // Flag for data integrity issues
   risk_score: number;
@@ -87,6 +88,7 @@ const UserSchema = new Schema<IUser>({
   mfa_enabled: { type: Boolean, default: false },
   mfa_otp: String,
   mfa_otp_expires_at: Date,
+  mfa_otp_attempts: { type: Number, default: 0 },
   refresh_token_hash: String,
   is_flagged: { type: Boolean, default: false },
   risk_score: { type: Number, default: 0 },

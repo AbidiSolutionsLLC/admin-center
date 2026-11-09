@@ -29,6 +29,8 @@ import { resolveUserPermissions, hasPermission } from '../lib/rbac';
 import { App } from '../models/App.model';
 import { AppAssignment } from '../models/AppAssignment.model';
 import { Group } from '../models/Group.model';
+import { assertCanAssignRoles } from '../lib/roleHierarchy';
+import { rbacCache } from '../lib/rbacCache';
 import { GroupMember } from '../models/GroupMember.model';
 import { applyDataGovernanceRead, applyDataGovernanceWrite } from '../lib/dataGovernance';
 import { validateAndSanitizeCustomFields, enforceStandardFieldPermissions, enforceCustomFieldPermissions } from '../services/customFieldValidation.service';
@@ -1053,6 +1055,7 @@ export const inviteUser = asyncHandler(async (req: Request, res: Response) => {
     if (roles.length !== input.role_ids.length) {
       throw new AppError('One or more roles not found or inactive', 404, 'NOT_FOUND');
     }
+    await assertCanAssignRoles(req as any, roles as any, []);
 
     const userRolesToCreate = roles.map(role => ({
       user_id: user._id,
@@ -1294,18 +1297,22 @@ export const updateUser = asyncHandler(async (req: Request, res: Response) => {
   // Sync multiple roles if provided
   if (safeInput.role_ids !== undefined) {
     const roleIds = safeInput.role_ids;
-    
+    let rolesToGrant: any[] = [];
+
     if (roleIds.length > 0) {
       const roles = await Role.find({
         _id: { $in: roleIds },
         company_id: req.user.company_id,
         is_active: true,
       });
-      
+
       if (roles.length !== roleIds.length) {
         throw new AppError('One or more roles not found or inactive', 404, 'NOT_FOUND');
       }
+      rolesToGrant = roles;
     }
+    // WI-08: cannot change own roles, cannot manage higher-ranked users, cannot grant above own rank
+    await assertCanAssignRoles(req as any, rolesToGrant, [user._id]);
 
     await UserRole.deleteMany({
       user_id: user._id,
@@ -1323,7 +1330,8 @@ export const updateUser = asyncHandler(async (req: Request, res: Response) => {
       
       await UserRole.insertMany(userRolesToCreate);
     }
-    
+    rbacCache.invalidateUser(user._id.toString());
+
     await auditLogger.log({
       req,
       action: 'user.roles_updated',
@@ -2009,6 +2017,9 @@ export const bulkAssignRole = asyncHandler(async (req: Request, res: Response) =
     throw new AppError('Role not found', 404, 'ROLE_NOT_FOUND');
   }
 
+  // WI-08: grant hierarchy for every target user
+  await assertCanAssignRoles(req as any, [role as any], input.user_ids);
+
   const results: Array<{ user_id: string; user_name: string; success: boolean; error?: string }> = [];
   let successCount = 0;
   let skippedCount = 0;
@@ -2044,6 +2055,7 @@ export const bulkAssignRole = asyncHandler(async (req: Request, res: Response) =
       assigned_by: new Types.ObjectId(req.user.userId),
       assigned_at: new Date(),
     });
+    rbacCache.invalidateUser(user._id.toString());
 
     // Audit event for each assignment
     await auditLogger.log({

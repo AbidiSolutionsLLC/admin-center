@@ -22,9 +22,13 @@ async function seedFirstUser() {
     });
     console.log('Connected successfully.');
 
-    const email = 'tsaleem@abidisolutions.com';
-    const password = 'Mtayyab696';
-    const fullName = 'Tayyab Saleem';
+    // WI-11: no credentials in source — provide via environment
+    const email = process.env.SEED_ADMIN_EMAIL;
+    const password = process.env.SEED_ADMIN_PASSWORD;
+    const fullName = process.env.SEED_ADMIN_NAME || 'Administrator';
+    if (!email || !password) {
+      throw new Error('SEED_ADMIN_EMAIL and SEED_ADMIN_PASSWORD must be set');
+    }
 
     // 1. Find or create Company
     let company = await Company.findOne({ name: 'Abidi Solutions LLC' });

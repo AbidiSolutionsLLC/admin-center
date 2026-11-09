@@ -57,7 +57,8 @@ router.post('/', requireRole(PERMISSION_GROUPS.OPS_ADMINS), createWorkflow);
  * POST /workflows/trigger/lifecycle_changed
  * Internal: fires when user lifecycle changes
  */
-router.post('/trigger/lifecycle_changed', handleLifecycleTrigger);
+// WI-09: was callable by any authenticated user with an arbitrary user_id
+router.post('/trigger/lifecycle_changed', requireRole([...PERMISSION_GROUPS.OPS_ADMINS, ...PERMISSION_GROUPS.PEOPLE_ADMINS]), handleLifecycleTrigger);
 
 
 

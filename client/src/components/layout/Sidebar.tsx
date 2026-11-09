@@ -17,6 +17,7 @@ import {
   ClipboardList,
 } from 'lucide-react';
 import { useAuthStore } from '@/store/useAuthStore';
+import { apiClient } from '@/lib/apiClient';
 import { useUIStore } from '@/store/useUIStore';
 import { PERMISSION_GROUPS } from '@/constants/roles';
 
@@ -71,6 +72,16 @@ import { useMyPermissions } from '@/hooks/useMyPermissions';
 
 export const Sidebar = ({ className }: SidebarProps) => {
   const { clearAuth, userName, userRole, companyName } = useAuthStore() as any;
+  // WI-14: revoke the refresh token server-side, then clear local state
+  const handleLogout = async () => {
+    try {
+      await apiClient.post('/auth/logout');
+    } catch {
+      // ignore — local state is cleared regardless
+    } finally {
+      clearAuth();
+    }
+  };
   const { closeSidebar } = useUIStore();
   const location = useLocation();
   const { data: myPermissions } = useMyPermissions();
@@ -227,7 +238,7 @@ export const Sidebar = ({ className }: SidebarProps) => {
           cursor: 'pointer',
           transition: 'background 0.15s ease',
         }}
-          onClick={clearAuth}
+          onClick={handleLogout}
           onMouseEnter={e => (e.currentTarget.style.background = 'rgba(255,255,255,0.05)')}
           onMouseLeave={e => (e.currentTarget.style.background = 'transparent')}
         >

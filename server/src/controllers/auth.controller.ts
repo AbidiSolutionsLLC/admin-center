@@ -254,10 +254,20 @@ export const login = asyncHandler(async (req: Request, res: Response) => {
     if (aggregatedPolicy?.settings.require_mfa) mfaRequired = true;
   }
 
+  // WI-07: MFA enforced. MFA_DISABLED=true is a local-development escape hatch only.
+  if (process.env.MFA_DISABLED === 'true') {
+    if (process.env.NODE_ENV === 'production') {
+      throw new AppError('Server misconfiguration: MFA cannot be disabled in production', 500, 'MISCONFIGURED');
+    }
+    console.warn('[Auth] WARNING: MFA_DISABLED=true — email OTP skipped (development only)');
+    mfaRequired = false;
+  }
+
   if (mfaRequired) {
-    // Generate 6 digit OTP
-    const otpCode = Math.floor(100000 + Math.random() * 900000).toString();
-    user.mfa_otp = otpCode;
+    // Generate 6 digit OTP (CSPRNG); only its SHA-256 hash is stored
+    const otpCode = crypto.randomInt(100000, 1000000).toString();
+    user.mfa_otp = crypto.createHash('sha256').update(otpCode).digest('hex');
+    user.mfa_otp_attempts = 0;
     user.mfa_otp_expires_at = new Date(Date.now() + 10 * 60 * 1000);
     await user.save();
 
@@ -354,7 +364,7 @@ export const login = asyncHandler(async (req: Request, res: Response) => {
     secure: process.env.NODE_ENV === 'production',
     sameSite: 'strict',
     maxAge: sessionTimeoutMs,
-    path: '/api/v1/auth/refresh' // only sent to refresh endpoint to save bandwidth
+    path: '/api/v1/auth' // WI-14: sent to /auth/refresh and /auth/logout
   });
 
   res.status(200).json({
@@ -392,7 +402,20 @@ export const verifyMfa = asyncHandler(async (req: Request, res: Response) => {
   }
 
   const user = await User.findById(decoded.mfaUserId);
-  if (!user || user.mfa_otp !== otp_code || !user.mfa_otp_expires_at) {
+  const otpHash = crypto.createHash('sha256').update(otp_code).digest('hex');
+  if (user && user.mfa_otp && (user.mfa_otp_attempts || 0) >= 5) {
+    // WI-07: attempt limit — force a fresh login
+    user.mfa_otp = undefined;
+    user.mfa_otp_expires_at = undefined;
+    user.mfa_otp_attempts = 0;
+    await user.save();
+    throw new AppError('Too many invalid codes. Please log in again.', 401, 'UNAUTHORIZED');
+  }
+  if (!user || user.mfa_otp !== otpHash || !user.mfa_otp_expires_at) {
+    if (user && user.mfa_otp) {
+      user.mfa_otp_attempts = (user.mfa_otp_attempts || 0) + 1;
+      await user.save();
+    }
     if (user) {
       await logSecurityEvent({
         company_id: user.company_id,
@@ -425,6 +448,7 @@ export const verifyMfa = asyncHandler(async (req: Request, res: Response) => {
   // OTP verified successfully
   user.mfa_otp = undefined;
   user.mfa_otp_expires_at = undefined;
+  user.mfa_otp_attempts = 0;
   // Automatically opt them in if they aren't already, since they just successfully verified
   user.mfa_enabled = true;
   user.last_login = new Date();
@@ -496,7 +520,7 @@ export const verifyMfa = asyncHandler(async (req: Request, res: Response) => {
     secure: process.env.NODE_ENV === 'production',
     sameSite: 'strict',
     maxAge: sessionTimeoutMs,
-    path: '/api/v1/auth/refresh'
+    path: '/api/v1/auth'
   });
 
   res.status(200).json({
@@ -593,20 +617,25 @@ export const logout = asyncHandler(async (req: Request, res: Response) => {
   if (token) {
     const tokenHash = crypto.createHash('sha256').update(token).digest('hex');
 
+    // WI-14: identify the session from the refresh cookie itself (logout needs no access token)
+    const record = await RefreshToken.findOne({ token_hash: tokenHash });
+
     // Invalidate RefreshToken record
     await RefreshToken.updateMany(
       { token_hash: tokenHash },
       { $set: { is_revoked: true } }
     );
 
-    // Optionally clear hash from User
-    if (req.user) {
-      await User.findByIdAndUpdate(req.user.userId, { $unset: { refresh_token_hash: 1 } });
-      
+    const owner = record ? await User.findById(record.user_id).select('company_id email refresh_token_hash') : null;
+    if (owner) {
+      if (owner.refresh_token_hash === tokenHash) {
+        await User.findByIdAndUpdate(owner._id, { $unset: { refresh_token_hash: 1 } });
+      }
+
       // Log logout security event
       await logSecurityEvent({
-        company_id: req.user.company_id,
-        user_id: req.user.userId,
+        company_id: owner.company_id,
+        user_id: owner._id,
         event_type: 'logout',
         ip_address: req.ip,
         user_agent: req.headers['user-agent'],
@@ -616,8 +645,8 @@ export const logout = asyncHandler(async (req: Request, res: Response) => {
 
       // Log token revocation event
       await logSecurityEvent({
-        company_id: req.user.company_id,
-        user_id: req.user.userId,
+        company_id: owner.company_id,
+        user_id: owner._id,
         event_type: 'token_revoked',
         ip_address: req.ip,
         user_agent: req.headers['user-agent'],
@@ -627,6 +656,13 @@ export const logout = asyncHandler(async (req: Request, res: Response) => {
     }
   }
 
+  res.clearCookie('refreshToken', {
+    httpOnly: true,
+    secure: process.env.NODE_ENV === 'production',
+    sameSite: 'strict',
+    path: '/api/v1/auth'
+  });
+  // Also clear any cookie issued under the previous, narrower path
   res.clearCookie('refreshToken', {
     httpOnly: true,
     secure: process.env.NODE_ENV === 'production',

@@ -3,10 +3,10 @@ import rateLimit from 'express-rate-limit';
 // Global rate limiter for all API routes
 export const globalLimiter = rateLimit({
   windowMs: 15 * 60 * 1000, // 15 minutes
-  max: process.env.NODE_ENV === 'development' ? 10000 : 1000, // much higher in dev
+  max: Number(process.env.GLOBAL_RATE_LIMIT) || (process.env.NODE_ENV === 'development' ? 10000 : 6000), // WI-07: prod default sized for dashboard polling (~0.8 req/s per open tab)
   standardHeaders: true, 
   legacyHeaders: false,
-  skip: () => true, // Disabled for now: req.method === 'OPTIONS', // Always skip preflight requests
+  skip: (req) => req.method === 'OPTIONS', // WI-07: re-enabled; only CORS preflight is skipped
   message: {
     success: false,
     message: 'Too many requests from this IP, please try again after 15 minutes',
@@ -16,10 +16,10 @@ export const globalLimiter = rateLimit({
 // Stricter rate limiter for authentication routes
 export const authLimiter = rateLimit({
   windowMs: 15 * 60 * 1000, // 15 minutes
-  max: process.env.NODE_ENV === 'development' ? 100 : 20, // increased for dev
+  max: Number(process.env.AUTH_RATE_LIMIT) || (process.env.NODE_ENV === 'development' ? 100 : 20), // increased for dev
   standardHeaders: true,
   legacyHeaders: false,
-  skip: () => true, // Disabled for now: req.method === 'OPTIONS', // Always skip preflight requests
+  skip: (req) => req.method === 'OPTIONS', // WI-07: re-enabled; only CORS preflight is skipped
   message: {
     success: false,
     message: 'Too many authentication attempts from this IP, please try again after 15 minutes',

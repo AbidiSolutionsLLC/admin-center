@@ -2,6 +2,7 @@
 import { Router } from 'express';
 import { requireAuth } from '../middleware/auth';
 import { requireRole } from '../middleware/requireRole';
+import { ROLES } from '../constants/roles';
 import {
   getTemplates,
   getSupportedVariables,
@@ -46,25 +47,25 @@ router.get('/templates/:id', getTemplateById);
  * POST /notifications/templates
  * Create a new template
  */
-router.post('/templates', requireRole(['super_admin', 'ops_admin']), createTemplate);
+router.post('/templates', requireRole([ROLES.SUPER_ADMIN, ROLES.OPS_ADMIN]), createTemplate);
 
 /**
  * PUT /notifications/templates/:id
  * Update a template
  */
-router.put('/templates/:id', requireRole(['super_admin', 'ops_admin']), updateTemplate);
+router.put('/templates/:id', requireRole([ROLES.SUPER_ADMIN, ROLES.OPS_ADMIN]), updateTemplate);
 
 /**
  * DELETE /notifications/templates/:id
  * Soft-delete a template
  */
-router.delete('/templates/:id', requireRole(['super_admin']), deleteTemplate);
+router.delete('/templates/:id', requireRole([ROLES.SUPER_ADMIN]), deleteTemplate);
 
 /**
  * POST /notifications/templates/:id/test
  * Test variable substitution (no actual email sent)
  */
-router.post('/templates/:id/test', requireRole(['super_admin', 'ops_admin']), testTemplate);
+router.post('/templates/:id/test', requireRole([ROLES.SUPER_ADMIN, ROLES.OPS_ADMIN]), testTemplate);
 
 // ── In-App Notifications ────────────────────────────────────────────
 
@@ -98,6 +99,6 @@ router.post('/in-app/mark-all-read', markAllAsRead);
  * GET /notifications/events
  * Get delivery event log
  */
-router.get('/events', requireRole(['super_admin', 'ops_admin']), getDeliveryEvents);
+router.get('/events', requireRole([ROLES.SUPER_ADMIN, ROLES.OPS_ADMIN]), getDeliveryEvents);
 
 export default router;

@@ -12,12 +12,12 @@ const app = express();
 app.set('trust proxy', 1); // Trust first proxy (e.g. Nginx, Azure) if deploying behind one
 app.use(cors({ 
   origin: (origin, callback) => {
-    const isDev = process.env.NODE_ENV !== 'production';
-    if (isDev) {
-      // Allow all origins in development (including mobile/local network devices)
+    // WI-13: reflecting any origin requires NODE_ENV=development AND ALLOW_ANY_ORIGIN=true
+    const allowAny = process.env.NODE_ENV === 'development' && process.env.ALLOW_ANY_ORIGIN === 'true';
+    if (allowAny) {
       callback(null, origin || true);
     } else {
-      const allowedOrigins = [process.env.CLIENT_URL as string];
+      const allowedOrigins = (process.env.CLIENT_URL || 'http://localhost:5173').split(',').map(o => o.trim()).filter(Boolean);
       if (!origin || allowedOrigins.includes(origin)) {
         callback(null, true);
       } else {

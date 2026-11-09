@@ -492,7 +492,7 @@ export const deleteWorkScheduleAssignment = asyncHandler(async (req: Request, re
  * Users inherit schedule automatically based on location.
  */
 export const getUserWorkSchedule = asyncHandler(async (req: Request, res: Response) => {
-  const user = await User.findById(req.params.user_id)
+  const user = await User.findOne({ _id: req.params.user_id, company_id: req.user.company_id }) // WI-09
     .populate('location_id', 'name type timezone')
     .lean();
 

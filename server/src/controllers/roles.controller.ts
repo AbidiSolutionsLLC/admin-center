@@ -4,6 +4,7 @@ import { z } from 'zod';
 import { asyncHandler } from '../utils/asyncHandler';
 import { AppError } from '../utils/AppError';
 import { rbacCache } from '../lib/rbacCache';
+import { assertCanAssignRoles } from '../lib/roleHierarchy';
 import { auditLogger } from '../lib/auditLogger';
 import { Role } from '../models/Role.model';
 import { Permission } from '../models/Permission.model';
@@ -634,6 +635,9 @@ export const assignRoleToUser = asyncHandler(async (req: Request, res: Response)
     throw new AppError(`User not found: ${user_id}`, 404, 'USER_NOT_FOUND');
   }
 
+  // WI-08: grant hierarchy
+  await assertCanAssignRoles(req as any, [role as any], [user._id]);
+
   // Check if already assigned
   const existing = await UserRole.findOne({ user_id, role_id: roleId });
   if (existing) {
@@ -678,6 +682,9 @@ export const unassignRoleFromUser = asyncHandler(async (req: Request, res: Respo
 
   const user = await User.findOne({ _id: new Types.ObjectId(userId), company_id: new Types.ObjectId(companyId as string) });
   if (!user) throw new AppError('User not found', 404, 'USER_NOT_FOUND');
+
+  // WI-08: removing a role is also bounded by the hierarchy (role at/below actor, target not above actor, not self)
+  await assertCanAssignRoles(req as any, [role as any], [user._id]);
 
   const result = await UserRole.deleteOne({
     user_id: userId,

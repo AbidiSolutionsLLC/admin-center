@@ -2,6 +2,7 @@ import { Types } from 'mongoose';
 import { DataGovernancePolicy } from '../models/DataGovernancePolicy.model';
 import { UserRole } from '../models/UserRole.model';
 import { AdminClaim } from './tokenService';
+import { ROLES } from '../constants/roles';
 
 type DataItem = Record<string, any>;
 
@@ -89,7 +90,7 @@ export const applyDataGovernanceRead = async (
   if (policies.length === 0) return data;
 
   const userRoleIds = await getUserRoles(user.userId, companyId);
-  const isSuperAdmin = (user.user_role as unknown as string) === 'super_admin';
+  const isSuperAdmin = (user.user_role as unknown as string) === ROLES.SUPER_ADMIN;
 
   for (const item of items) {
     for (const policy of policies) {
@@ -144,7 +145,7 @@ export const applyDataGovernanceWrite = async (
   if (policies.length === 0) return data;
 
   const userRoleIds = await getUserRoles(user.userId, companyId);
-  const isSuperAdmin = (user.user_role as unknown as string) === 'super_admin';
+  const isSuperAdmin = (user.user_role as unknown as string) === ROLES.SUPER_ADMIN;
 
   for (const policy of policies) {
     const targetRoles = policy.applied_to?.roles?.map(r => r.toString()) || [];

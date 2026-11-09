@@ -815,7 +815,7 @@ export const getHolidaysForAttendance = asyncHandler(async (req: Request, res: R
     throw new AppError('User ID is required', 400, 'VALIDATION_ERROR');
   }
 
-  const user = await User.findById(user_id).populate('location_id', 'name type timezone').lean();
+  const user = await User.findOne({ _id: user_id, company_id: req.user.company_id }).populate('location_id', 'name type timezone').lean(); // WI-09
   if (!user) {
     throw new AppError('User not found', 404, 'NOT_FOUND');
   }
