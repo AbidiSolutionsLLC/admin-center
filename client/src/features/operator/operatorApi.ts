@@ -36,7 +36,7 @@ operatorApi.interceptors.response.use(
   },
 );
 
-const errMsg = (e: any, fallback: string) => e?.response?.data?.error || e?.response?.data?.message || fallback;
+export const errMsg = (e: any, fallback: string) => e?.response?.data?.error || e?.response?.data?.message || fallback;
 
 export interface OrgEntitlement { product_key: string; status: string; seats_limit?: number | null }
 export interface OperatorOrg {
@@ -45,7 +45,11 @@ export interface OperatorOrg {
 }
 export interface Plan { id?: string; _id?: string; key: string; name: string; products: string[] }
 export interface OperatorUser { id?: string; _id?: string; email: string; full_name?: string; roles?: string[]; status: string; mfa_enabled?: boolean; last_login_at?: string | null; created_at?: string }
-export interface AuditEntry { id?: string; _id?: string; action: string; actor?: string; actor_email?: string; target?: string; target_type?: string; created_at?: string; [k: string]: unknown }
+export interface AuditEntry {
+  id?: string; _id?: string; action: string; operator_id?: string; operator_email?: string;
+  target_type?: string; target_id?: string | null; company_id?: string | null;
+  details?: Record<string, unknown> | null; correlation_id?: string | null; created_at?: string;
+}
 
 const idOf = <T extends { id?: string; _id?: string }>(x: T) => (x.id ?? x._id) as string;
 export { idOf };
@@ -64,7 +68,11 @@ export const useOrgAction = () => {
   return useMutation({
     mutationFn: async ({ id, action }: { id: string; action: 'suspend' | 'reactivate' | 'close' }) =>
       (await operatorApi.post(`/orgs/${id}/${action}`)).data,
-    onSuccess: () => { qc.invalidateQueries({ queryKey: ['operator', 'orgs'] }); toast.success('Organization updated'); },
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ['operator', 'orgs'] });
+      qc.invalidateQueries({ queryKey: ['operator', 'org'] });
+      toast.success('Organization updated');
+    },
     onError: (e) => toast.error(errMsg(e, 'Action failed')),
   });
 };
@@ -84,7 +92,11 @@ export const useSetEntitlement = () => {
   return useMutation({
     mutationFn: async ({ orgId, productKey, status, seats_limit }: { orgId: string; productKey: string; status: string; seats_limit?: number }) =>
       (await operatorApi.put(`/orgs/${orgId}/entitlements/${productKey}`, { status, seats_limit })).data,
-    onSuccess: () => { qc.invalidateQueries({ queryKey: ['operator', 'orgs'] }); toast.success('Entitlement updated'); },
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ['operator', 'orgs'] });
+      qc.invalidateQueries({ queryKey: ['operator', 'org'] });
+      toast.success('Entitlement updated');
+    },
     onError: (e) => toast.error(errMsg(e, 'Failed to update entitlement')),
   });
 };
