@@ -1,5 +1,10 @@
 import { Request, Response, NextFunction } from 'express';
-import { verifyAccessToken } from '../lib/tokenService';
+import * as jose from 'jose';
+import { Types } from 'mongoose';
+import { AdminClaim } from '../lib/tokenService';
+import { getPublicJwks } from '../identity/keys';
+import { getIdentityConfig, ADMIN_AUDIENCE } from '../identity/config';
+import { findLiveSession } from '../identity/sessions';
 import { asyncHandler } from '../utils/asyncHandler';
 import { User, UserRole, SecurityPolicy, GroupMember, Company, IpRestriction } from '../models';
 import { isIpInRange } from '../utils/ipUtils';
@@ -7,25 +12,58 @@ import { rbacCache } from '../lib/rbacCache';
 import { getAggregatedSecurityPolicy } from '../utils/securityPolicyUtils';
 import { rankOf } from '../lib/roleHierarchy';
 
+const INVALID = { error: 'Token invalid or expired', code: 'INVALID_TOKEN' };
+
+let tenantJwks: ReturnType<typeof jose.createLocalJWKSet> | undefined;
+const tenantKeySet = () => (tenantJwks ??= jose.createLocalJWKSet(getPublicJwks('tenant')));
+
 export const requireAuth = asyncHandler(async (req: Request, res: Response, next: NextFunction) => {
-  const token = req.headers.authorization?.replace('Bearer ', '');
+  const header = req.headers.authorization;
+  const token = header?.startsWith('Bearer ') ? header.slice(7).trim() : undefined;
   if (!token) return res.status(401).json({ error: 'Unauthorized', code: 'NO_TOKEN' });
 
-  let decoded;
+  // E2 / 03 §8: RS256 access token from the tenant realm, verified locally (no JWKS fetch).
+  let claims: jose.JWTPayload;
   try {
-    decoded = verifyAccessToken(token);
+    ({ payload: claims } = await jose.jwtVerify(token, tenantKeySet(), {
+      issuer: getIdentityConfig().tenantIssuer,
+      audience: ADMIN_AUDIENCE,
+      algorithms: ['RS256'],
+      typ: 'at+jwt',
+    }));
   } catch {
-    return res.status(401).json({ error: 'Token invalid or expired', code: 'INVALID_TOKEN' });
+    return res.status(401).json(INVALID);
+  }
+  const sub = claims.sub;
+  const org = claims.org;
+  const sid = claims.sid;
+  if (claims.token_use !== 'access' || typeof sub !== 'string' || typeof org !== 'string' || typeof sid !== 'string' || !Types.ObjectId.isValid(sub)) {
+    return res.status(401).json(INVALID);
   }
 
-  // WI-09: company_id in the token must match the user's company (forged/stale tokens rejected)
-  const user = await User.findById(decoded.userId).select('lifecycle_state is_active company_id department_id');
+  const user = await User.findById(sub).select('lifecycle_state is_active company_id department_id email identity_id');
   if (!user) {
-    return res.status(401).json({ error: 'Unauthorized', code: 'NO_TOKEN' });
+    return res.status(401).json(INVALID);
   }
-  if (!decoded.company_id || user.company_id?.toString() !== decoded.company_id.toString()) {
-    return res.status(401).json({ error: 'Token invalid or expired', code: 'INVALID_TOKEN' });
+  // SEC-11: the membership must belong to the token's org
+  if (user.company_id?.toString() !== org) {
+    return res.status(401).json(INVALID);
   }
+
+  // 03 §7: Session.revoked_at is the revocation source of truth
+  const session = await findLiveSession(sid);
+  if (!session || session.member_id.toString() !== sub) {
+    return res.status(401).json({ error: 'Session has been revoked or expired', code: 'SESSION_REVOKED' });
+  }
+
+  const decoded: AdminClaim = {
+    userId: sub,
+    email: typeof claims.email === 'string' ? claims.email : user.email,
+    user_role: 'Employee',
+    company_id: org,
+    sid,
+    identity_id: typeof claims.idn === 'string' ? claims.idn : session.identity_id.toString(),
+  };
 
   if (user.lifecycle_state === 'deactivated' || user.lifecycle_state === 'archived' || user.lifecycle_state === 'terminated' || user.is_active === false) {
     return res.status(403).json({ error: 'Your account is currently inactive. Please contact support if you believe this is an error.', code: 'FORBIDDEN' });

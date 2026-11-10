@@ -1,28 +1,29 @@
 // server/src/controllers/auth.controller.ts
+// E2: login / MFA / refresh moved to the hosted OIDC identity module (src/identity). The login-policy
+// helpers below (security events, IP restrictions, lockout, password expiry) are shared with it.
 import { Request, Response } from 'express';
 import bcrypt from 'bcryptjs';
 import crypto from 'crypto';
 import { asyncHandler } from '../utils/asyncHandler';
-import { User, LifecycleState, UserRole, Role, RefreshToken, SecurityEvent, SecurityPolicy, InviteToken, PasswordResetToken, Company, GroupMember, IpRestriction } from '../models';
-import { signAccessToken, signRefreshToken, AdminClaim, signMfaToken, verifyMfaToken } from '../lib/tokenService';
-import { sendPasswordResetEmail, sendMfaOtpEmail } from '../lib/emailService';
+import { User, IUser, UserRole, SecurityEvent, InviteToken, PasswordResetToken, Company, GroupMember, IpRestriction, Identity, IIdentity } from '../models';
+import { sendPasswordResetEmail } from '../lib/emailService';
 import { validatePasswordAgainstPolicy } from '../utils/passwordPolicy';
 import { AppError } from '../utils/AppError';
 import { z } from 'zod';
 import { auditLogger } from '../lib/auditLogger';
 import { resolveUserPermissions } from '../lib/rbac';
-import { ROLES } from '../constants/roles';
 import { sendSecurityAlert } from '../lib/notificationEngine';
 import { isIpInRange } from '../utils/ipUtils';
 import { getAggregatedSecurityPolicy } from '../utils/securityPolicyUtils';
+import { revokeSession, revokeIdentitySessions } from '../identity/sessions';
+import { getIdentityConfig, ADMIN_SPA_CLIENT_ID } from '../identity/config';
 
-// 7 days in milliseconds
-const REFRESH_TOKEN_MAX_AGE = 7 * 24 * 60 * 60 * 1000;
+const BCRYPT_COST = 12;
 
 /**
  * Helper: Log security event for login attempts
  */
-async function logSecurityEvent(params: {
+export async function logSecurityEvent(params: {
   company_id: any;
   user_id?: any;
   email?: string;
@@ -66,103 +67,71 @@ async function logSecurityEvent(params: {
   }
 }
 
-export const login = asyncHandler(async (req: Request, res: Response) => {
-  const { email, password } = req.body;
+export interface LoginPolicyDenial {
+  code: 'FORBIDDEN' | 'ACCOUNT_LOCKED' | 'PASSWORD_EXPIRED';
+  message: string;
+}
 
-  if (!email || !password) {
-    throw new AppError('Email and password are required', 400, 'BAD_REQUEST');
-  }
-
-  const user = await User.findOne({ email }).select('+password_hash');
-  
-  // Log login attempt (before validation)
-  await logSecurityEvent({
-    company_id: user?.company_id || null,
-    user_id: user?._id || null,
-    email: email.toLowerCase(),
-    event_type: 'login_attempt',
+const loginEvent = (req: Request, user: IUser, email: string, reason: string, is_suspicious: boolean, extra: Record<string, unknown> = {}) =>
+  logSecurityEvent({
+    company_id: user.company_id,
+    user_id: user._id,
+    email,
+    event_type: 'login_failure',
     ip_address: req.ip,
     user_agent: req.headers['user-agent'],
     req,
-    metadata: { reason: 'login_attempt_logged' },
+    is_suspicious,
+    metadata: { reason, ...extra },
   });
 
-  if (!user) {
-    // User not found - log failure
-    // Check if this is suspicious (multiple failures for non-existent email)
-    const recentFailures = await SecurityEvent.countDocuments({
-      email: email.toLowerCase(),
-      event_type: 'login_failure',
-      created_at: { $gte: new Date(Date.now() - 30 * 60 * 1000) }, // Last 30 minutes
-    });
+/** Unknown-email failure (logged without a company, suspicious after repeated attempts). */
+export async function recordUnknownEmailFailure(req: Request, email: string): Promise<void> {
+  const recentFailures = await SecurityEvent.countDocuments({
+    email,
+    event_type: 'login_failure',
+    created_at: { $gte: new Date(Date.now() - 30 * 60 * 1000) },
+  });
+  await logSecurityEvent({
+    company_id: null,
+    email,
+    event_type: 'login_failure',
+    ip_address: req.ip,
+    user_agent: req.headers['user-agent'],
+    req,
+    is_suspicious: recentFailures >= 5,
+    metadata: { reason: 'user_not_found' },
+  });
+}
 
-    const maxAttempts = 5; // Default threshold for unknown users
-    const isSuspicious = recentFailures >= maxAttempts;
-
-    await logSecurityEvent({
-      company_id: null,
-      email: email.toLowerCase(),
-      event_type: 'login_failure',
-      ip_address: req.ip,
-      user_agent: req.headers['user-agent'],
-      req,
-      is_suspicious: isSuspicious,
-      metadata: { reason: 'user_not_found' },
-    });
-
-    throw new AppError('Invalid credentials', 401, 'UNAUTHORIZED');
-  }
-
-  // Check IP restrictions
-  const globalPolicyForIp = await getAggregatedSecurityPolicy(user);
-  if (globalPolicyForIp) {
-    const clientIp = req.ip || '127.0.0.1';
-    if (globalPolicyForIp.settings.ip_whitelist_enabled && globalPolicyForIp.settings.ip_whitelist && globalPolicyForIp.settings.ip_whitelist.length > 0) {
-      const isWhitelisted = globalPolicyForIp.settings.ip_whitelist.some((range: string) => isIpInRange(clientIp, range));
+/** Legacy SecurityPolicy whitelist/blacklist + identity-scoped IpRestriction rules for the portal. */
+export async function evaluateLoginIpPolicy(req: Request, user: IUser, email: string): Promise<LoginPolicyDenial | null> {
+  const clientIp = req.ip || '127.0.0.1';
+  const policy = await getAggregatedSecurityPolicy(user);
+  if (policy) {
+    if (policy.settings.ip_whitelist_enabled && policy.settings.ip_whitelist && policy.settings.ip_whitelist.length > 0) {
+      const isWhitelisted = policy.settings.ip_whitelist.some((range: string) => isIpInRange(clientIp, range));
       if (!isWhitelisted) {
-        await logSecurityEvent({
-          company_id: user.company_id,
-          user_id: user._id,
-          email: email.toLowerCase(),
-          event_type: 'login_failure',
-          ip_address: req.ip,
-          user_agent: req.headers['user-agent'],
-          req,
-          is_suspicious: true,
-          metadata: { reason: 'ip_not_whitelisted' },
-        });
-        throw new AppError('Access denied from this IP address', 403, 'FORBIDDEN');
+        await loginEvent(req, user, email, 'ip_not_whitelisted', true);
+        return { code: 'FORBIDDEN', message: 'Access denied from this IP address' };
       }
     }
-    if (globalPolicyForIp.settings.ip_blacklist_enabled && globalPolicyForIp.settings.ip_blacklist && globalPolicyForIp.settings.ip_blacklist.length > 0) {
-      const isBlacklisted = globalPolicyForIp.settings.ip_blacklist.some((range: string) => isIpInRange(clientIp, range));
+    if (policy.settings.ip_blacklist_enabled && policy.settings.ip_blacklist && policy.settings.ip_blacklist.length > 0) {
+      const isBlacklisted = policy.settings.ip_blacklist.some((range: string) => isIpInRange(clientIp, range));
       if (isBlacklisted) {
-        await logSecurityEvent({
-          company_id: user.company_id,
-          user_id: user._id,
-          email: email.toLowerCase(),
-          event_type: 'login_failure',
-          ip_address: req.ip,
-          user_agent: req.headers['user-agent'],
-          req,
-          is_suspicious: true,
-          metadata: { reason: 'ip_blacklisted' },
-        });
-        throw new AppError('Access denied from this IP address', 403, 'FORBIDDEN');
+        await loginEvent(req, user, email, 'ip_blacklisted', true);
+        return { code: 'FORBIDDEN', message: 'Access denied from this IP address' };
       }
     }
   }
 
-  // New Identity-Scoped IP Restrictions Check
   const companySettings = await Company.findById(user.company_id).select('settings.ip_restrictions_enabled');
   if (companySettings?.settings?.ip_restrictions_enabled) {
-    const clientIp = req.ip || '127.0.0.1';
-    
-    // For login, we only evaluate 'portal' rules since they are trying to log into the admin portal.
-    const targetRestrictions = await IpRestriction.find({ 
-      company_id: user.company_id, 
+    // Login evaluates 'portal' and 'all_apps' rules.
+    const targetRestrictions = await IpRestriction.find({
+      company_id: user.company_id,
       is_enabled: true,
-      target_type: { $in: ['portal', 'all_apps'] }
+      target_type: { $in: ['portal', 'all_apps'] },
     });
 
     if (targetRestrictions.length > 0) {
@@ -176,7 +145,6 @@ export const login = asyncHandler(async (req: Request, res: Response) => {
       const applicableRestrictions = targetRestrictions.filter(r => {
         if (r.subject_type === 'all_users') return true;
         if (!r.subject_id) return false;
-        
         const sid = r.subject_id.toString();
         if (r.subject_type === 'user') return sid === userIdStr;
         if (r.subject_type === 'group') return userGroups.includes(sid);
@@ -186,603 +154,111 @@ export const login = asyncHandler(async (req: Request, res: Response) => {
       });
 
       if (applicableRestrictions.length === 0) {
-        await logSecurityEvent({
-          company_id: user.company_id,
-          user_id: user._id,
-          email: email.toLowerCase(),
-          event_type: 'login_failure',
-          ip_address: req.ip,
-          user_agent: req.headers['user-agent'],
-          req,
-          is_suspicious: true,
-          metadata: { reason: 'ip_implicit_deny' },
-        });
-        throw new AppError('Access denied. You are not authorized by any IP restriction rule.', 403, 'FORBIDDEN');
+        await loginEvent(req, user, email, 'ip_implicit_deny', true);
+        return { code: 'FORBIDDEN', message: 'Access denied. You are not authorized by any IP restriction rule.' };
       }
-
-      const isAllowed = applicableRestrictions.some(rule => isIpInRange(clientIp, rule.ip_address));
-      if (!isAllowed) {
-         await logSecurityEvent({
-          company_id: user.company_id,
-          user_id: user._id,
-          email: email.toLowerCase(),
-          event_type: 'login_failure',
-          ip_address: req.ip,
-          user_agent: req.headers['user-agent'],
-          req,
-          is_suspicious: true,
-          metadata: { reason: 'ip_not_whitelisted_abac' },
-        });
-        throw new AppError('Access denied from this IP address based on Company IP Restrictions', 403, 'FORBIDDEN');
+      if (!applicableRestrictions.some(rule => isIpInRange(clientIp, rule.ip_address))) {
+        await loginEvent(req, user, email, 'ip_not_whitelisted_abac', true);
+        return { code: 'FORBIDDEN', message: 'Access denied from this IP address based on Company IP Restrictions' };
       }
     }
   }
+  return null;
+}
 
-  if (user.locked_until && user.locked_until > new Date()) {
-    await logSecurityEvent({
-      company_id: user.company_id,
-      user_id: user._id,
-      email: email.toLowerCase(),
-      event_type: 'login_failure',
-      ip_address: req.ip,
-      user_agent: req.headers['user-agent'],
-      req,
-      is_suspicious: true,
-      metadata: { reason: 'account_locked' },
-    });
-    throw new AppError('Account is locked due to multiple failed login attempts. Please contact your administrator or reset your password.', 403, 'ACCOUNT_LOCKED');
-  }
+export const isLocked = (user: IUser, identity: IIdentity) =>
+  identity.status === 'locked'
+  || (!!identity.locked_until && identity.locked_until > new Date())
+  || (!!user.locked_until && user.locked_until > new Date());
 
-  const isMatch = await bcrypt.compare(password, user.password_hash);
-  if (!isMatch) {
-    // Check recent failures for this email/user
-    const recentFailures = await SecurityEvent.countDocuments({
-      email: email.toLowerCase(),
-      event_type: 'login_failure',
-      created_at: { $gte: new Date(Date.now() - 30 * 60 * 1000) }, // Last 30 minutes
-    });
+/** Wrong password: count recent failures, lock the membership per the org security policy. */
+export async function recordPasswordFailure(req: Request, user: IUser, identity: IIdentity): Promise<void> {
+  const email = identity.email;
+  const recentFailures = await SecurityEvent.countDocuments({
+    email,
+    event_type: 'login_failure',
+    created_at: { $gte: new Date(Date.now() - 30 * 60 * 1000) },
+  });
+  const securityPolicy = await getAggregatedSecurityPolicy(user);
+  const maxAttempts = securityPolicy?.settings.max_failed_login_attempts || 5;
+  const lockoutDurationMinutes = securityPolicy?.settings.lockout_duration_minutes || 30;
+  const isSuspicious = (recentFailures + 1) >= maxAttempts;
 
-    const securityPolicy = await getAggregatedSecurityPolicy(user);
-    const maxAttempts = securityPolicy?.settings.max_failed_login_attempts || 5;
-    const lockoutDurationMinutes = securityPolicy?.settings.lockout_duration_minutes || 30;
-    
-    // is_suspicious = true if we've reached or exceeded the threshold
-    const isSuspicious = (recentFailures + 1) >= maxAttempts;
-    
-    if (isSuspicious) {
-      user.locked_until = new Date(Date.now() + lockoutDurationMinutes * 60 * 1000);
-      await user.save();
-    }
-
-    // Log login failure
-    await logSecurityEvent({
-      company_id: user.company_id,
-      user_id: user._id,
-      email: email.toLowerCase(),
-      event_type: 'login_failure',
-      ip_address: req.ip,
-      user_agent: req.headers['user-agent'],
-      req,
-      is_suspicious: isSuspicious,
-      metadata: { 
-        reason: 'invalid_password',
-        failure_count: recentFailures + 1,
-        max_attempts: maxAttempts,
-      },
-    });
-
-    throw new AppError('Invalid credentials', 401, 'UNAUTHORIZED');
-  }
-
-  // Check password expiration
-  const securityPolicyForExpiry = await getAggregatedSecurityPolicy(user);
-  if (securityPolicyForExpiry?.settings.password_expiry_days && securityPolicyForExpiry.settings.password_expiry_days > 0) {
-    const changedOrCreated = user.password_changed_at || user.created_at;
-    const daysSince = (Date.now() - changedOrCreated.getTime()) / (1000 * 60 * 60 * 24);
-    
-    if (daysSince > securityPolicyForExpiry.settings.password_expiry_days) {
-      await logSecurityEvent({
-        company_id: user.company_id,
-        user_id: user._id,
-        email: email.toLowerCase(),
-        event_type: 'login_failure',
-        ip_address: req.ip,
-        user_agent: req.headers['user-agent'],
-        req,
-        is_suspicious: false,
-        metadata: { reason: 'password_expired' },
-      });
-      throw new AppError('Password has expired. Please reset your password.', 403, 'PASSWORD_EXPIRED');
-    }
-  }
-
-  if (user.lifecycle_state === 'deactivated' || user.lifecycle_state === 'archived' || user.lifecycle_state === 'terminated') {
-    throw new AppError('Your account is currently inactive. Please contact support if you believe this is an error.', 403, 'FORBIDDEN');
-  }
-
-  // Fetch actual user role from RBAC models
-  const userRoleAssignment = await UserRole.findOne({ user_id: user._id }).populate('role_id');
-  const userRole = (userRoleAssignment?.role_id as any)?.name as AdminClaim['user_role'] || 'Employee';
-
-  // --- MFA Check ---
-  let mfaRequired = user.mfa_enabled;
-
-  // Stricter controls: Admin users MUST use MFA
-  const adminRoles = [ROLES.SUPER_ADMIN, ROLES.HR_ADMIN, ROLES.IT_ADMIN, ROLES.OPS_ADMIN, ROLES.ADMIN];
-  // @ts-ignore
-  if (adminRoles.includes(user.role)) {
-    mfaRequired = true;
-  }
-
-  if (!mfaRequired) {
-    const aggregatedPolicy = await getAggregatedSecurityPolicy(user);
-    if (aggregatedPolicy?.settings.require_mfa) mfaRequired = true;
-  }
-
-  // WI-07: MFA re-enabled. MFA_DISABLED=true is a local-development escape hatch only.
-  if (process.env.MFA_DISABLED === 'true') {
-    if (process.env.NODE_ENV === 'production') {
-      throw new AppError('Server misconfiguration: MFA cannot be disabled in production', 500, 'MISCONFIGURED');
-    }
-    console.warn('[Auth] WARNING: MFA_DISABLED=true — email OTP skipped (development only)');
-    mfaRequired = false;
-  }
-
-  if (mfaRequired) {
-    // Generate 6 digit OTP (CSPRNG); only its SHA-256 hash is stored
-    const otpCode = crypto.randomInt(100000, 1000000).toString();
-    user.mfa_otp = crypto.createHash('sha256').update(otpCode).digest('hex');
-    user.mfa_otp_attempts = 0;
-    user.mfa_otp_expires_at = new Date(Date.now() + 10 * 60 * 1000);
+  identity.failed_login_attempts = (identity.failed_login_attempts || 0) + 1;
+  if (isSuspicious) {
+    // Locks live on the membership so the existing admin "unlock user" action clears them.
+    user.locked_until = new Date(Date.now() + lockoutDurationMinutes * 60 * 1000);
     await user.save();
-
-    const company = await Company.findById(user.company_id);
-    
-    sendMfaOtpEmail({
-      email: user.email,
-      full_name: user.full_name,
-      otp_code: otpCode,
-      company_name: company?.name || 'Our Company',
-    }).catch(err => console.error('[Auth] Failed to send MFA OTP email:', err));
-
-    await logSecurityEvent({
-      company_id: user.company_id,
-      user_id: user._id,
-      email: user.email,
-      event_type: 'mfa_challenge',
-      ip_address: req.ip,
-      user_agent: req.headers['user-agent'],
-      req,
-    });
-
-    const tempToken = signMfaToken({ mfaUserId: user._id.toString() });
-
-    return res.status(200).json({
-      success: true,
-      data: {
-        requires_mfa: true,
-        temp_token: tempToken
-      }
-    });
   }
+  await identity.save();
 
-  // Sign tokens
-  const accessToken = signAccessToken({
-    userId: user._id.toString(),
-    email: user.email,
-    user_role: userRole,
-    company_id: user.company_id.toString()
-  });
+  await loginEvent(req, user, email, 'invalid_password', isSuspicious, { failure_count: recentFailures + 1, max_attempts: maxAttempts });
+}
 
-  // Create a raw refresh token and its hash
-  const rawRefreshToken = signRefreshToken({ userId: user._id.toString() });
-  const refreshTokenHash = crypto.createHash('sha256').update(rawRefreshToken).digest('hex');
+export async function recordLockedAttempt(req: Request, user: IUser, email: string): Promise<void> {
+  await loginEvent(req, user, email, 'account_locked', true);
+}
 
-  user.mfa_otp = undefined;
-  user.mfa_otp_expires_at = undefined;
-  user.refresh_token_hash = refreshTokenHash;
-  user.last_login = new Date();
-  user.locked_until = undefined;
-  await user.save();
+/** Password expiry per the org security policy. */
+export async function checkPasswordExpired(req: Request, user: IUser, identity: IIdentity): Promise<LoginPolicyDenial | null> {
+  const policy = await getAggregatedSecurityPolicy(user);
+  const days = policy?.settings.password_expiry_days;
+  if (!days || days <= 0) return null;
+  const changedOrCreated = identity.password_changed_at || identity.created_at || user.created_at;
+  const daysSince = (Date.now() - changedOrCreated.getTime()) / (1000 * 60 * 60 * 24);
+  if (daysSince <= days) return null;
+  await loginEvent(req, user, identity.email, 'password_expired', false);
+  return { code: 'PASSWORD_EXPIRED', message: 'Password has expired. Please reset your password.' };
+}
 
-  let sessionTimeoutMs = REFRESH_TOKEN_MAX_AGE;
-  let maxConcurrent = 3;
-  const globalPolicy = await getAggregatedSecurityPolicy(user);
-  if (globalPolicy?.settings) {
-    sessionTimeoutMs = globalPolicy.settings.session_timeout_minutes ? globalPolicy.settings.session_timeout_minutes * 60 * 1000 : sessionTimeoutMs;
-    maxConcurrent = globalPolicy.settings.max_concurrent_sessions || 3;
-  }
-
-  // Create RefreshToken record
-  await RefreshToken.create({
-    user_id: user._id,
-    token_hash: refreshTokenHash,
-    expires_at: new Date(Date.now() + sessionTimeoutMs),
-    last_activity_at: new Date(),
-    ip_address: req.ip,
-    user_agent: req.headers['user-agent']
-  });
-
-  // Enforce max concurrent sessions
-  const activeTokens = await RefreshToken.find({ user_id: user._id, is_revoked: false }).sort({ last_activity_at: -1 });
-  if (activeTokens.length > maxConcurrent) {
-    const tokensToRevoke = activeTokens.slice(maxConcurrent);
-    const tokenIds = tokensToRevoke.map(t => t._id);
-    await RefreshToken.updateMany({ _id: { $in: tokenIds } }, { $set: { is_revoked: true } });
-  }
-
-  // Log successful login
+export async function recordLoginSuccess(req: Request, user: IUser, identity: IIdentity, amr: string[]): Promise<void> {
+  identity.failed_login_attempts = 0;
+  identity.last_login_at = new Date();
+  await identity.save();
+  await User.updateOne({ _id: user._id }, { $set: { last_login: new Date() }, $unset: { locked_until: 1 } });
   await logSecurityEvent({
     company_id: user.company_id,
     user_id: user._id,
-    email: user.email,
+    email: identity.email,
     event_type: 'login_success',
     ip_address: req.ip,
     user_agent: req.headers['user-agent'],
     req,
-    metadata: { lifecycle_state: user.lifecycle_state },
+    metadata: { lifecycle_state: user.lifecycle_state, amr },
   });
-
-  // Set the refresh cookie
-  res.cookie('refreshToken', rawRefreshToken, {
-    httpOnly: true,
-    secure: process.env.NODE_ENV === 'production',
-    sameSite: 'strict',
-    maxAge: sessionTimeoutMs,
-    path: '/api/v1/auth' // WI-14: sent to /auth/refresh and /auth/logout
-  });
-
-  res.status(200).json({
-    success: true,
-    data: {
-      accessToken,
-      user: {
-        _id: user._id,
-        email: user.email,
-        full_name: user.full_name,
-        company_id: user.company_id,
-        role: userRole,
-      }
-    }
-  });
-});
-
-const VerifyMfaSchema = z.object({
-  temp_token: z.string().min(1),
-  otp_code: z.string().length(6),
-});
-
-export const verifyMfa = asyncHandler(async (req: Request, res: Response) => {
-  const result = VerifyMfaSchema.safeParse(req.body);
-  if (!result.success) {
-    throw new AppError('Invalid request format', 400, 'BAD_REQUEST');
-  }
-
-  const { temp_token, otp_code } = result.data;
-  let decoded;
-  try {
-    decoded = verifyMfaToken(temp_token);
-  } catch (err) {
-    throw new AppError('Session expired or invalid. Please log in again.', 401, 'INVALID_TOKEN');
-  }
-
-  const user = await User.findById(decoded.mfaUserId);
-  const otpHash = crypto.createHash('sha256').update(otp_code).digest('hex');
-  if (user && user.mfa_otp && (user.mfa_otp_attempts || 0) >= 5) {
-    // WI-07: attempt limit — force a fresh login
-    user.mfa_otp = undefined;
-    user.mfa_otp_expires_at = undefined;
-    user.mfa_otp_attempts = 0;
-    await user.save();
-    throw new AppError('Too many invalid codes. Please log in again.', 401, 'UNAUTHORIZED');
-  }
-  if (!user || user.mfa_otp !== otpHash || !user.mfa_otp_expires_at) {
-    if (user && user.mfa_otp) {
-      user.mfa_otp_attempts = (user.mfa_otp_attempts || 0) + 1;
-      await user.save();
-    }
-    if (user) {
-      await logSecurityEvent({
-        company_id: user.company_id,
-        user_id: user._id,
-        email: user.email,
-        event_type: 'mfa_failed',
-        ip_address: req.ip,
-        user_agent: req.headers['user-agent'],
-        req,
-        metadata: { reason: 'invalid_otp' }
-      });
-    }
-    throw new AppError('Invalid verification code.', 401, 'UNAUTHORIZED');
-  }
-
-  if (new Date() > user.mfa_otp_expires_at) {
-    await logSecurityEvent({
-      company_id: user.company_id,
-      user_id: user._id,
-      email: user.email,
-      event_type: 'mfa_failed',
-      ip_address: req.ip,
-      user_agent: req.headers['user-agent'],
-      req,
-      metadata: { reason: 'expired_otp' }
-    });
-    throw new AppError('Verification code expired. Please log in again.', 401, 'UNAUTHORIZED');
-  }
-
-  // OTP verified successfully
-  user.mfa_otp = undefined;
-  user.mfa_otp_expires_at = undefined;
-  user.mfa_otp_attempts = 0;
-  // Automatically opt them in if they aren't already, since they just successfully verified
-  user.mfa_enabled = true;
-  user.last_login = new Date();
-  
-  await logSecurityEvent({
-    company_id: user.company_id,
-    user_id: user._id,
-    email: user.email,
-    event_type: 'mfa_verified',
-    ip_address: req.ip,
-    user_agent: req.headers['user-agent'],
-    req,
-  });
-
-  await logSecurityEvent({
-    company_id: user.company_id,
-    user_id: user._id,
-    email: user.email,
-    event_type: 'login_success',
-    ip_address: req.ip,
-    user_agent: req.headers['user-agent'],
-    req,
-    metadata: { lifecycle_state: user.lifecycle_state },
-  });
-
-  // Re-fetch role
-  const userRoleAssignment = await UserRole.findOne({ user_id: user._id }).populate('role_id');
-  const userRole = (userRoleAssignment?.role_id as any)?.name as AdminClaim['user_role'] || 'Employee';
-
-  const accessToken = signAccessToken({
-    userId: user._id.toString(),
-    email: user.email,
-    user_role: userRole,
-    company_id: user.company_id.toString()
-  });
-
-  const rawRefreshToken = signRefreshToken({ userId: user._id.toString() });
-  const refreshTokenHash = crypto.createHash('sha256').update(rawRefreshToken).digest('hex');
-
-  user.refresh_token_hash = refreshTokenHash;
-  await user.save();
-
-  const globalPolicy = await getAggregatedSecurityPolicy(user);
-  let sessionTimeoutMs = REFRESH_TOKEN_MAX_AGE;
-  let maxConcurrent = 3;
-  if (globalPolicy?.settings) {
-    sessionTimeoutMs = globalPolicy.settings.session_timeout_minutes ? globalPolicy.settings.session_timeout_minutes * 60 * 1000 : sessionTimeoutMs;
-    maxConcurrent = globalPolicy.settings.max_concurrent_sessions || 3;
-  }
-
-  await RefreshToken.create({
-    user_id: user._id,
-    token_hash: refreshTokenHash,
-    expires_at: new Date(Date.now() + sessionTimeoutMs),
-    last_activity_at: new Date(),
-    ip_address: req.ip,
-    user_agent: req.headers['user-agent']
-  });
-
-  const activeTokens = await RefreshToken.find({ user_id: user._id, is_revoked: false }).sort({ last_activity_at: -1 });
-  if (activeTokens.length > maxConcurrent) {
-    const tokensToRevoke = activeTokens.slice(maxConcurrent);
-    const tokenIds = tokensToRevoke.map(t => t._id);
-    await RefreshToken.updateMany({ _id: { $in: tokenIds } }, { $set: { is_revoked: true } });
-  }
-
-  res.cookie('refreshToken', rawRefreshToken, {
-    httpOnly: true,
-    secure: process.env.NODE_ENV === 'production',
-    sameSite: 'strict',
-    maxAge: sessionTimeoutMs,
-    path: '/api/v1/auth'
-  });
-
-  res.status(200).json({
-    success: true,
-    data: {
-      accessToken,
-      user: {
-        _id: user._id,
-        email: user.email,
-        full_name: user.full_name,
-        company_id: user.company_id,
-        role: userRole,
-      }
-    }
-  });
-});
-
-export const refresh = asyncHandler(async (req: Request, res: Response) => {
-  const token = req.cookies?.refreshToken;
-  
-  if (!token) {
-    throw new AppError('No refresh token provided', 401, 'NO_TOKEN');
-  }
-
-  const tokenHash = crypto.createHash('sha256').update(token).digest('hex');
-
-  // Verify in DB
-  const validTokenRecord = await RefreshToken.findOne({
-    token_hash: tokenHash,
-    is_revoked: false,
-    expires_at: { $gt: new Date() }
-  });
-
-  if (!validTokenRecord) {
-    throw new AppError('Invalid or expired refresh token', 401, 'INVALID_TOKEN');
-  }
-
-  const user = await User.findById(validTokenRecord.user_id);
-  if (!user) {
-    throw new AppError('User not found', 404, 'NOT_FOUND');
-  }
-
-  if (user.refresh_token_hash !== tokenHash) {
-    throw new AppError('Token was invalidated globally', 401, 'INVALID_TOKEN');
-  }
-
-  if (user.lifecycle_state === 'deactivated' || user.lifecycle_state === 'archived' || user.lifecycle_state === 'terminated') {
-    throw new AppError('Your account is currently inactive. Please contact support if you believe this is an error.', 403, 'FORBIDDEN');
-  }
-
-  // Identity-Scoped IP Restrictions Check
-  const companySettings = await Company.findById(user.company_id).select('settings.ip_restrictions_enabled');
-  if (companySettings?.settings?.ip_restrictions_enabled) {
-    const clientIp = req.ip || '127.0.0.1';
-    
-    const targetRestrictions = await IpRestriction.find({ 
-      company_id: user.company_id, 
-      is_enabled: true,
-      target_type: { $in: ['portal', 'all_apps'] }
-    });
-
-    if (targetRestrictions.length > 0) {
-      const userIdStr = user._id.toString();
-      const userRoleAssignment = await UserRole.findOne({ user_id: user._id });
-      const userRoleId = userRoleAssignment?.role_id?.toString() || null;
-      const memberships = await GroupMember.find({ user_id: user._id });
-      const userGroups = memberships.map(m => m.group_id.toString());
-      const userDepartment = user.department_id ? user.department_id.toString() : null;
-
-      const applicableRestrictions = targetRestrictions.filter(r => {
-        if (r.subject_type === 'all_users') return true;
-        if (!r.subject_id) return false;
-        
-        const sid = r.subject_id.toString();
-        if (r.subject_type === 'user') return sid === userIdStr;
-        if (r.subject_type === 'group') return userGroups.includes(sid);
-        if (r.subject_type === 'role') return sid === userRoleId;
-        if (r.subject_type === 'department') return sid === userDepartment;
-        return false;
-      });
-
-      if (applicableRestrictions.length === 0) {
-        throw new AppError('Access denied. You are not authorized by any IP restriction rule.', 403, 'FORBIDDEN');
-      }
-
-      const isAllowed = applicableRestrictions.some(rule => isIpInRange(clientIp, rule.ip_address));
-      if (!isAllowed) {
-        throw new AppError('Access denied from this IP address based on Company IP Restrictions', 403, 'FORBIDDEN');
-      }
-    }
-  }
-
-  // Issue new access token with actual role
-  const userRoleAssignment = await UserRole.findOne({ user_id: user._id }).populate('role_id');
-  const userRole = (userRoleAssignment?.role_id as any)?.name as AdminClaim['user_role'] || 'Employee';
-
-  const accessToken = signAccessToken({
-    userId: user._id.toString(),
-    email: user.email,
-    user_role: userRole,
-    company_id: user.company_id.toString()
-  });
-
-  // Log token refresh security event
-  await logSecurityEvent({
-    company_id: user.company_id,
-    user_id: user._id,
-    email: user.email,
-    event_type: 'token_refresh',
-    ip_address: req.ip,
-    user_agent: req.headers['user-agent'],
-    req,
-    metadata: { lifecycle_state: user.lifecycle_state },
-  });
-
-  const globalPolicy = await getAggregatedSecurityPolicy(user);
-  const sessionTimeoutMs = globalPolicy?.settings?.session_timeout_minutes 
-    ? globalPolicy.settings.session_timeout_minutes * 60 * 1000 
-    : REFRESH_TOKEN_MAX_AGE;
-
-  validTokenRecord.last_activity_at = new Date();
-  validTokenRecord.expires_at = new Date(Date.now() + sessionTimeoutMs);
-  await validTokenRecord.save();
-
-  res.status(200).json({
-    success: true,
-    data: {
-      accessToken
-    }
-  });
-});
+}
 
 export const logout = asyncHandler(async (req: Request, res: Response) => {
-  const token = req.cookies?.refreshToken;
+  const { sid, userId, company_id } = req.user;
+  await revokeSession(sid, 'user_logout');
 
-  if (token) {
-    const tokenHash = crypto.createHash('sha256').update(token).digest('hex');
-
-    // WI-14: identify the session from the refresh cookie itself (logout needs no access token)
-    const record = await RefreshToken.findOne({ token_hash: tokenHash });
-
-    // Invalidate RefreshToken record
-    await RefreshToken.updateMany(
-      { token_hash: tokenHash },
-      { $set: { is_revoked: true } }
-    );
-
-    const owner = record ? await User.findById(record.user_id).select('company_id email refresh_token_hash') : null;
-    if (owner) {
-      if (owner.refresh_token_hash === tokenHash) {
-        await User.findByIdAndUpdate(owner._id, { $unset: { refresh_token_hash: 1 } });
-      }
-
-      // Log logout security event
-      await logSecurityEvent({
-        company_id: owner.company_id,
-        user_id: owner._id,
-        event_type: 'logout',
-        ip_address: req.ip,
-        user_agent: req.headers['user-agent'],
-        req,
-        metadata: { token_revoked: true },
-      });
-
-      // Log token revocation event
-      await logSecurityEvent({
-        company_id: owner.company_id,
-        user_id: owner._id,
-        event_type: 'token_revoked',
-        ip_address: req.ip,
-        user_agent: req.headers['user-agent'],
-        req,
-        metadata: { reason: 'user_logout' },
-      });
-    }
-  }
-
-  res.clearCookie('refreshToken', {
-    httpOnly: true,
-    secure: process.env.NODE_ENV === 'production',
-    sameSite: 'strict',
-    path: '/api/v1/auth'
+  await logSecurityEvent({
+    company_id,
+    user_id: userId,
+    event_type: 'logout',
+    ip_address: req.ip,
+    user_agent: req.headers['user-agent'],
+    req,
+    metadata: { sid },
   });
-  // Also clear any cookie issued under the previous, narrower path
-  res.clearCookie('refreshToken', {
-    httpOnly: true,
-    secure: process.env.NODE_ENV === 'production',
-    sameSite: 'strict',
-    path: '/api/v1/auth/refresh'
+  await logSecurityEvent({
+    company_id,
+    user_id: userId,
+    event_type: 'token_revoked',
+    ip_address: req.ip,
+    user_agent: req.headers['user-agent'],
+    req,
+    metadata: { reason: 'user_logout', sid },
   });
 
-  res.status(200).json({ success: true, message: 'Logged out successfully' });
+  const { tenantIssuer, adminSpaOrigin } = getIdentityConfig();
+  const end_session_url = `${tenantIssuer}/oauth/end_session?client_id=${ADMIN_SPA_CLIENT_ID}&post_logout_redirect_uri=${encodeURIComponent(`${adminSpaOrigin}/login`)}`;
+  res.status(200).json({ success: true, data: { end_session_url } });
 });
 
 export const getMe = asyncHandler(async (req: Request, res: Response) => {
   const user = await User.findById(req.user.userId).select('-password_hash -refresh_token_hash');
-  
+
   if (!user) {
     throw new AppError('User not found', 404, 'NOT_FOUND');
   }
@@ -816,6 +292,39 @@ export const getMyPermissions = asyncHandler(async (req: Request, res: Response)
     }
   });
 });
+
+/** The member's Identity: linked one, else find-by-email and link, else create (03 §1.1/§1.2). */
+async function identityForMember(user: IUser): Promise<IIdentity> {
+  let identity = user.identity_id ? await Identity.findById(user.identity_id) : null;
+  if (!identity) {
+    const email = user.email.toLowerCase();
+    identity = await Identity.findOne({ email })
+      ?? await Identity.create({ email, full_name: user.full_name, status: 'active' });
+    user.identity_id = identity._id;
+  }
+  return identity;
+}
+
+/** Validate against policy + the identity's history, then store a bcrypt(12) hash on the Identity. */
+async function setIdentityPassword(user: IUser, identity: IIdentity, newPassword: string): Promise<void> {
+  const policy = await getAggregatedSecurityPolicy(user);
+  const historySubject = { role: user.role, password_hash: identity.password_hash, previous_password_hashes: identity.previous_password_hashes };
+  const validation = await validatePasswordAgainstPolicy(newPassword, policy?.settings, historySubject);
+  if (!validation.isValid) {
+    throw new AppError(validation.error || 'Password does not meet policy requirements', 400, 'BAD_REQUEST');
+  }
+
+  const previousHashes = [...(identity.previous_password_hashes || [])];
+  if (identity.password_hash) previousHashes.unshift(identity.password_hash);
+  const maxHistory = policy?.settings?.password_history_count || 5;
+
+  identity.previous_password_hashes = previousHashes.slice(0, maxHistory);
+  identity.password_hash = await bcrypt.hash(newPassword, BCRYPT_COST);
+  identity.password_changed_at = new Date();
+  identity.failed_login_attempts = 0;
+  identity.locked_until = undefined;
+  if (!identity.email_verified_at) identity.email_verified_at = new Date(); // proven by the emailed token
+}
 
 const SetupPasswordSchema = z.object({
   email: z.string().email().transform(v => v.toLowerCase()),
@@ -853,7 +362,7 @@ export const setupPassword = asyncHandler(async (req: Request, res: Response) =>
   const user = await User.findOne({
     _id: inviteRecord.user_id,
     email: email.toLowerCase(),
-  }).select('+password_hash');
+  });
 
   if (!user) {
     await logSecurityEvent({
@@ -868,31 +377,15 @@ export const setupPassword = asyncHandler(async (req: Request, res: Response) =>
     throw new AppError('Invalid or expired token', 400, 'INVALID_TOKEN');
   }
 
-  // Fetch policy and validate password
-  const policy = await getAggregatedSecurityPolicy(user);
-  const validation = await validatePasswordAgainstPolicy(newPassword, policy?.settings, user);
-  if (!validation.isValid) {
-    throw new AppError(validation.error || 'Password does not meet policy requirements', 400, 'BAD_REQUEST');
-  }
+  const identity = await identityForMember(user);
+  await setIdentityPassword(user, identity, newPassword);
+  await identity.save();
 
-  // Hash new password
-  const salt = await bcrypt.genSalt(10);
-  const password_hash = await bcrypt.hash(newPassword, salt);
-
-  // Update history
-  const previousHashes = user.previous_password_hashes || [];
-  if (user.password_hash) {
-    previousHashes.unshift(user.password_hash);
-  }
-  const maxHistory = policy?.settings?.password_history_count || 5;
-  user.previous_password_hashes = previousHashes.slice(0, maxHistory);
-  user.password_changed_at = new Date();
-
-  // Update user
+  // Update membership
   const oldState = user.lifecycle_state;
-  user.password_hash = password_hash;
   user.lifecycle_state = 'active'; // Transition to active
   user.is_active = true;
+  user.password_changed_at = identity.password_changed_at;
   await user.save();
 
   inviteRecord.is_used = true;
@@ -908,9 +401,10 @@ export const setupPassword = asyncHandler(async (req: Request, res: Response) =>
     ip_address: req.ip,
     user_agent: req.headers['user-agent'],
     req,
-    metadata: { 
+    metadata: {
       previous_state: oldState,
-      new_state: 'active'
+      new_state: 'active',
+      identity_id: identity._id.toString(),
     },
   });
 
@@ -960,7 +454,8 @@ export const requestPasswordReset = asyncHandler(async (req: Request, res: Respo
       expires_at: new Date(Date.now() + 60 * 60 * 1000), // 1 hour
     });
 
-    const resetLink = `${process.env.CLIENT_URL || 'http://localhost:3000'}/reset-password?token=${rawToken}&email=${encodeURIComponent(email)}`;
+    const spaOrigin = process.env.ADMIN_SPA_ORIGIN || process.env.CLIENT_URL || 'http://localhost:3000';
+    const resetLink = `${spaOrigin}/reset-password?token=${rawToken}&email=${encodeURIComponent(email)}`;
     // Run email sending in the background to prevent frontend timeout
     sendPasswordResetEmail(email, user.full_name || 'User', resetLink).catch((err) => {
       console.error('[auth.controller] Failed to send reset email:', err);
@@ -1012,37 +507,26 @@ export const resetPassword = asyncHandler(async (req: Request, res: Response) =>
   const user = await User.findOne({
     _id: resetRecord.user_id,
     email: email,
-  }).select('+password_hash +previous_password_hashes');
+  });
 
   if (!user) {
     throw new AppError('Invalid or expired reset token', 400, 'INVALID_TOKEN');
   }
 
-  const policy = await getAggregatedSecurityPolicy(user);
-  const validation = await validatePasswordAgainstPolicy(newPassword, policy?.settings, user);
-  
-  if (!validation.isValid) {
-    throw new AppError(validation.error || 'Password does not meet policy requirements', 400, 'BAD_REQUEST');
-  }
+  const identity = await identityForMember(user);
+  await setIdentityPassword(user, identity, newPassword);
+  await identity.save();
 
-  const salt = await bcrypt.genSalt(10);
-  const password_hash = await bcrypt.hash(newPassword, salt);
-
-  const previousHashes = user.previous_password_hashes || [];
-  if (user.password_hash) {
-    previousHashes.unshift(user.password_hash);
-  }
-  const maxHistory = policy?.settings?.password_history_count || 5;
-  
-  user.previous_password_hashes = previousHashes.slice(0, maxHistory);
-  user.password_hash = password_hash;
-  user.password_changed_at = new Date();
+  user.password_changed_at = identity.password_changed_at;
   user.locked_until = undefined;
   await user.save();
 
   resetRecord.is_used = true;
   resetRecord.used_at = new Date();
   await resetRecord.save();
+
+  // 03 §4.4: all sessions revoked; TOTP is still required at the next login.
+  const revoked = await revokeIdentitySessions(identity._id, 'password_reset');
 
   await logSecurityEvent({
     company_id: user.company_id,
@@ -1052,17 +536,11 @@ export const resetPassword = asyncHandler(async (req: Request, res: Response) =>
     ip_address: req.ip,
     user_agent: req.headers['user-agent'],
     req,
+    metadata: { sessions_revoked: revoked },
   });
-
-  // Optionally invalidate all existing sessions
-  await RefreshToken.updateMany(
-    { user_id: user._id },
-    { $set: { is_revoked: true } }
-  );
 
   res.status(200).json({
     success: true,
     message: 'Password reset successfully. You can now log in.',
   });
 });
-

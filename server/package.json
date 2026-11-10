@@ -12,7 +12,9 @@
     "test-ip-restrictions": "ts-node -T src/scripts/test-ip-restrictions.ts",
     "seed:first": "ts-node -T src/scripts/seed-first-user.ts",
     "prestart": "npm run build",
-    "test": "node --require ts-node/register/transpile-only --test \"src/**/__tests__/*.test.ts\""
+    "test": "node --require ts-node/register/transpile-only --test \"src/**/__tests__/*.test.ts\"",
+    "migrate:identities": "ts-node -T src/scripts/migrate-identities.ts",
+    "smoke:login": "ts-node -T src/scripts/smoke-oidc-login.ts"
   },
   "dependencies": {
     "@azure/communication-email": "^1.1.0",
@@ -24,9 +26,12 @@
     "express-rate-limit": "^8.3.2",
     "helmet": "^8.1.0",
     "ipaddr.js": "^2.5.0",
+    "jose": "^6.2.17",
     "jsonwebtoken": "^9.0.3",
     "mongoose": "^9.4.1",
     "nodemailer": "^8.0.5",
+    "oidc-provider": "~9.13.3",
+    "otplib": "^13.6.0",
     "zod": "^4.3.6"
   },
   "devDependencies": {
@@ -36,6 +41,7 @@
     "@types/jsonwebtoken": "^9.0.10",
     "@types/node": "^25.5.2",
     "@types/nodemailer": "^8.0.0",
+    "mongodb-memory-server": "^11.3.0",
     "ts-node-dev": "^2.0.0",
     "typescript": "^6.0.2"
   }

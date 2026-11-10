@@ -8,6 +8,8 @@ export type EmploymentType = 'full_time' | 'part_time' | 'contractor' | 'intern'
 
 export interface IUser extends Document {
   company_id: Types.ObjectId;
+  identity_id?: Types.ObjectId; // 03 §1.2 — required after the identity backfill (scripts/migrate-identities.ts)
+  authz_ver: number; // bumped on role/access change; carried in the access token
   employee_id: string;
   full_name: string;
   email: string;
@@ -50,6 +52,8 @@ export interface IUser extends Document {
 
 const UserSchema = new Schema<IUser>({
   company_id: { type: Schema.Types.ObjectId, ref: 'Company', required: true, index: true },
+  identity_id: { type: Schema.Types.ObjectId, ref: 'Identity', index: true },
+  authz_ver: { type: Number, default: 1 },
   employee_id: { type: String },
   full_name: { type: String, required: true },
   email: { type: String, required: true, lowercase: true },
@@ -99,6 +103,7 @@ const UserSchema = new Schema<IUser>({
 
 // ── Indexes ──────────────────────────────────────────────────────────────────
 UserSchema.index({ company_id: 1, email: 1 }, { unique: true });
+UserSchema.index({ company_id: 1, identity_id: 1 }, { unique: true, partialFilterExpression: { identity_id: { $exists: true } } });
 UserSchema.index({ company_id: 1, employee_id: 1 }, { unique: true });
 UserSchema.index({ company_id: 1, lifecycle_state: 1 });
 UserSchema.index({ company_id: 1, department_id: 1 });

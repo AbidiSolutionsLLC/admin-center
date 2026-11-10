@@ -9,6 +9,7 @@ import { ROUTES } from './constants/routes';
 
 // Pages
 import LoginPage from './pages/auth/LoginPage';
+import CallbackPage from './pages/auth/CallbackPage';
 import ForgotPasswordPage from './pages/auth/ForgotPasswordPage';
 import ResetPasswordPage from './pages/auth/ResetPasswordPage';
 import OnboardingPage from './pages/auth/OnboardingPage';
@@ -39,6 +40,7 @@ function App() {
     <QueryClientProvider client={queryClient}>
       <BrowserRouter>
         <Routes>
+          <Route path={ROUTES.AUTH_CALLBACK} element={<CallbackPage />} />
           <Route element={<GuestGuard />}>
             <Route path={ROUTES.LOGIN} element={<LoginPage />} />
             <Route path={ROUTES.FORGOT_PASSWORD} element={<ForgotPasswordPage />} />

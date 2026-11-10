@@ -2,10 +2,11 @@
 import axios from 'axios';
 import { toast } from 'sonner';
 import { useAuthStore } from '@/store/useAuthStore';
+import { startLogin } from '@/lib/oidc';
+import { clearSession, refreshSession } from '@/lib/session';
 
 export const apiClient = axios.create({
   baseURL: import.meta.env.VITE_API_URL || `http://${window.location.hostname}:5000/api/v1`,
-  withCredentials: true, // for httpOnly cookie (refresh token)
   timeout: 15000, // 15s timeout for hanging requests
 });
 
@@ -22,28 +23,23 @@ apiClient.interceptors.response.use(
   async (err) => {
     const originalRequest = err.config;
     
-    // 1. Handle 401 & Token Refresh
-    if (
-      err.response?.status === 401 && 
-      !originalRequest._retry && 
-      originalRequest.url !== '/auth/login' && 
-      originalRequest.url !== '/auth/refresh' &&
-      originalRequest.url !== '/auth/verify-mfa'
-    ) {
-      originalRequest._retry = true;
-      try {
-        const { data } = await apiClient.post('/auth/refresh');
-        const token = data.data.accessToken;
-        useAuthStore.getState().setAuth({ accessToken: token });
-        
-        // Retry original request with new token
-        originalRequest.headers.Authorization = `Bearer ${token}`;
-        return apiClient(originalRequest);
-      } catch (refreshErr) {
-        useAuthStore.getState().clearAuth();
-        window.location.href = '/login';
-        return Promise.reject(refreshErr);
+    // 1. Handle 401: single-flight refresh once, retry; otherwise re-login
+    if (err.response?.status === 401 && originalRequest) {
+      const code = err.response.data?.code;
+      const hasRefresh = !!useAuthStore.getState().refreshToken;
+      if (!originalRequest._retry && code !== 'SESSION_REVOKED' && hasRefresh) {
+        originalRequest._retry = true;
+        try {
+          const token = await refreshSession();
+          originalRequest.headers.Authorization = `Bearer ${token}`;
+          return apiClient(originalRequest);
+        } catch {
+          // fall through to re-login
+        }
       }
+      clearSession();
+      void startLogin(window.location.pathname + window.location.search);
+      return Promise.reject(err);
     }
 
     // 2. Force logout on deactivated/terminated/archived account
@@ -53,14 +49,12 @@ apiClient.interceptors.response.use(
       const errorMessage = errorData?.error || errorData?.message || '';
 
       if (errorCode === 'FORBIDDEN' && /deactivated|terminated|archived/i.test(errorMessage)) {
-        useAuthStore.getState().clearAuth();
-        
+        clearSession();
+
         // Only redirect and toast if not already on login page or if it was a background request
-        if (originalRequest.url !== '/auth/login') {
-          toast.error('Your account is no longer active. You have been logged out.');
-          window.location.href = '/login';
-          return Promise.reject(err);
-        }
+        toast.error('Your account is no longer active. You have been logged out.');
+        window.location.href = '/login';
+        return Promise.reject(err);
       }
     }
 

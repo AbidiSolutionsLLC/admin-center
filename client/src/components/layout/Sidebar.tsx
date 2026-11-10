@@ -68,19 +68,24 @@ const navGroups = [
   },
 ];
 
+import { clearSession } from '@/lib/session';
+import { logoutRedirect } from '@/lib/oidc';
 import { useMyPermissions } from '@/hooks/useMyPermissions';
 
 export const Sidebar = ({ className }: SidebarProps) => {
-  const { clearAuth, userName, userRole, companyName } = useAuthStore() as any;
-  // WI-14: revoke the refresh token server-side, then clear local state
+  const { userName, userRole, companyName } = useAuthStore() as any;
+  // Revoke the session server-side, clear local state, then end the IdP session
   const handleLogout = async () => {
+    let endSessionUrl: string | undefined;
     try {
-      await apiClient.post('/auth/logout');
+      const { data } = await apiClient.post('/auth/logout');
+      endSessionUrl = data?.data?.end_session_url;
     } catch {
       // ignore — local state is cleared regardless
-    } finally {
-      clearAuth();
     }
+    clearSession();
+    if (endSessionUrl) logoutRedirect(endSessionUrl);
+    else window.location.assign(`${ROUTES.LOGIN}?signed_out=1`);
   };
   const { closeSidebar } = useUIStore();
   const location = useLocation();

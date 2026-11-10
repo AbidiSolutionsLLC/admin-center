@@ -5,3 +5,4 @@ dist
 .env.local
 bulk_upload_template.csv
 .gitignore
+.local/

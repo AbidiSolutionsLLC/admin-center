@@ -25,6 +25,7 @@ export const ROUTES = {
   INTEGRATIONS: '/integrations',
   AUDIT_LOGS: '/audit-logs',
   LOGIN: '/login',
+  AUTH_CALLBACK: '/auth/callback',
   FORGOT_PASSWORD: '/forgot-password',
   RESET_PASSWORD: '/reset-password',
   ONBOARDING: '/onboarding',

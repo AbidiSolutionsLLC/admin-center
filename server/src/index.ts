@@ -2,17 +2,21 @@ import dotenv from 'dotenv';
 dotenv.config();
 
 import { connectDB } from './config/db';
-import app from './app';
+import { createServer } from './app';
 import { processEscalations } from './lib/escalationEngine';
 import { processAuditRetention } from './lib/auditRetention';
 import { runIntelligenceRulesForAllCompanies } from './lib/intelligence';
 
+export { createServer };
+
 const PORT = process.env.PORT || 5000;
 
-connectDB().then(() => {
+connectDB().then(async () => {
+  // Identity (keys, adapter indexes, providers) is initialised inside createServer, before listen.
+  const app = await createServer();
   app.listen(PORT, () => {
     console.log(`Server started on port ${PORT}`);
-    
+
     // Start background jobs
     // 1. Escalations processing (every 5 minutes)
     setInterval(() => {
@@ -28,15 +32,15 @@ connectDB().then(() => {
     setInterval(() => {
       runIntelligenceRulesForAllCompanies().catch(console.error);
     }, 60 * 1000);
-    
+
     console.log('[EscalationEngine] Escalation polling started.');
     console.log('[IntelligenceEngine] Automated misconfiguration and health detection started.');
-    
+
     // Run initial scans on startup
     processAuditRetention().catch(console.error);
     runIntelligenceRulesForAllCompanies().catch(console.error);
   });
 }).catch((err) => {
-  console.error("Failed to connect to MongoDB", err);
+  console.error("Failed to start server", err);
   process.exit(1);
 });
