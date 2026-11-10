@@ -2,12 +2,16 @@
 import { Request, Response, NextFunction } from 'express';
 import * as jose from 'jose';
 import { getPublicJwks } from '../identity/keys';
-import { getIdentityConfig, PLATFORM_API_AUDIENCE } from '../identity/config';
+import { getIdentityConfig, getClientAllowedProducts, PLATFORM_API_AUDIENCE } from '../identity/config';
 
 let servicesJwks: ReturnType<typeof jose.createLocalJWKSet> | undefined;
 const servicesKeySet = () => (servicesJwks ??= jose.createLocalJWKSet(getPublicJwks('services')));
 
 export interface ServiceClaims { client_id: string; scopes: string[] }
+
+/** True when the calling service client may act on productKey (allow-list read per request). */
+export const serviceMayAccessProduct = (req: Request, productKey: string): boolean =>
+  !!req.service && getClientAllowedProducts(req.service.client_id).includes(productKey);
 
 declare module 'express-serve-static-core' {
   interface Request { service?: ServiceClaims }

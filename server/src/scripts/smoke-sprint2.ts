@@ -770,6 +770,75 @@ async function main() {
       check('E4b revocations limit=0 / 1001 = 400', (await revGet('limit=0')).status === 400 && (await revGet('limit=1001')).status === 400);
     } catch (e) { check('E4b section did not crash', false, (e as Error).stack?.split(String.fromCharCode(10)).slice(0, 4).join(' | ')); }
 
+    // ── E4c: per-client product scoping, onCommit hooks, transactional teams ──────────────────
+    const prevClientProducts = process.env.PLATFORM_CLIENT_PRODUCTS;
+    try {
+      const { Team, Department, ProductRole, App } = await import('../models');
+      const { onCommit } = await import('../lib/platformEvents');
+      const SERVICES3 = `${ORIGIN}/realms/services`;
+      const a3 = await new jose.SignJWT({}).setProtectedHeader({ alg: 'RS256', kid: 'smoke-backend-1' })
+        .setIssuer('karbexa-products-backend').setSubject('karbexa-products-backend').setAudience(SERVICES3)
+        .setJti(crypto.randomUUID()).setIssuedAt().setExpirationTime('2m').sign(backend.privateKey);
+      const tk3 = await (await fetch(`${SERVICES3}/oauth/token`, form({
+        grant_type: 'client_credentials', client_id: 'karbexa-products-backend',
+        client_assertion_type: 'urn:ietf:params:oauth:client-assertion-type:jwt-bearer', client_assertion: a3,
+        scope: 'platform.role_catalog.write', resource: 'urn:karbexa:platform-api',
+      }))).json() as Record<string, string>;
+      const put3 = async (key: string, body: unknown) => {
+        const x = await fetch(`${ORIGIN}/platform/v1/apps/${key}/role-catalog`, { method: 'PUT', headers: { 'content-type': 'application/json', authorization: `Bearer ${tk3.access_token}` }, body: JSON.stringify(body) });
+        return { status: x.status, json: (await x.json().catch(() => ({}))) as any };
+      };
+      const catBody3 = (v: number, rows: any[]) => ({ version: v, roles: rows.map((x) => ({ key: x.key, name: x.name, description: x.description, rank: x.rank, is_default: !!x.is_default, assignable: x.assignable !== false })) });
+      const signRows3 = await ProductRole.find({ product_key: 'sign' }).lean();
+      const peopleRows3 = await ProductRole.find({ product_key: 'people' }).lean();
+      const signV3 = ((await App.findOne({ product_key: 'sign', app_type: 'karbexa_product' }).lean()) as any)?.role_catalog_version ?? 1;
+      const peopleV3 = ((await App.findOne({ product_key: 'people', app_type: 'karbexa_product' }).lean()) as any)?.role_catalog_version ?? 1;
+
+      process.env.PLATFORM_CLIENT_PRODUCTS = JSON.stringify({ 'karbexa-products-backend': ['people'] });
+      const denied = await put3('sign', catBody3(signV3 + 1, signRows3));
+      check('E4c role-catalog: product outside client allow-list = 403 PRODUCT_NOT_ALLOWED', denied.status === 403 && denied.json.code === 'PRODUCT_NOT_ALLOWED', denied);
+      const allowed = await put3('people', catBody3(peopleV3 + 1, peopleRows3));
+      check('E4c role-catalog: allowed product still = 200', allowed.status === 200, allowed);
+      if (prevClientProducts === undefined) delete process.env.PLATFORM_CLIENT_PRODUCTS; else process.env.PLATFORM_CLIENT_PRODUCTS = prevClientProducts;
+      const restored = await put3('sign', catBody3(signV3 + 1, signRows3));
+      check('E4c role-catalog: default allow-list (env restored) permits sign', restored.status === 200, restored);
+
+      // onCommit: runs after commit, not on abort
+      let okRan = false; let okRanInside = true;
+      await runInTransaction(async (session) => { onCommit(session, () => { okRan = true; }); okRanInside = okRan; });
+      let abortRan = false;
+      await runInTransaction(async (session) => { onCommit(session, () => { abortRan = true; }); throw new Error('boom'); }).catch(() => undefined);
+      check('E4c onCommit: runs after commit (not inside the transaction)', okRan === true && okRanInside === false, { okRan, okRanInside });
+      check('E4c onCommit: does not run when the transaction aborts', abortRan === false);
+      let immediate = false;
+      onCommit(undefined, () => { immediate = true; });
+      await new Promise((r) => setTimeout(r, 20));
+      check('E4c onCommit: no session runs immediately', immediate === true);
+
+      // teams: create writes an audit row (transactional with the team)
+      const sid3 = crypto.randomUUID();
+      await Session.create({
+        _id: sid3, identity_id: new mongoose.Types.ObjectId(), member_id: me._id, company_id: orgId, realm: 'tenant',
+        idle_expires_at: new Date(Date.now() + 3600e3), absolute_expires_at: new Date(Date.now() + 3600e3), amr: ['pwd'],
+      });
+      const tKey3 = await jose.importJWK(tenantPrivateJwk, 'RS256');
+      const tAt3 = await new jose.SignJWT({ token_use: 'access', org: String(orgId), sid: sid3, email: me.email })
+        .setProtectedHeader({ alg: 'RS256', kid: 'tenant-smoke', typ: 'at+jwt' })
+        .setIssuer(`${ORIGIN}/realms/tenant`).setAudience('urn:karbexa:admin').setSubject(String(me._id))
+        .setIssuedAt().setExpirationTime('10m').sign(tKey3);
+      const api3 = async (path: string, body: unknown, cid: string) => {
+        const rr = await fetch(`${ORIGIN}/api/v1${path}`, { method: 'POST', headers: { authorization: `Bearer ${tAt3}`, 'content-type': 'application/json', 'x-correlation-id': cid }, body: JSON.stringify(body) });
+        return { status: rr.status, text: await rr.text() };
+      };
+      await api3('/organization', { name: 'E4c Dept', type: 'business_unit' }, 'e4c-dept');
+      const dept3 = await Department.findOne({ company_id: orgId, name: 'E4c Dept' });
+      const tr = await api3('/teams', { name: 'E4c Team', department_id: String(dept3?._id), team_lead_id: String(me._id) }, 'e4c-team-create');
+      const team3 = await Team.findOne({ company_id: orgId, name: 'E4c Team' });
+      const ae3 = await AuditEvent.findOne({ company_id: orgId, action: 'team.created', correlation_id: 'e4c-team-create' }).lean();
+      check('E4c team create = 201 and writes its team.created audit row', tr.status === 201 && !!team3 && !!ae3 && ae3.object_id === String(team3?._id), `${tr.status} ${tr.text.slice(0, 200)}`);
+    } catch (e) { check('E4c section did not crash', false, (e as Error).stack?.split(String.fromCharCode(10)).slice(0, 4).join(' | ')); }
+    finally { if (prevClientProducts === undefined) delete process.env.PLATFORM_CLIENT_PRODUCTS; else process.env.PLATFORM_CLIENT_PRODUCTS = prevClientProducts; }
+
     // ── audit ─────────────────────────────────────────────────────────────────────────────
     const actions = (await OperatorAuditEvent.find()).map((e) => e.action);
     check('E10 operator audit recorded', ['org.provisioned', 'entitlement.updated', 'org.suspended', 'org.reactivated'].every((a) => actions.includes(a)), actions);

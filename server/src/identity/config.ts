@@ -71,6 +71,25 @@ export function getIdentityConfig(): IdentityConfig {
   return cached;
 }
 
+/**
+ * Product keys each services client may write to (role catalog etc). Default: the products backend may
+ * touch every karbexa_product key except 'admin'. Override with env PLATFORM_CLIENT_PRODUCTS = {"clientId":["key",...]}.
+ * Read at call time. Unknown clients get no products.
+ */
+export function getClientAllowedProducts(clientId: string): string[] {
+  const raw = process.env.PLATFORM_CLIENT_PRODUCTS;
+  if (raw) {
+    try {
+      const map = JSON.parse(raw) as Record<string, unknown>;
+      if (Object.prototype.hasOwnProperty.call(map, clientId)) {
+        const v = map[clientId];
+        return Array.isArray(v) ? v.filter((k): k is string => typeof k === 'string') : [];
+      }
+    } catch { console.error('[identity] PLATFORM_CLIENT_PRODUCTS is not valid JSON; using defaults'); }
+  }
+  return clientId === PRODUCTS_BACKEND_CLIENT_ID ? ['people', 'projects', 'sign', 'desk'] : [];
+}
+
 /** 03 §10.2 — oidc-provider and jose are ESM-only; CommonJS loads them via require(esm). */
 export function assertRequireModule(): void {
   if (!(process.features as { require_module?: boolean }).require_module) {

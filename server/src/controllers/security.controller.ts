@@ -15,7 +15,6 @@ import { auditLogger } from '../lib/auditLogger';
 import { AppError } from '../utils/AppError';
 import { runInTransaction, correlationIdFor } from '../lib/platformEvents';
 import { revokeSessionsTx, destroyProviderSession } from '../identity/sessions';
-import { sendSecurityAlert } from '../lib/notificationEngine';
 
 /**
  * GET /api/v1/security/policies
@@ -348,15 +347,10 @@ export const forceLogoutUser = asyncHandler(async (req: Request, res: Response) 
     return sids;
   });
 
-  // After commit: provider-side teardown and admin-change alert (logTx has no side effects)
+  // After commit: provider-side teardown (admin-change alert fires via logTx onCommit)
   for (const sid of revokedSids) {
     await destroyProviderSession(sid).catch((e) => console.error('[Security] provider session teardown failed', sid, e));
   }
-  sendSecurityAlert(
-    req.user.company_id.toString(),
-    'admin_change',
-    `Admin action 'security.force_logout' was performed on User "${user.full_name}".`,
-  ).catch(err => console.error('[Security] Failed to send admin change alert:', err));
 
   res.status(200).json({
     success: true,

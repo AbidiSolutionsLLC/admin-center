@@ -17,6 +17,15 @@ async function detectTopology(): Promise<TxMode> {
   return txMode;
 }
 
+const commitHooks = new WeakMap<ClientSession, Array<() => unknown>>();
+
+/** Queue fn to run after the session's transaction commits (never on abort). No session: run now. Errors are swallowed and logged. */
+export function onCommit(session: ClientSession | undefined, fn: () => unknown): void {
+  const queue = session ? commitHooks.get(session) : undefined;
+  if (queue) { queue.push(fn); return; }
+  void (async () => { try { await fn(); } catch (err) { console.error('[onCommit] hook failed:', err); } })();
+}
+
 /** Run fn inside a Mongo transaction. Standalone Mongo is tolerated outside production (no atomicity). */
 export async function runInTransaction<T>(fn: (session: ClientSession | undefined) => Promise<T>): Promise<T> {
   if ((await detectTopology()) === 'standalone') {
@@ -29,7 +38,14 @@ export async function runInTransaction<T>(fn: (session: ClientSession | undefine
     }
     return fn(undefined);
   }
-  return mongoose.connection.transaction((session) => fn(session));
+  let hooks: Array<() => unknown> = [];
+  const result = await mongoose.connection.transaction((session) => {
+    hooks = []; // a retried attempt starts with a clean queue
+    commitHooks.set(session, hooks);
+    return fn(session);
+  });
+  for (const h of hooks) { try { await h(); } catch (err) { console.error('[onCommit] hook failed:', err); } }
+  return result;
 }
 
 export interface PlatformEventInput {

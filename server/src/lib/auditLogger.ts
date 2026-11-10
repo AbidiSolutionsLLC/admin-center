@@ -2,7 +2,7 @@ import { Request } from 'express';
 import { Types, ClientSession } from 'mongoose';
 import { AuditEvent } from '../models/AuditEvent.model';
 import { sendSecurityAlert } from './notificationEngine';
-import { correlationIdFor } from './platformEvents';
+import { correlationIdFor, onCommit } from './platformEvents';
 
 interface LogParams {
   req?: Request;
@@ -22,6 +22,26 @@ interface LogParams {
     email: string;
     company_id: any;
   };
+}
+
+const ADMIN_CHANGE_ACTIONS = ['roles.permissions_updated', 'roles.updated', 'roles.deleted', 'security.force_logout'];
+
+/** Admin-change security alert for sensitive actions (role/permission edits, force logout, user role change). */
+function fireAdminChangeAlert(params: LogParams, company_id: any): void {
+  let isAdminChange = ADMIN_CHANGE_ACTIONS.includes(params.action);
+  let alertDetail = `Admin action '${params.action}' was performed on ${params.object_type} "${params.object_label}".`;
+  if (params.action === 'user.updated' && params.before_state && params.after_state) {
+    const before = params.before_state as any;
+    const after = params.after_state as any;
+    if (before.role && after.role && before.role !== after.role) {
+      isAdminChange = true;
+      alertDetail = `User "${params.object_label}" role changed from '${before.role}' to '${after.role}'.`;
+    }
+  }
+  if (isAdminChange) {
+    sendSecurityAlert(company_id.toString(), 'admin_change', alertDetail)
+      .catch(err => console.error('[AuditLog] Failed to send admin change alert:', err));
+  }
 }
 
 export const auditLogger = {
@@ -57,27 +77,7 @@ export const auditLogger = {
         correlation_id: params.correlation_id ?? (params.req ? correlationIdFor(params.req) : undefined),
       });
 
-      // Admin Change Alerts Evaluation
-      const adminChangeActions = ['roles.permissions_updated', 'roles.updated', 'roles.deleted', 'security.force_logout'];
-      let isAdminChange = adminChangeActions.includes(params.action);
-      let alertDetail = `Admin action '${params.action}' was performed on ${params.object_type} "${params.object_label}".`;
-
-      if (params.action === 'user.updated' && params.before_state && params.after_state) {
-        const before = params.before_state as any;
-        const after = params.after_state as any;
-        if (before.role && after.role && before.role !== after.role) {
-          isAdminChange = true;
-          alertDetail = `User "${params.object_label}" role changed from '${before.role}' to '${after.role}'.`;
-        }
-      }
-
-      if (isAdminChange) {
-        sendSecurityAlert(
-          company_id.toString(),
-          'admin_change',
-          alertDetail
-        ).catch(err => console.error('[AuditLog] Failed to send admin change alert:', err));
-      }
+      fireAdminChangeAlert(params, company_id);
 
       // Trigger intelligence rules on every admin write operation to ensure near real-time updates
       const { triggerIntelligenceRules } = await import('./intelligence');
@@ -88,7 +88,7 @@ export const auditLogger = {
       // We don't throw here to avoid failing the user action if audit logging fails
     }
   },
-  /** Transactional write: same session as the business change, throws on failure, no side effects. */
+  /** Transactional write: same session as the business change, throws on failure. Alerts/intelligence run via onCommit. */
   logTx: async (session: ClientSession | undefined, params: LogParams): Promise<void> => {
     const company_id = params.actor_override?.company_id || params.req?.user?.company_id;
     if (!company_id) throw new Error(`[AuditLog] Missing company_id for action: ${params.action}`);
@@ -110,5 +110,11 @@ export const auditLogger = {
       source: params.source ?? 'admin',
       correlation_id: params.correlation_id ?? (params.req ? correlationIdFor(params.req) : undefined),
     }], { session });
+    // Post-commit side effects (the audit row and the business change are atomic; these must not fire on abort)
+    onCommit(session, () => fireAdminChangeAlert(params, company_id));
+    onCommit(session, async () => {
+      const { triggerIntelligenceRules } = await import('./intelligence');
+      triggerIntelligenceRules(company_id);
+    });
   },
 };

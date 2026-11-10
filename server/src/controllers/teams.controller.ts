@@ -7,6 +7,7 @@ import { TeamMember } from '../models/TeamMember.model';
 import { User } from '../models/User.model';
 import { Department } from '../models/Department.model';
 import { auditLogger } from '../lib/auditLogger';
+import { runInTransaction } from '../lib/platformEvents';
 import { AppError } from '../utils/AppError';
 import { slugify } from '../utils/slugify';
 import { Types } from 'mongoose';
@@ -198,24 +199,26 @@ export const createTeam = asyncHandler(async (req: Request, res: Response) => {
      { ...input } as unknown as Record<string, unknown>,
    );
 
-   const team = await Team.create({
-     ...filteredInput,
-     department_id: input.department_id,
-     team_lead_id: input.team_lead_id || undefined,
-     company_id: req.user.company_id,
-     custom_fields: permissionedCustomFields,
+   const team = await runInTransaction(async (session) => {
+     const [created] = await Team.create([{
+       ...filteredInput,
+       department_id: input.department_id,
+       team_lead_id: input.team_lead_id || undefined,
+       company_id: req.user.company_id,
+       custom_fields: permissionedCustomFields,
+     }], { session });
+     await auditLogger.logTx(session, {
+       req,
+       action: 'team.created',
+       module: 'organization',
+       object_type: 'Team',
+       object_id: created._id.toString(),
+       object_label: created.name,
+       before_state: null,
+       after_state: created.toObject(),
+     });
+     return created;
    });
-
-  await auditLogger.log({
-    req,
-    action: 'team.created',
-    module: 'organization',
-    object_type: 'Team',
-    object_id: team._id.toString(),
-    object_label: team.name,
-    before_state: null,
-    after_state: team.toObject(),
-  });
 
   res.status(201).json({ success: true, data: team });
 });
@@ -321,18 +324,19 @@ export const updateTeam = asyncHandler(async (req: Request, res: Response) => {
    }
 
    Object.assign(team, updates);
-   await team.save();
-
-  await auditLogger.log({
-    req,
-    action: 'team.updated',
-    module: 'organization',
-    object_type: 'Team',
-    object_id: team._id.toString(),
-    object_label: team.name,
-    before_state: beforeState,
-    after_state: team.toObject(),
-  });
+   await runInTransaction(async (session) => {
+     await team.save({ session });
+     await auditLogger.logTx(session, {
+       req,
+       action: 'team.updated',
+       module: 'organization',
+       object_type: 'Team',
+       object_id: team._id.toString(),
+       object_label: team.name,
+       before_state: beforeState,
+       after_state: team.toObject(),
+     });
+   });
 
   res.status(200).json({ success: true, data: team });
 });
@@ -371,17 +375,18 @@ export const deleteTeam = asyncHandler(async (req: Request, res: Response) => {
   const beforeState = team.toObject();
 
   team.is_active = false;
-  await team.save();
-
-  await auditLogger.log({
-    req,
-    action: 'team.deleted',
-    module: 'organization',
-    object_type: 'Team',
-    object_id: team._id.toString(),
-    object_label: team.name,
-    before_state: beforeState,
-    after_state: team.toObject(),
+  await runInTransaction(async (session) => {
+    await team.save({ session });
+    await auditLogger.logTx(session, {
+      req,
+      action: 'team.deleted',
+      module: 'organization',
+      object_type: 'Team',
+      object_id: team._id.toString(),
+      object_label: team.name,
+      before_state: beforeState,
+      after_state: team.toObject(),
+    });
   });
 
   res.status(200).json({ success: true, data: {} });
@@ -466,22 +471,24 @@ export const addTeamMember = asyncHandler(async (req: Request, res: Response) =>
     throw new AppError('User is already a member of this team', 400, 'DUPLICATE_MEMBER');
   }
 
-  const member = await TeamMember.create({
-    company_id: req.user.company_id,
-    team_id: team._id,
-    user_id: user._id,
-    role: input.role,
-  });
-
-  await auditLogger.log({
-    req,
-    action: 'team.member_added',
-    module: 'organization',
-    object_type: 'TeamMember',
-    object_id: member._id.toString(),
-    object_label: `${user.full_name} added to ${team.name}`,
-    before_state: null,
-    after_state: member.toObject(),
+  const member = await runInTransaction(async (session) => {
+    const [created] = await TeamMember.create([{
+      company_id: req.user.company_id,
+      team_id: team._id,
+      user_id: user._id,
+      role: input.role,
+    }], { session });
+    await auditLogger.logTx(session, {
+      req,
+      action: 'team.member_added',
+      module: 'organization',
+      object_type: 'TeamMember',
+      object_id: created._id.toString(),
+      object_label: `${user.full_name} added to ${team.name}`,
+      before_state: null,
+      after_state: created.toObject(),
+    });
+    return created;
   });
 
   const populated = await TeamMember.findById(member._id)
@@ -531,17 +538,18 @@ export const updateTeamMember = asyncHandler(async (req: Request, res: Response)
   const beforeState = member.toObject();
 
   Object.assign(member, input);
-  await member.save();
-
-  await auditLogger.log({
-    req,
-    action: 'team.member_updated',
-    module: 'organization',
-    object_type: 'TeamMember',
-    object_id: member._id.toString(),
-    object_label: `Updated member in ${team.name}`,
-    before_state: beforeState,
-    after_state: member.toObject(),
+  await runInTransaction(async (session) => {
+    await member.save({ session });
+    await auditLogger.logTx(session, {
+      req,
+      action: 'team.member_updated',
+      module: 'organization',
+      object_type: 'TeamMember',
+      object_id: member._id.toString(),
+      object_label: `Updated member in ${team.name}`,
+      before_state: beforeState,
+      after_state: member.toObject(),
+    });
   });
 
   const populated = await TeamMember.findById(member._id)
@@ -589,26 +597,29 @@ export const removeTeamMember = asyncHandler(async (req: Request, res: Response)
   const beforeState = member.toObject();
   const userId = member.user_id;
 
-  // 1. Remove membership record
-  await member.deleteOne();
+  await runInTransaction(async (session) => {
+    // 1. Remove membership record
+    await member.deleteOne({ session });
 
-  // 2. Synchronize User.team_id (clear if it matches this team)
-  await User.findOneAndUpdate(
-    { _id: userId, team_id: team._id },
-    { $set: { team_id: null } }
-  );
+    // 2. Synchronize User.team_id (clear if it matches this team)
+    await User.findOneAndUpdate(
+      { _id: userId, team_id: team._id },
+      { $set: { team_id: null } },
+      { session },
+    );
 
-  const user = await User.findById(userId);
+    const user = await User.findById(userId).session(session ?? null);
 
-  await auditLogger.log({
-    req,
-    action: 'team.member_removed',
-    module: 'organization',
-    object_type: 'TeamMember',
-    object_id: member._id.toString(),
-    object_label: `${user?.full_name ?? 'Unknown'} removed from ${team.name}`,
-    before_state: beforeState,
-    after_state: null,
+    await auditLogger.logTx(session, {
+      req,
+      action: 'team.member_removed',
+      module: 'organization',
+      object_type: 'TeamMember',
+      object_id: member._id.toString(),
+      object_label: `${user?.full_name ?? 'Unknown'} removed from ${team.name}`,
+      before_state: beforeState,
+      after_state: null,
+    });
   });
 
   res.status(200).json({ success: true, data: {} });
@@ -643,28 +654,31 @@ export const removeBulkTeamMembers = asyncHandler(async (req: Request, res: Resp
 
   const userIds = members.map(m => m.user_id);
 
-  // 1. Remove membership records
-  await TeamMember.deleteMany({
-    _id: { $in: memberIds },
-    team_id: team._id,
-    company_id: req.user.company_id,
-  });
+  await runInTransaction(async (session) => {
+    // 1. Remove membership records
+    await TeamMember.deleteMany({
+      _id: { $in: memberIds },
+      team_id: team._id,
+      company_id: req.user.company_id,
+    }, { session });
 
-  // 2. Synchronize User.team_id for all removed members
-  await User.updateMany(
-    { _id: { $in: userIds }, team_id: team._id },
-    { $set: { team_id: null } }
-  );
+    // 2. Synchronize User.team_id for all removed members
+    await User.updateMany(
+      { _id: { $in: userIds }, team_id: team._id },
+      { $set: { team_id: null } },
+      { session },
+    );
 
-  await auditLogger.log({
-    req,
-    action: 'team.bulk_members_removed',
-    module: 'organization',
-    object_type: 'Team',
-    object_id: team._id.toString(),
-    object_label: `Removed ${memberIds.length} members from ${team.name}`,
-    before_state: { member_ids: memberIds },
-    after_state: null,
+    await auditLogger.logTx(session, {
+      req,
+      action: 'team.bulk_members_removed',
+      module: 'organization',
+      object_type: 'Team',
+      object_id: team._id.toString(),
+      object_label: `Removed ${memberIds.length} members from ${team.name}`,
+      before_state: { member_ids: memberIds },
+      after_state: null,
+    });
   });
 
   res.status(200).json({ success: true, data: {} });

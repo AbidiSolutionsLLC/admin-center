@@ -5,7 +5,7 @@ import { App } from '../models/App.model';
 import { AppAssignment } from '../models/AppAssignment.model';
 import { ProductRole, PRODUCT_KEYS } from '../models/ProductRole.model';
 import { runInTransaction } from '../lib/platformEvents';
-import { requireServiceToken } from './requireServiceToken';
+import { requireServiceToken, serviceMayAccessProduct } from './requireServiceToken';
 
 export const roleCatalogRouter = Router();
 
@@ -38,6 +38,9 @@ roleCatalogRouter.put('/apps/:productKey/role-catalog', requireServiceToken('pla
     const productKey = req.params.productKey as string;
     if (!(PRODUCT_KEYS as string[]).includes(productKey) || productKey === 'admin') {
       return res.status(404).json({ error: 'Not found', code: 'NOT_FOUND' });
+    }
+    if (!serviceMayAccessProduct(req, productKey)) {
+      return res.status(403).json({ error: 'Product not allowed for this client', code: 'PRODUCT_NOT_ALLOWED' });
     }
     const parsed = bodySchema.safeParse(req.body);
     if (!parsed.success) return res.status(400).json({ error: parsed.error.issues.map(i => i.message).join('; '), code: 'VALIDATION_ERROR' });

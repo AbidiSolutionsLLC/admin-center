@@ -6,7 +6,6 @@ import { AppError } from '../utils/AppError';
 import { rbacCache } from '../lib/rbacCache';
 import { assertCanAssignRoles } from '../lib/roleHierarchy';
 import { auditLogger } from '../lib/auditLogger';
-import { sendSecurityAlert } from '../lib/notificationEngine';
 import { runInTransaction, emitAppAccessChanged, correlationIdFor } from '../lib/platformEvents';
 import { Role } from '../models/Role.model';
 import { Permission } from '../models/Permission.model';
@@ -309,8 +308,6 @@ export const updateRole = asyncHandler(async (req: Request, res: Response) => {
 
   // Invalidate entire cache (after commit)
   rbacCache.invalidateAll();
-  sendSecurityAlert(companyId.toString(), 'admin_change', `Admin action 'roles.updated' was performed on Role "${role.name}".`)
-    .catch(err => console.error('[roles] Failed to send admin change alert:', err));
 
   res.status(200).json({
     success: true,
@@ -406,8 +403,6 @@ export const deleteRole = asyncHandler(async (req: Request, res: Response) => {
 
   // Invalidate entire cache (after commit)
   rbacCache.invalidateAll();
-  sendSecurityAlert(companyId.toString(), 'admin_change', `Admin action 'roles.deleted' was performed on Role "${role.name}".`)
-    .catch(err => console.error('[roles] Failed to send admin change alert:', err));
 
   res.status(200).json({
     success: true,
@@ -501,8 +496,6 @@ export const updateRolePermissions = asyncHandler(async (req: Request, res: Resp
 
   // Invalidate entire cache on permission updates (after commit)
   rbacCache.invalidateAll();
-  sendSecurityAlert(companyId.toString(), 'admin_change', `Admin action 'roles.permissions_updated' was performed on Role "${role.name}".`)
-    .catch(err => console.error('[roles] Failed to send admin change alert:', err));
 
   res.status(200).json({
     success: true,
