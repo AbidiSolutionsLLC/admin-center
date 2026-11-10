@@ -3,6 +3,7 @@ import { Router, Request, Response, NextFunction } from 'express';
 import { Types } from 'mongoose';
 import { Company } from '../models/Company.model';
 import { User } from '../models/User.model';
+import { platformReadRouter } from './readApi';
 import { OrganizationEntitlement } from '../models/OrganizationEntitlement.model';
 import { computeEffectiveAccess } from '../lib/effectiveAccess';
 import { requireServiceToken } from './requireServiceToken';
@@ -14,6 +15,8 @@ platformRouter.use((req: Request, res: Response, next: NextFunction) => {
   if (typeof cid === 'string' && cid) res.setHeader('X-Correlation-Id', cid);
   next();
 });
+
+platformRouter.use(platformReadRouter);
 
 const notFound = (res: Response) => res.status(404).json({ error: 'Not found', code: 'NOT_FOUND' });
 

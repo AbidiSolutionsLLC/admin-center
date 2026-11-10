@@ -326,6 +326,198 @@ async function main() {
     const activeKeys = (await OrganizationEntitlement.find({ company_id: orgId, status: 'active' })).map((e) => e.product_key);
     check('E10 PATCH /orgs/:id {plan_key} activates plan products (suspended ones stay suspended)', res.status === 200 && !!enterprise && enterprise.products.includes('desk') && activeKeys.includes('desk') && !activeKeys.includes('projects'), { status: res.status, activeKeys });
 
+    // ── E4: platform read API, ack hook, dispatcher ───────────────────────────────────────
+    {
+      const { PlatformEventSubscription, SubscriptionCursor } = await import('../models');
+      const { dispatchOnce, verifyNudgeSignature } = await import('../lib/platformDispatcher');
+      const { assertSafeSubscriberUrl } = await import('../lib/ssrfGuard');
+      const mint = async (scope: string) => {
+        const a = await new jose.SignJWT({}).setProtectedHeader({ alg: 'RS256', kid: 'smoke-backend-1' })
+          .setIssuer('karbexa-products-backend').setSubject('karbexa-products-backend').setAudience(SERVICES)
+          .setJti(crypto.randomUUID()).setIssuedAt().setExpirationTime('2m').sign(backend.privateKey);
+        const t = await (await fetch(`${SERVICES}/oauth/token`, form({
+          grant_type: 'client_credentials', client_id: 'karbexa-products-backend',
+          client_assertion_type: 'urn:ietf:params:oauth:client-assertion-type:jwt-bearer', client_assertion: a,
+          scope, resource: 'urn:karbexa:platform-api',
+        }))).json() as Record<string, string>;
+        return t.access_token;
+      };
+      const P = `${ORIGIN}/platform/v1`;
+      const tkAll = await mint('platform.org.read platform.events.read platform.members.read platform.sessions.read');
+      check('E4 service token with read scopes minted', !!tkAll);
+      const get = (path: string, token: string | undefined = tkAll) => fetch(`${P}${path}`, { headers: token ? { authorization: `Bearer ${token}` } : {} });
+
+      // second org for cross-org checks
+      res = await op('/orgs', 'POST', { name: 'Beta Inc', slug: 'beta', plan_key: 'professional', first_admin: { email: 'admin@beta.test', full_name: 'Bea Admin' } });
+      const betaId = ((await res.json()) as { data?: { id: string } }).data?.id || '';
+      check('E4 second org provisioned', res.status === 201 && !!betaId, res.status);
+
+      // events
+      const dbEvents = await PlatformEvent.find({ org_id: orgId }).sort({ seq: 1 }).lean();
+      res = await get(`/orgs/${orgId}/events?after_seq=0`);
+      const ev0 = await res.json() as { events: any[]; latest_seq: number; has_more: boolean };
+      check('E4 events after_seq=0 = 200 no-store', res.status === 200 && /no-store/.test(res.headers.get('cache-control') || ''), res.status);
+      check('E4 events envelopes ordered and match PlatformEvent rows', ev0.events.length === dbEvents.length && ev0.events.every((e, i) =>
+        e.id === dbEvents[i].id && e.seq === dbEvents[i].seq && e.type === dbEvents[i].type && e.version === dbEvents[i].version
+        && e.org_id === String(orgId) && e.subject.id === dbEvents[i].subject.id && e.actor.type === dbEvents[i].actor.type
+        && e.correlation_id === dbEvents[i].correlation_id && !!e.occurred_at && e.data !== undefined), ev0.events.map((e) => e.seq));
+      check('E4 events latest_seq = last seq, has_more false', ev0.latest_seq === dbEvents[dbEvents.length - 1].seq && ev0.has_more === false, { l: ev0.latest_seq, h: ev0.has_more });
+      const N = dbEvents[2].seq;
+      const evN = await (await get(`/orgs/${orgId}/events?after_seq=${N}`)).json() as { events: any[] };
+      check('E4 events after_seq=N returns only newer', evN.events.length === dbEvents.length - N && evN.events.every((e) => e.seq > N) && evN.events[0]?.seq === N + 1, evN.events.map((e) => e.seq));
+      const evL = await (await get(`/orgs/${orgId}/events?after_seq=0&limit=2`)).json() as { events: any[]; has_more: boolean };
+      check('E4 events limit=2 -> 2 events and has_more true', evL.events.length === 2 && evL.has_more === true && evL.events[0].seq === 1, evL);
+      res = await get(`/orgs/${orgId}/events?after_seq=0&limit=0`);
+      check('E4 events limit=0 = 400', res.status === 400, res.status);
+      res = await get(`/orgs/${orgId}/events?after_seq=abc`);
+      check('E4 events after_seq=abc = 400', res.status === 400, res.status);
+      res = await get(`/orgs/${orgId}/events?after_seq=0`, svc.access_token);
+      check('E4 events with wrong-scope token = 403', res.status === 403, res.status);
+      res = await get(`/orgs/${orgId}/events?after_seq=0`, '');
+      check('E4 events without token = 401', res.status === 401, res.status);
+      res = await get(`/orgs/${new mongoose.Types.ObjectId()}/events?after_seq=0`);
+      check('E4 events unknown org = 404', res.status === 404, res.status);
+
+      // cross-org isolation
+      const betaEv = await (await get(`/orgs/${betaId}/events?after_seq=0`)).json() as { events: any[] };
+      check('E4 cross-org: beta events only carry beta org_id', betaEv.events.length > 0 && betaEv.events.every((e) => e.org_id === betaId), betaEv.events.map((e) => e.org_id));
+      const betaMem = await (await get(`/orgs/${betaId}/members`)).json() as { items: any[]; next_cursor: string | null };
+      const betaUserIds = (await User.find({ company_id: betaId })).map((u) => String(u._id));
+      check('E4 cross-org: beta members only beta users', betaMem.items.length === betaUserIds.length && betaMem.items.every((m) => betaUserIds.includes(String(m.id))), betaMem.items.map((m) => m.id));
+
+      // orgs list
+      const orgsList = await (await get('/orgs')).json() as { items: { id: string; latest_seq: number }[] };
+      const counterNow = (await OrgEventCounter.findById(orgId))?.seq;
+      check('E4 GET /orgs lists latest_seq = OrgEventCounter', orgsList.items.find((o) => o.id === String(orgId))?.latest_seq === counterNow && orgsList.items.some((o) => o.id === betaId), orgsList);
+
+      // members paging + single
+      const allMem = await (await get(`/orgs/${orgId}/members`)).json() as { items: any[] };
+      const pg = await (await get(`/orgs/${orgId}/members?limit=1`)).json() as { items: any[]; next_cursor: string | null };
+      check('E4 members limit=1 -> 1 item with next_cursor (when >1 member)', pg.items.length === 1 && (allMem.items.length < 2 || !!pg.next_cursor), pg);
+      if (pg.next_cursor) {
+        const pg2 = await (await get(`/orgs/${orgId}/members?limit=1&cursor=${pg.next_cursor}`)).json() as { items: any[] };
+        check('E4 members next page differs from first', pg2.items.length === 1 && pg2.items[0].id !== pg.items[0].id, pg2.items.map((m) => m.id));
+      }
+      res = await get(`/orgs/${orgId}/members/${me._id}`);
+      const one = await res.json() as Record<string, unknown>;
+      check('E4 single member = 200 with expected shape', res.status === 200 && one.email === me.email && 'authz_ver' in one && 'lifecycle_state' in one, one);
+      check('E4 member views expose no password/secret fields', ![...Object.keys(one), ...allMem.items.flatMap((m) => Object.keys(m))].some((k) => /pass|secret|hash|totp|mfa|token/i.test(k)), Object.keys(one));
+      res = await get(`/orgs/${betaId}/members/${me._id}`);
+      check('E4 member of another org = 404', res.status === 404, res.status);
+      res = await get(`/orgs/${orgId}/departments`);
+      check('E4 departments = 200 array', res.status === 200 && Array.isArray(await res.json()), res.status);
+      res = await get(`/orgs/${orgId}/locations`);
+      check('E4 locations = 200 array', res.status === 200 && Array.isArray(await res.json()), res.status);
+
+      // session revocations
+      const revSid = crypto.randomUUID();
+      await Session.create({
+        _id: revSid, identity_id: new mongoose.Types.ObjectId(), member_id: me._id, company_id: orgId, realm: 'tenant',
+        idle_expires_at: new Date(Date.now() + 3600e3), absolute_expires_at: new Date(Date.now() + 3600e3), amr: ['pwd'], revoked_at: new Date(), revoked_reason: 'smoke',
+      });
+      const revs = await (await get('/sessions/revocations')).json() as { sid: string; member_id: string; org_id: string }[];
+      check('E4 /sessions/revocations returns the revoked session', revs.some((r) => r.sid === revSid && String(r.org_id) === String(orgId)), revs);
+
+      // dispatcher + ack hook
+      const hits: { sig: string; body: string }[] = [];
+      let failMode = false;
+      const sink = http.createServer((rq, rs) => {
+        let b = '';
+        rq.on('data', (c) => (b += c));
+        rq.on('end', () => { hits.push({ sig: String(rq.headers['x-karbexa-signature']), body: b }); rs.statusCode = failMode ? 500 : 204; rs.end(); });
+      });
+      await new Promise<void>((r) => sink.listen(0, '127.0.0.1', () => r()));
+      const SECRET_ENV = 'SMOKE_NUDGE_SECRET';
+      const NUDGE_SECRET = crypto.randomBytes(24).toString('hex');
+      process.env[SECRET_ENV] = NUDGE_SECRET;
+      try {
+        const sub = await PlatformEventSubscription.create({ name: 'karbexa-products-backend', url: `http://127.0.0.1:${(sink.address() as { port: number }).port}/hook`, secret_ref: SECRET_ENV });
+        const seqOf = async (id: unknown) => (await OrgEventCounter.findById(id))?.seq as number;
+        const activeOrgs = await OrgEventCounter.countDocuments({ seq: { $gt: 0 } });
+        const r1 = await dispatchOnce();
+        check('E4 dispatcher nudges once per org with events', r1.nudged === activeOrgs && r1.failed === 0 && hits.length === activeOrgs, { r1, hits: hits.length, activeOrgs });
+        const hit = hits.map((h) => ({ ...h, j: JSON.parse(h.body) })).find((h) => h.j.org_id === String(orgId));
+        check('E4 nudge body is exactly {org_id, latest_seq}', !!hit && Object.keys(hit.j).sort().join() === 'latest_seq,org_id' && hit.j.latest_seq === (await seqOf(orgId)), hit?.j);
+        check('E4 nudge signature verifies', !!hit && verifyNudgeSignature(NUDGE_SECRET, hit.sig, hit.body), hit?.sig);
+        check('E4 nudge signature rejects wrong secret / tampered body / tampered mac', !!hit && !verifyNudgeSignature('other', hit.sig, hit.body)
+          && !verifyNudgeSignature(NUDGE_SECRET, hit.sig, hit.body.replace(/\d/, (d) => String((Number(d) + 1) % 10)))
+          && !verifyNudgeSignature(NUDGE_SECRET, hit.sig.replace(/v1=./, (m) => (m.endsWith('0') ? 'v1=1' : 'v1=0')), hit.body)
+          && !verifyNudgeSignature(NUDGE_SECRET, '', hit.body) && !verifyNudgeSignature(NUDGE_SECRET, 'garbage', hit.body));
+        const oldT = Math.floor(Date.now() / 1000) - 1000;
+        const oldSig = `t=${oldT},v1=${crypto.createHmac('sha256', NUDGE_SECRET).update(`${oldT}.${hit?.body}`).digest('hex')}`;
+        check('E4 nudge signature with old timestamp rejected (valid mac)', !verifyNudgeSignature(NUDGE_SECRET, oldSig, hit!.body) && verifyNudgeSignature(NUDGE_SECRET, oldSig, hit!.body, 5000));
+        let cur = await SubscriptionCursor.findOne({ subscription_id: sub._id, org_id: orgId });
+        check('E4 cursor.last_nudged_seq updated', cur?.last_nudged_seq === (await seqOf(orgId)) && !cur?.last_error, cur?.toObject());
+
+        const before = hits.length;
+        const r2 = await dispatchOnce();
+        check('E4 second dispatchOnce sends nothing', r2.nudged === 0 && r2.failed === 0 && hits.length === before, { r2, hits: hits.length });
+
+        // ack hook: informational cursor update for the subscription named like the calling client
+        await get(`/orgs/${orgId}/events?after_seq=${N}`);
+        const settle = () => new Promise((r) => setTimeout(r, 300)); // ack is written after the response is sent
+        await settle();
+        cur = await SubscriptionCursor.findOne({ subscription_id: sub._id, org_id: orgId });
+        check('E4 ack hook: last_acknowledged_seq = after_seq', cur?.last_acknowledged_seq === N, cur?.toObject());
+        await get(`/orgs/${orgId}/events?after_seq=1`);
+        await settle();
+        cur = await SubscriptionCursor.findOne({ subscription_id: sub._id, org_id: orgId });
+        check('E4 ack hook never moves backwards', cur?.last_acknowledged_seq === N, cur?.last_acknowledged_seq);
+        res = await get(`/orgs/${orgId}/events?after_seq=${N}`, await mint('platform.events.read'));
+        check('E4 ack hook does not break the request', res.status === 200, res.status);
+
+        // new event -> new nudge
+        await runInTransaction(async (session) => {
+          await emitPlatformEvent(session, { org_id: orgId, type: 'smoke.e4', subject: { type: 'org', id: String(orgId) }, actor: { type: 'system' } });
+        });
+        const newSeq = await seqOf(orgId);
+        const r3 = await dispatchOnce();
+        const last = hits[hits.length - 1] && JSON.parse(hits[hits.length - 1].body);
+        check('E4 new event -> exactly one new nudge with new latest_seq', r3.nudged === 1 && hits.length === before + 1 && last?.latest_seq === newSeq && last?.org_id === String(orgId), { r3, last });
+
+        // failure: 500 -> recorded, backoff, no storm
+        failMode = true;
+        await runInTransaction(async (session) => {
+          await emitPlatformEvent(session, { org_id: orgId, type: 'smoke.e4', subject: { type: 'org', id: String(orgId) }, actor: { type: 'system' } });
+        });
+        const h0 = hits.length;
+        const r4 = await dispatchOnce();
+        cur = await SubscriptionCursor.findOne({ subscription_id: sub._id, org_id: orgId });
+        check('E4 subscriber 500 -> failure recorded (last_error, attempts, next_attempt_at in future)', r4.failed === 1 && r4.nudged === 0 && /500/.test(cur?.last_error || '') && (cur?.attempts ?? 0) >= 1 && !!cur?.next_attempt_at && cur.next_attempt_at.getTime() > Date.now() && cur.last_nudged_seq === newSeq, { r4, cur: cur?.toObject() });
+        const r5 = await dispatchOnce();
+        check('E4 no nudge storm: immediate retry skipped during backoff', r5.failed === 0 && r5.nudged === 0 && hits.length === h0 + 1, { r5, hits: hits.length - h0 });
+        failMode = false;
+
+        // SSRF guard
+        const rejects = async (u: string) => assertSafeSubscriberUrl(u).then(() => false, () => true);
+        check('E4 ssrf: credentials in URL rejected', await rejects('http://user:pw@127.0.0.1:9/x'));
+        check('E4 ssrf: http to non-localhost rejected', await rejects('http://203.0.113.5/x'));
+        check('E4 ssrf: localhost http allowed in dev', !(await rejects('http://127.0.0.1:9/x')));
+        const prevEnv = process.env.NODE_ENV;
+        try {
+          process.env.NODE_ENV = 'production';
+          check('E4 ssrf (prod): 169.254.169.254 rejected', await rejects('https://169.254.169.254/latest'));
+          check('E4 ssrf (prod): 10.0.0.1 rejected', await rejects('https://10.0.0.1/x'));
+          check('E4 ssrf (prod): [::1] rejected', await rejects('https://[::1]/x'));
+          check('E4 ssrf (prod): http localhost rejected', await rejects('http://127.0.0.1/x'));
+        } finally {
+          process.env.NODE_ENV = prevEnv;
+        }
+      } finally {
+        delete process.env[SECRET_ENV];
+        await new Promise<void>((r) => sink.close(() => r()));
+      }
+
+      // 410 CURSOR_EXPIRED: purge early events of beta (raw collection bypasses the append-only guard)
+      const betaCount = await PlatformEvent.countDocuments({ org_id: betaId });
+      await PlatformEvent.collection.deleteMany({ org_id: new mongoose.Types.ObjectId(betaId), seq: { $lte: 2 } });
+      res = await get(`/orgs/${betaId}/events?after_seq=1`);
+      const gone = await res.json() as { code?: string };
+      check('E4 purged cursor -> 410 CURSOR_EXPIRED', betaCount > 3 && res.status === 410 && gone.code === 'CURSOR_EXPIRED', { betaCount, status: res.status, gone });
+      res = await get(`/orgs/${betaId}/events?after_seq=2`);
+      check('E4 cursor at the purge boundary still served (200)', res.status === 200, res.status);
+    }
+
     // ── audit ─────────────────────────────────────────────────────────────────────────────
     const actions = (await OperatorAuditEvent.find()).map((e) => e.action);
     check('E10 operator audit recorded', ['org.provisioned', 'entitlement.updated', 'org.suspended', 'org.reactivated'].every((a) => actions.includes(a)), actions);
