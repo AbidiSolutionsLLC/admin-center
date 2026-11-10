@@ -25,7 +25,9 @@ export interface EffectiveAccess {
   denials: Record<string, string>;
 }
 
-export const isProductApp = (app?: { type?: string } | null) => app?.type === 'karbexa_product';
+// Server field is `app_type` (App.model); `type` kept as a fallback for older payloads.
+export const isProductApp = (app?: { app_type?: string; type?: string } | null) =>
+  (app?.app_type ?? app?.type) === 'karbexa_product';
 export const appProductKey = (app?: { product_key?: string; slug?: string } | null) => app?.product_key || app?.slug || '';
 export const isEntitled = (entitlements: Entitlement[] | undefined, productKey: string) =>
   !!entitlements?.some((e) => e.product_key === productKey && e.status === 'active');

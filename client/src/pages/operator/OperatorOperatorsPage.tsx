@@ -10,10 +10,11 @@ export default function OperatorOperatorsPage() {
   const [creating, setCreating] = useState(false);
   const [email, setEmail] = useState('');
   const [fullName, setFullName] = useState('');
+  const [password, setPassword] = useState(''); // POST /operators requires an initial password (12-200 chars)
 
   const create = async () => {
-    await save.mutateAsync({ body: { email, full_name: fullName } });
-    setCreating(false); setEmail(''); setFullName('');
+    await save.mutateAsync({ body: { email, full_name: fullName, password } });
+    setCreating(false); setEmail(''); setFullName(''); setPassword('');
   };
 
   return (
@@ -51,9 +52,11 @@ export default function OperatorOperatorsPage() {
           <div className="space-y-3">
             <input className={inputCls} placeholder="Full name" value={fullName} onChange={(e) => setFullName(e.target.value)} />
             <input className={inputCls} type="email" placeholder="Email" value={email} onChange={(e) => setEmail(e.target.value)} />
+            <input className={inputCls} type="password" autoComplete="new-password" placeholder="Initial password (min 12 characters)" value={password} onChange={(e) => setPassword(e.target.value)} />
+            <p className="text-xs text-ink-muted">The operator enrols an authenticator app at first sign-in.</p>
             <div className="flex justify-end gap-2 pt-2">
               <button onClick={() => setCreating(false)} className="h-9 px-4 text-sm border border-line rounded-md">Cancel</button>
-              <button onClick={create} disabled={!email || !fullName || save.isPending} className="h-9 px-4 text-sm bg-primary text-white rounded-md disabled:opacity-50">Create</button>
+              <button onClick={create} disabled={!email || !fullName || password.length < 12 || save.isPending} className="h-9 px-4 text-sm bg-primary text-white rounded-md disabled:opacity-50">Create</button>
             </div>
           </div>
         </Modal>

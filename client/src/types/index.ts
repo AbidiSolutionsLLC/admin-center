@@ -868,8 +868,11 @@ export interface App {
   updated_at: string;
   assignment_count?: number;
   owner_info?: { _id: string; full_name: string; email: string } | null;
+  app_type?: 'karbexa_product' | 'third_party';
   type?: string;
   product_key?: string;
+  default_role_key?: string;
+  launch_url?: string;
 }
 
 export interface AppAssignment {

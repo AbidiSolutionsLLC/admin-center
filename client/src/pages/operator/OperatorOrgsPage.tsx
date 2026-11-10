@@ -4,7 +4,7 @@ import { ConfirmDialog } from '@/components/ui/ConfirmDialog';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { toast } from 'sonner';
 import {
-  idOf, operatorApi, useCreateOrg, useOrgAction, useOrgs, usePlans, useSetEntitlement,
+  errMsg, idOf, operatorApi, useCreateOrg, useOrgAction, useOrgs, usePlans, useSetEntitlement,
   type OperatorOrg,
 } from '@/features/operator/operatorApi';
 
@@ -12,13 +12,17 @@ const inputCls = 'w-full h-9 px-3 text-sm bg-surface border border-line rounded-
 const LIMIT = 20;
 const cap = (s: string) => s[0].toUpperCase() + s.slice(1);
 
-// Plan assignment: PATCH /orgs/:id {plan_key} (assumed; contract lists only create-time plan_key).
+// Plan assignment: PATCH /orgs/:id {plan_key} -> { id, plan_key, products } (activates the plan's products).
 const useAssignPlan = () => {
   const qc = useQueryClient();
   return useMutation({
     mutationFn: async ({ id, plan_key }: { id: string; plan_key: string }) => (await operatorApi.patch(`/orgs/${id}`, { plan_key })).data,
-    onSuccess: () => { qc.invalidateQueries({ queryKey: ['operator', 'orgs'] }); toast.success('Plan assigned'); },
-    onError: () => toast.error('Failed to assign plan'),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ['operator', 'orgs'] });
+      qc.invalidateQueries({ queryKey: ['operator', 'org'] });
+      toast.success('Plan assigned');
+    },
+    onError: (e) => toast.error(errMsg(e, 'Failed to assign plan')),
   });
 };
 

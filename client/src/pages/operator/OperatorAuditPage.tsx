@@ -21,9 +21,9 @@ export default function OperatorAuditPage() {
             {rows.map((r, i) => (
               <tr key={idOf(r) ?? i}>
                 <td className="p-3 text-xs whitespace-nowrap">{r.created_at ? new Date(r.created_at).toLocaleString() : '-'}</td>
-                <td className="p-3">{r.actor_email ?? r.actor ?? '-'}</td>
+                <td className="p-3">{r.operator_email ?? '-'}</td>
                 <td className="p-3">{r.action}</td>
-                <td className="p-3 text-xs">{[r.target_type, r.target].filter(Boolean).join(': ') || '-'}</td>
+                <td className="p-3 text-xs">{[r.target_type, r.target_id].filter(Boolean).join(': ') || '-'}</td>
               </tr>
             ))}
           </tbody>
