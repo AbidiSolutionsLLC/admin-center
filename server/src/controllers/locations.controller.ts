@@ -8,6 +8,7 @@ import { PolicyVersion } from '../models/PolicyVersion.model';
 import { PolicyAssignment } from '../models/PolicyAssignment.model';
 import { AccessControlPolicy } from '../models/AccessControlPolicy.model';
 import { auditLogger } from '../lib/auditLogger';
+import { runInTransaction, emitPlatformEvent, correlationIdFor } from '../lib/platformEvents';
 import { AppError } from '../utils/AppError';
 import { isValidTimezone } from '../constants/timezones';
 import { locationSettingsService } from '../services/locationSettings.service';
@@ -221,10 +222,13 @@ export const getLocationById = asyncHandler(async (req: Request, res: Response) 
      locationData.working_hours = input.working_hours || undefined;
    }
 
-   const location = await Location.create(locationData);
+  const correlation_id = correlationIdFor(req);
+  const location = await runInTransaction(async (session) => {
+  const [location] = await Location.create([locationData], { session });
 
-  await auditLogger.log({
+  await auditLogger.logTx(session, {
     req,
+    correlation_id,
     action: 'location.created',
     module: 'locations',
     object_type: 'Location',
@@ -232,6 +236,14 @@ export const getLocationById = asyncHandler(async (req: Request, res: Response) 
     object_label: location.name,
     before_state: null,
     after_state: location.toObject(),
+  });
+  await emitPlatformEvent(session, {
+    org_id: req.user.company_id, type: 'org_structure.changed',
+    subject: { type: 'location', id: location._id.toString() },
+    actor: { type: 'member', id: String(req.user.userId) }, correlation_id,
+    data: location.toObject(),
+  });
+  return location;
   });
 
   res.status(201).json({ success: true, data: location });
@@ -359,10 +371,13 @@ export const updateLocation = asyncHandler(async (req: Request, res: Response) =
    }
 
    Object.assign(location, updates);
-   await location.save();
+  const correlation_id = correlationIdFor(req);
+  await runInTransaction(async (session) => {
+   await location.save({ session });
 
-  await auditLogger.log({
+  await auditLogger.logTx(session, {
     req,
+    correlation_id,
     action: 'location.updated',
     module: 'locations',
     object_type: 'Location',
@@ -370,6 +385,13 @@ export const updateLocation = asyncHandler(async (req: Request, res: Response) =
     object_label: location.name,
     before_state: beforeState,
     after_state: location.toObject(),
+  });
+  await emitPlatformEvent(session, {
+    org_id: req.user.company_id, type: 'org_structure.changed',
+    subject: { type: 'location', id: location._id.toString() },
+    actor: { type: 'member', id: String(req.user.userId) }, correlation_id,
+    data: location.toObject(),
+  });
   });
 
   res.status(200).json({ success: true, data: location });
@@ -463,20 +485,23 @@ export const deleteLocation = asyncHandler(async (req: Request, res: Response) =
 
   const beforeState = location.toObject();
 
+  const correlation_id = correlationIdFor(req);
+  await runInTransaction(async (session) => {
   // Clean up orphaned policy assignments for this location
   await PolicyAssignment.deleteMany({
     company_id: req.user.company_id,
     target_type: 'location',
     target_id: req.params.id,
-  });
+  }, { session });
 
   // Soft delete — mark as deleted instead of removing
   location.is_deleted = true;
   location.deleted_at = new Date();
-  await location.save();
+  await location.save({ session });
 
-  await auditLogger.log({
+  await auditLogger.logTx(session, {
     req,
+    correlation_id,
     action: 'location.deleted',
     module: 'locations',
     object_type: 'Location',
@@ -484,6 +509,13 @@ export const deleteLocation = asyncHandler(async (req: Request, res: Response) =
     object_label: location.name,
     before_state: beforeState,
     after_state: location.toObject(),
+  });
+  await emitPlatformEvent(session, {
+    org_id: req.user.company_id, type: 'org_structure.changed',
+    subject: { type: 'location', id: location._id.toString() },
+    actor: { type: 'member', id: String(req.user.userId) }, correlation_id,
+    data: { deleted: true },
+  });
   });
 
   res.status(200).json({ success: true, data: {} });
@@ -629,16 +661,16 @@ export const assignPolicyToLocation = asyncHandler(async (req: Request, res: Res
     );
   }
 
-  const assignment = await PolicyAssignment.create({
+  const assignment = await runInTransaction(async (session) => {
+  const [assignment] = await PolicyAssignment.create([{
     company_id: req.user.company_id,
     policy_version_id: policyVersion._id,
     target_type: 'location',
-    // @ts-ignore
-    target_id: req.params.id,
+    target_id: req.params.id as string,
     target_label: location.name,
-  });
+  }], { session });
 
-  await auditLogger.log({
+  await auditLogger.logTx(session, {
     req,
     action: 'policy.location_assigned',
     module: 'locations',
@@ -653,6 +685,8 @@ export const assignPolicyToLocation = asyncHandler(async (req: Request, res: Res
       location_name: location.name,
       policy_title: policyVersion.title,
     },
+  });
+  return assignment;
   });
 
   res.status(201).json({ success: true, data: assignment });
@@ -674,9 +708,10 @@ export const removeLocationPolicy = asyncHandler(async (req: Request, res: Respo
   }
 
   const beforeState = assignment.toObject();
-  await PolicyAssignment.findByIdAndDelete(assignment._id);
+  await runInTransaction(async (session) => {
+  await PolicyAssignment.findByIdAndDelete(assignment._id, { session });
 
-  await auditLogger.log({
+  await auditLogger.logTx(session, {
     req,
     action: 'policy.location_assignment_removed',
     module: 'locations',
@@ -685,6 +720,7 @@ export const removeLocationPolicy = asyncHandler(async (req: Request, res: Respo
     object_label: `${assignment.target_label}`,
     before_state: beforeState,
     after_state: null,
+  });
   });
 
   res.status(200).json({ success: true, data: {} });

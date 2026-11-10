@@ -3,10 +3,11 @@
 // `revoked_at` is the revocation source of truth. Revoking also destroys the provider-side SSO
 // session, its grants and refresh tokens, so a revoked browser is forced through a fresh login
 // instead of being silently re-issued tokens for a dead sid.
-import { Types } from 'mongoose';
+import { Types, ClientSession } from 'mongoose';
 import { Session, ISession } from '../models/Session.model';
 import { User } from '../models/User.model';
 import { realmCollection } from './mongoAdapter';
+import { runInTransaction, emitPlatformEvent, PlatformEventInput } from '../lib/platformEvents';
 import { SESSION_ABSOLUTE_MS, SESSION_IDLE_MS } from './config';
 
 export class SessionDeniedError extends Error {
@@ -91,16 +92,54 @@ export async function destroyProviderSession(sid: string): Promise<void> {
   await sessions.deleteMany({ 'payload.uid': sid });
 }
 
+type EventCtx = { actor: PlatformEventInput['actor']; correlation_id?: string };
+const SYSTEM_CTX: EventCtx = { actor: { type: 'system' } };
+
+/**
+ * Transactional half of revocation: mark every live Session matching `filter` revoked and emit
+ * `session.revoked` per sid (06 §2) in the caller's session. Provider-side teardown (not
+ * transactional) must follow commit via destroyProviderSession. Returns the revoked sids.
+ */
+export async function revokeSessionsTx(
+  session: ClientSession | undefined,
+  filter: Record<string, unknown>,
+  reason: string,
+  ctx: EventCtx,
+  opts: { emitEvents?: boolean } = {},
+): Promise<string[]> {
+  const live = await Session.find({ ...filter, revoked_at: { $exists: false } }, null, { session });
+  if (live.length === 0) return [];
+  const now = new Date();
+  await Session.updateMany(
+    { _id: { $in: live.map((l) => l._id) }, revoked_at: { $exists: false } },
+    { $set: { revoked_at: now, revoked_reason: reason } },
+    { session },
+  );
+  if (opts.emitEvents !== false) {
+    for (const l of live) {
+      await emitPlatformEvent(session, {
+        org_id: l.company_id,
+        type: 'session.revoked',
+        subject: { type: 'member', id: l.member_id.toString() },
+        actor: ctx.actor,
+        correlation_id: ctx.correlation_id,
+        data: { sid: l._id, member_id: l.member_id.toString() },
+      });
+    }
+  }
+  return live.map((l) => l._id);
+}
+
 /** Revoke one session (idempotent: first revocation reason wins) and tear down provider state. */
-export async function revokeSession(sid: string, reason: string): Promise<void> {
-  await Session.updateOne({ _id: sid, revoked_at: { $exists: false } }, { $set: { revoked_at: new Date(), revoked_reason: reason } });
+export async function revokeSession(sid: string, reason: string, ctx: EventCtx = SYSTEM_CTX): Promise<void> {
+  await runInTransaction((session) => revokeSessionsTx(session, { _id: sid }, reason, ctx));
   await destroyProviderSession(sid);
 }
 
 /** Revoke every live session of an identity (password reset, identity disabled). Returns the count. */
-export async function revokeIdentitySessions(identityId: Types.ObjectId | string, reason: string): Promise<number> {
+export async function revokeIdentitySessions(identityId: Types.ObjectId | string, reason: string, ctx: EventCtx = SYSTEM_CTX): Promise<number> {
   const live = await Session.find({ identity_id: identityId, revoked_at: { $exists: false } }).select('_id');
-  for (const s of live) await revokeSession(s._id, reason);
+  for (const s of live) await revokeSession(s._id, reason, ctx);
   // Provider sessions that never reached token issuance have no Session row yet.
   const memberIds = (await User.find({ identity_id: identityId }).select('_id')).map((u) => u._id.toString());
   if (memberIds.length) {

@@ -53,3 +53,17 @@ export const getTransitionErrorMessage = (from: LifecycleState, to: LifecycleSta
   }
   return `Invalid transition from '${from}' to '${to}'. Valid transitions: ${validStates.join(', ')}`;
 };
+
+export type LifecycleEventType = 'member.suspended' | 'member.reactivated' | 'member.terminated';
+
+/**
+ * Maps a lifecycle transition to its platform event type (06 §2), or null when the
+ * transition carries no dedicated member.* event (only app_access.changed).
+ * Admin 'deactivated' is the contract's 'suspended'; 'archived' reuses member.terminated.
+ */
+export const lifecycleEventFor = (from: LifecycleState, to: LifecycleState): LifecycleEventType | null => {
+  if (to === 'deactivated') return 'member.suspended';
+  if (to === 'terminated' || to === 'archived') return 'member.terminated';
+  if (to === 'active' && (from === 'deactivated' || from === 'terminated' || from === 'archived')) return 'member.reactivated';
+  return null;
+};

@@ -6,6 +6,8 @@ import { AppError } from '../utils/AppError';
 import { rbacCache } from '../lib/rbacCache';
 import { assertCanAssignRoles } from '../lib/roleHierarchy';
 import { auditLogger } from '../lib/auditLogger';
+import { sendSecurityAlert } from '../lib/notificationEngine';
+import { runInTransaction, emitAppAccessChanged, correlationIdFor } from '../lib/platformEvents';
 import { Role } from '../models/Role.model';
 import { Permission } from '../models/Permission.model';
 import { RolePermission } from '../models/RolePermission.model';
@@ -184,7 +186,9 @@ export const createRole = asyncHandler(async (req: Request, res: Response) => {
     }).lean();
   }
 
-  const role = await Role.create({
+  const correlation_id = correlationIdFor(req);
+  const role = await runInTransaction(async (session) => {
+  const [role] = await Role.create([{
     company_id: companyObjectId,
     name: validated.name,
     description: validated.description,
@@ -193,7 +197,7 @@ export const createRole = asyncHandler(async (req: Request, res: Response) => {
       ? new Types.ObjectId(validated.parent_role_id)
       : undefined,
     is_active: true,
-  });
+  }], { session });
 
   // If duplicating, copy permissions
   if (templatePermissions.length > 0) {
@@ -204,12 +208,13 @@ export const createRole = asyncHandler(async (req: Request, res: Response) => {
       granted: tp.granted,
     }));
 
-    await RolePermission.insertMany(newPermissions);
+    await RolePermission.insertMany(newPermissions, { session });
   }
 
   // Audit log
-  await auditLogger.log({
+  await auditLogger.logTx(session, {
     req,
+    correlation_id,
     action: 'roles.created',
     module: 'roles',
     object_type: 'Role',
@@ -221,6 +226,8 @@ export const createRole = asyncHandler(async (req: Request, res: Response) => {
       duplicated_from: validated.template_role_id,
       permissions_copied: templatePermissions.length,
     },
+  });
+  return role;
   });
 
   res.status(201).json({
@@ -280,16 +287,16 @@ export const updateRole = asyncHandler(async (req: Request, res: Response) => {
 
   // Update fields
   Object.assign(role, validated);
-  await role.save();
-
-  // Invalidate entire cache
-  rbacCache.invalidateAll();
+  const correlation_id = correlationIdFor(req);
+  await runInTransaction(async (session) => {
+  await role.save({ session });
 
   const afterState = role.toObject();
 
   // Audit log
-  await auditLogger.log({
+  await auditLogger.logTx(session, {
     req,
+    correlation_id,
     action: 'roles.updated',
     module: 'roles',
     object_type: 'Role',
@@ -298,6 +305,12 @@ export const updateRole = asyncHandler(async (req: Request, res: Response) => {
     before_state: beforeState,
     after_state: afterState,
   });
+  });
+
+  // Invalidate entire cache (after commit)
+  rbacCache.invalidateAll();
+  sendSecurityAlert(companyId.toString(), 'admin_change', `Admin action 'roles.updated' was performed on Role "${role.name}".`)
+    .catch(err => console.error('[roles] Failed to send admin change alert:', err));
 
   res.status(200).json({
     success: true,
@@ -370,17 +383,17 @@ export const deleteRole = asyncHandler(async (req: Request, res: Response) => {
   const beforeState = role.toObject();
 
   // Delete all role permissions associated with this role
-  await RolePermission.deleteMany({ role_id: roleId, company_id: companyId });
+  const correlation_id = correlationIdFor(req);
+  await runInTransaction(async (session) => {
+  await RolePermission.deleteMany({ role_id: roleId, company_id: companyId }, { session });
 
   // Hard delete the role
-  await Role.deleteOne({ _id: roleId, company_id: companyId });
-
-  // Invalidate entire cache
-  rbacCache.invalidateAll();
+  await Role.deleteOne({ _id: roleId, company_id: companyId }, { session });
 
   // Audit log
-  await auditLogger.log({
+  await auditLogger.logTx(session, {
     req,
+    correlation_id,
     action: 'roles.deleted',
     module: 'roles',
     object_type: 'Role',
@@ -389,6 +402,12 @@ export const deleteRole = asyncHandler(async (req: Request, res: Response) => {
     before_state: beforeState,
     after_state: null,
   });
+  });
+
+  // Invalidate entire cache (after commit)
+  rbacCache.invalidateAll();
+  sendSecurityAlert(companyId.toString(), 'admin_change', `Admin action 'roles.deleted' was performed on Role "${role.name}".`)
+    .catch(err => console.error('[roles] Failed to send admin change alert:', err));
 
   res.status(200).json({
     success: true,
@@ -453,21 +472,22 @@ export const updateRolePermissions = asyncHandler(async (req: Request, res: Resp
   }));
 
   // Batch update
+  const correlation_id = correlationIdFor(req);
+  const updatedCount = await runInTransaction(async (session) => {
   const updatedCount = await batchUpdateRolePermissions(
     new Types.ObjectId(role._id.toString()),
     new Types.ObjectId(companyId.toString()),
-    updates
+    updates,
+    session,
   );
 
-  // Invalidate entire cache on permission updates
-  rbacCache.invalidateAll();
-
   // Get after state for audit
-  const afterPermissions = await RolePermission.find({ role_id: roleId, company_id: companyId }).lean();
+  const afterPermissions = await RolePermission.find({ role_id: roleId, company_id: companyId }).session(session ?? null).lean();
 
   // Audit log
-  await auditLogger.log({
+  await auditLogger.logTx(session, {
     req,
+    correlation_id,
     action: 'roles.permissions_updated',
     module: 'roles',
     object_type: 'Role',
@@ -476,6 +496,13 @@ export const updateRolePermissions = asyncHandler(async (req: Request, res: Resp
     before_state: { permissions: beforePermissions },
     after_state: { permissions: afterPermissions },
   });
+  return updatedCount;
+  });
+
+  // Invalidate entire cache on permission updates (after commit)
+  rbacCache.invalidateAll();
+  sendSecurityAlert(companyId.toString(), 'admin_change', `Admin action 'roles.permissions_updated' was performed on Role "${role.name}".`)
+    .catch(err => console.error('[roles] Failed to send admin change alert:', err));
 
   res.status(200).json({
     success: true,
@@ -644,18 +671,18 @@ export const assignRoleToUser = asyncHandler(async (req: Request, res: Response)
     return res.status(200).json({ success: true, message: 'User already assigned to this role' });
   }
 
-  await UserRole.create({
+  const correlation_id = correlationIdFor(req);
+  await runInTransaction(async (session) => {
+  await UserRole.create([{
     user_id,
     role_id: roleId,
     company_id: companyId,
     assigned_by: req.user.userId,
-  });
+  }], { session });
 
-  // Invalidate cache for assigned user
-  rbacCache.invalidateUser(user_id);
-
-  await auditLogger.log({
+  await auditLogger.logTx(session, {
     req,
+    correlation_id,
     action: 'roles.user_assigned',
     module: 'roles',
     object_type: 'Role',
@@ -664,6 +691,14 @@ export const assignRoleToUser = asyncHandler(async (req: Request, res: Response)
     before_state: null,
     after_state: { user_id, full_name: user.full_name },
   });
+  // Org-role targets feed effective product access (04 section 8.1)
+  await emitAppAccessChanged(session, companyId, [user_id], {
+    actor: { type: 'member', id: String(req.user.userId) }, correlation_id,
+  });
+  });
+
+  // Invalidate cache for assigned user (after commit)
+  rbacCache.invalidateUser(user_id);
 
   res.status(201).json({ success: true, message: 'User assigned to role' });
 });
@@ -686,20 +721,20 @@ export const unassignRoleFromUser = asyncHandler(async (req: Request, res: Respo
   // WI-08: removing a role is also bounded by the hierarchy (role at/below actor, target not above actor, not self)
   await assertCanAssignRoles(req as any, [role as any], [user._id]);
 
+  const correlation_id = correlationIdFor(req);
+  await runInTransaction(async (session) => {
   const result = await UserRole.deleteOne({
     user_id: userId,
     role_id: roleId,
-  });
+  }, { session });
 
   if (result.deletedCount === 0) {
     throw new AppError('User not assigned to this role', 404, 'ASSIGNMENT_NOT_FOUND');
   }
 
-  // Invalidate cache for unassigned user
-  rbacCache.invalidateUser(userId);
-
-  await auditLogger.log({
+  await auditLogger.logTx(session, {
     req,
+    correlation_id,
     action: 'roles.user_unassigned',
     module: 'roles',
     object_type: 'Role',
@@ -708,6 +743,13 @@ export const unassignRoleFromUser = asyncHandler(async (req: Request, res: Respo
     before_state: { user_id: userId, full_name: user.full_name },
     after_state: null,
   });
+  await emitAppAccessChanged(session, companyId, [userId], {
+    actor: { type: 'member', id: String(req.user.userId) }, correlation_id,
+  });
+  });
+
+  // Invalidate cache for unassigned user (after commit)
+  rbacCache.invalidateUser(userId);
 
   res.status(200).json({ success: true, message: 'User unassigned from role' });
 });

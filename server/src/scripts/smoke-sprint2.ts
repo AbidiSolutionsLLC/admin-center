@@ -518,6 +518,258 @@ async function main() {
       check('E4 cursor at the purge boundary still served (200)', res.status === 200, res.status);
     }
 
+    // ── E4b: tenant mutations emit domain + AuditEvent + PlatformEvent atomically ─────────────
+    try {
+      const { Role, HolidayCalendar, Holiday, Location, Department } = await import('../models');
+      const SERVICES2 = `${ORIGIN}/realms/services`;
+      const mintSvc = async (scope: string) => {
+        const a = await new jose.SignJWT({}).setProtectedHeader({ alg: 'RS256', kid: 'smoke-backend-1' })
+          .setIssuer('karbexa-products-backend').setSubject('karbexa-products-backend').setAudience(SERVICES2)
+          .setJti(crypto.randomUUID()).setIssuedAt().setExpirationTime('2m').sign(backend.privateKey);
+        const tk = await (await fetch(`${SERVICES2}/oauth/token`, form({
+          grant_type: 'client_credentials', client_id: 'karbexa-products-backend',
+          client_assertion_type: 'urn:ietf:params:oauth:client-assertion-type:jwt-bearer', client_assertion: a,
+          scope, resource: 'urn:karbexa:platform-api',
+        }))).json() as Record<string, string>;
+        return tk.access_token;
+      };
+      const mkSession = async (memberId: unknown, extra: Record<string, unknown> = {}) => {
+        const sid = crypto.randomUUID();
+        await Session.create({
+          _id: sid, identity_id: new mongoose.Types.ObjectId(), member_id: memberId, company_id: orgId, realm: 'tenant',
+          idle_expires_at: new Date(Date.now() + 3600e3), absolute_expires_at: new Date(Date.now() + 3600e3), amr: ['pwd'], ...extra,
+        });
+        return sid;
+      };
+      const adminSid = await mkSession(me._id);
+      const tenantKey = await jose.importJWK(tenantPrivateJwk, 'RS256');
+      const tAt = await new jose.SignJWT({ token_use: 'access', org: String(orgId), sid: adminSid, email: me.email })
+        .setProtectedHeader({ alg: 'RS256', kid: 'tenant-smoke', typ: 'at+jwt' })
+        .setIssuer(`${ORIGIN}/realms/tenant`).setAudience('urn:karbexa:admin').setSubject(String(me._id))
+        .setIssuedAt().setExpirationTime('10m').sign(tenantKey);
+      const API = `${ORIGIN}/api/v1`;
+      const t = async (path: string, method: string, body: unknown, cid: string) => {
+        const rr = await fetch(`${API}${path}`, {
+          method, headers: { authorization: `Bearer ${tAt}`, 'content-type': 'application/json', 'x-correlation-id': cid }, body: body ? JSON.stringify(body) : undefined,
+        });
+        return { status: rr.status, text: await rr.text() };
+      };
+      const evsOf = (cid: string) => PlatformEvent.find({ org_id: orgId, correlation_id: cid }).sort({ seq: 1 }).lean();
+      const ofType = (list: any[], type: string) => list.filter((e) => e.type === type);
+      const auditHasCid = async (label: string, action: string, cid: string, list: any[]) => {
+        const ae = await AuditEvent.findOne({ company_id: orgId, action, correlation_id: cid }).lean();
+        check(`E4b ${label}: AuditEvent(${action}).correlation_id == events' correlation_id`, !!ae && list.length > 0 && list.every((e) => e.correlation_id === ae.correlation_id), { ae: ae?.correlation_id, evs: list.map((e) => e.correlation_id) });
+      };
+      const asActor = (list: any[]) => list.length > 0 && list.every((e) => e.actor.type === 'member' && e.actor.id === String(me._id));
+
+      // org structure: location + departments
+      let r = await t('/locations', 'POST', { name: 'Smoke HQ', type: 'region', timezone: 'Europe/London' }, 'e4b-loc-create');
+      const loc = await Location.findOne({ company_id: orgId, name: 'Smoke HQ' });
+      check('E4b location create = 201', r.status === 201 && !!loc, `${r.status} ${r.text.slice(0, 200)}`);
+      let evs = await evsOf('e4b-loc-create');
+      check('E4b location create -> org_structure.changed (subject location)', ofType(evs, 'org_structure.changed').length === 1 && ofType(evs, 'org_structure.changed')[0].subject.type === 'location' && ofType(evs, 'org_structure.changed')[0].subject.id === String(loc?._id) && asActor(evs), evs.map((e) => [e.type, e.subject]));
+      await auditHasCid('location create', 'location.created', 'e4b-loc-create', evs);
+      const locId = String(loc?._id);
+
+      r = await t('/organization', 'POST', { name: 'Smoke BU A', type: 'business_unit' }, 'e4b-dept-create');
+      const deptA = await Department.findOne({ company_id: orgId, name: 'Smoke BU A' });
+      check('E4b department create = 201', r.status === 201 && !!deptA, `${r.status} ${r.text.slice(0, 200)}`);
+      evs = await evsOf('e4b-dept-create');
+      check('E4b department create -> org_structure.changed (subject department)', ofType(evs, 'org_structure.changed').length === 1 && ofType(evs, 'org_structure.changed')[0].subject.id === String(deptA?._id) && asActor(evs), evs.map((e) => [e.type, e.subject]));
+      await auditHasCid('department create', 'department.created', 'e4b-dept-create', evs);
+
+      r = await t(`/organization/${deptA?._id}`, 'PUT', { name: 'Smoke BU A2' }, 'e4b-dept-update');
+      evs = await evsOf('e4b-dept-update');
+      check('E4b department update = 200 -> org_structure.changed', r.status === 200 && ofType(evs, 'org_structure.changed').length === 1 && ofType(evs, 'org_structure.changed')[0].subject.id === String(deptA?._id), `${r.status} ${r.text.slice(0, 200)}`);
+      await auditHasCid('department update', 'department.updated', 'e4b-dept-update', evs);
+
+      await t('/organization', 'POST', { name: 'Smoke BU B', type: 'business_unit' }, 'e4b-dept-create-b');
+      const deptB = await Department.findOne({ company_id: orgId, name: 'Smoke BU B' });
+      r = await t(`/organization/${deptB?._id}`, 'DELETE', undefined, 'e4b-dept-delete');
+      evs = await evsOf('e4b-dept-delete');
+      check('E4b department delete = 200 -> org_structure.changed data.deleted true', r.status === 200 && ofType(evs, 'org_structure.changed').length === 1 && (ofType(evs, 'org_structure.changed')[0].data as any)?.deleted === true && ofType(evs, 'org_structure.changed')[0].subject.id === String(deptB?._id), `${r.status} ${r.text.slice(0, 200)} ${JSON.stringify(evs.map((e) => e.data))}`);
+      await auditHasCid('department delete', 'department.archived', 'e4b-dept-delete', evs);
+
+      // invite member / update member
+      r = await t('/people/invite', 'POST', { full_name: 'Smoke Member', email: 'smoke.member@acme.test', location_id: locId }, 'e4b-invite');
+      const mem = await User.findOne({ company_id: orgId, email: 'smoke.member@acme.test' });
+      check('E4b invite = 201', r.status === 201 && !!mem, `${r.status} ${r.text.slice(0, 300)}`);
+      if (!mem) throw new Error(`invite did not create the member: ${r.status} ${r.text.slice(0, 400)}`);
+      const memId = String(mem._id);
+      evs = await evsOf('e4b-invite');
+      const prov = ofType(evs, 'member.provisioned');
+      check('E4b invite -> member.provisioned (subject member, lifecycle invited, email, location)', prov.length === 1 && prov[0].subject.id === memId && (prov[0].data as any).lifecycle_state === 'invited' && (prov[0].data as any).email === 'smoke.member@acme.test' && (prov[0].data as any).location_id === locId && asActor(evs), prov.map((e) => e.data));
+      check('E4b invite -> app_access.changed for the new member', ofType(evs, 'app_access.changed').some((e) => e.subject.id === memId), evs.map((e) => e.type));
+      await auditHasCid('invite', 'user.invited', 'e4b-invite', evs);
+
+      const verBefore1 = (await User.findById(memId))?.authz_ver ?? 0;
+      r = await t(`/people/${memId}`, 'PUT', { full_name: 'Smoke Member Renamed', department_id: String(deptA?._id) }, 'e4b-member-update');
+      evs = await evsOf('e4b-member-update');
+      const upd = ofType(evs, 'member.updated');
+      const changedKeys = Object.keys((upd[0]?.data as any)?.changed || {}).sort().join();
+      check('E4b member update = 200 -> member.updated with changed fields only', r.status === 200 && upd.length === 1 && changedKeys === 'department_id,full_name' && (upd[0].data as any).changed.full_name === 'Smoke Member Renamed' && (upd[0].data as any).changed.department_id === String(deptA?._id), `${r.status} ${r.text.slice(0, 200)} ${changedKeys}`);
+      const aac = ofType(evs, 'app_access.changed').find((e) => e.subject.id === memId);
+      const verAfter1 = (await User.findById(memId))?.authz_ver ?? 0;
+      check('E4b member update -> authz_ver bumped and app_access.changed carries it', verAfter1 > verBefore1 && (aac?.data as any)?.authz_ver === verAfter1, { verBefore1, verAfter1, evt: (aac?.data as any)?.authz_ver });
+      await auditHasCid('member update', 'user.updated', 'e4b-member-update', evs);
+      r = await t(`/people/${memId}`, 'PUT', { full_name: 'Smoke Member Renamed' }, 'e4b-member-noop');
+      evs = await evsOf('e4b-member-noop');
+      check('E4b member update with no admin-field change emits no member.updated', r.status === 200 && ofType(evs, 'member.updated').length === 0, `${r.status} ${evs.map((e) => e.type)}`);
+
+      // lifecycle
+      r = await t(`/people/${memId}/lifecycle`, 'PUT', { lifecycle_state: 'active' }, 'e4b-activate');
+      check('E4b lifecycle invited->active = 200', r.status === 200, `${r.status} ${r.text.slice(0, 300)}`);
+      const liveSid = await mkSession(memId);
+      r = await t(`/people/${memId}/lifecycle`, 'PUT', { lifecycle_state: 'deactivated', reason: 'smoke suspend' }, 'e4b-suspend');
+      evs = await evsOf('e4b-suspend');
+      const sus = ofType(evs, 'member.suspended');
+      check('E4b suspend = 200 -> member.suspended with session_ids containing the live Session', r.status === 200 && sus.length === 1 && sus[0].subject.id === memId && ((sus[0].data as any).session_ids || []).includes(liveSid) && (sus[0].data as any).reason === 'smoke suspend' && asActor(evs), `${r.status} ${r.text.slice(0, 200)} ${JSON.stringify(sus.map((e) => e.data))}`);
+      const sessAfter = await Session.findById(liveSid);
+      check('E4b suspend revokes the live Session (revoked_at + reason)', !!sessAfter?.revoked_at && /lifecycle_deactivated/.test(String(sessAfter?.revoked_reason)), sessAfter?.revoked_reason);
+      check('E4b suspend -> app_access.changed for member (sids ride on member.suspended, no separate session.revoked)', ofType(evs, 'app_access.changed').some((e) => e.subject.id === memId) && ofType(evs, 'session.revoked').length === 0, evs.map((e) => e.type));
+      await auditHasCid('suspend', 'user.lifecycle_changed', 'e4b-suspend', evs);
+
+      r = await t(`/people/${memId}/lifecycle`, 'PUT', { lifecycle_state: 'active' }, 'e4b-reactivate');
+      evs = await evsOf('e4b-reactivate');
+      check('E4b reactivate = 200 -> member.reactivated + app_access.changed', r.status === 200 && ofType(evs, 'member.reactivated').length === 1 && (ofType(evs, 'member.reactivated')[0].data as any).lifecycle_state === 'active' && ofType(evs, 'app_access.changed').some((e) => e.subject.id === memId), `${r.status} ${evs.map((e) => e.type)}`);
+      await auditHasCid('reactivate', 'user.lifecycle_changed', 'e4b-reactivate', evs);
+
+      const fsid = await mkSession(memId);
+      r = await t(`/security/force-logout/${memId}`, 'POST', undefined, 'e4b-force-logout');
+      evs = await evsOf('e4b-force-logout');
+      const fs = ofType(evs, 'session.revoked');
+      check('E4b force logout = 200 -> session.revoked for the live sid', r.status === 200 && fs.length === 1 && (fs[0].data as any).sid === fsid && fs[0].subject.id === memId && !!(await Session.findById(fsid))?.revoked_at, `${r.status} ${r.text.slice(0, 200)} ${JSON.stringify(fs.map((e) => e.data))}`);
+      await auditHasCid('force logout', 'security.force_logout', 'e4b-force-logout', evs);
+
+      const tsid = await mkSession(memId);
+      r = await t(`/people/${memId}/lifecycle`, 'PUT', { lifecycle_state: 'terminated' }, 'e4b-terminate');
+      evs = await evsOf('e4b-terminate');
+      const term = ofType(evs, 'member.terminated');
+      check('E4b terminate = 200 -> member.terminated with termination_date', r.status === 200 && term.length === 1 && !!(term[0].data as any).termination_date, `${r.status} ${r.text.slice(0, 200)} ${JSON.stringify(term.map((e) => e.data))}`);
+      check('E4b terminate -> session.revoked for live sid + app_access.changed', ofType(evs, 'session.revoked').some((e) => (e.data as any).sid === tsid) && ofType(evs, 'app_access.changed').some((e) => e.subject.id === memId) && !!(await Session.findById(tsid))?.revoked_at, evs.map((e) => e.type));
+      await auditHasCid('terminate', 'user.lifecycle_changed', 'e4b-terminate', evs);
+      // an invalid transition is rejected up-front and leaves no events/audit behind (true mid-txn rollback is covered by E4a)
+      r = await t(`/people/${memId}/lifecycle`, 'PUT', { lifecycle_state: 'deactivated', reason: 'x' }, 'e4b-invalid');
+      check('E4b invalid transition (terminated->deactivated) = 400 and emits nothing', r.status === 400 && (await evsOf('e4b-invalid')).length === 0 && !(await AuditEvent.findOne({ company_id: orgId, correlation_id: 'e4b-invalid' })), `${r.status} ${r.text.slice(0, 160)}`);
+
+      // calendars
+      r = await t('/holidays/calendars', 'POST', { name: 'Smoke Calendar' }, 'e4b-cal-create');
+      const cal = await HolidayCalendar.findOne({ company_id: orgId, name: 'Smoke Calendar' });
+      check('E4b calendar create = 201', r.status === 201 && !!cal, `${r.status} ${r.text.slice(0, 200)}`);
+      r = await t(`/holidays/calendars/${cal?._id}/holidays`, 'POST', { name: 'Smoke Yearly Day', date: '2026-03-15', recurring_type: 'yearly' }, 'e4b-holiday-create');
+      const hol = await Holiday.findOne({ calendar_id: cal?._id, name: 'Smoke Yearly Day' });
+      evs = await evsOf('e4b-holiday-create');
+      check('E4b holiday create = 201 -> calendar.changed (org subject, no assigned locations yet)', r.status === 201 && !!hol && ofType(evs, 'calendar.changed').length === 1 && JSON.stringify((ofType(evs, 'calendar.changed')[0].data as any).affected_location_ids) === '[]' && ofType(evs, 'calendar.changed')[0].subject.id === String(orgId), `${r.status} ${r.text.slice(0, 200)} ${JSON.stringify(evs.map((e) => e.data))}`);
+      await auditHasCid('holiday create', 'holiday.created', 'e4b-holiday-create', evs);
+      r = await t('/holidays/assignments', 'POST', { location_id: locId, calendar_id: String(cal?._id), is_primary: true, effective_date: '2020-01-01' }, 'e4b-hol-assign');
+      evs = await evsOf('e4b-hol-assign');
+      check('E4b holiday assignment = 201 -> calendar.changed with affected_location_ids [location]', r.status === 201 && ofType(evs, 'calendar.changed').length === 1 && JSON.stringify((ofType(evs, 'calendar.changed')[0].data as any).affected_location_ids) === JSON.stringify([locId]), `${r.status} ${r.text.slice(0, 200)} ${JSON.stringify(evs.map((e) => e.data))}`);
+      r = await t(`/holidays/holidays/${hol?._id}`, 'PUT', { name: 'Smoke Yearly Day 2' }, 'e4b-holiday-update');
+      evs = await evsOf('e4b-holiday-update');
+      check('E4b holiday update after assignment -> calendar.changed affected_location_ids includes location', r.status === 200 && ofType(evs, 'calendar.changed').some((e) => ((e.data as any).affected_location_ids || []).includes(locId)), `${r.status} ${JSON.stringify(evs.map((e) => e.data))}`);
+
+      // company settings + role assign
+      r = await t('/company/settings/company-name', 'PUT', { name: 'Acme Corp Renamed' }, 'e4b-company-name');
+      evs = await evsOf('e4b-company-name');
+      check('E4b company name update = 200 -> org.updated (org subject)', r.status === 200 && ofType(evs, 'org.updated').length === 1 && ofType(evs, 'org.updated')[0].subject.id === String(orgId) && asActor(evs), `${r.status} ${r.text.slice(0, 200)} ${evs.map((e) => e.type)}`);
+      await auditHasCid('company name', 'company.name_updated', 'e4b-company-name', evs);
+
+      const anyRole: any = (await Role.find({ company_id: orgId, is_active: true }).lean()).find((x: any) => /employee/i.test(x.name || x.key || '')) || (await Role.findOne({ company_id: orgId }).lean());
+      const verBefore2 = (await User.findById(memId))?.authz_ver ?? 0;
+      r = await t(`/roles/${anyRole?._id}/users`, 'POST', { user_id: memId }, 'e4b-role-assign');
+      evs = await evsOf('e4b-role-assign');
+      const verAfter2 = (await User.findById(memId))?.authz_ver ?? 0;
+      check('E4b role assign = 201 -> app_access.changed for user (authz_ver bumped)', r.status === 201 && ofType(evs, 'app_access.changed').some((e) => e.subject.id === memId && (e.data as any).authz_ver === verAfter2) && verAfter2 > verBefore2, `${r.status} ${r.text.slice(0, 200)} ${verBefore2}->${verAfter2}`);
+      await auditHasCid('role assign', 'roles.user_assigned', 'e4b-role-assign', evs);
+      r = await t(`/roles/${anyRole?._id}/users/${memId}`, 'DELETE', undefined, 'e4b-role-unassign');
+      evs = await evsOf('e4b-role-unassign');
+      check('E4b role unassign = 200 -> app_access.changed', r.status === 200 && ofType(evs, 'app_access.changed').some((e) => e.subject.id === memId), `${r.status} ${r.text.slice(0, 200)} ${evs.map((e) => e.type)}`);
+
+      const seqs = (await PlatformEvent.find({ org_id: orgId }).sort({ seq: 1 }).lean()).map((e) => e.seq);
+      check('E4b org seq contiguous 1..N after all tenant mutations', seqs.every((v, i) => v === i + 1) && (await OrgEventCounter.findById(orgId))?.seq === seqs.length, { n: seqs.length });
+
+      // GET /platform/v1/orgs/:id/calendars/effective
+      const P2 = `${ORIGIN}/platform/v1`;
+      const tkRead = await mintSvc('platform.org.read');
+      const g = async (path: string, token: string | undefined = tkRead) => {
+        const x = await fetch(`${P2}${path}`, { headers: token ? { authorization: `Bearer ${token}` } : {} });
+        return { status: x.status, headers: x.headers, json: (await x.json().catch(() => ({}))) as any };
+      };
+      const otherOrg = (await Company.findOne({ slug: 'beta' }))?._id;
+      const base = `/orgs/${orgId}/calendars/effective`;
+      check('E4b calendars/effective: no member_id/location_id = 400', (await g(`${base}?from=2026-01-01&to=2026-01-31`)).status === 400);
+      check('E4b calendars/effective: missing dates = 400', (await g(`${base}?location_id=${locId}`)).status === 400);
+      check('E4b calendars/effective: invalid dates = 400', (await g(`${base}?location_id=${locId}&from=abc&to=2026-01-31`)).status === 400);
+      check('E4b calendars/effective: to before from = 400', (await g(`${base}?location_id=${locId}&from=2026-02-01&to=2026-01-01`)).status === 400);
+      check('E4b calendars/effective: range > 366 days = 400', (await g(`${base}?location_id=${locId}&from=2026-01-01&to=2027-01-05`)).status === 400);
+      check('E4b calendars/effective: no token = 401', (await g(`${base}?location_id=${locId}&from=2026-01-01&to=2026-01-31`, '')).status === 401);
+      check('E4b calendars/effective: member of another org = 404', (await g(`/orgs/${otherOrg}/calendars/effective?member_id=${memId}&from=2026-01-01&to=2026-01-31`)).status === 404);
+      check('E4b calendars/effective: unknown org = 404', (await g(`/orgs/${new mongoose.Types.ObjectId()}/calendars/effective?location_id=${locId}&from=2026-01-01&to=2026-01-31`)).status === 404);
+      check('E4b calendars/effective: location of another org = 404', (await g(`/orgs/${otherOrg}/calendars/effective?location_id=${locId}&from=2026-01-01&to=2026-01-31`)).status === 404);
+      let ce = await g(`${base}?location_id=${locId}&from=2026-03-01&to=2026-03-31`);
+      check('E4b calendars/effective: happy path expands assigned yearly holiday in range', ce.status === 200 && /no-store/.test(ce.headers.get('cache-control') || '') && ce.json.holidays?.length === 1 && ce.json.holidays[0].date === '2026-03-15' && ce.json.holidays[0].name === 'Smoke Yearly Day 2' && ce.json.holidays[0].calendar_id === String(cal?._id) && ce.json.holidays[0].recurring_type === 'yearly', ce.json);
+      ce = await g(`${base}?member_id=${memId}&from=2026-03-01&to=2026-03-31`);
+      check('E4b calendars/effective: member_id resolves the member location', ce.status === 200 && ce.json.holidays?.length === 1 && ce.json.holidays[0].date === '2026-03-15', ce.json);
+      ce = await g(`${base}?location_id=${locId}&from=2026-04-01&to=2026-04-30`);
+      check('E4b calendars/effective: out-of-range month has no holidays', ce.status === 200 && ce.json.holidays?.length === 0 && 'work_schedule' in ce.json, ce.json);
+      ce = await g(`${base}?location_id=${locId}&from=2026-01-01&to=2026-12-31`);
+      check('E4b calendars/effective: 365-day range accepted', ce.status === 200 && ce.json.holidays?.length === 1, ce.status);
+
+      // PUT /platform/v1/apps/:productKey/role-catalog
+      const tkW = await mintSvc('platform.role_catalog.write');
+      const put = async (key: string, body: unknown, token: string | undefined = tkW) => {
+        const x = await fetch(`${P2}/apps/${key}/role-catalog`, { method: 'PUT', headers: { 'content-type': 'application/json', ...(token ? { authorization: `Bearer ${token}` } : {}) }, body: JSON.stringify(body) });
+        return { status: x.status, json: (await x.json().catch(() => ({}))) as any };
+      };
+      const signRows = await ProductRole.find({ product_key: 'sign' }).lean();
+      const catBody = (v: number, rows: any[]) => ({ version: v, roles: rows.map((x) => ({ key: x.key, name: x.name, description: x.description, rank: x.rank, is_default: !!x.is_default, assignable: x.assignable !== false })) });
+      const signApp2: any = await App.findOne({ product_key: 'sign', app_type: 'karbexa_product' }).lean();
+      const v0 = signApp2?.role_catalog_version ?? 1;
+      check('E4b role-catalog: wrong scope = 403', (await put('sign', catBody(v0 + 1, signRows), tkRead)).status === 403);
+      check('E4b role-catalog: no token = 401', (await put('sign', catBody(v0 + 1, signRows), '')).status === 401);
+      check('E4b role-catalog: unknown product = 404', (await put('nope', catBody(v0 + 1, signRows))).status === 404);
+      check('E4b role-catalog: invalid body (no default) = 400', (await put('sign', { version: v0 + 1, roles: signRows.map((x: any) => ({ key: x.key, name: x.name, rank: x.rank })) })).status === 400);
+      const p1 = await put('sign', catBody(v0 + 1, signRows));
+      check('E4b role-catalog: valid catalog = 200 with version + roles', p1.status === 200 && p1.json.version === v0 + 1 && p1.json.roles?.length === signRows.length, p1.json);
+      const p2 = await put('sign', catBody(v0 + 1, signRows));
+      check('E4b role-catalog: re-PUT identical catalog is idempotent (same body, same row count)', p2.status === 200 && JSON.stringify(p2.json) === JSON.stringify(p1.json) && (await ProductRole.countDocuments({ product_key: 'sign' })) === signRows.length, p2.json);
+      check('E4b role-catalog: App.role_catalog_version updated', (await App.findOne({ product_key: 'sign', app_type: 'karbexa_product' }))?.role_catalog_version === v0 + 1);
+      const victim = signRows.find((x: any) => !x.is_default);
+      const victimAssign = await AppAssignment.create({ company_id: orgId, app_id: signApp2._id, granted_by: me._id, is_active: true, product_role_key: victim!.key, target_type: 'user', target_id: me._id } as never);
+      const keep = signRows.filter((x: any) => x.key !== victim!.key);
+      const p3 = await put('sign', catBody(v0 + 2, keep));
+      check('E4b role-catalog: removing a role in active use = 409 ROLE_IN_USE', p3.status === 409 && p3.json.code === 'ROLE_IN_USE' && (p3.json.roles || []).includes(victim!.key), p3.json);
+      check('E4b role-catalog: 409 leaves catalog unchanged (roles + version)', (await ProductRole.countDocuments({ product_key: 'sign' })) === signRows.length && !!(await ProductRole.findOne({ product_key: 'sign', key: victim!.key })) && (await App.findOne({ product_key: 'sign', app_type: 'karbexa_product' }))?.role_catalog_version === v0 + 1);
+      await AppAssignment.updateOne({ _id: victimAssign._id }, { $set: { is_active: false } });
+      const p4 = await put('sign', catBody(v0 + 2, keep));
+      check('E4b role-catalog: removing an unused role = 200 and the role is gone', p4.status === 200 && !(await ProductRole.findOne({ product_key: 'sign', key: victim!.key })), p4.json);
+      const p5 = await put('sign', catBody(v0 + 1, signRows));
+      check('E4b role-catalog: stale version returns stored (newer) catalog unchanged', p5.status === 200 && p5.json.version === v0 + 2 && !p5.json.roles.some((x: any) => x.key === victim!.key), p5.json);
+      const p6 = await put('sign', catBody(v0 + 3, signRows));
+      check('E4b role-catalog: re-adding the removed role = 200', p6.status === 200 && p6.json.roles.some((x: any) => x.key === victim!.key), p6.json);
+
+      // /sessions/revocations pagination (keyset within identical revoked_at)
+      const tkS = await mintSvc('platform.sessions.read');
+      const T0 = new Date('2099-01-01T00:00:00.000Z');
+      const pageSids: string[] = [];
+      for (let i = 0; i < 5; i++) pageSids.push(await mkSession(me._id, { revoked_at: T0, revoked_reason: 'smoke-page' }));
+      const revGet = async (qs: string) => {
+        const x = await fetch(`${P2}/sessions/revocations?${qs}`, { headers: { authorization: `Bearer ${tkS}` } });
+        return { status: x.status, headers: x.headers, rows: (await x.json()) as { sid: string }[] };
+      };
+      const pg1 = await revGet(`since=${T0.toISOString()}&limit=2`);
+      check('E4b revocations limit=2: 2 rows, X-Has-More true, X-Next-Since/X-Next-After-Sid set', pg1.status === 200 && pg1.rows.length === 2 && pg1.headers.get('x-has-more') === 'true' && pg1.headers.get('x-next-since') === T0.toISOString() && pg1.headers.get('x-next-after-sid') === pg1.rows[1]?.sid, { rows: pg1.rows.length, h: [...pg1.headers.entries()].filter(([k]) => k.startsWith('x-')) });
+      const pg2 = await revGet(`since=${pg1.headers.get('x-next-since')}&after_sid=${pg1.headers.get('x-next-after-sid')}&limit=2`);
+      check('E4b revocations continuation: next 2 rows, more pending, no duplicates', pg2.rows.length === 2 && pg2.headers.get('x-has-more') === 'true' && pg2.rows.every((x) => !pg1.rows.some((y) => y.sid === x.sid)), pg2.rows);
+      const pg3 = await revGet(`since=${pg2.headers.get('x-next-since')}&after_sid=${pg2.headers.get('x-next-after-sid')}&limit=2`);
+      check('E4b revocations last page: 1 row, no X-Has-More', pg3.rows.length === 1 && pg3.headers.get('x-has-more') === null, { n: pg3.rows.length, h: pg3.headers.get('x-has-more') });
+      const gathered = [...pg1.rows, ...pg2.rows, ...pg3.rows].map((x) => x.sid);
+      check('E4b revocations pagination yields exactly the 5 sessions (no dupes, none missed)', new Set(gathered).size === 5 && pageSids.every((s) => gathered.includes(s)), gathered);
+      const fullNoLimit = await revGet(`since=${T0.toISOString()}`);
+      check('E4b revocations default limit: no X-Has-More when everything fits', fullNoLimit.rows.length === 5 && fullNoLimit.headers.get('x-has-more') === null);
+      check('E4b revocations limit=0 / 1001 = 400', (await revGet('limit=0')).status === 400 && (await revGet('limit=1001')).status === 400);
+    } catch (e) { check('E4b section did not crash', false, (e as Error).stack?.split(String.fromCharCode(10)).slice(0, 4).join(' | ')); }
+
     // ── audit ─────────────────────────────────────────────────────────────────────────────
     const actions = (await OperatorAuditEvent.find()).map((e) => e.action);
     check('E10 operator audit recorded', ['org.provisioned', 'entitlement.updated', 'org.suspended', 'org.reactivated'].every((a) => actions.includes(a)), actions);

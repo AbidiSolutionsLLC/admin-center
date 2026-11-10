@@ -5,7 +5,28 @@ import { asyncHandler } from '../utils/asyncHandler';
 import { User } from '../models/User.model';
 import { auditLogger } from '../lib/auditLogger';
 import { AppError } from '../utils/AppError';
-import { Types } from 'mongoose';
+import { Types, ClientSession } from 'mongoose';
+import { runInTransaction, emitPlatformEvent, correlationIdFor } from '../lib/platformEvents';
+
+/** 06 section 2: reporting_line.changed {manager_id, secondary_manager_ids}, subject = the member. */
+async function emitReportingLineChanged(
+  session: ClientSession | undefined,
+  req: Request,
+  correlation_id: string,
+  user: { _id: Types.ObjectId; manager_id?: Types.ObjectId | null; secondary_manager_ids?: Types.ObjectId[] },
+): Promise<void> {
+  await emitPlatformEvent(session, {
+    org_id: req.user.company_id,
+    type: 'reporting_line.changed',
+    subject: { type: 'member', id: String(user._id) },
+    actor: { type: 'member', id: String(req.user.userId) },
+    correlation_id,
+    data: {
+      manager_id: user.manager_id ? String(user.manager_id) : null,
+      secondary_manager_ids: (user.secondary_manager_ids ?? []).map(String),
+    },
+  });
+}
 
 // ── Zod Schemas ──────────────────────────────────────────────────────────────
 
@@ -316,11 +337,14 @@ export const addSecondaryManager = asyncHandler(async (req: Request, res: Respon
 
   // Add the manager
   user.secondary_manager_ids.push(managerObjectId);
-  await user.save();
+  const correlation_id = correlationIdFor(req);
+  await runInTransaction(async (session) => {
+  await user.save({ session });
 
   // Audit log
-  await auditLogger.log({
+  await auditLogger.logTx(session, {
     req,
+    correlation_id,
     action: 'user.secondary_manager_added',
     module: 'people',
     object_type: 'User',
@@ -331,6 +355,8 @@ export const addSecondaryManager = asyncHandler(async (req: Request, res: Respon
       ...user.toObject(),
       secondary_manager_added: manager._id.toString(),
     },
+  });
+  await emitReportingLineChanged(session, req, correlation_id, user);
   });
 
   // Return enriched user
@@ -381,25 +407,29 @@ export const removeSecondaryManager = asyncHandler(async (req: Request, res: Res
   const beforeState = user.toObject();
   const removedManagerId = (secondaryManagerIds[managerIndex] as Types.ObjectId).toString();
 
+  const correlation_id = correlationIdFor(req);
+  const updatedUser = await runInTransaction(async (session) => {
   // Remove the manager using MongoDB $pull operator
   await User.updateOne(
     { _id: user._id },
-    { $pull: { secondary_manager_ids: managerObjectId } }
+    { $pull: { secondary_manager_ids: managerObjectId } },
+    { session },
   );
 
   // Reload the user
   const updatedUser = await User.findOne({
     _id: user._id,
     company_id: req.user.company_id,
-  });
+  }).session(session ?? null);
 
   if (!updatedUser) {
     throw new AppError('User not found after update', 500, 'USER_NOT_FOUND_AFTER_UPDATE');
   }
 
   // Audit log
-  await auditLogger.log({
+  await auditLogger.logTx(session, {
     req,
+    correlation_id,
     action: 'user.secondary_manager_removed',
     module: 'people',
     object_type: 'User',
@@ -410,6 +440,9 @@ export const removeSecondaryManager = asyncHandler(async (req: Request, res: Res
       ...updatedUser.toObject(),
       secondary_manager_removed: removedManagerId,
     },
+  });
+  await emitReportingLineChanged(session, req, correlation_id, updatedUser);
+  return updatedUser;
   });
 
   // Return enriched user
@@ -446,10 +479,13 @@ export const changePrimaryManager = asyncHandler(async (req: Request, res: Respo
   if (!input.manager_id) {
     const beforeState = user.toObject();
     user.manager_id = undefined;
-    await user.save();
+    const correlation_id = correlationIdFor(req);
+    await runInTransaction(async (session) => {
+    await user.save({ session });
 
-    await auditLogger.log({
+    await auditLogger.logTx(session, {
       req,
+      correlation_id,
       action: 'user.primary_manager_changed',
       module: 'people',
       object_type: 'User',
@@ -460,6 +496,8 @@ export const changePrimaryManager = asyncHandler(async (req: Request, res: Respo
         ...user.toObject(),
         primary_manager_removed: true,
       },
+    });
+    await emitReportingLineChanged(session, req, correlation_id, user);
     });
 
     const enrichedUser = await enrichUserWithManagers(user);
@@ -515,11 +553,14 @@ export const changePrimaryManager = asyncHandler(async (req: Request, res: Respo
 
   // Update the primary manager
   user.manager_id = new Types.ObjectId(input.manager_id);
-  await user.save();
+  const correlation_id = correlationIdFor(req);
+  await runInTransaction(async (session) => {
+  await user.save({ session });
 
   // Audit log
-  await auditLogger.log({
+  await auditLogger.logTx(session, {
     req,
+    correlation_id,
     action: 'user.primary_manager_changed',
     module: 'people',
     object_type: 'User',
@@ -530,6 +571,8 @@ export const changePrimaryManager = asyncHandler(async (req: Request, res: Respo
       ...user.toObject(),
       primary_manager_changed: manager._id.toString(),
     },
+  });
+  await emitReportingLineChanged(session, req, correlation_id, user);
   });
 
   // Return enriched user

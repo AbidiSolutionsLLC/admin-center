@@ -4,6 +4,7 @@ import { asyncHandler } from '../utils/asyncHandler';
 import { Company } from '../models/Company.model';
 import { AppError } from '../utils/AppError';
 import { auditLogger } from '../lib/auditLogger';
+import { runInTransaction, emitPlatformEvent, correlationIdFor } from '../lib/platformEvents';
 import { z } from 'zod';
 import { validateEmployeeIdFormat } from '../services/employeeId';
 import { ALL_IANA_TIMEZONES } from '../constants/timezones';
@@ -67,14 +68,17 @@ export const updateEmployeeIdFormat = asyncHandler(async (req: Request, res: Res
   const before = await Company.findById(req.user.company_id).lean();
   if (!before) throw new AppError('Company not found', 404, 'COMPANY_NOT_FOUND');
 
+  const correlation_id = correlationIdFor(req);
+  const company = await runInTransaction(async (session) => {
   const company = await Company.findByIdAndUpdate(
     req.user.company_id,
     { employee_id_format: input.employee_id_format },
-    { new: true, runValidators: true },
+    { new: true, runValidators: true, session },
   );
 
-  await auditLogger.log({
+  await auditLogger.logTx(session, {
     req,
+    correlation_id,
     action: 'company.employee_id_format_updated',
     module: 'company',
     object_type: 'company',
@@ -82,6 +86,14 @@ export const updateEmployeeIdFormat = asyncHandler(async (req: Request, res: Res
     object_label: company?.name || 'company',
     before_state: { employee_id_format: before.employee_id_format },
     after_state: { employee_id_format: input.employee_id_format },
+  });
+  await emitPlatformEvent(session, {
+    org_id: req.user.company_id, type: 'org.updated',
+    subject: { type: 'org', id: String(req.user.company_id) },
+    actor: { type: 'member', id: String(req.user.userId) }, correlation_id,
+    data: { employee_id_format: input.employee_id_format },
+  });
+  return company;
   });
 
   res.json({ success: true, data: company });
@@ -93,14 +105,17 @@ export const updateRequiredUserFields = asyncHandler(async (req: Request, res: R
   const before = await Company.findById(req.user.company_id).lean();
   if (!before) throw new AppError('Company not found', 404, 'COMPANY_NOT_FOUND');
 
+  const correlation_id = correlationIdFor(req);
+  const company = await runInTransaction(async (session) => {
   const company = await Company.findByIdAndUpdate(
     req.user.company_id,
     { 'settings.required_user_fields': input.required_user_fields },
-    { new: true, runValidators: true },
+    { new: true, runValidators: true, session },
   );
 
-  await auditLogger.log({
+  await auditLogger.logTx(session, {
     req,
+    correlation_id,
     action: 'company.required_user_fields_updated',
     module: 'company',
     object_type: 'company',
@@ -108,6 +123,14 @@ export const updateRequiredUserFields = asyncHandler(async (req: Request, res: R
     object_label: company?.name || 'company',
     before_state: { required_user_fields: before.settings?.required_user_fields || ['email', 'full_name'] },
     after_state: { required_user_fields: input.required_user_fields },
+  });
+  await emitPlatformEvent(session, {
+    org_id: req.user.company_id, type: 'org.updated',
+    subject: { type: 'org', id: String(req.user.company_id) },
+    actor: { type: 'member', id: String(req.user.userId) }, correlation_id,
+    data: { required_user_fields: input.required_user_fields },
+  });
+  return company;
   });
 
   res.json({ success: true, data: company });
@@ -119,17 +142,20 @@ export const updateDomainEnforcement = asyncHandler(async (req: Request, res: Re
   const before = await Company.findById(req.user.company_id).lean();
   if (!before) throw new AppError('Company not found', 404, 'COMPANY_NOT_FOUND');
 
+  const correlation_id = correlationIdFor(req);
+  const company = await runInTransaction(async (session) => {
   const company = await Company.findByIdAndUpdate(
     req.user.company_id,
     {
       'settings.allowed_domains': input.allowed_domains,
       'settings.is_domain_enforcement_active': input.is_domain_enforcement_active,
     },
-    { new: true, runValidators: true },
+    { new: true, runValidators: true, session },
   );
 
-  await auditLogger.log({
+  await auditLogger.logTx(session, {
     req,
+    correlation_id,
     action: 'company.domain_enforcement_updated',
     module: 'company',
     object_type: 'company',
@@ -143,6 +169,17 @@ export const updateDomainEnforcement = asyncHandler(async (req: Request, res: Re
       allowed_domains: input.allowed_domains,
       is_domain_enforcement_active: input.is_domain_enforcement_active,
     },
+  });
+  await emitPlatformEvent(session, {
+    org_id: req.user.company_id, type: 'org.updated',
+    subject: { type: 'org', id: String(req.user.company_id) },
+    actor: { type: 'member', id: String(req.user.userId) }, correlation_id,
+    data: {
+      allowed_domains: input.allowed_domains,
+      is_domain_enforcement_active: input.is_domain_enforcement_active,
+    },
+  });
+  return company;
   });
 
   res.json({ success: true, data: company });
@@ -167,6 +204,8 @@ export const resetCompanySettings = asyncHandler(async (req: Request, res: Respo
     default_location_id: null,
   };
 
+  const correlation_id = correlationIdFor(req);
+  const company = await runInTransaction(async (session) => {
   const company = await Company.findByIdAndUpdate(
     req.user.company_id,
     {
@@ -175,17 +214,18 @@ export const resetCompanySettings = asyncHandler(async (req: Request, res: Respo
         settings: defaultSettings
       }
     },
-    { new: true, runValidators: true }
+    { new: true, runValidators: true, session }
   );
 
   // Align with frontend: Purge all non-system custom fields
   await CustomField.deleteMany({
     company_id: req.user.company_id,
     is_system_field: false,
-  });
+  }, { session });
 
-  await auditLogger.log({
+  await auditLogger.logTx(session, {
     req,
+    correlation_id,
     action: 'company.settings_reset',
     module: 'company',
     object_type: 'company',
@@ -193,6 +233,14 @@ export const resetCompanySettings = asyncHandler(async (req: Request, res: Respo
     object_label: company?.name || 'company',
     before_state: before,
     after_state: company?.toObject(),
+  });
+  await emitPlatformEvent(session, {
+    org_id: req.user.company_id, type: 'org.updated',
+    subject: { type: 'org', id: String(req.user.company_id) },
+    actor: { type: 'member', id: String(req.user.userId) }, correlation_id,
+    data: { settings_reset: true },
+  });
+  return company;
   });
 
   res.json({ success: true, data: company });
@@ -208,14 +256,17 @@ export const updateCompanyName = asyncHandler(async (req: Request, res: Response
   const before = await Company.findById(req.user.company_id).lean();
   if (!before) throw new AppError('Company not found', 404, 'COMPANY_NOT_FOUND');
 
+  const correlation_id = correlationIdFor(req);
+  const company = await runInTransaction(async (session) => {
   const company = await Company.findByIdAndUpdate(
     req.user.company_id,
     { name: input.name },
-    { new: true, runValidators: true },
+    { new: true, runValidators: true, session },
   );
 
-  await auditLogger.log({
+  await auditLogger.logTx(session, {
     req,
+    correlation_id,
     action: 'company.name_updated',
     module: 'company',
     object_type: 'company',
@@ -223,6 +274,14 @@ export const updateCompanyName = asyncHandler(async (req: Request, res: Response
     object_label: company?.name || 'company',
     before_state: { name: before.name },
     after_state: { name: input.name },
+  });
+  await emitPlatformEvent(session, {
+    org_id: req.user.company_id, type: 'org.updated',
+    subject: { type: 'org', id: String(req.user.company_id) },
+    actor: { type: 'member', id: String(req.user.userId) }, correlation_id,
+    data: { name: input.name },
+  });
+  return company;
   });
 
   res.json({ success: true, data: company });
@@ -243,14 +302,17 @@ export const updateTimezone = asyncHandler(async (req: Request, res: Response) =
   const before = await Company.findById(req.user.company_id).lean();
   if (!before) throw new AppError('Company not found', 404, 'COMPANY_NOT_FOUND');
 
+  const correlation_id = correlationIdFor(req);
+  const company = await runInTransaction(async (session) => {
   const company = await Company.findByIdAndUpdate(
     req.user.company_id,
     { 'settings.timezone': input.timezone },
-    { new: true, runValidators: true },
+    { new: true, runValidators: true, session },
   );
 
-  await auditLogger.log({
+  await auditLogger.logTx(session, {
     req,
+    correlation_id,
     action: 'company.timezone_updated',
     module: 'company',
     object_type: 'company',
@@ -258,6 +320,14 @@ export const updateTimezone = asyncHandler(async (req: Request, res: Response) =
     object_label: company?.name || 'company',
     before_state: { timezone: before.settings?.timezone || 'UTC' },
     after_state: { timezone: input.timezone },
+  });
+  await emitPlatformEvent(session, {
+    org_id: req.user.company_id, type: 'org.updated',
+    subject: { type: 'org', id: String(req.user.company_id) },
+    actor: { type: 'member', id: String(req.user.userId) }, correlation_id,
+    data: { timezone: input.timezone },
+  });
+  return company;
   });
 
   res.json({ success: true, data: company });
@@ -273,14 +343,17 @@ export const updateLocale = asyncHandler(async (req: Request, res: Response) => 
   const before = await Company.findById(req.user.company_id).lean();
   if (!before) throw new AppError('Company not found', 404, 'COMPANY_NOT_FOUND');
 
+  const correlation_id = correlationIdFor(req);
+  const company = await runInTransaction(async (session) => {
   const company = await Company.findByIdAndUpdate(
     req.user.company_id,
     { 'settings.locale': input.locale },
-    { new: true, runValidators: true },
+    { new: true, runValidators: true, session },
   );
 
-  await auditLogger.log({
+  await auditLogger.logTx(session, {
     req,
+    correlation_id,
     action: 'company.locale_updated',
     module: 'company',
     object_type: 'company',
@@ -288,6 +361,14 @@ export const updateLocale = asyncHandler(async (req: Request, res: Response) => 
     object_label: company?.name || 'company',
     before_state: { locale: before.settings?.locale || 'en-US' },
     after_state: { locale: input.locale },
+  });
+  await emitPlatformEvent(session, {
+    org_id: req.user.company_id, type: 'org.updated',
+    subject: { type: 'org', id: String(req.user.company_id) },
+    actor: { type: 'member', id: String(req.user.userId) }, correlation_id,
+    data: { locale: input.locale },
+  });
+  return company;
   });
 
   res.json({ success: true, data: company });
@@ -316,14 +397,17 @@ export const updateDefaultLocation = asyncHandler(async (req: Request, res: Resp
   const before = await Company.findById(req.user.company_id).lean();
   if (!before) throw new AppError('Company not found', 404, 'COMPANY_NOT_FOUND');
 
+  const correlation_id = correlationIdFor(req);
+  const company = await runInTransaction(async (session) => {
   const company = await Company.findByIdAndUpdate(
     req.user.company_id,
     { 'settings.default_location_id': input.default_location_id },
-    { new: true, runValidators: true },
+    { new: true, runValidators: true, session },
   );
 
-  await auditLogger.log({
+  await auditLogger.logTx(session, {
     req,
+    correlation_id,
     action: 'company.default_location_updated',
     module: 'company',
     object_type: 'company',
@@ -331,6 +415,14 @@ export const updateDefaultLocation = asyncHandler(async (req: Request, res: Resp
     object_label: company?.name || 'company',
     before_state: { default_location_id: before.settings?.default_location_id ?? null },
     after_state: { default_location_id: input.default_location_id },
+  });
+  await emitPlatformEvent(session, {
+    org_id: req.user.company_id, type: 'org.updated',
+    subject: { type: 'org', id: String(req.user.company_id) },
+    actor: { type: 'member', id: String(req.user.userId) }, correlation_id,
+    data: { default_location_id: input.default_location_id },
+  });
+  return company;
   });
 
   res.json({ success: true, data: company });
@@ -346,14 +438,17 @@ export const updateAuditLogRetention = asyncHandler(async (req: Request, res: Re
   const before = await Company.findById(req.user.company_id).lean();
   if (!before) throw new AppError('Company not found', 404, 'COMPANY_NOT_FOUND');
 
+  const correlation_id = correlationIdFor(req);
+  const company = await runInTransaction(async (session) => {
   const company = await Company.findByIdAndUpdate(
     req.user.company_id,
     { 'settings.audit_log_retention_days': input.audit_log_retention_days },
-    { new: true, runValidators: true },
+    { new: true, runValidators: true, session },
   );
 
-  await auditLogger.log({
+  await auditLogger.logTx(session, {
     req,
+    correlation_id,
     action: 'company.audit_log_retention_updated',
     module: 'company',
     object_type: 'company',
@@ -361,6 +456,14 @@ export const updateAuditLogRetention = asyncHandler(async (req: Request, res: Re
     object_label: company?.name || 'company',
     before_state: { audit_log_retention_days: before.settings?.audit_log_retention_days || 0 },
     after_state: { audit_log_retention_days: input.audit_log_retention_days },
+  });
+  await emitPlatformEvent(session, {
+    org_id: req.user.company_id, type: 'org.updated',
+    subject: { type: 'org', id: String(req.user.company_id) },
+    actor: { type: 'member', id: String(req.user.userId) }, correlation_id,
+    data: { audit_log_retention_days: input.audit_log_retention_days },
+  });
+  return company;
   });
 
   res.json({ success: true, data: company });
@@ -380,14 +483,17 @@ export const updateInsightSensitivity = asyncHandler(async (req: Request, res: R
   const before = await Company.findById(req.user.company_id).lean();
   if (!before) throw new AppError('Company not found', 404, 'COMPANY_NOT_FOUND');
 
+  const correlation_id = correlationIdFor(req);
+  const company = await runInTransaction(async (session) => {
   const company = await Company.findByIdAndUpdate(
     req.user.company_id,
     { 'settings.insight_sensitivity': input.insight_sensitivity },
-    { new: true, runValidators: true },
+    { new: true, runValidators: true, session },
   );
 
-  await auditLogger.log({
+  await auditLogger.logTx(session, {
     req,
+    correlation_id,
     action: 'company.insight_sensitivity_updated',
     module: 'company',
     object_type: 'company',
@@ -395,6 +501,14 @@ export const updateInsightSensitivity = asyncHandler(async (req: Request, res: R
     object_label: company?.name || 'company',
     before_state: { insight_sensitivity: (before.settings as any)?.insight_sensitivity || 'medium' },
     after_state: { insight_sensitivity: input.insight_sensitivity },
+  });
+  await emitPlatformEvent(session, {
+    org_id: req.user.company_id, type: 'org.updated',
+    subject: { type: 'org', id: String(req.user.company_id) },
+    actor: { type: 'member', id: String(req.user.userId) }, correlation_id,
+    data: { insight_sensitivity: input.insight_sensitivity },
+  });
+  return company;
   });
 
   res.json({ success: true, data: company });

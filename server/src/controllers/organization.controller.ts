@@ -10,6 +10,7 @@ import { TeamMember } from '../models/TeamMember.model';
 import { AuditEvent } from '../models/AuditEvent.model';
 import { Insight } from '../models/Insight.model';
 import { auditLogger } from '../lib/auditLogger';
+import { runInTransaction, emitPlatformEvent, correlationIdFor } from '../lib/platformEvents';
 import { triggerIntelligenceRules } from '../lib/intelligence';
 import { AppError } from '../utils/AppError';
 import { slugify } from '../utils/slugify';
@@ -303,7 +304,9 @@ export const createDepartment = asyncHandler(async (req: Request, res: Response)
     { ...input } as unknown as Record<string, unknown>,
   );
 
-  const dept = await Department.create({
+  const correlation_id = correlationIdFor(req);
+  const dept = await runInTransaction(async (session) => {
+  const [dept] = await Department.create([{
     ...filteredInput,
     // Normalize empty strings → undefined so Mongoose doesn't store ''
     parent_id: input.parent_id || undefined,
@@ -311,10 +314,11 @@ export const createDepartment = asyncHandler(async (req: Request, res: Response)
     secondary_manager_ids: input.secondary_manager_ids || [],
     custom_fields: permissionedCustomFields,
     company_id: req.user.company_id,
-  });
+  }], { session });
 
-  await auditLogger.log({
+  await auditLogger.logTx(session, {
     req,
+    correlation_id,
     action: 'department.created',
     module: 'organization',
     object_type: input.type === 'business_unit' ? 'BusinessUnit' : 'Department',
@@ -322,6 +326,14 @@ export const createDepartment = asyncHandler(async (req: Request, res: Response)
     object_label: dept.name,
     before_state: null,
     after_state: dept.toObject(),
+  });
+  await emitPlatformEvent(session, {
+    org_id: req.user.company_id, type: 'org_structure.changed',
+    subject: { type: 'department', id: dept._id.toString() },
+    actor: { type: 'member', id: String(req.user.userId) }, correlation_id,
+    data: dept.toObject(),
+  });
+  return dept;
   });
 
   // Trigger intelligence rules after department creation
@@ -452,10 +464,13 @@ export const updateDepartment = asyncHandler(async (req: Request, res: Response)
   );
 
   Object.assign(dept, permissionedUpdates);
-  await dept.save();
+  const correlation_id = correlationIdFor(req);
+  await runInTransaction(async (session) => {
+  await dept.save({ session });
 
-  await auditLogger.log({
+  await auditLogger.logTx(session, {
     req,
+    correlation_id,
     action: 'department.updated',
     module: 'organization',
     object_type: dept.type === 'business_unit' ? 'BusinessUnit' : 'Department',
@@ -463,6 +478,13 @@ export const updateDepartment = asyncHandler(async (req: Request, res: Response)
     object_label: dept.name,
     before_state: beforeState,
     after_state: dept.toObject(),
+  });
+  await emitPlatformEvent(session, {
+    org_id: req.user.company_id, type: 'org_structure.changed',
+    subject: { type: 'department', id: dept._id.toString() },
+    actor: { type: 'member', id: String(req.user.userId) }, correlation_id,
+    data: dept.toObject(),
+  });
   });
 
   // Trigger intelligence rules after department update
@@ -539,10 +561,13 @@ export const deleteDepartment = asyncHandler(async (req: Request, res: Response)
   const beforeState = dept.toObject();
 
   dept.is_active = false;
-  await dept.save();
+  const correlation_id = correlationIdFor(req);
+  await runInTransaction(async (session) => {
+  await dept.save({ session });
 
-  await auditLogger.log({
+  await auditLogger.logTx(session, {
     req,
+    correlation_id,
     action: 'department.archived',
     module: 'organization',
     object_type: 'Department',
@@ -550,6 +575,13 @@ export const deleteDepartment = asyncHandler(async (req: Request, res: Response)
     object_label: dept.name,
     before_state: beforeState,
     after_state: dept.toObject(),
+  });
+  await emitPlatformEvent(session, {
+    org_id: req.user.company_id, type: 'org_structure.changed',
+    subject: { type: 'department', id: dept._id.toString() },
+    actor: { type: 'member', id: String(req.user.userId) }, correlation_id,
+    data: { deleted: true },
+  });
   });
 
   // Trigger intelligence rules after department deletion
@@ -649,10 +681,13 @@ export const moveDepartment = asyncHandler(async (req: Request, res: Response) =
     dept.parent_id = input.parent_id || undefined;
   }
 
-  await dept.save();
+  const correlation_id = correlationIdFor(req);
+  await runInTransaction(async (session) => {
+  await dept.save({ session });
 
-  await auditLogger.log({
+  await auditLogger.logTx(session, {
     req,
+    correlation_id,
     action: 'department.moved',
     module: 'organization',
     object_type: 'Department',
@@ -660,6 +695,13 @@ export const moveDepartment = asyncHandler(async (req: Request, res: Response) =
     object_label: dept.name,
     before_state: { parent_id: oldParentId?.toString() ?? null },
     after_state: { parent_id: dept.parent_id?.toString() ?? null },
+  });
+  await emitPlatformEvent(session, {
+    org_id: req.user.company_id, type: 'org_structure.changed',
+    subject: { type: 'department', id: dept._id.toString() },
+    actor: { type: 'member', id: String(req.user.userId) }, correlation_id,
+    data: dept.toObject(),
+  });
   });
 
   triggerIntelligenceRules(req.user.company_id);
@@ -981,10 +1023,13 @@ export const deleteBusinessUnit = asyncHandler(async (req: Request, res: Respons
   const beforeState = bu.toObject();
 
   bu.is_active = false;
-  await bu.save();
+  const correlation_id = correlationIdFor(req);
+  await runInTransaction(async (session) => {
+  await bu.save({ session });
 
-  await auditLogger.log({
+  await auditLogger.logTx(session, {
     req,
+    correlation_id,
     action: 'business_unit.archived',
     module: 'organization',
     object_type: 'BusinessUnit',
@@ -992,6 +1037,13 @@ export const deleteBusinessUnit = asyncHandler(async (req: Request, res: Respons
     object_label: bu.name,
     before_state: beforeState,
     after_state: bu.toObject(),
+  });
+  await emitPlatformEvent(session, {
+    org_id: req.user.company_id, type: 'org_structure.changed',
+    subject: { type: 'department', id: bu._id.toString() },
+    actor: { type: 'member', id: String(req.user.userId) }, correlation_id,
+    data: { deleted: true },
+  });
   });
 
   triggerIntelligenceRules(req.user.company_id);
@@ -1032,7 +1084,9 @@ export const assignUserOrg = asyncHandler(async (req: Request, res: Response) =>
     (user as Record<string, unknown>).team_id = undefined;
   }
 
-  await user.save();
+  const correlation_id = correlationIdFor(req);
+  await runInTransaction(async (session) => {
+  await user.save({ session });
 
   // 2. Handle Team Memberships
   // If team_ids is null/empty, we remove all memberships.
@@ -1047,7 +1101,7 @@ export const assignUserOrg = asyncHandler(async (req: Request, res: Response) =>
         company_id: req.user.company_id,
         department_id: input.department_id,
         is_active: true,
-      });
+      }).session(session ?? null);
 
       if (validTeams.length !== teamIds.length) {
         throw new AppError(
@@ -1062,7 +1116,7 @@ export const assignUserOrg = asyncHandler(async (req: Request, res: Response) =>
     await TeamMember.deleteMany({
       company_id: req.user.company_id,
       user_id: user._id,
-    });
+    }, { session });
 
     // Create new memberships
     if (teamIds.length > 0) {
@@ -1072,7 +1126,7 @@ export const assignUserOrg = asyncHandler(async (req: Request, res: Response) =>
         user_id: user._id,
         role: 'member' as const,
       }));
-      await TeamMember.insertMany(memberships);
+      await TeamMember.insertMany(memberships, { session });
     }
   }
 
@@ -1080,8 +1134,9 @@ export const assignUserOrg = asyncHandler(async (req: Request, res: Response) =>
   delete (sanitizedBefore as any).password_hash;
   delete (sanitizedBefore as any).refresh_token_hash;
 
-  await auditLogger.log({
+  await auditLogger.logTx(session, {
     req,
+    correlation_id,
     action: 'user.org_assigned',
     module: 'organization',
     object_type: 'User',
@@ -1092,6 +1147,7 @@ export const assignUserOrg = asyncHandler(async (req: Request, res: Response) =>
       department_id: user.department_id,
       team_ids: input.team_ids || [],
     },
+  });
   });
 
   res.status(200).json({ 

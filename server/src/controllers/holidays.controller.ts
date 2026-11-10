@@ -8,9 +8,40 @@ import { HolidayAssignment } from '../models/HolidayAssignment.model';
 import { Location } from '../models/Location.model';
 import { User } from '../models/User.model';
 import { auditLogger } from '../lib/auditLogger';
+import { runInTransaction, emitPlatformEvent, correlationIdFor } from '../lib/platformEvents';
+import type { ClientSession } from 'mongoose';
 import { AppError } from '../utils/AppError';
 import { hasPermission } from '../lib/rbac';
 import { validateAndSanitizeCustomFields, enforceStandardFieldPermissions, enforceCustomFieldPermissions } from '../services/customFieldValidation.service';
+
+/** 06 section 2: calendar.changed so consumers invalidate their CalendarService cache. */
+async function emitCalendarChanged(
+  session: ClientSession | undefined,
+  req: Request,
+  correlation_id: string,
+  locationIds: Array<unknown>,
+): Promise<void> {
+  await emitPlatformEvent(session, {
+    org_id: req.user.company_id,
+    type: 'calendar.changed',
+    subject: { type: 'org', id: String(req.user.company_id) },
+    actor: { type: 'member', id: String(req.user.userId) },
+    correlation_id,
+    data: { affected_location_ids: Array.from(new Set(locationIds.map(String))) },
+  });
+}
+
+async function locationsOfCalendars(
+  session: ClientSession | undefined,
+  req: Request,
+  calendarIds: Array<unknown>,
+): Promise<string[]> {
+  const ids = await HolidayAssignment.find({
+    company_id: req.user.company_id,
+    calendar_id: { $in: calendarIds as any[] },
+  }).session(session ?? null).distinct('location_id');
+  return ids.map(String);
+}
 
 // ── Zod Schemas ──────────────────────────────────────────────────────────────
 
@@ -91,7 +122,7 @@ async function enrichHolidays(
 ): Promise<any[]> {
   const calendar = await HolidayCalendar.findById(calendarId).lean();
   const enriched = holidays.map((holiday) => {
-    const data = { ...holiday };
+    const data = typeof holiday?.toObject === 'function' ? holiday.toObject() : { ...holiday };
     return {
       ...data,
       calendar_name: calendar?.name,
@@ -231,14 +262,17 @@ export const getHolidayCalendarById = asyncHandler(async (req: Request, res: Res
      { ...input } as unknown as Record<string, unknown>,
    );
 
-   const calendar = await HolidayCalendar.create({
+   const correlation_id = correlationIdFor(req);
+   const calendar = await runInTransaction(async (session) => {
+   const [calendar] = await HolidayCalendar.create([{
      ...filteredInput,
      company_id: req.user.company_id,
      custom_fields: permissionedCustomFields,
-   });
+   }], { session });
 
-  await auditLogger.log({
+  await auditLogger.logTx(session, {
     req,
+    correlation_id,
     action: 'holiday_calendar.created',
     module: 'holidays',
     object_type: 'HolidayCalendar',
@@ -246,6 +280,9 @@ export const getHolidayCalendarById = asyncHandler(async (req: Request, res: Res
     object_label: calendar.name,
     before_state: null,
     after_state: calendar.toObject(),
+  });
+  await emitCalendarChanged(session, req, correlation_id, []);
+  return calendar;
   });
 
   res.status(201).json({ success: true, data: calendar });
@@ -312,10 +349,13 @@ export const updateHolidayCalendar = asyncHandler(async (req: Request, res: Resp
    }
 
    Object.assign(calendar, filteredInput);
-   await calendar.save();
+   const correlation_id = correlationIdFor(req);
+   await runInTransaction(async (session) => {
+   await calendar.save({ session });
 
-  await auditLogger.log({
+  await auditLogger.logTx(session, {
     req,
+    correlation_id,
     action: 'holiday_calendar.updated',
     module: 'holidays',
     object_type: 'HolidayCalendar',
@@ -323,6 +363,8 @@ export const updateHolidayCalendar = asyncHandler(async (req: Request, res: Resp
     object_label: calendar.name,
     before_state: beforeState,
     after_state: calendar.toObject(),
+  });
+  await emitCalendarChanged(session, req, correlation_id, await locationsOfCalendars(session, req, [calendar._id]));
   });
 
   res.status(200).json({ success: true, data: calendar });
@@ -371,10 +413,13 @@ export const deleteHolidayCalendar = asyncHandler(async (req: Request, res: Resp
 
   const beforeState = calendar.toObject();
 
-  await HolidayCalendar.deleteOne({ _id: calendar._id });
+  const correlation_id = correlationIdFor(req);
+  await runInTransaction(async (session) => {
+  await HolidayCalendar.deleteOne({ _id: calendar._id }, { session });
 
-  await auditLogger.log({
+  await auditLogger.logTx(session, {
     req,
+    correlation_id,
     action: 'holiday_calendar.deleted',
     module: 'holidays',
     object_type: 'HolidayCalendar',
@@ -382,6 +427,9 @@ export const deleteHolidayCalendar = asyncHandler(async (req: Request, res: Resp
     object_label: calendar.name,
     before_state: beforeState,
     after_state: null,
+  });
+  // Deletion is blocked while assignments exist, so no locations are affected.
+  await emitCalendarChanged(session, req, correlation_id, []);
   });
 
   res.status(200).json({ success: true, data: {} });
@@ -479,15 +527,19 @@ export const createHoliday = asyncHandler(async (req: Request, res: Response) =>
   }
 
    // @ts-ignore
-   const holiday = await Holiday.create({
+   const correlation_id = correlationIdFor(req);
+   const holiday = await runInTransaction(async (session) => {
+   // @ts-ignore
+   const [holiday] = await Holiday.create([{
      ...input,
      date: new Date(input.date),
      recurring_details: input.recurring_details || undefined,
      calendar_id: calendar._id,
-   });
+   }], { session });
 
-  await auditLogger.log({
+  await auditLogger.logTx(session, {
     req,
+    correlation_id,
     action: 'holiday.created',
     module: 'holidays',
     object_type: 'Holiday',
@@ -498,6 +550,9 @@ export const createHoliday = asyncHandler(async (req: Request, res: Response) =>
     before_state: null,
     // @ts-ignore
     after_state: holiday.toObject(),
+  });
+  await emitCalendarChanged(session, req, correlation_id, await locationsOfCalendars(session, req, [calendar._id]));
+  return holiday;
   });
 
   const enriched = await enrichHolidays([holiday], calendar._id.toString());
@@ -547,10 +602,13 @@ export const updateHoliday = asyncHandler(async (req: Request, res: Response) =>
    }
 
    Object.assign(holiday, input);
-   await holiday.save();
+   const correlation_id = correlationIdFor(req);
+   await runInTransaction(async (session) => {
+   await holiday.save({ session });
 
-  await auditLogger.log({
+  await auditLogger.logTx(session, {
     req,
+    correlation_id,
     action: 'holiday.updated',
     module: 'holidays',
     object_type: 'Holiday',
@@ -558,6 +616,8 @@ export const updateHoliday = asyncHandler(async (req: Request, res: Response) =>
     object_label: holiday.name,
     before_state: beforeState,
     after_state: holiday.toObject(),
+  });
+  await emitCalendarChanged(session, req, correlation_id, await locationsOfCalendars(session, req, [holiday.calendar_id]));
   });
 
   const enriched = await enrichHolidays([holiday], holiday.calendar_id.toString());
@@ -584,10 +644,13 @@ export const deleteHoliday = asyncHandler(async (req: Request, res: Response) =>
 
   const beforeState = holiday.toObject();
 
-  await Holiday.deleteOne({ _id: holiday._id });
+  const correlation_id = correlationIdFor(req);
+  await runInTransaction(async (session) => {
+  await Holiday.deleteOne({ _id: holiday._id }, { session });
 
-  await auditLogger.log({
+  await auditLogger.logTx(session, {
     req,
+    correlation_id,
     action: 'holiday.deleted',
     module: 'holidays',
     object_type: 'Holiday',
@@ -595,6 +658,8 @@ export const deleteHoliday = asyncHandler(async (req: Request, res: Response) =>
     object_label: holiday.name,
     before_state: beforeState,
     after_state: null,
+  });
+  await emitCalendarChanged(session, req, correlation_id, await locationsOfCalendars(session, req, [holiday.calendar_id]));
   });
 
   res.status(200).json({ success: true, data: {} });
@@ -699,15 +764,18 @@ export const createHolidayAssignment = asyncHandler(async (req: Request, res: Re
     );
   }
 
-  const assignment = await HolidayAssignment.create({
+  const correlation_id = correlationIdFor(req);
+  const assignment = await runInTransaction(async (session) => {
+  const [assignment] = await HolidayAssignment.create([{
   ...input,
   effective_date: new Date(input.effective_date),
   expiry_date: input.expiry_date ? new Date(input.expiry_date) : undefined,
   company_id: req.user.company_id,
-});
+}], { session });
 
-await auditLogger.log({
+await auditLogger.logTx(session, {
   req,
+  correlation_id,
   action: 'holiday_assignment.created',
   module: 'holidays',
   object_type: 'HolidayAssignment',
@@ -715,6 +783,9 @@ await auditLogger.log({
   object_label: `${location.name} - ${calendar.name}`,
   before_state: null,
   after_state: assignment.toObject(),
+});
+await emitCalendarChanged(session, req, correlation_id, [assignment.location_id]);
+return assignment;
 });
 
 res.status(201).json({ success: true, data: assignment });
@@ -750,11 +821,15 @@ export const updateHolidayAssignment = asyncHandler(async (req: Request, res: Re
     input.expiry_date = new Date(input.expiry_date);
   }
 
+  const oldLocationId = assignment.location_id;
   Object.assign(assignment, input);
-  await assignment.save();
+  const correlation_id = correlationIdFor(req);
+  await runInTransaction(async (session) => {
+  await assignment.save({ session });
 
-  await auditLogger.log({
+  await auditLogger.logTx(session, {
     req,
+    correlation_id,
     action: 'holiday_assignment.updated',
     module: 'holidays',
     object_type: 'HolidayAssignment',
@@ -762,6 +837,8 @@ export const updateHolidayAssignment = asyncHandler(async (req: Request, res: Re
     object_label: `${assignment.location_id} - ${assignment.calendar_id}`,
     before_state: beforeState,
     after_state: assignment.toObject(),
+  });
+  await emitCalendarChanged(session, req, correlation_id, [oldLocationId, assignment.location_id]);
   });
 
   res.status(200).json({ success: true, data: assignment });
@@ -786,10 +863,13 @@ export const deleteHolidayAssignment = asyncHandler(async (req: Request, res: Re
 
   const beforeState = assignment.toObject();
 
-  await HolidayAssignment.deleteOne({ _id: assignment._id });
+  const correlation_id = correlationIdFor(req);
+  await runInTransaction(async (session) => {
+  await HolidayAssignment.deleteOne({ _id: assignment._id }, { session });
 
-  await auditLogger.log({
+  await auditLogger.logTx(session, {
     req,
+    correlation_id,
     action: 'holiday_assignment.deleted',
     module: 'holidays',
     object_type: 'HolidayAssignment',
@@ -797,6 +877,8 @@ export const deleteHolidayAssignment = asyncHandler(async (req: Request, res: Re
     object_label: `${assignment.location_id} - ${assignment.calendar_id}`,
     before_state: beforeState,
     after_state: null,
+  });
+  await emitCalendarChanged(session, req, correlation_id, [assignment.location_id]);
   });
 
   res.status(200).json({ success: true, data: {} });
@@ -955,14 +1037,16 @@ export const createBulkHolidayCalendars = asyncHandler(async (req: Request, res:
 
   // @ts-ignore
   const calendars = [];
-  const errors = [];
+  const errors: string[] = [];
+  const correlation_id = correlationIdFor(req);
 
+  await runInTransaction(async (session) => {
   for (const item of input) {
     try {
       const existing = await HolidayCalendar.findOne({
         company_id: req.user.company_id,
         name: item.name,
-      });
+      }).session(session ?? null);
 
       if (existing) {
         errors.push(`Calendar with name "${item.name}" already exists.`);
@@ -970,10 +1054,10 @@ export const createBulkHolidayCalendars = asyncHandler(async (req: Request, res:
       }
 
       // @ts-ignore
-      const calendar = await HolidayCalendar.create({
+      const [calendar] = await HolidayCalendar.create([{
         ...item,
         company_id: req.user.company_id,
-      });
+      }], { session });
 
       calendars.push(calendar);
     } catch (error) {
@@ -984,8 +1068,9 @@ export const createBulkHolidayCalendars = asyncHandler(async (req: Request, res:
   if (calendars.length > 0) {
     // @ts-ignore
     for (const calendar of calendars) {
-      await auditLogger.log({
+      await auditLogger.logTx(session, {
         req,
+        correlation_id,
         action: 'holiday_calendar.bulk_created',
         module: 'holidays',
         object_type: 'HolidayCalendar',
@@ -995,7 +1080,9 @@ export const createBulkHolidayCalendars = asyncHandler(async (req: Request, res:
         after_state: calendar.toObject(),
       });
     }
+    await emitCalendarChanged(session, req, correlation_id, []);
   }
+  });
 
   res.status(201).json({
     success: true,
@@ -1022,8 +1109,10 @@ export const createBulkHolidays = asyncHandler(async (req: Request, res: Respons
 
   // @ts-ignore
   const holidays = [];
-  const errors = [];
+  const errors: string[] = [];
+  const correlation_id = correlationIdFor(req);
 
+  await runInTransaction(async (session) => {
   for (const item of input) {
     try {
       const year = new Date(item.date).getFullYear();
@@ -1038,7 +1127,7 @@ export const createBulkHolidays = asyncHandler(async (req: Request, res: Respons
             $gte: new Date(year, month, day),
             $lt: new Date(year, month, day + 1),
           },
-        });
+        }).session(session ?? null);
 
         if (existing) {
           errors.push(`Holiday with name "${item.name}" already exists for this date.`);
@@ -1047,12 +1136,12 @@ export const createBulkHolidays = asyncHandler(async (req: Request, res: Respons
       }
 
       // @ts-ignore
-      const holiday = await Holiday.create({
+      const [holiday] = await Holiday.create([{
         ...item,
         date: new Date(item.date),
         recurring_details: item.recurring_details || undefined,
         calendar_id: calendar._id,
-      });
+      }], { session });
 
       holidays.push(holiday);
     } catch (error) {
@@ -1063,8 +1152,9 @@ export const createBulkHolidays = asyncHandler(async (req: Request, res: Respons
   if (holidays.length > 0) {
     // @ts-ignore
     for (const holiday of holidays) {
-      await auditLogger.log({
+      await auditLogger.logTx(session, {
         req,
+        correlation_id,
         action: 'holiday.bulk_created',
         module: 'holidays',
         object_type: 'Holiday',
@@ -1074,7 +1164,9 @@ export const createBulkHolidays = asyncHandler(async (req: Request, res: Respons
         after_state: holiday.toObject(),
       });
     }
+    await emitCalendarChanged(session, req, correlation_id, await locationsOfCalendars(session, req, [calendar._id]));
   }
+  });
 
   // @ts-ignore
   const enriched = await enrichHolidays(holidays, calendar._id.toString());
@@ -1103,13 +1195,16 @@ export const deleteBulkHolidayAssignments = asyncHandler(async (req: Request, re
     throw new AppError('No holiday assignments found', 404, 'NOT_FOUND');
   }
 
+  const correlation_id = correlationIdFor(req);
+  await runInTransaction(async (session) => {
   await HolidayAssignment.deleteMany({
     _id: { $in: assignment_ids },
-  });
+  }, { session });
 
   for (const assignment of assignments) {
-    await auditLogger.log({
+    await auditLogger.logTx(session, {
       req,
+      correlation_id,
       action: 'holiday_assignment.bulk_deleted',
       module: 'holidays',
       object_type: 'HolidayAssignment',
@@ -1119,6 +1214,8 @@ export const deleteBulkHolidayAssignments = asyncHandler(async (req: Request, re
       after_state: null,
     });
   }
+  await emitCalendarChanged(session, req, correlation_id, assignments.map(a => a.location_id));
+  });
 
   res.status(200).json({ success: true, data: { deleted_count: assignments.length } });
 });
@@ -1148,11 +1245,15 @@ export const moveHoliday = asyncHandler(async (req: Request, res: Response) => {
 
   const beforeState = sourceHoliday.toObject();
 
+  const sourceCalendarId = sourceHoliday.calendar_id;
   sourceHoliday.calendar_id = targetCalendar._id;
-  await sourceHoliday.save();
+  const correlation_id = correlationIdFor(req);
+  await runInTransaction(async (session) => {
+  await sourceHoliday.save({ session });
 
-  await auditLogger.log({
+  await auditLogger.logTx(session, {
     req,
+    correlation_id,
     action: 'holiday.moved',
     module: 'holidays',
     object_type: 'Holiday',
@@ -1160,6 +1261,8 @@ export const moveHoliday = asyncHandler(async (req: Request, res: Response) => {
     object_label: sourceHoliday.name,
     before_state: beforeState,
     after_state: sourceHoliday.toObject(),
+  });
+  await emitCalendarChanged(session, req, correlation_id, await locationsOfCalendars(session, req, [sourceCalendarId, targetCalendar._id]));
   });
 
   const enriched = await enrichHolidays([sourceHoliday], targetCalendar._id.toString());

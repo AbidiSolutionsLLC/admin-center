@@ -10,8 +10,10 @@ import { Role } from '../models/Role.model';
 import { UserRole } from '../models/UserRole.model';
 import { TeamMember } from '../models/TeamMember.model';
 import { auditLogger } from '../lib/auditLogger';
+import { runInTransaction, emitPlatformEvent, emitAppAccessChanged, correlationIdFor } from '../lib/platformEvents';
 import { sendWelcomeEmail, sendBulkWelcomeEmails, sendEmail } from '../lib/emailService';
-import { isValidTransition, getTransitionErrorMessage, LifecycleState } from '../lib/lifecycle';
+import { isValidTransition, getTransitionErrorMessage, LifecycleState, lifecycleEventFor } from '../lib/lifecycle';
+import { revokeSessionsTx, destroyProviderSession } from '../identity/sessions';
 import { AppError } from '../utils/AppError';
 import { Types } from 'mongoose';
 import { Department } from '../models/Department.model';
@@ -56,6 +58,17 @@ const getRouteId = (param: string | string[]): string =>
 
 import crypto from 'crypto';
 import { InviteToken } from '../models/InviteToken.model';
+
+/** Admin-owned member fields carried on member.provisioned / member.updated (07 §1.2). */
+const MEMBER_ADMIN_FIELDS = ['full_name', 'email', 'department_id', 'location_id', 'manager_id', 'employment_type'] as const;
+const memberAdminFields = (u: any): Record<string, unknown> => {
+  const out: Record<string, unknown> = {};
+  for (const f of MEMBER_ADMIN_FIELDS) {
+    const v = u[f];
+    out[f] = v == null ? null : (v instanceof Types.ObjectId ? v.toString() : v);
+  }
+  return out;
+};
 
 // ── Zod Schemas ──────────────────────────────────────────────────────────────
 
@@ -370,12 +383,145 @@ async function enrichUsers(
   });
 }
 
+/**
+ * Applies a lifecycle transition atomically: user state, token/session revocation, audit and
+ * platform events (member.suspended|reactivated|terminated, session.revoked, app_access.changed)
+ * commit together (06 §1, 04 §8.2). Provider-side session teardown runs after commit.
+ */
+async function transitionLifecycleTx(
+  req: Request,
+  user: any,
+  currentState: LifecycleState,
+  targetState: LifecycleState,
+  opts: { reason?: string; auditAction: string; applyAutomationWrites: boolean },
+): Promise<{ original: { email: string; full_name: string; manager_id?: any } }> {
+  const beforeState = user.toObject() as any;
+  const original = { email: user.email, full_name: user.full_name, manager_id: user.manager_id };
+  const transitionKey = `${currentState}_to_${targetState}`;
+  const revokes = targetState === 'archived' || targetState === 'deactivated' || targetState === 'terminated';
+  const eventType = lifecycleEventFor(currentState, targetState);
+  const correlationId = correlationIdFor(req);
+  const actor = { type: 'member' as const, id: req.user.userId };
+  const companyId = req.user.company_id;
+
+  const sessionIds = await runInTransaction(async (session) => {
+    user.lifecycle_state = targetState;
+    if (targetState === 'active' || targetState === 'on_leave' || targetState === 'probation') user.is_active = true;
+    if (revokes) user.is_active = false;
+
+    const auditAutomation = (after: Record<string, unknown>, label: string = user.full_name) => auditLogger.logTx(session, {
+      req,
+      action: 'user.lifecycle_automation',
+      module: 'people',
+      object_type: 'User',
+      object_id: user._id.toString(),
+      object_label: label,
+      before_state: { transition: transitionKey },
+      after_state: after,
+    });
+
+    if (opts.applyAutomationWrites) {
+      if (revokes) {
+        user.refresh_token_hash = undefined;
+        if (targetState === 'terminated' && !user.termination_date) user.termination_date = new Date();
+      }
+      if (transitionKey === 'onboarding_to_active') {
+        if (!user.role) user.role = ROLES.EMPLOYEE;
+        user.is_active = true;
+      }
+    }
+    const terminationDate: Date = user.termination_date ?? beforeState.termination_date ?? new Date();
+    const preAnonymizeName = user.full_name;
+    if (opts.applyAutomationWrites && targetState === 'archived') {
+      user.full_name = 'Archived User';
+      user.email = `archived-${crypto.randomBytes(6).toString('hex')}@archived.local`;
+      user.phone = undefined;
+      user.avatar_url = undefined;
+      user.employee_id = `ARCHIVED-${crypto.randomBytes(4).toString('hex').toUpperCase()}`;
+      user.is_active = false;
+      user.department_id = undefined;
+      user.team_id = undefined;
+      user.manager_id = undefined;
+      user.location_id = undefined;
+      user.hire_date = undefined;
+      user.termination_date = undefined;
+      user.custom_fields = {};
+    }
+    await user.save({ session });
+
+    let revokedSids: string[] = [];
+    if (revokes) {
+      await RefreshToken.updateMany(
+        { user_id: user._id, is_revoked: false },
+        { $set: { is_revoked: true } },
+        { session },
+      );
+      // member.suspended carries session_ids itself; other revoking states emit session.revoked per sid
+      revokedSids = await revokeSessionsTx(
+        session,
+        { member_id: user._id },
+        `lifecycle_${targetState}`,
+        { actor, correlation_id: correlationId },
+        { emitEvents: eventType !== 'member.suspended' },
+      );
+    }
+
+    if (opts.applyAutomationWrites) {
+      if (revokes) {
+        await auditAutomation({
+          automation: 'sessions_revoked',
+          refresh_tokens_invalidated: true,
+          termination_date_set: targetState === 'terminated',
+        }, preAnonymizeName);
+      }
+      if (targetState === 'archived') await auditAutomation({ automation: 'pii_anonymized' });
+      if (transitionKey === 'onboarding_to_active') await auditAutomation({ automation: 'account_activated', role: user.role });
+    }
+
+    const afterState = user.toObject() as any;
+    delete afterState.password_hash;
+    delete afterState.refresh_token_hash;
+    delete beforeState.password_hash;
+    delete beforeState.refresh_token_hash;
+    await auditLogger.logTx(session, {
+      req,
+      action: opts.auditAction,
+      module: 'people',
+      object_type: 'User',
+      object_id: user._id.toString(),
+      object_label: user.full_name,
+      before_state: beforeState,
+      after_state: afterState,
+    });
+
+    const subject = { type: 'member', id: user._id.toString() };
+    if (eventType === 'member.suspended') {
+      await emitPlatformEvent(session, { org_id: companyId, type: eventType, subject, actor, correlation_id: correlationId,
+        data: { lifecycle_state: targetState, reason: opts.reason ?? null, session_ids: revokedSids } });
+    } else if (eventType === 'member.reactivated') {
+      await emitPlatformEvent(session, { org_id: companyId, type: eventType, subject, actor, correlation_id: correlationId,
+        data: { lifecycle_state: targetState } });
+    } else if (eventType === 'member.terminated') {
+      await emitPlatformEvent(session, { org_id: companyId, type: eventType, subject, actor, correlation_id: correlationId,
+        data: { termination_date: terminationDate.toISOString() } });
+    }
+    await emitAppAccessChanged(session, companyId, [user._id.toString()], { actor, correlation_id: correlationId });
+    return revokedSids;
+  });
+
+  for (const sid of sessionIds) {
+    await destroyProviderSession(sid).catch((e) => console.error('[Lifecycle] provider session teardown failed', sid, e));
+  }
+  return { original };
+}
+
 async function runLifecycleAutomations(
   user: any,
   currentState: LifecycleState,
   targetState: LifecycleState,
   req: Request,
-  reason?: string
+  reason?: string,
+  original: { email: string; full_name: string; manager_id?: any } = user
 ): Promise<void> {
   const transitionKey = `${currentState}_to_${targetState}`;
   const company = await Company.findById(req.user.company_id);
@@ -384,131 +530,12 @@ async function runLifecycleAutomations(
     return;
   }
 
-  const originalUserEmail = user.email;
-  const originalUserFullName = user.full_name;
+  // Identity/access writes (session revocation, anonymization, activation) already committed
+  // in transitionLifecycleTx; only side effects (invite email, notifications) run here.
+  const originalUserEmail = original.email;
+  const originalUserFullName = original.full_name;
   const originalUserFirstName = originalUserFullName.split(' ')[0];
-  const originalManagerId = user.manager_id;
-
-  // 1. Target-Specific Side Effects (Revocation, Anonymization, etc.)
-  if (targetState === 'archived' || targetState === 'deactivated' || targetState === 'terminated') {
-    user.refresh_token_hash = undefined;
-    
-    // termination_date only for terminated
-    if (targetState === 'terminated' && !user.termination_date) {
-      user.termination_date = new Date();
-    }
-
-    await user.save();
-
-    await RefreshToken.updateMany(
-      { user_id: user._id, is_revoked: false },
-      { $set: { is_revoked: true } }
-    );
-
-    await auditLogger.log({
-      req,
-      action: 'user.lifecycle_automation',
-      module: 'people',
-      object_type: 'User',
-      object_id: user._id.toString(),
-      object_label: user.full_name,
-      before_state: { transition: transitionKey },
-      after_state: { 
-        automation: 'sessions_revoked', 
-        refresh_tokens_invalidated: true,
-        termination_date_set: targetState === 'terminated'
-      },
-    });
-
-    // Unblock pending workflow approvals for this user
-    try {
-      const pendingApprovals = await ApprovalRequest.find({
-        status: 'pending',
-        approver_user_ids: user._id
-      });
-      
-      for (const approval of pendingApprovals) {
-        // Remove user from approvers
-        await ApprovalRequest.updateOne(
-          { _id: approval._id },
-          { $pull: { approver_user_ids: user._id } }
-        );
-        
-        const remainingCount = approval.approver_user_ids.length - 1;
-        
-        if (approval.approval_condition === 'all') {
-          const approvedCount = approval.decisions.filter(d => d.status === 'approved').length;
-          if (remainingCount === 0 || approvedCount >= remainingCount) {
-            approval.status = 'approved';
-            approval.decided_at = new Date();
-            approval.comments = 'Automatically approved due to approver deactivation satisfying conditions.';
-            await approval.save();
-            await resumeWorkflow(approval.workflow_run_id.toString(), true, user._id.toString());
-          }
-        } else if (approval.approval_condition === 'any') {
-          if (remainingCount === 0) {
-            approval.status = 'rejected';
-            approval.decided_at = new Date();
-            approval.comments = 'All assigned approvers were deactivated.';
-            await approval.save();
-            await resumeWorkflow(approval.workflow_run_id.toString(), false, user._id.toString());
-          }
-        }
-      }
-    } catch (err) {
-      console.error('[Lifecycle Automation] Failed to update pending approvals:', err);
-    }
-  }
-
-  if (targetState === 'archived') {
-    user.full_name = 'Archived User';
-    user.email = `archived-${crypto.randomBytes(6).toString('hex')}@archived.local`;
-    user.phone = undefined;
-    user.avatar_url = undefined;
-    user.employee_id = `ARCHIVED-${crypto.randomBytes(4).toString('hex').toUpperCase()}`;
-    user.is_active = false;
-    (user as any).department_id = undefined;
-    (user as any).team_id = undefined;
-    (user as any).manager_id = undefined;
-    (user as any).location_id = undefined;
-    (user as any).hire_date = undefined;
-    (user as any).termination_date = undefined;
-    (user as any).custom_fields = {};
-
-    await user.save();
-
-    await auditLogger.log({
-      req,
-      action: 'user.lifecycle_automation',
-      module: 'people',
-      object_type: 'User',
-      object_id: user._id.toString(),
-      object_label: user.full_name,
-      before_state: { transition: transitionKey },
-      after_state: { automation: 'pii_anonymized' },
-    });
-  }
-
-  // 2. Transition-Specific Automations (Invite Link, etc.)
-  if (transitionKey === 'onboarding_to_active') {
-    // RBAC: Grant 'Employee' role by default if not set
-    if (!user.role) {
-      user.role = ROLES.EMPLOYEE;
-    }
-    user.is_active = true;
-    await user.save();
-
-    await auditLogger.log({
-      req,
-      action: 'user.lifecycle_automation',
-      module: 'people',
-      object_type: 'User',
-      object_id: user._id.toString(),
-      object_label: user.full_name,
-      before_state: { transition: transitionKey },
-      after_state: { automation: 'account_activated', role: user.role },
-    });
-  }
+  const originalManagerId = original.manager_id;
 
   if (transitionKey === 'invited_to_onboarding') {
     const rawToken = crypto.randomBytes(32).toString('hex');
@@ -1026,25 +1053,8 @@ export const inviteUser = asyncHandler(async (req: Request, res: Response) => {
   const tempPassword = generateTemporaryPassword();
   const password_hash = await bcrypt.hash(tempPassword, 10);
 
-  // Create user (employee_id will be auto-generated by pre-save hook)
-  const user = await User.create({
-    ...filteredInput,
-    company_id: req.user.company_id as any, // Needed due to Mongoose Types.ObjectId vs string mismatch
-    password_hash,
-    role: input.role || 'Employee', // Default to 'Employee' if not provided
-    lifecycle_state: 'invited',
-    is_active: false, // User is not active until they complete onboarding
-    phone: input.phone ?? undefined,
-    department_id: input.department_id || undefined,
-    team_id: input.team_id || undefined,
-    manager_id: input.manager_id || undefined,
-    secondary_manager_ids: input.secondary_manager_ids || [],
-    location_id: input.location_id || undefined,
-    hire_date: input.hire_date ? new Date(input.hire_date) : undefined,
-    custom_fields: permissionedCustomFields,
-  });
-
-  // Assign multiple roles if provided
+  // Validate roles before opening the transaction
+  let rolesToAssign: any[] = [];
   if (input.role_ids && input.role_ids.length > 0) {
     const roles = await Role.find({
       _id: { $in: input.role_ids },
@@ -1056,28 +1066,81 @@ export const inviteUser = asyncHandler(async (req: Request, res: Response) => {
       throw new AppError('One or more roles not found or inactive', 404, 'NOT_FOUND');
     }
     await assertCanAssignRoles(req as any, roles as any, []);
-
-    const userRolesToCreate = roles.map(role => ({
-      user_id: user._id,
-      role_id: role._id,
-      company_id: req.user.company_id,
-      assigned_by: req.user.userId,
-    }));
-    
-    await UserRole.insertMany(userRolesToCreate);
+    rolesToAssign = roles;
   }
 
-  // Generate secure invite token
   const rawToken = crypto.randomBytes(32).toString('hex');
   const tokenHash = crypto.createHash('sha256').update(rawToken).digest('hex');
+  const correlationId = correlationIdFor(req);
+  const actor = { type: 'member' as const, id: req.user.userId };
 
-  await InviteToken.create({
-    user_id: user._id,
-    token_hash: tokenHash,
-    expires_at: new Date(Date.now() + 72 * 60 * 60 * 1000), // 72 hours
+  // Domain change + audit + platform events commit atomically (06 §1)
+  const user = await runInTransaction(async (session) => {
+    // employee_id will be auto-generated by pre-save hook
+    const [created] = await User.create([{
+      ...filteredInput,
+      company_id: req.user.company_id as any, // Needed due to Mongoose Types.ObjectId vs string mismatch
+      password_hash,
+      role: input.role || 'Employee', // Default to 'Employee' if not provided
+      lifecycle_state: 'invited',
+      is_active: false, // User is not active until they complete onboarding
+      phone: input.phone ?? undefined,
+      department_id: input.department_id || undefined,
+      team_id: input.team_id || undefined,
+      manager_id: input.manager_id || undefined,
+      secondary_manager_ids: input.secondary_manager_ids || [],
+      location_id: input.location_id || undefined,
+      hire_date: input.hire_date ? new Date(input.hire_date) : undefined,
+      custom_fields: permissionedCustomFields,
+    }], { session });
+
+    if (rolesToAssign.length > 0) {
+      await UserRole.insertMany(rolesToAssign.map(role => ({
+        user_id: created._id,
+        role_id: role._id,
+        company_id: req.user.company_id,
+        assigned_by: req.user.userId,
+      })), { session });
+    }
+
+    await InviteToken.create([{
+      user_id: created._id,
+      token_hash: tokenHash,
+      expires_at: new Date(Date.now() + 72 * 60 * 60 * 1000), // 72 hours
+    }], { session });
+
+    const afterState = created.toObject();
+    // @ts-ignore
+    delete afterState.password_hash;
+    delete afterState.refresh_token_hash;
+
+    await auditLogger.logTx(session, {
+      req,
+      action: 'user.invited',
+      module: 'people',
+      object_type: 'User',
+      object_id: created._id.toString(),
+      object_label: created.full_name,
+      before_state: null,
+      after_state: afterState,
+    });
+
+    await emitPlatformEvent(session, {
+      org_id: req.user.company_id,
+      type: 'member.provisioned',
+      subject: { type: 'member', id: created._id.toString() },
+      actor,
+      correlation_id: correlationId,
+      data: {
+        ...memberAdminFields(created),
+        lifecycle_state: 'invited',
+      },
+    });
+    await emitAppAccessChanged(session, req.user.company_id, [created._id.toString()], { actor, correlation_id: correlationId });
+    return created;
   });
 
-  // Send welcome email
+  // Send welcome email (after commit)
   try {
     await sendWelcomeEmail({
       email: user.email,
@@ -1090,23 +1153,6 @@ export const inviteUser = asyncHandler(async (req: Request, res: Response) => {
     console.error('Failed to send welcome email:', error);
     // Don't fail the invite if email fails, just log it
   }
-
-  // Audit log
-  const afterState = user.toObject();
-  // @ts-ignore
-  delete afterState.password_hash;
-  delete afterState.refresh_token_hash;
-
-  await auditLogger.log({
-    req,
-    action: 'user.invited',
-    module: 'people',
-    object_type: 'User',
-    object_id: user._id.toString(),
-    object_label: user.full_name,
-    before_state: null,
-    after_state: afterState,
-  });
 
   // Trigger user.created workflow
   handleLifecycleEvent({
@@ -1291,14 +1337,10 @@ export const updateUser = asyncHandler(async (req: Request, res: Response) => {
     updates.termination_date = new Date(updates.termination_date);
   }
 
-  Object.assign(user, updates);
-  await user.save();
-
-  // Sync multiple roles if provided
+  // Validate role sync before opening the transaction
+  let rolesToGrant: any[] = [];
   if (safeInput.role_ids !== undefined) {
     const roleIds = safeInput.role_ids;
-    let rolesToGrant: any[] = [];
-
     if (roleIds.length > 0) {
       const roles = await Role.find({
         _id: { $in: roleIds },
@@ -1313,35 +1355,105 @@ export const updateUser = asyncHandler(async (req: Request, res: Response) => {
     }
     // WI-08: cannot change own roles, cannot manage higher-ranked users, cannot grant above own rank
     await assertCanAssignRoles(req as any, rolesToGrant, [user._id]);
+  }
 
-    await UserRole.deleteMany({
-      user_id: user._id,
-      company_id: req.user.company_id
-    });
+  const correlationId = correlationIdFor(req);
+  const actor = { type: 'member' as const, id: req.user.userId };
+  const adminBefore = memberAdminFields(beforeState);
+  const oldLocationId = beforeState.location_id?.toString() ?? null;
+  const newLocationId = updates.location_id?.toString() ?? null;
+  const locationChanged = updates.location_id !== undefined && oldLocationId !== newLocationId;
 
-    if (roleIds.length > 0) {
-      // @ts-ignore
-      const userRolesToCreate = roleIds.map(roleId => ({
+  // Domain change + audit + platform events commit atomically (06 §1, 04 §8.2)
+  await runInTransaction(async (session) => {
+    Object.assign(user, updates);
+    await user.save({ session });
+
+    if (safeInput.role_ids !== undefined) {
+      const roleIds = safeInput.role_ids;
+      await UserRole.deleteMany({
         user_id: user._id,
-        role_id: roleId,
-        company_id: req.user.company_id,
-        assigned_by: req.user.userId,
-      }));
-      
-      await UserRole.insertMany(userRolesToCreate);
-    }
-    rbacCache.invalidateUser(user._id.toString());
+        company_id: req.user.company_id
+      }, { session });
 
-    await auditLogger.log({
+      if (roleIds.length > 0) {
+        // @ts-ignore
+        const userRolesToCreate = roleIds.map(roleId => ({
+          user_id: user._id,
+          role_id: roleId,
+          company_id: req.user.company_id,
+          assigned_by: req.user.userId,
+        }));
+
+        await UserRole.insertMany(userRolesToCreate, { session });
+      }
+
+      await auditLogger.logTx(session, {
+        req,
+        action: 'user.roles_updated',
+        module: 'people',
+        object_type: 'User',
+        object_id: user._id.toString(),
+        object_label: user.full_name,
+        before_state: null,
+        after_state: { role_ids: roleIds },
+      });
+    }
+
+    // Audit log — location change fires a dedicated event
+    if (locationChanged) {
+      await auditLogger.logTx(session, {
+        req,
+        action: 'user.location_assigned',
+        module: 'people',
+        object_type: 'User',
+        object_id: user._id.toString(),
+        object_label: user.full_name,
+        before_state: { location_id: beforeState.location_id?.toString() ?? null },
+        after_state: { location_id: updates.location_id },
+      });
+    }
+
+    const afterStateTx = user.toObject() as any;
+    delete afterStateTx.password_hash;
+    delete afterStateTx.refresh_token_hash;
+    const sanitizedBeforeTx = { ...(beforeState as any) };
+    delete sanitizedBeforeTx.password_hash;
+    delete sanitizedBeforeTx.refresh_token_hash;
+
+    await auditLogger.logTx(session, {
       req,
-      action: 'user.roles_updated',
+      action: 'user.updated',
       module: 'people',
       object_type: 'User',
       object_id: user._id.toString(),
       object_label: user.full_name,
-      before_state: null,
-      after_state: { role_ids: roleIds },
+      before_state: sanitizedBeforeTx,
+      after_state: afterStateTx,
     });
+
+    const adminAfter = memberAdminFields(user);
+    const changed: Record<string, unknown> = {};
+    for (const f of MEMBER_ADMIN_FIELDS) {
+      if (adminBefore[f] !== adminAfter[f]) changed[f] = adminAfter[f];
+    }
+    if (Object.keys(changed).length > 0) {
+      await emitPlatformEvent(session, {
+        org_id: req.user.company_id,
+        type: 'member.updated',
+        subject: { type: 'member', id: user._id.toString() },
+        actor,
+        correlation_id: correlationId,
+        data: { changed },
+      });
+    }
+    await emitAppAccessChanged(session, req.user.company_id, [user._id.toString()], { actor, correlation_id: correlationId });
+  });
+
+  // Side effects after commit
+  if (safeInput.role_ids !== undefined) {
+    const roleIds = safeInput.role_ids;
+    rbacCache.invalidateUser(user._id.toString());
 
     handleLifecycleEvent({
       companyId: req.user.company_id,
@@ -1353,21 +1465,7 @@ export const updateUser = asyncHandler(async (req: Request, res: Response) => {
     }).catch(err => console.error('[Workflow Error user.role_changed]', err));
   }
 
-  // Audit log — location change fires a dedicated event
-  const oldLocationId = beforeState.location_id?.toString() ?? null;
-  const newLocationId = updates.location_id?.toString() ?? null;
-  if (updates.location_id !== undefined && oldLocationId !== newLocationId) {
-    await auditLogger.log({
-      req,
-      action: 'user.location_assigned',
-      module: 'people',
-      object_type: 'User',
-      object_id: user._id.toString(),
-      object_label: user.full_name,
-      before_state: { location_id: beforeState.location_id?.toString() ?? null },
-      after_state: { location_id: updates.location_id },
-    });
-
+  if (locationChanged) {
     const effectiveSettings = await locationSettingsService.getEffectiveSettingsForUser(
       user._id.toString(),
       req.user.company_id
@@ -1399,26 +1497,6 @@ export const updateUser = asyncHandler(async (req: Request, res: Response) => {
       console.error(`[ContextEngine] Failed for user ${user._id}:`, err);
     });
   }
-
-  // Audit log
-  const afterState = user.toObject() as any;
-  delete afterState.password_hash;
-  delete afterState.refresh_token_hash;
-  
-  const sanitizedBefore = beforeState as any;
-  delete sanitizedBefore.password_hash;
-  delete sanitizedBefore.refresh_token_hash;
-
-  await auditLogger.log({
-    req,
-    action: 'user.updated',
-    module: 'people',
-    object_type: 'User',
-    object_id: user._id.toString(),
-    object_label: user.full_name,
-    before_state: sanitizedBefore,
-    after_state: afterState,
-  });
 
   if (updates.department_id !== undefined && updates.department_id !== beforeState.department_id) {
     handleLifecycleEvent({
@@ -1482,26 +1560,16 @@ export const updateUserLifecycle = asyncHandler(async (req: Request, res: Respon
     );
   }
 
-  const beforeState = user.toObject();
+  // lifecycle_changed_at is auto-updated by the pre-save hook
+  const { original } = await transitionLifecycleTx(req, user, currentState, targetState, {
+    reason: input.reason,
+    auditAction: 'user.lifecycle_changed',
+    applyAutomationWrites: true,
+  });
 
-  // Update lifecycle state (lifecycle_changed_at will be auto-updated by pre-save hook)
-  user.lifecycle_state = targetState;
-
-  // Handle specific transitions
-  if (targetState === 'active' || targetState === 'on_leave' || targetState === 'probation') {
-    user.is_active = true;
-  }
-
-  if (targetState === 'deactivated' || targetState === 'terminated' || targetState === 'archived') {
-    user.is_active = false; // Deactivate user account access
-  }
-
-  await user.save();
-
-  // ── Lifecycle Automations ─────────────────────────────────────────────
-  // Each automation fires an audit event and performs its specific action
+  // ── Lifecycle side effects (invite email, notifications) run after commit ──
   try {
-    await runLifecycleAutomations(user, currentState, targetState, req, input.reason);
+    await runLifecycleAutomations(user, currentState, targetState, req, input.reason, original);
   } catch (automationError) {
     const transitionKey = `${currentState}_to_${targetState}`;
     console.error(`[Lifecycle Automation Error] ${transitionKey}:`, automationError);
@@ -1517,26 +1585,6 @@ export const updateUserLifecycle = asyncHandler(async (req: Request, res: Respon
       after_state: { error: automationError instanceof Error ? automationError.message : 'Unknown error' },
     });
   }
-
-  // MANDATORY: Main audit log for lifecycle change
-  const afterState = user.toObject() as any;
-  delete afterState.password_hash;
-  delete afterState.refresh_token_hash;
-
-  const sanitizedBefore = beforeState as any;
-  delete sanitizedBefore.password_hash;
-  delete sanitizedBefore.refresh_token_hash;
-
-  await auditLogger.log({
-    req,
-    action: 'user.lifecycle_changed',
-    module: 'people',
-    object_type: 'User',
-    object_id: user._id.toString(),
-    object_label: user.full_name,
-    before_state: sanitizedBefore,
-    after_state: afterState,
-  });
 
   // ── Workflow Engine: Fire lifecycle event to matching workflows ─────────
   // Fire-and-forget: workflows execute asynchronously, don't block the response
@@ -1646,55 +1694,69 @@ export const bulkInviteUsers = asyncHandler(async (req: Request, res: Response) 
   }
 
   if (usersToCreate.length > 0) {
-    // 1. Bulk Create Users
-    // Note: We use create() instead of insertMany() to trigger pre-save hooks (like employee_id generation)
-    // but we can still optimize by doing them in parallel if needed. 
-    // However, User.create([docs]) is actually quite efficient in Mongoose as it runs hooks.
-    const createdUsers = await User.create(usersToCreate.map(({ _tokenHash, _rawToken, ...u }) => u));
+    // 1. Create users, tokens, audits and platform events in ONE transaction (06 §1)
+    // Note: create() (not insertMany) triggers pre-save hooks like employee_id generation.
+    const correlationId = correlationIdFor(req);
+    const actor = { type: 'member' as const, id: req.user.userId };
+    const createdUsers = await runInTransaction(async (session) => {
+      createdUserInfos.length = 0;
+      const created = await User.create(usersToCreate.map(({ _tokenHash, _rawToken, ...u }) => u), { session, ordered: true });
 
-    // 2. Bulk Create Tokens and Audit Logs
-    const tokensToCreate = [];
-    const auditLogs = [];
+      const tokensToCreate = [];
+      for (let i = 0; i < created.length; i++) {
+        const user = created[i];
+        const sourceData = usersToCreate[i];
 
-    for (let i = 0; i < createdUsers.length; i++) {
-      const user = createdUsers[i];
-      const sourceData = usersToCreate[i];
+        tokensToCreate.push({
+          user_id: user._id,
+          token_hash: sourceData._tokenHash,
+          expires_at: new Date(Date.now() + 72 * 60 * 60 * 1000),
+        });
 
-      tokensToCreate.push({
-        user_id: user._id,
-        token_hash: sourceData._tokenHash,
-        expires_at: new Date(Date.now() + 72 * 60 * 60 * 1000),
-      });
+        createdUserInfos.push({
+          email: user.email,
+          full_name: user.full_name,
+          employee_id: user.employee_id,
+          token: sourceData._rawToken,
+          userId: user._id.toString()
+        });
 
-      createdUserInfos.push({
-        email: user.email,
-        full_name: user.full_name,
-        employee_id: user.employee_id,
-        token: sourceData._rawToken,
-        userId: user._id.toString()
-      });
+        const afterState = user.toObject() as any;
+        delete afterState.password_hash;
+        delete afterState.refresh_token_hash;
 
-      // Update results with generated employee_id
+        await auditLogger.logTx(session, {
+          req,
+          action: 'user.bulk_invited',
+          module: 'people',
+          object_type: 'User',
+          object_id: user._id.toString(),
+          object_label: user.full_name,
+          before_state: null,
+          after_state: afterState,
+        });
+
+        await emitPlatformEvent(session, {
+          org_id: req.user.company_id,
+          type: 'member.provisioned',
+          subject: { type: 'member', id: user._id.toString() },
+          actor,
+          correlation_id: correlationId,
+          data: { ...memberAdminFields(user), lifecycle_state: 'invited' },
+        });
+      }
+
+      await InviteToken.insertMany(tokensToCreate, { session });
+      await emitAppAccessChanged(session, req.user.company_id, created.map(u => u._id.toString()), { actor, correlation_id: correlationId });
+      return created;
+    });
+
+    // 2. After commit: result enrichment and workflows
+    for (const user of createdUsers) {
       const resultIndex = results.findIndex(r => r.email === user.email && r.success);
       if (resultIndex !== -1) {
         results[resultIndex].employee_id = user.employee_id;
       }
-
-      // Prepare audit log
-      const afterState = user.toObject() as any;
-      delete afterState.password_hash;
-      delete afterState.refresh_token_hash;
-
-      auditLogs.push(auditLogger.log({
-        req,
-        action: 'user.bulk_invited',
-        module: 'people',
-        object_type: 'User',
-        object_id: user._id.toString(),
-        object_label: user.full_name,
-        before_state: null,
-        after_state: afterState,
-      }));
 
       // Trigger user.created workflow
       handleLifecycleEvent({
@@ -1705,11 +1767,6 @@ export const bulkInviteUsers = asyncHandler(async (req: Request, res: Response) 
         trigger: 'user.created'
       }).catch(err => console.error(`[Bulk Workflow Error user.created] ${user._id}:`, err));
     }
-
-    await Promise.all([
-      InviteToken.insertMany(tokensToCreate),
-      ...auditLogs
-    ]);
 
     // 3. Send Emails
     try {
@@ -1806,30 +1863,9 @@ export const deleteUser = asyncHandler(async (req: Request, res: Response) => {
     );
   }
 
-  const beforeState = user.toObject();
-
-  user.lifecycle_state = targetState;
-  user.is_active = false;
-  await user.save();
-
-  const afterState = user.toObject() as any;
-  delete afterState.password_hash;
-  delete afterState.refresh_token_hash;
-
-  const sanitizedBefore = beforeState as any;
-  delete sanitizedBefore.password_hash;
-  delete sanitizedBefore.refresh_token_hash;
-
-  // Audit log
-  await auditLogger.log({
-    req,
-    action: 'user.archived',
-    module: 'people',
-    object_type: 'User',
-    object_id: user._id.toString(),
-    object_label: user.full_name,
-    before_state: sanitizedBefore,
-    after_state: afterState,
+  await transitionLifecycleTx(req, user, currentState, targetState, {
+    auditAction: 'user.archived',
+    applyAutomationWrites: false,
   });
 
   res.status(200).json({ success: true, data: {} });
@@ -1914,45 +1950,17 @@ export const bulkUpdateLifecycle = asyncHandler(async (req: Request, res: Respon
       continue;
     }
 
-    const beforeState = user.toObject();
-    user.lifecycle_state = targetState;
-
-    // Handle specific transitions
-    if (targetState === 'active' || targetState === 'on_leave' || targetState === 'probation') {
-      user.is_active = true;
-    }
-
-    if (targetState === 'deactivated' || targetState === 'terminated' || targetState === 'archived') {
-      user.is_active = false;
-    }
-
-    await user.save();
+    const { original } = await transitionLifecycleTx(req, user, currentState, targetState, {
+      reason: input.reason,
+      auditAction: 'user.lifecycle_changed',
+      applyAutomationWrites: true,
+    });
 
     try {
-      await runLifecycleAutomations(user, currentState, targetState, req, input.reason);
+      await runLifecycleAutomations(user, currentState, targetState, req, input.reason, original);
     } catch (automationError) {
       console.error(`[Bulk Lifecycle Automation Error] ${user._id}:`, automationError);
     }
-
-    // Individual audit event for each user
-    const afterState = user.toObject() as any;
-    delete afterState.password_hash;
-    delete afterState.refresh_token_hash;
-
-    const sanitizedBefore = beforeState as any;
-    delete sanitizedBefore.password_hash;
-    delete sanitizedBefore.refresh_token_hash;
-
-    await auditLogger.log({
-      req,
-      action: 'user.lifecycle_changed',
-      module: 'people',
-      object_type: 'User',
-      object_id: user._id.toString(),
-      object_label: user.full_name,
-      before_state: sanitizedBefore,
-      after_state: afterState,
-    });
 
     successCount++;
     results.push({ user_id: userId, user_name: user.full_name, success: true });
@@ -2048,26 +2056,32 @@ export const bulkAssignRole = asyncHandler(async (req: Request, res: Response) =
       continue;
     }
 
-    // Assign the role
-    await UserRole.create({
-      user_id: user._id,
-      role_id: role._id,
-      assigned_by: new Types.ObjectId(req.user.userId),
-      assigned_at: new Date(),
+    // Assign the role + audit + app_access.changed atomically (04 §8.2)
+    await runInTransaction(async (session) => {
+      await UserRole.create([{
+        user_id: user._id,
+        role_id: role._id,
+        assigned_by: new Types.ObjectId(req.user.userId),
+        assigned_at: new Date(),
+      }], { session });
+
+      await auditLogger.logTx(session, {
+        req,
+        action: 'user.role_assigned',
+        module: 'people',
+        object_type: 'User',
+        object_id: user._id.toString(),
+        object_label: user.full_name,
+        before_state: null,
+        after_state: { role_id: role._id.toString(), role_name: role.name },
+      });
+
+      await emitAppAccessChanged(session, req.user.company_id, [user._id.toString()], {
+        actor: { type: 'member', id: req.user.userId },
+        correlation_id: correlationIdFor(req),
+      });
     });
     rbacCache.invalidateUser(user._id.toString());
-
-    // Audit event for each assignment
-    await auditLogger.log({
-      req,
-      action: 'user.role_assigned',
-      module: 'people',
-      object_type: 'User',
-      object_id: user._id.toString(),
-      object_label: user.full_name,
-      before_state: null,
-      after_state: { role_id: role._id.toString(), role_name: role.name },
-    });
 
     successCount++;
     results.push({ user_id: userId, user_name: user.full_name, success: true });
@@ -2139,19 +2153,36 @@ export const bulkAssignLocation = asyncHandler(async (req: Request, res: Respons
     }
 
     const beforeState = user.toObject();
-    user.location_id = location._id;
-    await user.save();
+    const actor = { type: 'member' as const, id: req.user.userId };
+    const oldLocation = beforeState.location_id?.toString() ?? null;
 
-    // Audit event for each assignment
-    await auditLogger.log({
-      req,
-      action: 'user.location_assigned',
-      module: 'people',
-      object_type: 'User',
-      object_id: user._id.toString(),
-      object_label: user.full_name,
-      before_state: { location_id: beforeState.location_id?.toString() },
-      after_state: { location_id: location._id.toString(), location_name: location.name },
+    // Domain change + audit + platform events commit atomically (06 §1, 04 §8.2)
+    await runInTransaction(async (session) => {
+      user.location_id = location._id;
+      await user.save({ session });
+
+      await auditLogger.logTx(session, {
+        req,
+        action: 'user.location_assigned',
+        module: 'people',
+        object_type: 'User',
+        object_id: user._id.toString(),
+        object_label: user.full_name,
+        before_state: { location_id: beforeState.location_id?.toString() },
+        after_state: { location_id: location._id.toString(), location_name: location.name },
+      });
+
+      if (oldLocation !== location._id.toString()) {
+        await emitPlatformEvent(session, {
+          org_id: req.user.company_id,
+          type: 'member.updated',
+          subject: { type: 'member', id: user._id.toString() },
+          actor,
+          correlation_id: correlationIdFor(req),
+          data: { changed: { location_id: location._id.toString() } },
+        });
+      }
+      await emitAppAccessChanged(session, req.user.company_id, [user._id.toString()], { actor, correlation_id: correlationIdFor(req) });
     });
 
     // Log effective settings resulting from the location assignment

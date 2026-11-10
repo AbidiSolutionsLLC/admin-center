@@ -7,6 +7,25 @@ import { WorkScheduleAssignment } from '../models/WorkScheduleAssignment.model';
 import { Location } from '../models/Location.model';
 import { User } from '../models/User.model';
 import { auditLogger } from '../lib/auditLogger';
+import { runInTransaction, emitPlatformEvent, correlationIdFor } from '../lib/platformEvents';
+import type { ClientSession } from 'mongoose';
+
+/** 06 section 2: calendar.changed so consumers invalidate their CalendarService cache. */
+async function emitCalendarChanged(
+  session: ClientSession | undefined,
+  req: Request,
+  correlation_id: string,
+  locationIds: Array<unknown>,
+): Promise<void> {
+  await emitPlatformEvent(session, {
+    org_id: req.user.company_id,
+    type: 'calendar.changed',
+    subject: { type: 'org', id: String(req.user.company_id) },
+    actor: { type: 'member', id: String(req.user.userId) },
+    correlation_id,
+    data: { affected_location_ids: Array.from(new Set(locationIds.map(String))) },
+  });
+}
 import { AppError } from '../utils/AppError';
 import { isValidTimezone } from '../constants/timezones';
 import { validateAndSanitizeCustomFields, enforceStandardFieldPermissions, enforceCustomFieldPermissions } from '../services/customFieldValidation.service';
@@ -139,13 +158,16 @@ export const createWorkSchedule = asyncHandler(async (req: Request, res: Respons
     );
   }
 
-   const schedule = await WorkSchedule.create({
+   const correlation_id = correlationIdFor(req);
+   const schedule = await runInTransaction(async (session) => {
+   const [schedule] = await WorkSchedule.create([{
      ...input,
      company_id: req.user.company_id,
-   } as any);
+   } as any], { session });
 
-  await auditLogger.log({
+  await auditLogger.logTx(session, {
     req,
+    correlation_id,
     action: 'work_schedule.created',
     module: 'locations',
     object_type: 'WorkSchedule',
@@ -153,6 +175,9 @@ export const createWorkSchedule = asyncHandler(async (req: Request, res: Respons
     object_label: schedule.name,
     before_state: null,
     after_state: schedule.toObject(),
+  });
+  await emitCalendarChanged(session, req, correlation_id, []);
+  return schedule;
   });
 
   res.status(201).json({ success: true, data: schedule });
@@ -216,10 +241,13 @@ export const updateWorkSchedule = asyncHandler(async (req: Request, res: Respons
    );
 
    Object.assign(schedule, filteredInput);
-   await schedule.save();
+   const correlation_id = correlationIdFor(req);
+   await runInTransaction(async (session) => {
+   await schedule.save({ session });
 
-  await auditLogger.log({
+  await auditLogger.logTx(session, {
     req,
+    correlation_id,
     action: 'work_schedule.updated',
     module: 'locations',
     object_type: 'WorkSchedule',
@@ -227,6 +255,12 @@ export const updateWorkSchedule = asyncHandler(async (req: Request, res: Respons
     object_label: schedule.name,
     before_state: beforeState,
     after_state: schedule.toObject(),
+  });
+  const affected = await WorkScheduleAssignment.find({
+    work_schedule_id: schedule._id,
+    company_id: req.user.company_id,
+  }).session(session ?? null).distinct('location_id');
+  await emitCalendarChanged(session, req, correlation_id, affected);
   });
 
   // Recalculate SLA due dates for affected locations when schedule changes
@@ -274,10 +308,13 @@ export const deleteWorkSchedule = asyncHandler(async (req: Request, res: Respons
 
   const beforeState = schedule.toObject();
 
-  await WorkSchedule.deleteOne({ _id: schedule._id });
+  const correlation_id = correlationIdFor(req);
+  await runInTransaction(async (session) => {
+  await WorkSchedule.deleteOne({ _id: schedule._id }, { session });
 
-  await auditLogger.log({
+  await auditLogger.logTx(session, {
     req,
+    correlation_id,
     action: 'work_schedule.deleted',
     module: 'locations',
     object_type: 'WorkSchedule',
@@ -285,6 +322,9 @@ export const deleteWorkSchedule = asyncHandler(async (req: Request, res: Respons
     object_label: schedule.name,
     before_state: beforeState,
     after_state: null,
+  });
+  // Deletion is blocked while assignments exist, so no locations are affected.
+  await emitCalendarChanged(session, req, correlation_id, []);
   });
 
   res.status(200).json({ success: true, data: {} });
@@ -377,15 +417,18 @@ export const createWorkScheduleAssignment = asyncHandler(async (req: Request, re
     }
   }
 
-  const assignment = await WorkScheduleAssignment.create({
+  const correlation_id = correlationIdFor(req);
+  const assignment = await runInTransaction(async (session) => {
+  const [assignment] = await WorkScheduleAssignment.create([{
     ...input,
     effective_date: new Date(input.effective_date),
     expiry_date: input.expiry_date ? new Date(input.expiry_date) : undefined,
     company_id: req.user.company_id,
-  });
+  }], { session });
 
-  await auditLogger.log({
+  await auditLogger.logTx(session, {
     req,
+    correlation_id,
     action: 'work_schedule_assignment.created',
     module: 'locations',
     object_type: 'WorkScheduleAssignment',
@@ -393,6 +436,9 @@ export const createWorkScheduleAssignment = asyncHandler(async (req: Request, re
     object_label: `${location.name} - ${schedule.name}`,
     before_state: null,
     after_state: assignment.toObject(),
+  });
+  await emitCalendarChanged(session, req, correlation_id, [assignment.location_id]);
+  return assignment;
   });
 
   // Recalculate SLA due dates for affected location
@@ -433,10 +479,13 @@ export const updateWorkScheduleAssignment = asyncHandler(async (req: Request, re
     assignment.is_primary = input.is_primary;
   }
 
-  await assignment.save();
+  const correlation_id = correlationIdFor(req);
+  await runInTransaction(async (session) => {
+  await assignment.save({ session });
 
-  await auditLogger.log({
+  await auditLogger.logTx(session, {
     req,
+    correlation_id,
     action: 'work_schedule_assignment.updated',
     module: 'locations',
     object_type: 'WorkScheduleAssignment',
@@ -444,6 +493,8 @@ export const updateWorkScheduleAssignment = asyncHandler(async (req: Request, re
     object_label: `${assignment.location_id} - ${assignment.work_schedule_id}`,
     before_state: beforeState,
     after_state: assignment.toObject(),
+  });
+  await emitCalendarChanged(session, req, correlation_id, [assignment.location_id]);
   });
 
   res.status(200).json({ success: true, data: assignment });
@@ -468,10 +519,13 @@ export const deleteWorkScheduleAssignment = asyncHandler(async (req: Request, re
 
   const beforeState = assignment.toObject();
 
-  await WorkScheduleAssignment.deleteOne({ _id: assignment._id });
+  const correlation_id = correlationIdFor(req);
+  await runInTransaction(async (session) => {
+  await WorkScheduleAssignment.deleteOne({ _id: assignment._id }, { session });
 
-  await auditLogger.log({
+  await auditLogger.logTx(session, {
     req,
+    correlation_id,
     action: 'work_schedule_assignment.deleted',
     module: 'locations',
     object_type: 'WorkScheduleAssignment',
@@ -479,6 +533,8 @@ export const deleteWorkScheduleAssignment = asyncHandler(async (req: Request, re
     object_label: `${assignment.location_id} - ${assignment.work_schedule_id}`,
     before_state: beforeState,
     after_state: null,
+  });
+  await emitCalendarChanged(session, req, correlation_id, [assignment.location_id]);
   });
 
   res.status(200).json({ success: true, data: {} });

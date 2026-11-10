@@ -13,6 +13,9 @@ import { User } from '../models/User.model';
 import { RefreshToken } from '../models/RefreshToken.model';
 import { auditLogger } from '../lib/auditLogger';
 import { AppError } from '../utils/AppError';
+import { runInTransaction, correlationIdFor } from '../lib/platformEvents';
+import { revokeSessionsTx, destroyProviderSession } from '../identity/sessions';
+import { sendSecurityAlert } from '../lib/notificationEngine';
 
 /**
  * GET /api/v1/security/policies
@@ -298,42 +301,62 @@ export const forceLogoutUser = asyncHandler(async (req: Request, res: Response) 
     throw new AppError('User not found', 404, 'NOT_FOUND');
   }
 
-  // Invalidate ALL refresh tokens for this user
-  await RefreshToken.updateMany(
-    { user_id: user._id, is_revoked: false },
-    { $set: { is_revoked: true } },
-  );
+  const actor = { type: 'member' as const, id: req.user.userId };
+  const correlationId = correlationIdFor(req);
 
-  // Clear refresh_token_hash from User document
-  user.refresh_token_hash = undefined;
-  await user.save();
+  // Token + Session revocation, security event, audit and session.revoked events commit atomically (06 §1)
+  const revokedSids = await runInTransaction(async (session) => {
+    // Invalidate ALL refresh tokens for this user
+    await RefreshToken.updateMany(
+      { user_id: user._id, is_revoked: false },
+      { $set: { is_revoked: true } },
+      { session },
+    );
 
-  // Log security event
-  await SecurityEvent.create({
-    company_id: req.user.company_id,
-    user_id: user._id,
-    email: user.email,
-    event_type: 'token_revoked',
-    ip_address: req.ip,
-    user_agent: req.headers['user-agent'],
-    is_suspicious: false,
-    metadata: {
-      reason: 'force_logout_by_admin',
-      revoked_by: req.user.userId,
-    },
+    // Clear refresh_token_hash from User document
+    user.refresh_token_hash = undefined;
+    await user.save({ session });
+
+    const sids = await revokeSessionsTx(session, { member_id: user._id }, 'force_logout', { actor, correlation_id: correlationId });
+
+    // Log security event
+    await SecurityEvent.create([{
+      company_id: req.user.company_id,
+      user_id: user._id,
+      email: user.email,
+      event_type: 'token_revoked',
+      ip_address: req.ip,
+      user_agent: req.headers['user-agent'],
+      is_suspicious: false,
+      metadata: {
+        reason: 'force_logout_by_admin',
+        revoked_by: req.user.userId,
+      },
+    }], { session });
+
+    // MANDATORY: audit log
+    await auditLogger.logTx(session, {
+      req,
+      action: 'security.force_logout',
+      module: 'security',
+      object_type: 'User',
+      object_id: user._id.toString(),
+      object_label: user.full_name,
+      before_state: { session_status: 'active' },
+      after_state: { session_status: 'terminated', refresh_tokens_revoked: true },
+    });
+    return sids;
   });
 
-  // MANDATORY: audit log
-  await auditLogger.log({
-    req,
-    action: 'security.force_logout',
-    module: 'security',
-    object_type: 'User',
-    object_id: user._id.toString(),
-    object_label: user.full_name,
-    before_state: { session_status: 'active' },
-    after_state: { session_status: 'terminated', refresh_tokens_revoked: true },
-  });
+  // After commit: provider-side teardown and admin-change alert (logTx has no side effects)
+  for (const sid of revokedSids) {
+    await destroyProviderSession(sid).catch((e) => console.error('[Security] provider session teardown failed', sid, e));
+  }
+  sendSecurityAlert(
+    req.user.company_id.toString(),
+    'admin_change',
+    `Admin action 'security.force_logout' was performed on User "${user.full_name}".`,
+  ).catch(err => console.error('[Security] Failed to send admin change alert:', err));
 
   res.status(200).json({
     success: true,

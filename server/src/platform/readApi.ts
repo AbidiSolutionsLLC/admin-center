@@ -11,6 +11,8 @@ import { OrgEventCounter } from '../models/OrgEventCounter.model';
 import { PlatformEventSubscription } from '../models/PlatformEventSubscription.model';
 import { SubscriptionCursor } from '../models/SubscriptionCursor.model';
 import { requireServiceToken } from './requireServiceToken';
+import { calendarsRouter } from './calendars';
+import { roleCatalogRouter } from './roleCatalog';
 
 export const platformReadRouter = Router();
 
@@ -172,9 +174,27 @@ platformReadRouter.get('/sessions/revocations', requireServiceToken('platform.se
   try {
     const since = dateParam(req.query.since);
     if (since === null) return bad(res, 'since must be an ISO date');
-    const rows = await Session.find({ revoked_at: since ? { $gte: since } : { $exists: true, $ne: null } })
-      .sort({ revoked_at: 1 }).limit(1000).lean();
+    const limit = intParam(req.query.limit, 1000, 1, 1000);
+    if (limit === undefined) return bad(res, 'limit must be an integer between 1 and 1000');
+    const afterSid = req.query.after_sid;
+    if (afterSid !== undefined && typeof afterSid !== 'string') return bad(res, 'invalid after_sid');
+    let filter: Record<string, unknown> = { revoked_at: since ? { $gte: since } : { $exists: true, $ne: null } };
+    // Keyset continuation within identical revoked_at values (pass since=X-Next-Since, after_sid=X-Next-After-Sid).
+    if (since && afterSid) {
+      filter = { $or: [{ revoked_at: { $gt: since } }, { revoked_at: since, _id: { $gt: afterSid } }] };
+    }
+    const found = await Session.find(filter).sort({ revoked_at: 1, _id: 1 }).limit(limit + 1).lean();
+    const rows = found.slice(0, limit);
     res.setHeader('Cache-Control', 'no-store');
+    if (found.length > limit) {
+      const last: any = rows[rows.length - 1];
+      res.setHeader('X-Has-More', 'true');
+      res.setHeader('X-Next-Since', new Date(last.revoked_at).toISOString());
+      res.setHeader('X-Next-After-Sid', String(last._id));
+    }
     res.json(rows.map(s => ({ sid: s._id, member_id: s.member_id, org_id: s.company_id, revoked_at: s.revoked_at })));
   } catch (err) { next(err); }
 });
+
+platformReadRouter.use(calendarsRouter);
+platformReadRouter.use(roleCatalogRouter);

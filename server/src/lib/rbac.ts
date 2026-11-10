@@ -1,5 +1,5 @@
 // server/src/lib/rbac.ts
-import { Types } from 'mongoose';
+import { Types, ClientSession } from 'mongoose';
 import { Role, IRole } from '../models/Role.model';
 import { Permission, IPermission } from '../models/Permission.model';
 import { RolePermission, IRolePermission } from '../models/RolePermission.model';
@@ -207,13 +207,14 @@ export const getRolePermissions = async (
 export const batchUpdateRolePermissions = async (
   roleId: Types.ObjectId,
   companyId: Types.ObjectId,
-  updates: Array<{ permission_id: Types.ObjectId; granted: boolean | null }>
+  updates: Array<{ permission_id: Types.ObjectId; granted: boolean | null }>,
+  session?: ClientSession,
 ): Promise<number> => {
   // Verify role belongs to company
   const role = await Role.findOne({
     _id: roleId,
     company_id: companyId,
-  });
+  }).session(session ?? null);
 
   if (!role) {
     throw new Error('Role not found');
@@ -228,7 +229,7 @@ export const batchUpdateRolePermissions = async (
       await RolePermission.deleteOne({
         role_id: roleId,
         permission_id: update.permission_id,
-      });
+      }, { session });
     } else {
       // Upsert the permission entry
       await RolePermission.updateOne(
@@ -244,7 +245,7 @@ export const batchUpdateRolePermissions = async (
             granted: update.granted,
           },
         },
-        { upsert: true }
+        { upsert: true, session }
       );
     }
     updatedCount++;
