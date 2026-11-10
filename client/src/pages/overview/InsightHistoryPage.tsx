@@ -5,6 +5,7 @@ import { useInsightHistory } from '@/features/overview/useInsightHistory';
 import { DataTable } from '@/components/ui/DataTable';
 import { ErrorState } from '@/components/ui/ErrorState';
 import { EmptyState } from '@/components/ui/EmptyState';
+import { TableSkeleton } from '@/components/ui/TableSkeleton';
 import { ROUTES } from '@/constants/routes';
 import { cn } from '@/utils/cn';
 import { format } from 'date-fns';
@@ -231,26 +232,42 @@ export default function InsightHistoryPage() {
               </select>
             </div>
 
-            <DataTable
-              columns={columns}
-              data={data?.data || []}
-              isLoading={isLoading}
-              emptyState={
-                <EmptyState 
-                  icon={AlertCircle} 
-                  title="No historical insights" 
-                  description="No insights match your current filters." 
-                />
-              }
-              pagination={
-                data ? {
-                  page: data.pagination.page,
-                  pageSize: data.pagination.limit,
-                  total: data.pagination.total,
-                  onPageChange: setPage,
-                } : undefined
-              }
-            />
+            {isLoading ? (
+              <TableSkeleton rows={6} columns={4} />
+            ) : !data?.data?.length ? (
+              <EmptyState
+                icon={AlertCircle}
+                title="No historical insights"
+                description="No insights match your current filters."
+              />
+            ) : (
+              <DataTable columns={columns} data={data.data} />
+            )}
+            {data && data.pagination.total > data.pagination.limit && (
+              <div className="flex items-center justify-between mt-4 text-sm text-ink-secondary">
+                <span>
+                  Page {data.pagination.page} of {Math.max(1, Math.ceil(data.pagination.total / data.pagination.limit))} · {data.pagination.total} total
+                </span>
+                <div className="flex gap-2">
+                  <button
+                    type="button"
+                    disabled={data.pagination.page <= 1}
+                    onClick={() => setPage(data.pagination.page - 1)}
+                    className="h-8 px-3 rounded-md border border-line bg-surface disabled:opacity-40"
+                  >
+                    Previous
+                  </button>
+                  <button
+                    type="button"
+                    disabled={data.pagination.page * data.pagination.limit >= data.pagination.total}
+                    onClick={() => setPage(data.pagination.page + 1)}
+                    className="h-8 px-3 rounded-md border border-line bg-surface disabled:opacity-40"
+                  >
+                    Next
+                  </button>
+                </div>
+              </div>
+            )}
           </div>
         </>
       )}

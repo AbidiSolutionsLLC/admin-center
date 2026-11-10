@@ -8,6 +8,7 @@ export interface IpRestriction {
   ip_address: string;
   target_type: 'portal' | 'all_apps' | 'app';
   target_id?: string;
+  target_label?: string;
   subject_type: 'all_users' | 'user' | 'group' | 'role' | 'department';
   subject_id?: string;
   subject_label?: string;

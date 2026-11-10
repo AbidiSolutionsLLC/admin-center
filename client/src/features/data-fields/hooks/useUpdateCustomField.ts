@@ -30,7 +30,10 @@ interface UpdateCustomFieldResponse {
 export const useUpdateCustomField = () => {
   const queryClient = useQueryClient();
 
-  return useMutation<CustomField, Error, { id: string; input: UpdateCustomFieldInput }>({
+  return useMutation<CustomField & {
+    _rename_migration?: UpdateCustomFieldResponse['rename_migration'];
+    _type_change?: UpdateCustomFieldResponse['type_change'];
+  }, Error, { id: string; input: UpdateCustomFieldInput }>({
     mutationFn: async ({ id, input }) => {
       const { data } = await apiClient.put<UpdateCustomFieldResponse>(`/data-fields/${id}`, input);
       // Store migration info on the returned object for the caller to use

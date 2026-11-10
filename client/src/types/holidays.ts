@@ -17,6 +17,9 @@ export interface HolidayCalendarTreeNode extends HolidayCalendar {
   type?: LocationType;
   locations?: HolidayCalendarTreeNode[];
   user_count?: number;
+  holiday_calendars?: unknown[] | number;
+  timezone?: string;
+  is_headquarters?: boolean;
 }
 
 // Holiday Types

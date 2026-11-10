@@ -19,7 +19,7 @@ export function IpRestrictionsTable() {
   const [restrictionToDelete, setRestrictionToDelete] = useState<IpRestriction | null>(null);
 
   const userRole = useAuthStore((state) => state.userRole);
-  const canMutate = userRole ? PERMISSION_GROUPS.IT_ADMINS.includes(userRole as string) : false;
+  const canMutate = userRole ? (PERMISSION_GROUPS.IT_ADMINS as readonly string[]).includes(userRole) : false;
 
   const handleEdit = (restriction: IpRestriction) => {
     setSelectedRestriction(restriction);

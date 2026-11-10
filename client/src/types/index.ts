@@ -390,11 +390,14 @@ export interface IntegrationSyncLog {
   created_at: string;
 }
 
+export type InsightSeverity = 'critical' | 'high' | 'medium' | 'low';
+
 export interface Insight {
   _id: string;
   company_id: string;
   category: 'health' | 'misconfiguration' | 'recommendation' | 'data_consistency';
-  severity: 'critical' | 'warning' | 'info';
+  severity: InsightSeverity;
+  affected_area?: string;
   title: string;
   description: string;
   reasoning?: string;
@@ -411,8 +414,10 @@ export interface Insight {
     url: string;
   }>;
   is_resolved: boolean;
+  is_dismissed?: boolean;
   detected_at: string;
   resolved_at?: string;
+  dismissed_at?: string;
 }
 
 /** Filter state for the Organization page */
@@ -687,6 +692,7 @@ export interface User {
   custom_fields: Record<string, unknown>;
   last_login?: string;
   mfa_enabled: boolean;
+  locked_until?: string;
   is_flagged: boolean;
   risk_score?: number;
   risk_level?: 'none' | 'low' | 'medium' | 'high';
@@ -792,6 +798,7 @@ export interface Role {
   created_at: string;
   updated_at: string;
   granted_permissions_count?: number;
+  user_count?: number;
 }
 
 export interface Permission {
@@ -860,6 +867,7 @@ export interface App {
   created_at: string;
   updated_at: string;
   assignment_count?: number;
+  owner_info?: { _id: string; full_name: string; email: string } | null;
   type?: string;
   product_key?: string;
 }
@@ -1466,6 +1474,7 @@ export interface WorkflowSimulationResult {
 export type NotificationChannel = 'email' | 'in_app' | 'both';
 export type NotificationDigestMode = 'immediate' | 'hourly' | 'daily';
 export type NotificationSeverity = 'info' | 'warning' | 'critical';
+export type NotificationTargetType = 'all' | 'role' | 'department' | 'group' | 'user' | 'location';
 
 export interface NotificationTemplate {
   _id: string;
@@ -1476,6 +1485,8 @@ export interface NotificationTemplate {
   channel: NotificationChannel;
   severity: NotificationSeverity;
   digest_mode: NotificationDigestMode;
+  target_type?: NotificationTargetType;
+  target_id?: string;
   subject: string;
   body: string;
   trigger_event: string;
