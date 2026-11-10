@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
 import { ChevronRight, ChevronDown, Calendar, MapPin, Globe2, Building2, Crown, Clock } from 'lucide-react';
 import { formatTimeInTimezone, getTimezoneOffset } from '@/lib/timezone';
-import type { HolidayCalendarTreeNode } from '@/types';
+import type { HolidayCalendarTreeNode } from '@/types/holidays';
 import { cn } from '@/utils/cn';
 
 interface HolidayCalendarHierarchyProps {
