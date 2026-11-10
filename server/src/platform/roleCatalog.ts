@@ -4,7 +4,7 @@ import { z } from 'zod';
 import { App } from '../models/App.model';
 import { AppAssignment } from '../models/AppAssignment.model';
 import { ProductRole, PRODUCT_KEYS } from '../models/ProductRole.model';
-import { runInTransaction } from '../lib/platformEvents';
+import { runInTransaction, fanOutAppAccessChanged, correlationIdFor } from '../lib/platformEvents';
 import { requireServiceToken, serviceMayAccessProduct } from './requireServiceToken';
 
 export const roleCatalogRouter = Router();
@@ -54,13 +54,26 @@ roleCatalogRouter.put('/apps/:productKey/role-catalog', requireServiceToken('pla
     }
 
     const newKeys = roles.map(r => r.key);
+    const newDefault = roles.find(r => r.is_default)!.key;
     const result = await runInTransaction(async (session) => {
       const opts = session ? { session } : {};
-      const removed = (await ProductRole.find({ product_key: productKey, key: { $nin: newKeys } }, null, opts).lean()).map(r => r.key);
+      // Optimistic version lock as the first write: a concurrent/newer catalog makes this match nothing.
+      const lock = await App.updateOne({ _id: app._id, role_catalog_version: { $not: { $gt: version } } }, { $set: { role_catalog_version: version } }, opts);
+      if (lock.matchedCount === 0) return { stale: true as const };
+      const before = await ProductRole.find({ product_key: productKey }, null, opts).lean();
+      const oldApp: any = await App.findById(app._id, 'default_role_key', opts).lean();
+      const removed = before.filter(r => !newKeys.includes(r.key)).map(r => r.key);
+      const oldDefault: string | undefined = oldApp?.default_role_key;
       if (removed.length) {
-        const used = await AppAssignment.distinct('product_role_key', { app_id: app._id, is_active: true, product_role_key: { $in: removed } }, opts as any);
-        if (used.length) throw new RoleInUse(used as string[]);
+        const used = new Set<string>(await AppAssignment.distinct('product_role_key', { app_id: app._id, is_active: true, product_role_key: { $in: removed } }, opts as any) as string[]);
+        // Assignments without an explicit role resolve through the default role: it cannot be removed while they exist.
+        if (oldDefault && removed.includes(oldDefault)
+          && await AppAssignment.exists({ app_id: app._id, is_active: true, $or: [{ product_role_key: { $exists: false } }, { product_role_key: null }, { product_role_key: '' }] }).session(session ?? null)) {
+          used.add(oldDefault);
+        }
+        if (used.size) throw new RoleInUse([...used]);
       }
+      const rankChanged = before.some(b => { const n = roles.find(r => r.key === b.key); return n && (n.rank !== b.rank || n.name !== b.name); });
       for (const r of roles) {
         await ProductRole.updateOne(
           { product_key: productKey, key: r.key },
@@ -69,10 +82,23 @@ roleCatalogRouter.put('/apps/:productKey/role-catalog', requireServiceToken('pla
         );
       }
       if (removed.length) await ProductRole.deleteMany({ product_key: productKey, key: { $in: removed } }, opts);
-      await App.updateOne({ _id: app._id }, { $set: { role_catalog_version: version, default_role_key: roles.find(r => r.is_default)!.key } }, opts);
-      return ProductRole.find({ product_key: productKey }, null, opts).lean();
+      await App.updateOne({ _id: app._id }, { $set: { default_role_key: newDefault } }, opts);
+      return { stale: false as const, rows: await ProductRole.find({ product_key: productKey }, null, opts).lean(), accessAffected: oldDefault !== newDefault || rankChanged };
     });
-    res.status(200).json(view(version, result));
+    if (result.stale) {
+      const stored: any = await App.findById(app._id, 'role_catalog_version').lean();
+      return res.status(200).json(view(stored?.role_catalog_version ?? current, await ProductRole.find({ product_key: productKey }).lean()));
+    }
+    res.status(200).json(view(version, result.rows));
+    if (result.accessAffected) {
+      // Effective roles may have changed for assignees: bump + notify, per org, after commit (errors logged inside).
+      void (async () => {
+        const ctx = { actor: { type: 'system' as const }, correlation_id: correlationIdFor(req), bump: true };
+        for (const companyId of await AppAssignment.distinct('company_id', { app_id: app._id, is_active: true })) {
+          await fanOutAppAccessChanged(companyId, ctx);
+        }
+      })().catch(e => console.error('[roleCatalog] fan-out failed', e));
+    }
   } catch (err) {
     if (err instanceof RoleInUse) return res.status(409).json({ error: 'Role in use', code: 'ROLE_IN_USE', roles: err.keys });
     next(err);

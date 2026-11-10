@@ -61,6 +61,7 @@ platformReadRouter.get('/orgs/:orgId/events', requireServiceToken('platform.even
     const org = new Types.ObjectId(orgId);
     const counter = await OrgEventCounter.findById(org).lean();
     const latestSeq = counter?.seq ?? 0;
+    if (afterSeq > latestSeq) return res.status(409).json({ error: 'after_seq is ahead of the latest event', code: 'CURSOR_AHEAD', latest_seq: latestSeq });
     const rows = await PlatformEvent.find({ org_id: org, seq: { $gt: afterSeq } }).sort({ seq: 1 }).limit(limit + 1).lean();
 
     // The event right after the cursor is missing although the counter says it exists: purged by TTL.
@@ -82,7 +83,7 @@ platformReadRouter.get('/orgs/:orgId/events', requireServiceToken('platform.even
       const clientId = req.service?.client_id;
       const sub = clientId ? await PlatformEventSubscription.findOne({ name: clientId }).select('_id').lean() : null;
       if (sub && afterSeq > 0) {
-        await SubscriptionCursor.updateOne({ subscription_id: sub._id, org_id: org }, { $max: { last_acknowledged_seq: afterSeq } }, { upsert: true });
+        await SubscriptionCursor.updateOne({ subscription_id: sub._id, org_id: org }, { $max: { last_acknowledged_seq: Math.min(afterSeq, latestSeq) } }, { upsert: true });
       }
     } catch { /* informational only */ }
   } catch (err) { next(err); }

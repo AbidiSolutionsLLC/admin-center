@@ -405,6 +405,13 @@ async function transitionLifecycleTx(
   const companyId = req.user.company_id;
 
   const sessionIds = await runInTransaction(async (session) => {
+    // Guarded first write: a concurrent transition changes lifecycle_state, so this matches nothing (409) instead of overwriting it.
+    const guard = await User.updateOne(
+      { _id: user._id, company_id: companyId, lifecycle_state: currentState },
+      { $set: { lifecycle_state: targetState } },
+      { session },
+    );
+    if (guard.matchedCount === 0) throw new AppError('Member lifecycle state changed concurrently; reload and retry', 409, 'LIFECYCLE_CONFLICT');
     user.lifecycle_state = targetState;
     if (targetState === 'active' || targetState === 'on_leave' || targetState === 'probation') user.is_active = true;
     if (revokes) user.is_active = false;

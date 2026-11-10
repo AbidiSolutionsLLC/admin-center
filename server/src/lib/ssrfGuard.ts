@@ -10,6 +10,8 @@ function isPrivateV4(ip: string): boolean {
     || (a === 172 && b >= 16 && b <= 31)
     || (a === 192 && b === 168)
     || ip.startsWith('192.0.0.')
+    || (a === 198 && (b === 18 || b === 19))  // benchmarking 198.18.0.0/15
+    || ip.startsWith('192.0.2.') || ip.startsWith('198.51.100.') || ip.startsWith('203.0.113.') // documentation
     || a >= 224;                               // multicast / reserved / broadcast
 }
 
@@ -19,6 +21,11 @@ function isPrivateV6(raw: string): boolean {
   const mapped = ip.match(/^::ffff:(\d+\.\d+\.\d+\.\d+)$/);
   if (mapped) return isPrivateV4(mapped[1]);
   if (ip.startsWith('::ffff:')) return true; // hex-form mapped: reject conservatively
+  if (/^::(\d+\.\d+\.\d+\.\d+|[0-9a-f]{1,4}(:[0-9a-f]{1,4})?)$/.test(ip)) return true; // ::/96 IPv4-compatible
+  if (/^64:ff9b::/.test(ip)) return true;                                  // 64:ff9b::/96 NAT64
+  if (/^2002:/.test(ip)) return true;                                      // 2002::/16 6to4
+  if (/^2001:(0{1,4})?:/.test(ip)) return true;                            // 2001::/32 Teredo
+  if (/^100::/.test(ip) || /^100:0{1,4}:0{1,4}:0{1,4}:/.test(ip)) return true; // 100::/64 discard
   return /^f[cd]/.test(ip)        // fc00::/7 unique local
     || /^fe[89a-f]/.test(ip)      // fe80::/10 link-local + site-local
     || ip.startsWith('ff');       // multicast

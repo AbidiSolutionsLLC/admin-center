@@ -14,6 +14,9 @@ import { isValidTimezone } from '../constants/timezones';
 import { locationSettingsService } from '../services/locationSettings.service';
 import { validateAndSanitizeCustomFields, enforceStandardFieldPermissions, enforceCustomFieldPermissions } from '../services/customFieldValidation.service';
 
+// 05 �2 org_structure.changed payload for locations: only the contract fields (no toObject() leakage).
+const locationEventData = (l: any) => ({ id: String(l._id), name: l.name, parent_id: l.parent_id ? String(l.parent_id) : null, timezone: l.timezone });
+
 // ── Zod Schemas ──────────────────────────────────────────────────────────────
 
 const CreateLocationSchema = z.object({
@@ -241,7 +244,7 @@ export const getLocationById = asyncHandler(async (req: Request, res: Response) 
     org_id: req.user.company_id, type: 'org_structure.changed',
     subject: { type: 'location', id: location._id.toString() },
     actor: { type: 'member', id: String(req.user.userId) }, correlation_id,
-    data: location.toObject(),
+    data: locationEventData(location),
   });
   return location;
   });
@@ -390,7 +393,7 @@ export const updateLocation = asyncHandler(async (req: Request, res: Response) =
     org_id: req.user.company_id, type: 'org_structure.changed',
     subject: { type: 'location', id: location._id.toString() },
     actor: { type: 'member', id: String(req.user.userId) }, correlation_id,
-    data: location.toObject(),
+    data: locationEventData(location),
   });
   });
 

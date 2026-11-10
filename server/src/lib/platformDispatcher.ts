@@ -30,6 +30,8 @@ export function verifyNudgeSignature(secret: string, header: string, body: strin
   return got.length === expected.length && crypto.timingSafeEqual(got, expected);
 }
 
+const SECRET_REF_RE = /^PLATFORM_SUB_SECRET_[A-Z0-9_]+$/;
+
 async function seedSubscriptions(): Promise<void> {
   const raw = process.env.PLATFORM_SUBSCRIPTIONS;
   if (!raw) return;
@@ -38,6 +40,7 @@ async function seedSubscriptions(): Promise<void> {
   if (!Array.isArray(list)) return;
   for (const s of list) {
     if (!s?.name || !s?.url || !s?.secret_env) continue;
+    if (!SECRET_REF_RE.test(s.secret_env)) { console.error(`[PlatformDispatcher] subscription ${s.name}: secret_env must match ${SECRET_REF_RE}`); continue; }
     await PlatformEventSubscription.updateOne(
       { name: s.name },
       { $set: { url: s.url, secret_ref: s.secret_env }, $setOnInsert: { status: 'active' } },
@@ -47,12 +50,15 @@ async function seedSubscriptions(): Promise<void> {
 }
 
 async function nudge(sub: IPlatformEventSubscription, orgId: string, latestSeq: number): Promise<void> {
+  if (!SECRET_REF_RE.test(sub.secret_ref)) throw new Error('Subscription secret_ref must match PLATFORM_SUB_SECRET_*');
   const secret = process.env[sub.secret_ref];
   if (!secret) throw new Error(`Secret env var ${sub.secret_ref} is not set`);
   const url = await assertSafeSubscriberUrl(sub.url);
   const evt = await PlatformEvent.findOne({ org_id: orgId, seq: latestSeq }).select('id').lean();
   const body = JSON.stringify({ org_id: orgId, latest_seq: latestSeq });
   const t = Math.floor(Date.now() / 1000);
+  // NOTE: assertSafeSubscriberUrl validates the resolved addresses but fetch() re-resolves at connect time (DNS-rebinding window);
+  // pinning needs an undici Agent with a custom lookup, which would add a dependency.
   const res = await fetch(url, {
     method: 'POST',
     redirect: 'manual',
@@ -64,6 +70,7 @@ async function nudge(sub: IPlatformEventSubscription, orgId: string, latestSeq: 
     },
     body,
   });
+  await res.body?.cancel().catch(() => undefined); // release the connection; the body is never read
   if (res.status < 200 || res.status > 299) throw new Error(`Subscriber responded ${res.status}`);
 }
 

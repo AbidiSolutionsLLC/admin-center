@@ -122,13 +122,22 @@ export async function computeEffectiveAccess(companyId: string | Types.ObjectId,
     if (!identity || identity.status !== 'active') return denyAll('IDENTITY_NOT_ACTIVE');
   }
 
-  const [groupMemberships, userRoles, deptChain, locChain, dynGroups] = await Promise.all([
-    GroupMember.find({ user_id: user._id }).select('group_id').session(session).lean(),
-    UserRole.find({ user_id: user._id, company_id: companyId }).select('role_id').session(session).lean(),
-    user.department_id ? ancestorIds(Department, companyId, user.department_id, opts?.session) : Promise.resolve([] as Types.ObjectId[]),
-    user.location_id ? ancestorIds(Location, companyId, user.location_id, opts?.session) : Promise.resolve([] as Types.ObjectId[]),
-    Group.find({ company_id: companyId, type: 'dynamic', is_active: true }).session(session).lean(),
-  ]);
+  const loadGroupMemberships = () => GroupMember.find({ user_id: user._id }).select('group_id').session(session).lean();
+  const loadUserRoles = () => UserRole.find({ user_id: user._id, company_id: companyId }).select('role_id').session(session).lean();
+  const loadDeptChain = () => user.department_id ? ancestorIds(Department, companyId, user.department_id, opts?.session) : Promise.resolve([] as Types.ObjectId[]);
+  const loadLocChain = () => user.location_id ? ancestorIds(Location, companyId, user.location_id, opts?.session) : Promise.resolve([] as Types.ObjectId[]);
+  const loadDynGroups = () => Group.find({ company_id: companyId, type: 'dynamic', is_active: true }).session(session).lean();
+  let groupMemberships, userRoles, deptChain, locChain, dynGroups;
+  if (opts?.session) {
+    // Operations on one transaction session must not run concurrently.
+    groupMemberships = await loadGroupMemberships();
+    userRoles = await loadUserRoles();
+    deptChain = await loadDeptChain();
+    locChain = await loadLocChain();
+    dynGroups = await loadDynGroups();
+  } else {
+    [groupMemberships, userRoles, deptChain, locChain, dynGroups] = await Promise.all([loadGroupMemberships(), loadUserRoles(), loadDeptChain(), loadLocChain(), loadDynGroups()]);
+  }
   const groupIds = new Set(groupMemberships.map(g => g.group_id.toString()));
   for (const g of dynGroups) {
     const rules = dynamicGroupFilter(g.dynamic_rules);

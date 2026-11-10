@@ -3,6 +3,7 @@ import crypto from 'crypto';
 import type { Request } from 'express';
 import mongoose, { ClientSession, Types } from 'mongoose';
 import { PlatformEvent, IPlatformEvent } from '../models/PlatformEvent.model';
+import { User } from '../models/User.model';
 import { OrgEventCounter } from '../models/OrgEventCounter.model';
 import { bumpAuthzVer, computeEffectiveAccess } from './effectiveAccess';
 
@@ -77,33 +78,62 @@ export async function emitPlatformEvent(session: ClientSession | undefined, e: P
   return evt;
 }
 
-const CHUNK = 20;
-
-/** Bump authz_ver and emit one app_access.changed per member with the full effective product->role map. */
+/**
+ * Emit one app_access.changed per member with the full effective product->role map. Bumps authz_ver first
+ * unless `bump:false` (caller already bumped, e.g. an org-level updateMany). Effective access is computed
+ * sequentially: a transaction session must not run concurrent operations.
+ */
 export async function emitAppAccessChanged(
   session: ClientSession | undefined,
   companyId: string | Types.ObjectId,
   memberIds: Array<string | Types.ObjectId>,
-  ctx: { actor: PlatformEventInput['actor']; correlation_id?: string },
+  ctx: { actor: PlatformEventInput['actor']; correlation_id?: string; bump?: boolean },
 ): Promise<void> {
   const ids = Array.from(new Set(memberIds.map(String)));
   if (ids.length === 0) return;
-  await bumpAuthzVer(ids, session);
-  for (let i = 0; i < ids.length; i += CHUNK) {
-    const accesses = await Promise.all(ids.slice(i, i + CHUNK).map(id => computeEffectiveAccess(companyId, id, { session })));
-    // seq allocation is serialized: counter doc is a hot row inside one transaction
-    for (const acc of accesses) {
-      const products: Record<string, string> = {};
-      for (const [pk, v] of Object.entries(acc.products)) products[pk] = v.role;
-      await emitPlatformEvent(session, {
-        org_id: companyId,
-        type: 'app_access.changed',
-        subject: { type: 'member', id: acc.member_id },
-        actor: ctx.actor,
-        correlation_id: ctx.correlation_id,
-        data: { authz_ver: acc.authz_ver, products },
-      });
+  if (ctx.bump !== false) await bumpAuthzVer(ids, session);
+  for (const id of ids) {
+    const acc = await computeEffectiveAccess(companyId, id, { session });
+    const products: Record<string, string> = {};
+    for (const [pk, v] of Object.entries(acc.products)) products[pk] = v.role;
+    await emitPlatformEvent(session, {
+      org_id: companyId,
+      type: 'app_access.changed',
+      subject: { type: 'member', id: acc.member_id },
+      actor: ctx.actor,
+      correlation_id: ctx.correlation_id,
+      data: { authz_ver: acc.authz_ver, products },
+    });
+  }
+}
+
+/**
+ * After an org-level change committed (members' authz_ver already bumped in that txn), fan out per-member
+ * app_access.changed in batches, each in its own transaction, without bumping again. Errors are logged, never thrown.
+ * Keyset-paginated by _id, so a failed batch is skipped (logged) and the remainder still proceeds.
+ */
+export async function fanOutAppAccessChanged(
+  companyId: string | Types.ObjectId,
+  ctx: { actor: PlatformEventInput['actor']; correlation_id?: string; batchSize?: number; bump?: boolean },
+): Promise<void> {
+  const batchSize = ctx.batchSize ?? 200;
+  let after: Types.ObjectId | undefined;
+  try {
+    for (;;) {
+      const rows = await User.find({ company_id: companyId, ...(after ? { _id: { $gt: after } } : {}) })
+        .sort({ _id: 1 }).limit(batchSize).select('_id').lean();
+      if (rows.length === 0) break;
+      const ids = rows.map((r) => r._id as Types.ObjectId);
+      after = ids[ids.length - 1];
+      try {
+        await runInTransaction((session) => emitAppAccessChanged(session, companyId, ids, { actor: ctx.actor, correlation_id: ctx.correlation_id, bump: ctx.bump ?? false }));
+      } catch (err) {
+        console.error('[fanOutAppAccessChanged] batch failed', String(companyId), err);
+      }
+      if (rows.length < batchSize) break;
     }
+  } catch (err) {
+    console.error('[fanOutAppAccessChanged] failed', String(companyId), err);
   }
 }
 
@@ -113,7 +143,7 @@ export function correlationIdFor(req?: Request): string {
   if (!req) return crypto.randomUUID();
   const hdr = req.headers?.['x-correlation-id'];
   const fromHeader = Array.isArray(hdr) ? hdr[0] : hdr;
-  if (fromHeader) return fromHeader;
+  if (typeof fromHeader === 'string' && /^[\w.-]{1,100}$/.test(fromHeader)) return fromHeader;
   let id = reqCorrelation.get(req);
   if (!id) { id = crypto.randomUUID(); reqCorrelation.set(req, id); }
   return id;

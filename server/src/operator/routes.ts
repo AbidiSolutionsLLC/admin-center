@@ -10,7 +10,6 @@ import { User } from '../models/User.model';
 import { Role } from '../models/Role.model';
 import { UserRole } from '../models/UserRole.model';
 import { InviteToken } from '../models/InviteToken.model';
-import { Session } from '../models/Session.model';
 import { AuditEvent } from '../models/AuditEvent.model';
 import { Plan } from '../models/Plan.model';
 import { PRODUCT_KEYS } from '../models/ProductRole.model';
@@ -21,12 +20,13 @@ import { App } from '../models/App.model';
 import { AppAssignment } from '../models/AppAssignment.model';
 import { Group } from '../models/Group.model';
 import { seedProductRegistry } from '../lib/productCatalog';
-import { runInTransaction, emitPlatformEvent, emitAppAccessChanged } from '../lib/platformEvents';
+import { runInTransaction, emitPlatformEvent, emitAppAccessChanged, fanOutAppAccessChanged } from '../lib/platformEvents';
+import { RefreshToken } from '../models/RefreshToken.model';
 import { RolePermission } from '../models/RolePermission.model';
 import { SecurityPolicy } from '../models/SecurityPolicy.model';
 import { seedDatabase } from '../lib/seed';
 import { sendWelcomeEmail } from '../lib/emailService';
-import { revokeSession } from '../identity/sessions';
+import { revokeSessionsTx, destroyProviderSession } from '../identity/sessions';
 import { ROLES } from '../constants/roles';
 import { slugify } from '../utils/slugify';
 import { generateEmployeeId } from '../services/employeeId';
@@ -159,11 +159,15 @@ async function ensureDefaultPeopleAccess(companyId: Types.ObjectId, grantedBy: T
   }
 }
 
-/** Entitlement/plan/status changes alter every member's effective access (04 ยง8.2). */
-async function bumpOrgAuthz(req: Request, companyId: Types.ObjectId, session?: ClientSession) {
-  const ids = await User.find({ company_id: companyId }).session(session ?? null).distinct('_id');
-  await emitAppAccessChanged(session, companyId, ids, { actor: actorOf(req), correlation_id: corrOf(req) });
+/**
+ * Entitlement/plan/status changes alter every member's effective access (04 ง8.2). O(1) inside the txn:
+ * one updateMany bumps every member's authz_ver. Per-member app_access.changed fans out after commit (fanOutOrgAccess).
+ */
+async function bumpOrgAuthz(companyId: Types.ObjectId, session?: ClientSession) {
+  await User.updateMany({ company_id: companyId }, { $inc: { authz_ver: 1 } }, { session });
 }
+const fanOutOrgAccess = (req: Request, companyId: Types.ObjectId) =>
+  fanOutAppAccessChanged(companyId, { actor: actorOf(req), correlation_id: corrOf(req), batchSize: 200 });
 
 router.post('/orgs', asyncHandler(async (req: Request, res: Response) => {
   const input = ProvisionSchema.parse(req.body);
@@ -276,20 +280,30 @@ async function setOrgStatus(req: Request, res: Response, status: 'active' | 'sus
   const before = company.status;
   const reason = typeof req.body?.reason === 'string' && req.body.reason.trim() ? req.body.reason.trim() : status;
   const eventType = action as 'org.suspended' | 'org.reactivated' | 'org.closed';
-  const live = status !== 'active' ? await Session.find({ company_id: company._id, revoked_at: { $exists: false } }).select('_id') : [];
-  await runInTransaction(async (session) => {
+  const revokedSids = await runInTransaction(async (session) => {
     company.status = status;
     company.is_active = status === 'active';
     await company.save({ session: session ?? undefined });
-    await bumpOrgAuthz(req, company._id, session);
+    await bumpOrgAuthz(company._id, session);
+    let sids: string[] = [];
+    if (status !== 'active') {
+      await RefreshToken.updateMany(
+        { user_id: { $in: await User.find({ company_id: company._id }).session(session ?? null).distinct('_id') }, is_revoked: false },
+        { $set: { is_revoked: true } },
+        { session },
+      );
+      sids = await revokeSessionsTx(session, { company_id: company._id }, `org_${status}`, { actor: actorOf(req), correlation_id: corrOf(req) });
+    }
     await emitPlatformEvent(session, {
       org_id: company._id.toString(), type: eventType, subject: { type: 'org', id: company._id.toString() },
       actor: actorOf(req), correlation_id: corrOf(req), data: { reason },
     });
-    await audit(req, { action, target_type: 'Organization', target_id: company._id.toString(), company, before: { status: before }, after: { status }, details: { from: before, to: status, sessions_revoked: live.length } }, session);
+    await audit(req, { action, target_type: 'Organization', target_id: company._id.toString(), company, before: { status: before }, after: { status }, details: { from: before, to: status, sessions_revoked: sids.length } }, session);
+    return sids;
   });
-  for (const s of live) await revokeSession(s._id, `org_${status}`);
-  ok(res, { ...(await orgDetail(company._id.toString())), sessions_revoked: live.length });
+  for (const sid of revokedSids) await destroyProviderSession(sid).catch((e) => console.error('[operator] provider session teardown failed', sid, e));
+  await fanOutOrgAccess(req, company._id);
+  ok(res, { ...(await orgDetail(company._id.toString())), sessions_revoked: revokedSids.length });
 }
 router.post('/orgs/:id/suspend', asyncHandler((req: Request, res: Response) => setOrgStatus(req, res, 'suspended', 'org.suspended')));
 router.post('/orgs/:id/reactivate', asyncHandler((req: Request, res: Response) => setOrgStatus(req, res, 'active', 'org.reactivated')));
@@ -318,9 +332,10 @@ router.patch('/orgs/:id', asyncHandler(async (req: Request, res: Response) => {
     }
     const firstAdmin = await User.findOne({ company_id: company._id, role: ROLES.SUPER_ADMIN }).sort({ created_at: 1 }).select('_id').session(session ?? null);
     if (firstAdmin) await ensureDefaultPeopleAccess(company._id, firstAdmin._id, session);
-    await bumpOrgAuthz(req, company._id, session);
+    await bumpOrgAuthz(company._id, session);
     await audit(req, { action: 'org.plan_assigned', target_type: 'Company', target_id: String(company._id), company, before: null, after: { plan_key: plan.key, products: plan.products } }, session);
   });
+  await fanOutOrgAccess(req, company._id);
   ok(res, { id: String(company._id), plan_key: plan.key, products: plan.products });
 }));
 
@@ -344,7 +359,7 @@ router.put('/orgs/:id/entitlements/:productKey',asyncHandler(async (req: Request
       org_id: company._id.toString(), type: 'entitlement.changed', subject: { type: 'org', id: company._id.toString() },
       actor: actorOf(req), correlation_id: corrOf(req), data: { product_key: key, status: ent!.status },
     });
-    await bumpOrgAuthz(req, company._id, session);
+    await bumpOrgAuthz(company._id, session);
     await audit(req, {
       action: 'entitlement.updated', target_type: 'Entitlement', target_id: `${company._id}:${key}`, company,
       before: prior ? { status: prior.status, seats_limit: prior.seats_limit ?? null } : null,
@@ -352,6 +367,7 @@ router.put('/orgs/:id/entitlements/:productKey',asyncHandler(async (req: Request
     }, session);
     return ent;
   });
+  await fanOutOrgAccess(req, company._id);
   ok(res, { product_key: ent!.product_key, status: ent!.status, seats_limit: ent!.seats_limit ?? null, source: ent!.source });
 }));
 

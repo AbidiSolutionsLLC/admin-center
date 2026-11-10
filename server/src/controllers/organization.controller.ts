@@ -16,6 +16,9 @@ import { AppError } from '../utils/AppError';
 import { slugify } from '../utils/slugify';
 import { validateAndSanitizeCustomFields, enforceStandardFieldPermissions, enforceCustomFieldPermissions } from '../services/customFieldValidation.service';
 
+// 05 �2 org_structure.changed payload for departments: only the contract fields (no toObject() leakage).
+const deptEventData = (d: any) => ({ id: String(d._id), name: d.name, type: d.type, parent_id: d.parent_id ? String(d.parent_id) : null, primary_manager_id: d.primary_manager_id ? String(d.primary_manager_id) : null, is_active: d.is_active });
+
 // ── Types & Interfaces ───────────────────────────────────────────────────────
 
 interface DepartmentFilter {
@@ -331,7 +334,7 @@ export const createDepartment = asyncHandler(async (req: Request, res: Response)
     org_id: req.user.company_id, type: 'org_structure.changed',
     subject: { type: 'department', id: dept._id.toString() },
     actor: { type: 'member', id: String(req.user.userId) }, correlation_id,
-    data: dept.toObject(),
+    data: deptEventData(dept),
   });
   return dept;
   });
@@ -483,7 +486,7 @@ export const updateDepartment = asyncHandler(async (req: Request, res: Response)
     org_id: req.user.company_id, type: 'org_structure.changed',
     subject: { type: 'department', id: dept._id.toString() },
     actor: { type: 'member', id: String(req.user.userId) }, correlation_id,
-    data: dept.toObject(),
+    data: deptEventData(dept),
   });
   });
 
@@ -700,7 +703,7 @@ export const moveDepartment = asyncHandler(async (req: Request, res: Response) =
     org_id: req.user.company_id, type: 'org_structure.changed',
     subject: { type: 'department', id: dept._id.toString() },
     actor: { type: 'member', id: String(req.user.userId) }, correlation_id,
-    data: dept.toObject(),
+    data: deptEventData(dept),
   });
   });
 

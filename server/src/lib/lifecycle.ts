@@ -54,6 +54,8 @@ export const getTransitionErrorMessage = (from: LifecycleState, to: LifecycleSta
   return `Invalid transition from '${from}' to '${to}'. Valid transitions: ${validStates.join(', ')}`;
 };
 
+const ACCESS_STATE_SET = new Set<string>(['onboarding', 'active', 'probation', 'on_leave']); // mirrors identity/config ACCESS_STATES
+
 export type LifecycleEventType = 'member.suspended' | 'member.reactivated' | 'member.terminated';
 
 /**
@@ -64,6 +66,6 @@ export type LifecycleEventType = 'member.suspended' | 'member.reactivated' | 'me
 export const lifecycleEventFor = (from: LifecycleState, to: LifecycleState): LifecycleEventType | null => {
   if (to === 'deactivated') return 'member.suspended';
   if (to === 'terminated' || to === 'archived') return 'member.terminated';
-  if (to === 'active' && (from === 'deactivated' || from === 'terminated' || from === 'archived')) return 'member.reactivated';
+  if (ACCESS_STATE_SET.has(to) && (from === 'deactivated' || from === 'terminated' || from === 'archived')) return 'member.reactivated';
   return null;
 };

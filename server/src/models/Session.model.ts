@@ -40,6 +40,8 @@ const SessionSchema = new Schema<ISession>({
 }, { timestamps: false });
 
 SessionSchema.index({ company_id: 1, revoked_at: 1 });
+// Revocation pull (products poll revoked sessions by _id order).
+SessionSchema.index({ revoked_at: 1, _id: 1 }, { partialFilterExpression: { revoked_at: { $exists: true } } });
 // Keep revoked/expired rows 30 days for audit + products' revocation pull, then purge.
 SessionSchema.index({ absolute_expires_at: 1 }, { expireAfterSeconds: 30 * 24 * 3600 });
 

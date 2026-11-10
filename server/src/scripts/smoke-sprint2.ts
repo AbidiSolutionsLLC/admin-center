@@ -427,7 +427,7 @@ async function main() {
         rq.on('end', () => { hits.push({ sig: String(rq.headers['x-karbexa-signature']), body: b }); rs.statusCode = failMode ? 500 : 204; rs.end(); });
       });
       await new Promise<void>((r) => sink.listen(0, '127.0.0.1', () => r()));
-      const SECRET_ENV = 'SMOKE_NUDGE_SECRET';
+      const SECRET_ENV = 'PLATFORM_SUB_SECRET_SMOKE';
       const NUDGE_SECRET = crypto.randomBytes(24).toString('hex');
       process.env[SECRET_ENV] = NUDGE_SECRET;
       try {
@@ -838,6 +838,96 @@ async function main() {
       check('E4c team create = 201 and writes its team.created audit row', tr.status === 201 && !!team3 && !!ae3 && ae3.object_id === String(team3?._id), `${tr.status} ${tr.text.slice(0, 200)}`);
     } catch (e) { check('E4c section did not crash', false, (e as Error).stack?.split(String.fromCharCode(10)).slice(0, 4).join(' | ')); }
     finally { if (prevClientProducts === undefined) delete process.env.PLATFORM_CLIENT_PRODUCTS; else process.env.PLATFORM_CLIENT_PRODUCTS = prevClientProducts; }
+
+    // ── E4d: O(1) org txn + post-commit fan-out, lifecycle guard, catalog lock, hardening ──────
+    try {
+      const { correlationIdFor } = await import('../lib/platformEvents');
+      const { isPrivateAddress } = await import('../lib/ssrfGuard');
+      const SERVICES4 = `${ORIGIN}/realms/services`;
+      const mint4 = async (scope: string) => {
+        const a = await new jose.SignJWT({}).setProtectedHeader({ alg: 'RS256', kid: 'smoke-backend-1' })
+          .setIssuer('karbexa-products-backend').setSubject('karbexa-products-backend').setAudience(SERVICES4)
+          .setJti(crypto.randomUUID()).setIssuedAt().setExpirationTime('2m').sign(backend.privateKey);
+        const j = await (await fetch(`${SERVICES4}/oauth/token`, form({
+          grant_type: 'client_credentials', client_id: 'karbexa-products-backend',
+          client_assertion_type: 'urn:ietf:params:oauth:client-assertion-type:jwt-bearer', client_assertion: a, scope, resource: 'urn:karbexa:platform-api',
+        }))).json() as Record<string, string>;
+        return j.access_token;
+      };
+
+      // org suspend with 60+ members
+      res = await op('/orgs', 'POST', { name: 'Gamma Ltd', slug: 'gamma', plan_key: 'professional', first_admin: { email: 'admin@gamma.test', full_name: 'Gus Admin' } });
+      const gammaId = ((await res.json()) as { data?: { id: string } }).data?.id || '';
+      await User.insertMany(Array.from({ length: 65 }, (_, i) => ({
+        company_id: gammaId, full_name: `Bulk ${i}`, email: `bulk${i}@gamma.test`, password_hash: 'x', role: 'Employee',
+        lifecycle_state: 'active', is_active: true, employment_type: 'full_time', employee_id: `GAM-${i}`,
+      })));
+      const before4 = new Map((await User.find({ company_id: gammaId }).lean()).map((u) => [String(u._id), u.authz_ver ?? 0]));
+      res = await op(`/orgs/${gammaId}/suspend`, 'POST', { reason: 'e4d' });
+      check('E4d org suspend (66 members) = 200', res.status === 200 && before4.size >= 66, { status: res.status, members: before4.size });
+      const after4 = await User.find({ company_id: gammaId }).lean();
+      check('E4d suspend bumped every member authz_ver exactly once (no double bump)', after4.every((u) => (u.authz_ver ?? 0) === (before4.get(String(u._id)) ?? 0) + 1), after4.slice(0, 3).map((u) => u.authz_ver));
+      const susEv = await PlatformEvent.find({ org_id: gammaId, type: 'org.suspended' }).lean();
+      check('E4d exactly ONE org.suspended event', susEv.length === 1, susEv.length);
+      const aacEv = await PlatformEvent.find({ org_id: gammaId, type: 'app_access.changed', seq: { $gt: susEv[0]?.seq ?? 0 } }).lean();
+      const authzOf = new Map(after4.map((u) => [String(u._id), u.authz_ver ?? 0]));
+      const bySubject = new Map(aacEv.map((e) => [e.subject.id, e]));
+      check('E4d per-member app_access.changed arrive after org.suspended with the correct authz_ver', [...authzOf].every(([id, v]) => (bySubject.get(id)?.data as any)?.authz_ver === v), { events: aacEv.length, members: authzOf.size });
+      const seqs4 = (await PlatformEvent.find({ org_id: gammaId }).sort({ seq: 1 }).lean()).map((e) => e.seq);
+      check('E4d org event seq contiguous after fan-out', seqs4.every((v, i) => v === i + 1), seqs4.length);
+
+      // concurrent conflicting lifecycle transitions
+      const sidL = crypto.randomUUID();
+      await Session.create({
+        _id: sidL, identity_id: new mongoose.Types.ObjectId(), member_id: me._id, company_id: orgId, realm: 'tenant',
+        idle_expires_at: new Date(Date.now() + 3600e3), absolute_expires_at: new Date(Date.now() + 3600e3), amr: ['pwd'],
+      });
+      const tKeyL = await jose.importJWK(tenantPrivateJwk, 'RS256');
+      const tAtL = await new jose.SignJWT({ token_use: 'access', org: String(orgId), sid: sidL, email: me.email })
+        .setProtectedHeader({ alg: 'RS256', kid: 'tenant-smoke', typ: 'at+jwt' })
+        .setIssuer(`${ORIGIN}/realms/tenant`).setAudience('urn:karbexa:admin').setSubject(String(me._id))
+        .setIssuedAt().setExpirationTime('10m').sign(tKeyL);
+      const apiL = async (path: string, method: string, body: unknown, cid: string) => {
+        const rr = await fetch(`${ORIGIN}/api/v1${path}`, { method, headers: { authorization: `Bearer ${tAtL}`, 'content-type': 'application/json', 'x-correlation-id': cid }, body: JSON.stringify(body) });
+        return { status: rr.status, text: await rr.text() };
+      };
+      await apiL('/people/invite', 'POST', { full_name: 'Race Member', email: 'race.member@acme.test' }, 'e4d-invite');
+      const race = await User.findOne({ company_id: orgId, email: 'race.member@acme.test' });
+      await User.updateOne({ _id: race?._id }, { $set: { lifecycle_state: 'active', is_active: true } });
+      const rr2 = await Promise.all([
+        apiL(`/people/${race?._id}/lifecycle`, 'PUT', { lifecycle_state: 'on_leave' }, 'e4d-race-a'),
+        apiL(`/people/${race?._id}/lifecycle`, 'PUT', { lifecycle_state: 'deactivated', reason: 'e4d race' }, 'e4d-race-b'),
+      ]);
+      const statuses = rr2.map((x) => x.status).sort().join();
+      check('E4d concurrent conflicting lifecycle transitions -> one success, one 409 LIFECYCLE_CONFLICT', statuses === '200,409' && rr2.some((x) => x.status === 409 && /LIFECYCLE_CONFLICT/.test(x.text)), rr2.map((x) => `${x.status} ${x.text.slice(0, 120)}`));
+
+      // stale role-catalog version is a no-op
+      const rcTok = await mint4('platform.role_catalog.write');
+      const signApp = await App.findOne({ product_key: 'sign', app_type: 'karbexa_product' }).lean();
+      const verNow = (signApp as any)?.role_catalog_version ?? 1;
+      const stale = await fetch(`${ORIGIN}/platform/v1/apps/sign/role-catalog`, {
+        method: 'PUT', headers: { 'content-type': 'application/json', authorization: `Bearer ${rcTok}` },
+        body: JSON.stringify({ version: Math.max(verNow - 1, 1), roles: [{ key: 'stale_only', name: 'Stale', rank: 1, is_default: true }] }),
+      });
+      const staleJson = await stale.json() as { version: number; roles: { key: string }[] };
+      const verAfter = ((await App.findOne({ product_key: 'sign', app_type: 'karbexa_product' }).lean()) as any)?.role_catalog_version ?? 1;
+      check('E4d stale role-catalog version = 200 no-op returning stored catalog', verNow > 1 && stale.status === 200 && verAfter === verNow && staleJson.version === verNow && !staleJson.roles.some((r) => r.key === 'stale_only') && !(await ProductRole.exists({ product_key: 'sign', key: 'stale_only' })), { status: stale.status, verNow, verAfter });
+
+      // CURSOR_AHEAD
+      const evTok = await mint4('platform.events.read');
+      const ahead = await fetch(`${ORIGIN}/platform/v1/orgs/${orgId}/events?after_seq=99999999`, { headers: { authorization: `Bearer ${evTok}` } });
+      check('E4d after_seq beyond latest = 409 CURSOR_AHEAD', ahead.status === 409 && ((await ahead.json()) as any).code === 'CURSOR_AHEAD', ahead.status);
+
+      // correlation id sanitising
+      const badCid = correlationIdFor({ headers: { 'x-correlation-id': 'bad id!<script>' } } as any);
+      const goodCid = correlationIdFor({ headers: { 'x-correlation-id': 'ok-id_1.2' } } as any);
+      check('E4d correlation id with illegal chars is replaced; legal one kept', badCid !== 'bad id!<script>' && /^[\w.-]{1,100}$/.test(badCid) && goodCid === 'ok-id_1.2', { badCid, goodCid });
+
+      // ssrfGuard ranges
+      const blocked = ['64:ff9b::1.2.3.4', '64:ff9b::7f00:1', '2002:c000:204::1', '2001::1', '2001:0:4136:e378::1', '::1.2.3.4', '::102:304', '100::1', '198.18.0.1', '198.19.255.255', '192.0.2.1', '198.51.100.7', '203.0.113.9'];
+      const leaked = blocked.filter((a) => !isPrivateAddress(a));
+      check('E4d ssrfGuard rejects NAT64/6to4/Teredo/IPv4-compatible/discard/benchmark/doc ranges', leaked.length === 0 && !isPrivateAddress('8.8.8.8') && !isPrivateAddress('2606:4700:4700::1111'), leaked);
+    } catch (e) { check('E4d section did not crash', false, (e as Error).stack?.split(String.fromCharCode(10)).slice(0, 4).join(' | ')); }
 
     // ── audit ─────────────────────────────────────────────────────────────────────────────
     const actions = (await OperatorAuditEvent.find()).map((e) => e.action);
