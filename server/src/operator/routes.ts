@@ -17,6 +17,11 @@ import { PRODUCT_KEYS } from '../models/ProductRole.model';
 import { OrganizationEntitlement } from '../models/OrganizationEntitlement.model';
 import { OperatorAccount } from '../models/OperatorAccount.model';
 import { OperatorAuditEvent } from '../models/OperatorAuditEvent.model';
+import { App } from '../models/App.model';
+import { AppAssignment } from '../models/AppAssignment.model';
+import { Group } from '../models/Group.model';
+import { seedProductRegistry } from '../lib/productCatalog';
+import { bumpAuthzVer } from '../lib/effectiveAccess';
 import { seedDatabase } from '../lib/seed';
 import { sendWelcomeEmail } from '../lib/emailService';
 import { revokeSession } from '../identity/sessions';
@@ -126,6 +131,31 @@ const ProvisionSchema = z.object({
   first_admin: z.object({ email: z.string().trim().email().toLowerCase(), full_name: z.string().trim().min(1).max(120) }),
 });
 
+/** "All Members" dynamic group + default People employee assignment (only with an active people entitlement). Idempotent. */
+async function ensureDefaultPeopleAccess(companyId: Types.ObjectId, grantedBy: Types.ObjectId) {
+  if (!(await OrganizationEntitlement.exists({ company_id: companyId, product_key: 'people', status: 'active' }))) return;
+  let app = await App.findOne({ product_key: 'people', app_type: 'karbexa_product' });
+  if (!app) {
+    await seedProductRegistry();
+    app = await App.findOne({ product_key: 'people', app_type: 'karbexa_product' });
+  }
+  if (!app) return;
+  let group = await Group.findOne({ company_id: companyId, name: 'All Members', type: 'dynamic' });
+  if (!group) group = await Group.create({ company_id: companyId, name: 'All Members', type: 'dynamic', dynamic_rules: {}, is_active: true } as never);
+  const exists = await AppAssignment.exists({ company_id: companyId, app_id: app._id, target_type: 'group', target_id: group._id, product_role_key: 'employee' });
+  if (!exists) {
+    await AppAssignment.create({
+      company_id: companyId, app_id: app._id, target_type: 'group', target_id: group._id, product_role_key: 'employee', granted_by: grantedBy, is_active: true,
+    } as never);
+  }
+}
+
+/** Entitlement/plan/status changes alter every member's effective access (04 §8.2). */
+async function bumpOrgAuthz(companyId: Types.ObjectId) {
+  const ids = await User.find({ company_id: companyId }).distinct('_id');
+  await bumpAuthzVer(ids);
+}
+
 router.post('/orgs', asyncHandler(async (req: Request, res: Response) => {
   const input = ProvisionSchema.parse(req.body);
   const slug = input.slug || slugify(input.name);
@@ -173,6 +203,8 @@ router.post('/orgs', asyncHandler(async (req: Request, res: Response) => {
       console.error('[operator] invite email failed', e);
     }
 
+    await ensureDefaultPeopleAccess(company._id, user._id);
+
     company.status = 'active';
     company.is_active = true;
     await company.save();
@@ -194,6 +226,7 @@ async function setOrgStatus(req: Request, res: Response, status: 'active' | 'sus
   company.status = status;
   company.is_active = status === 'active';
   await company.save();
+  await bumpOrgAuthz(company._id);
   let revoked = 0;
   if (status !== 'active') {
     const live = await Session.find({ company_id: company._id, revoked_at: { $exists: false } }).select('_id');
@@ -221,6 +254,9 @@ router.patch('/orgs/:id', asyncHandler(async (req: Request, res: Response) => {
       { upsert: true },
     );
   }
+  const firstAdmin = await User.findOne({ company_id: company._id, role: ROLES.SUPER_ADMIN }).sort({ created_at: 1 }).select('_id');
+  if (firstAdmin) await ensureDefaultPeopleAccess(company._id, firstAdmin._id);
+  await bumpOrgAuthz(company._id);
   await audit(req, { action: 'org.plan_assigned', target_type: 'Company', target_id: String(company._id), company, before: null, after: { plan_key: plan.key, products: plan.products } });
   ok(res, { id: String(company._id), plan_key: plan.key, products: plan.products });
 }));
@@ -240,6 +276,7 @@ router.put('/orgs/:id/entitlements/:productKey',asyncHandler(async (req: Request
     { $set: set, ...(Object.keys(unset).length ? { $unset: unset } : {}) },
     { upsert: true, returnDocument: 'after', setDefaultsOnInsert: true },
   );
+  await bumpOrgAuthz(company._id);
   await audit(req, {
     action: 'entitlement.updated', target_type: 'Entitlement', target_id: `${company._id}:${key}`, company,
     before: prior ? { status: prior.status, seats_limit: prior.seats_limit ?? null } : null,

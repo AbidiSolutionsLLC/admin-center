@@ -135,11 +135,16 @@ async function main() {
     const desk = await App.findOne({ product_key: 'desk', app_type: 'karbexa_product' });
     const me = admin!;
     await User.updateOne({ _id: me._id }, { lifecycle_state: 'active', is_active: true });
-    const grp = await Group.create({ company_id: orgId, name: 'All Members', type: 'dynamic', dynamic_rules: {}, is_active: true } as never);
+    const grp = await Group.findOne({ company_id: orgId, name: 'All Members', type: 'dynamic' });
+    check('E10 provisioning creates dynamic All Members group', !!grp && grp.is_active, grp?.toObject());
+    check('E10 provisioning creates default people employee assignment (group)', !!(await AppAssignment.exists({
+      company_id: orgId, app_id: people!._id, target_type: 'group', target_id: grp!._id, product_role_key: 'employee', granted_by: admin!._id,
+    })));
+    check('E10 re-provision does not duplicate group/assignment', (await Group.countDocuments({ company_id: orgId, name: 'All Members' })) === 1
+      && (await AppAssignment.countDocuments({ company_id: orgId, app_id: people!._id, target_type: 'group' })) === 1);
     const mk = (app: typeof people, role: string, target: object) => AppAssignment.create({
       company_id: orgId, app_id: app!._id, granted_by: me._id, is_active: true, product_role_key: role, ...target,
     } as never);
-    await mk(people, 'employee', { target_type: 'group', target_id: grp._id });
     await mk(projects, 'team_member', { target_type: 'user', target_id: me._id });
     const pm = await mk(projects, 'project_manager', { target_type: 'user', target_id: me._id });
     await mk(desk, 'technician', { target_type: 'user', target_id: me._id });
@@ -170,7 +175,9 @@ async function main() {
     check('E3 operator token rejected by platform API', res.status === 401 || res.status === 403, res.status);
 
     // ── entitlement suspend → effective access denies ────────────────────────────────────
+    const verBefore = (await User.findById(me._id))?.authz_ver ?? 0;
     res = await op(`/orgs/${orgId}/entitlements/projects`, 'PUT', { status: 'suspended' });
+    check('E10 entitlement change bumps authz_ver', ((await User.findById(me._id))?.authz_ver ?? 0) > verBefore, { verBefore, after: (await User.findById(me._id))?.authz_ver });
     check('E10 PUT entitlement suspended = 200', res.status === 200, res.status);
     const ea2 = await computeEffectiveAccess(orgId, me._id.toString());
     check('E3 suspended entitlement removes product access', !ea2.products.projects && ea2.denials.projects === 'NO_ENTITLEMENT', ea2.denials);
@@ -186,6 +193,12 @@ async function main() {
     check('E10 Company.status suspended and is_active false', (await Company.findById(orgId))?.status === 'suspended' && (await Company.findById(orgId))?.is_active === false);
     res = await op(`/orgs/${orgId}/reactivate`, 'POST');
     check('E10 reactivate org = 200', res.status === 200 && (await Company.findById(orgId))?.status === 'active', res.status);
+
+    // ── plan assignment activates products ───────────────────────────────────────────────
+    res = await op(`/orgs/${orgId}`, 'PATCH', { plan_key: 'enterprise' });
+    const enterprise = await Plan.findOne({ key: 'enterprise' });
+    const activeKeys = (await OrganizationEntitlement.find({ company_id: orgId, status: 'active' })).map((e) => e.product_key);
+    check('E10 PATCH /orgs/:id {plan_key} activates plan products (suspended ones stay suspended)', res.status === 200 && !!enterprise && enterprise.products.includes('desk') && activeKeys.includes('desk') && !activeKeys.includes('projects'), { status: res.status, activeKeys });
 
     // ── audit ─────────────────────────────────────────────────────────────────────────────
     const actions = (await OperatorAuditEvent.find()).map((e) => e.action);

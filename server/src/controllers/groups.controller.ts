@@ -4,6 +4,7 @@ import { asyncHandler } from '../utils/asyncHandler';
 import { Group } from '../models/Group.model';
 import { GroupMember } from '../models/GroupMember.model';
 import { User } from '../models/User.model';
+import { bumpAuthzVer } from '../lib/effectiveAccess';
 import { auditLogger } from '../lib/auditLogger';
 import { AppError } from '../utils/AppError';
 import { Types } from 'mongoose';
@@ -21,6 +22,8 @@ const UpdateGroupSchema = z.object({
   name: z.string().min(1, 'Name is required').transform(v => v.trim()).optional(),
   description: z.string().optional(),
   is_active: z.boolean().optional(),
+  // @ts-ignore
+  dynamic_rules: z.record(z.unknown()).optional(),
 });
 
 const AddUsersSchema = z.object({
@@ -137,7 +140,15 @@ export const updateGroup = asyncHandler(async (req: Request, res: Response) => {
   if (input.description !== undefined) group.description = input.description;
   if (input.is_active !== undefined) group.is_active = input.is_active;
 
+  const rulesChanged = group.type === 'dynamic' && input.dynamic_rules !== undefined
+    && JSON.stringify(input.dynamic_rules) !== JSON.stringify(group.dynamic_rules ?? {});
+  if (rulesChanged) group.dynamic_rules = input.dynamic_rules;
+
   await group.save();
+  if (rulesChanged) {
+    const ids = await User.find({ company_id: req.user.company_id }).distinct('_id');
+    await bumpAuthzVer(ids);
+  }
 
   await auditLogger.log({
     req,

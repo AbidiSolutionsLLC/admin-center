@@ -5,6 +5,7 @@ import { Request, Response, NextFunction } from 'express';
 import * as jose from 'jose';
 import { getPublicJwks } from '../identity/keys';
 import { getIdentityConfig, OPERATOR_AUDIENCE } from '../identity/config';
+import { isIpInRange } from '../utils/ipUtils';
 import { asyncHandler } from '../utils/asyncHandler';
 import { IOperatorAccount } from '../models/OperatorAccount.model';
 import { findOperatorAccount } from './accounts';
@@ -23,6 +24,10 @@ let operatorJwks: ReturnType<typeof jose.createLocalJWKSet> | undefined;
 const keySet = () => (operatorJwks ??= jose.createLocalJWKSet(getPublicJwks('operator')));
 
 export const requireOperator = asyncHandler(async (req: Request, res: Response, next: NextFunction) => {
+  const allow = (process.env.OPERATOR_IP_ALLOWLIST || '').split(',').map((s) => s.trim()).filter(Boolean);
+  if (allow.length && !allow.some((r) => isIpInRange(req.ip || '', r))) {
+    return res.status(403).json({ success: false, error: 'Forbidden', code: 'FORBIDDEN' });
+  }
   const header = req.headers.authorization;
   const token = header?.startsWith('Bearer ') ? header.slice(7).trim() : undefined;
   if (!token) return res.status(401).json({ success: false, error: 'Unauthorized', code: 'NO_TOKEN' });
