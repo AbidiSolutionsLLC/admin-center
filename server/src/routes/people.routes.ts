@@ -24,6 +24,7 @@ import {
 } from '../controllers/people.controller';
 
 import { assignUserOrg } from '../controllers/organization.controller';
+import { getEffectiveAccess } from '../controllers/appAccess.controller';
 import { PERMISSION_GROUPS } from '../constants/roles';
 import reportingLinesRoutes from './reportingLines.routes';
 
@@ -115,6 +116,7 @@ router.get('/:id/app-history', requireRole(PEOPLE_MANAGERS), getUserAppAccessHis
  * Returns effective permissions for a single user
  */
 router.get('/:id/effective-permissions', requireRole(PEOPLE_MANAGERS), getEffectivePermissions);
+router.get('/:id/effective-access', requireRole(PEOPLE_MANAGERS), getEffectiveAccess);
 
 /**
  * GET /people/:id/effective-settings

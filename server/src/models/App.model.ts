@@ -17,6 +17,12 @@ export interface IApp extends Document {
   dependencies?: string[];
   /** Slugs of apps that cannot be assigned together with this app */
   mutually_exclusive?: string[];
+  /** 04 §4 product registry */
+  app_type?: 'karbexa_product' | 'third_party';
+  product_key?: 'admin' | 'people' | 'projects' | 'sign' | 'desk';
+  launch_url?: string;
+  role_catalog_version?: number;
+  default_role_key?: string;
   created_at: Date;
   updated_at: Date;
 }
@@ -39,6 +45,11 @@ const AppSchema = new Schema<IApp>({
   is_active: { type: Boolean, default: true },
   dependencies: [{ type: String }],
   mutually_exclusive: [{ type: String }],
+  app_type: { type: String, enum: ['karbexa_product', 'third_party'], default: 'third_party' },
+  product_key: { type: String, enum: ['admin', 'people', 'projects', 'sign', 'desk'] },
+  launch_url: String,
+  role_catalog_version: { type: Number, default: 1 },
+  default_role_key: String,
 }, { timestamps: { createdAt: 'created_at', updatedAt: 'updated_at' } });
 
 // Unique index for system apps (slug only) and company apps (company_id + slug)

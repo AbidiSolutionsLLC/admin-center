@@ -7,6 +7,8 @@ import { globalLimiter } from './middleware/rateLimiter';
 import './models';
 import routes from './routes';
 import { initIdentity, mountIdentity } from './identity';
+import operatorRoutes from './operator/routes';
+import { platformRouter } from './platform';
 
 /**
  * Build the Express app. Requires an open Mongoose connection (identity adapter indexes + keys).
@@ -52,6 +54,9 @@ export async function createServer(): Promise<Express> {
 
   // Mount routes
   app.use('/api/v1', routes);
+  // E10: operator API (own realm token via requireOperator)
+  app.use('/operator/v1', operatorRoutes);
+  app.use('/platform/v1', platformRouter);
 
   // Global Error Handler
   app.use(errorHandler);

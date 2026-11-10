@@ -18,6 +18,9 @@ export interface IAppAssignment extends Document {
   is_active: boolean;
   // Optional reason/note
   reason?: string;
+  /** 04 §7 */
+  product_role_key?: string;
+  include_descendants: boolean;
 }
 
 const AppAssignmentSchema = new Schema<IAppAssignment>({
@@ -41,6 +44,8 @@ const AppAssignmentSchema = new Schema<IAppAssignment>({
   revoked_at: { type: Date },
   is_active: { type: Boolean, default: true },
   reason: { type: String },
+  product_role_key: { type: String },
+  include_descendants: { type: Boolean, default: true },
 }, { timestamps: { createdAt: 'created_at', updatedAt: 'updated_at' } });
 
 // Compound indexes for efficient queries

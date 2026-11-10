@@ -2,12 +2,16 @@
 // Identity module configuration (03 §2, §3; sprint1-contract "Local dev hosts").
 // Read lazily so callers (e.g. the smoke script) can set env vars before the first call.
 
-export type Realm = 'tenant' | 'services';
+export type Realm = 'tenant' | 'services' | 'operator';
 
 export const ADMIN_AUDIENCE = 'urn:karbexa:admin';
 export const PRODUCTS_AUDIENCE = 'urn:karbexa:products';
 export const PLATFORM_API_AUDIENCE = 'urn:karbexa:platform-api';
 export const PRODUCTS_INTERNAL_AUDIENCE = 'urn:karbexa:products-internal';
+
+export const OPERATOR_AUDIENCE = 'urn:karbexa:operator';
+export const OPERATOR_SPA_CLIENT_ID = 'karbexa-operator-spa';
+export const OPERATOR_SESSION_IDLE_S = 30 * 60; // 09 §7
 
 export const ADMIN_SPA_CLIENT_ID = 'karbexa-admin-spa';
 export const PRODUCTS_SPA_CLIENT_ID = 'karbexa-products-spa';
@@ -29,6 +33,8 @@ export interface IdentityConfig {
   issuerOrigin: string;
   tenantIssuer: string;
   servicesIssuer: string;
+  operatorIssuer: string;
+  operatorSpaOrigin: string;
   adminSpaOrigin: string;
   productsSpaOrigin: string;
   secureCookies: boolean;
@@ -51,6 +57,8 @@ export function getIdentityConfig(): IdentityConfig {
     issuerOrigin,
     tenantIssuer: `${issuerOrigin}/realms/tenant`,
     servicesIssuer: `${issuerOrigin}/realms/services`,
+    operatorIssuer: `${issuerOrigin}/realms/operator`,
+    operatorSpaOrigin: trimSlash(process.env.OPERATOR_SPA_ORIGIN || 'http://admin.karbexa.localhost:5173'),
     adminSpaOrigin: trimSlash(process.env.ADMIN_SPA_ORIGIN || 'http://admin.karbexa.localhost:5173'),
     productsSpaOrigin: trimSlash(process.env.PRODUCTS_SPA_ORIGIN || 'http://app.karbexa.localhost:5174'),
     secureCookies: issuerOrigin.startsWith('https://'),

@@ -26,10 +26,10 @@ export async function loadAccessContext(memberId: string): Promise<AccessContext
   if (!user || !user.identity_id || !hasAccessState(user.lifecycle_state)) return null;
   const [identity, company] = await Promise.all([
     Identity.findById(user.identity_id),
-    Company.findById(user.company_id).select('is_active'),
+    Company.findById(user.company_id).select('is_active status'),
   ]);
   if (!identity || identity.status !== 'active') return null;
-  if (!company || company.is_active === false) return null;
+  if (!company || company.is_active === false || (company.status && company.status !== 'active')) return null;
   const assignments = await UserRole.find({ user_id: user._id, company_id: user.company_id }).populate('role_id', 'name');
   const roles = assignments.map((a) => (a.role_id as unknown as { name?: string } | null)?.name).filter((n): n is string => !!n);
   return { user, identity, roles };

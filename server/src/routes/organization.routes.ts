@@ -17,6 +17,7 @@ import {
 } from '../controllers/organization.controller';
 
 import { PERMISSION_GROUPS } from '../constants/roles';
+import { getSubscription } from '../controllers/appAccess.controller';
 
 const router = Router();
 
@@ -31,6 +32,7 @@ router.get('/bu-tree', getBUTree);
 router.get('/business-units', getBusinessUnits);
 router.get('/health', getOrgHealth);
 router.get('/history', getOrgHistory);
+router.get('/subscription', getSubscription);
 router.delete('/business-units/:id', requireRole(DEPT_MANAGERS), deleteBusinessUnit);
 
 // Parameterized routes last

@@ -98,7 +98,11 @@ export const requireAuth = asyncHandler(async (req: Request, res: Response, next
   }
 
   // IP Restriction Check (Portal & Applications) - ABAC Engine
-  const company = await Company.findById(decoded.company_id).select('settings.ip_restrictions_enabled');
+  const company = await Company.findById(decoded.company_id).select('settings.ip_restrictions_enabled status is_active');
+  // 09 §5: suspended / closed / provisioning organisations are blocked (blocked within the 30 s target).
+  if (!company || company.is_active === false || (company.status && company.status !== 'active')) {
+    return res.status(423).json({ error: 'This organization is suspended. Contact Karbexa support.', code: 'ORG_SUSPENDED' });
+  }
   if (company?.settings?.ip_restrictions_enabled) {
     const clientIp = req.ip || '127.0.0.1';
     

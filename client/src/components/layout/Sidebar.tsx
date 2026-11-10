@@ -43,6 +43,7 @@ const navGroups = [
       { label: 'Groups', href: ROUTES.GROUPS, icon: Users },
       { label: 'Locations', href: ROUTES.LOCATIONS, icon: MapPin },
       { label: 'Apps', href: ROUTES.APPS, icon: Package },
+      { label: 'Subscription', href: ROUTES.SUBSCRIPTION, icon: Package },
       { label: 'Policies', href: ROUTES.POLICIES, icon: FileText },
       { label: 'Workflows', href: ROUTES.WORKFLOWS, icon: GitBranch },
       { label: 'Approvals', href: ROUTES.APPROVALS, icon: CheckSquare },

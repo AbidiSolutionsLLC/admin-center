@@ -47,7 +47,7 @@ let entraJwks: ReturnType<typeof jose.createRemoteJWKSet> | undefined;
 
 const RESOURCE_FOR_CLIENT: Record<string, string> = { [ADMIN_SPA_CLIENT_ID]: ADMIN_AUDIENCE, [PRODUCTS_SPA_CLIENT_ID]: PRODUCTS_AUDIENCE };
 
-function send(res: Response, title: string, body: string, status = 200) {
+export function send(res: Response, title: string, body: string, status = 200) {
   const nonce = newNonce();
   res.status(status);
   res.setHeader('Content-Security-Policy', pageCsp(nonce));
@@ -57,7 +57,7 @@ function send(res: Response, title: string, body: string, status = 200) {
   res.type('html').send(pageShell(nonce, title, body));
 }
 
-const errBox = (msg?: string) => (msg ? `<p class="err" role="alert">${escapeHtml(msg)}</p>` : '');
+export const errBox = (msg?: string) => (msg ? `<p class="err" role="alert">${escapeHtml(msg)}</p>` : '');
 
 function renderLogin(res: Response, uid: string, opts: { error?: string; email?: string; status?: number } = {}) {
   const cfg = getIdentityConfig();
@@ -104,9 +104,9 @@ const readCookie = (req: Request, name: string): string | undefined => {
   return undefined;
 };
 
-const normaliseCode = (raw: unknown) => String(raw ?? '').replace(/\s+/g, '');
+export const normaliseCode = (raw: unknown) => String(raw ?? '').replace(/\s+/g, '');
 
-async function totpValid(secret: string, code: string): Promise<boolean> {
+export async function totpValid(secret: string, code: string): Promise<boolean> {
   if (!/^\d{6}$/.test(code)) return false;
   const result = await verifyTotp({ secret, token: code, epochTolerance: 30 });
   return result.valid;

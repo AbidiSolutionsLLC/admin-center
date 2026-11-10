@@ -9,6 +9,8 @@ import { useGroups } from '@/features/groups/useGroups';
 import { useLocations } from '@/features/locations/hooks/useLocations';
 import { AppCatalog } from '@/features/apps/AppCatalog';
 import { AccessTimeline } from '@/features/apps/AccessTimeline';
+import { ProductRoleFields } from '@/features/apps/ProductRoleFields';
+import { useAppRoles, useSubscription, useUpdateAssignment, isProductApp, appProductKey, isEntitled } from '@/features/apps/productAccess';
 import { AssignmentRuleBuilder } from '@/features/apps/AssignmentRuleBuilder';
 import { Modal } from '@/components/ui/Modal';
 import { TableSkeleton } from '@/components/ui/TableSkeleton';
@@ -44,6 +46,9 @@ export default function AppsPage() {
   const [assignAttributeName, setAssignAttributeName] = useState('department_id');
   const [assignAttributeValue, setAssignAttributeValue] = useState('');
   const [assignReason, setAssignReason] = useState('');
+  const [productRoleKey, setProductRoleKey] = useState('');
+  const [includeDescendants, setIncludeDescendants] = useState(false);
+  const [editingAssignmentId, setEditingAssignmentId] = useState<string | null>(null);
 
   // Revoke state
   const [isRevokeModalOpen, setIsRevokeModalOpen] = useState(false);
@@ -70,6 +75,11 @@ export default function AppsPage() {
   const assignAppMutation = useAssignApp();
   const revokeAppMutation = useRevokeApp();
   const updateAppMutation = useUpdateApp();
+  const { data: subscription } = useSubscription();
+  const isProduct = isProductApp(currentApp);
+  const entitled = !isProduct || isEntitled(subscription?.entitlements, appProductKey(currentApp));
+  const { data: productRoles } = useAppRoles(selectedApp?._id ?? '', isProduct);
+  const updateAssignment = useUpdateAssignment(selectedApp?._id ?? '');
 
   // ── Timeline data (loaded when modal opens) ─────────────────────────
   const { data: timelineData, isLoading: isLoadingTimeline } = useAppTimeline(
@@ -89,6 +99,8 @@ export default function AppsPage() {
     setAssignAttributeName('department_id');
     setAssignAttributeValue('');
     setAssignReason('');
+    setProductRoleKey('');
+    setIncludeDescendants(false);
     setIsAssignModalOpen(true);
   };
 
@@ -112,6 +124,7 @@ export default function AppsPage() {
           target_id: assignTargetId
         }),
         reason: assignReason.trim() || undefined,
+        ...(isProduct ? { product_role_key: productRoleKey || undefined, include_descendants: includeDescendants } : {}),
       },
     });
 
@@ -230,7 +243,9 @@ export default function AppsPage() {
                 </button>
                 <button
                   onClick={handleOpenAssignModal}
-                  className="inline-flex items-center gap-2 h-9 px-4 bg-primary text-white text-sm font-medium rounded-md hover:bg-primary-hover transition-colors"
+                  disabled={!entitled}
+                  title={entitled ? undefined : 'Your organization has no active entitlement for this product'}
+                  className="disabled:opacity-50 disabled:cursor-not-allowed inline-flex items-center gap-2 h-9 px-4 bg-primary text-white text-sm font-medium rounded-md hover:bg-primary-hover transition-colors"
                 >
                   <Users className="h-4 w-4" />
                   Assign App
@@ -359,6 +374,11 @@ export default function AppsPage() {
               >
                 {currentApp.status.toUpperCase()}
               </span>
+              {isProduct && (
+                <span className={`text-[11px] font-semibold px-2 py-0.5 rounded-full ml-1 ${entitled ? 'bg-success/10 text-success' : 'bg-error/10 text-error'}`}>
+                  {entitled ? 'ENTITLED' : 'NO ENTITLEMENT'}
+                </span>
+              )}
             </div>
 
             {currentApp.dependencies && currentApp.dependencies.length > 0 && (
@@ -452,6 +472,42 @@ export default function AppsPage() {
                           )}
                         </div>
                       </div>
+                      {isProduct && (
+                        <div className="flex items-center gap-2 mr-3 ml-auto">
+                          {editingAssignmentId === assignment._id ? (
+                            <select
+                              autoFocus
+                              defaultValue={assignment.product_role_key ?? ''}
+                              onChange={(e) => {
+                                updateAssignment.mutate({ assignmentId: assignment._id, data: { product_role_key: e.target.value } });
+                                setEditingAssignmentId(null);
+                              }}
+                              onBlur={() => setEditingAssignmentId(null)}
+                              className="h-8 px-2 text-xs bg-surface border border-line rounded-md"
+                            >
+                              {(productRoles ?? []).filter((r) => r.assignable).map((r) => (
+                                <option key={r.key} value={r.key}>{r.name}</option>
+                              ))}
+                            </select>
+                          ) : (
+                            <button
+                              onClick={() => setEditingAssignmentId(assignment._id)}
+                              className="text-xs px-2 h-7 rounded-md border border-line text-ink-secondary hover:bg-surface-alt"
+                              title="Change product role"
+                            >
+                              {productRoles?.find((r) => r.key === assignment.product_role_key)?.name ?? assignment.product_role_key ?? 'default role'}
+                            </button>
+                          )}
+                          <label className="flex items-center gap-1 text-[11px] text-ink-muted">
+                            <input
+                              type="checkbox"
+                              checked={!!assignment.include_descendants}
+                              onChange={(e) => updateAssignment.mutate({ assignmentId: assignment._id, data: { include_descendants: e.target.checked } })}
+                            />
+                            descendants
+                          </label>
+                        </div>
+                      )}
                       <button
                         onClick={() => handleOpenRevokeModal(assignment._id)}
                         disabled={revokeAppMutation.isPending}
@@ -599,6 +655,17 @@ export default function AppsPage() {
                 placeholder="Why are you assigning this app?"
               />
             </div>
+
+            {isProduct && (
+              <ProductRoleFields
+                appId={selectedApp._id}
+                roleKey={productRoleKey}
+                includeDescendants={includeDescendants}
+                onRoleChange={setProductRoleKey}
+                onIncludeDescendantsChange={setIncludeDescendants}
+                showDescendants={assignTargetType === 'department' || assignTargetType === 'group'}
+              />
+            )}
 
             {/* Dependency Warning & Confirm */}
             {(assignTargetId || (assignTargetType === 'attribute' && assignAttributeName && assignAttributeValue)) && (

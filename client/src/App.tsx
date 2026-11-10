@@ -6,6 +6,14 @@ import { queryClient } from './lib/queryClient';
 import { AdminShell } from './components/layout/AdminShell';
 import { AuthGuard, GuestGuard } from './components/layout/AuthGuard';
 import { ROUTES } from './constants/routes';
+import SubscriptionPage from './pages/subscription/SubscriptionPage';
+import { OperatorGuard } from './features/operator/OperatorGuard';
+import { OperatorLayout } from './features/operator/OperatorLayout';
+import OperatorCallbackPage from './pages/operator/OperatorCallbackPage';
+import OperatorOrgsPage from './pages/operator/OperatorOrgsPage';
+import OperatorPlansPage from './pages/operator/OperatorPlansPage';
+import OperatorOperatorsPage from './pages/operator/OperatorOperatorsPage';
+import OperatorAuditPage from './pages/operator/OperatorAuditPage';
 
 // Pages
 import LoginPage from './pages/auth/LoginPage';
@@ -41,6 +49,16 @@ function App() {
       <BrowserRouter>
         <Routes>
           <Route path={ROUTES.AUTH_CALLBACK} element={<CallbackPage />} />
+          <Route path={ROUTES.OPERATOR_CALLBACK} element={<OperatorCallbackPage />} />
+          <Route element={<OperatorGuard />}>
+            <Route path={ROUTES.OPERATOR} element={<OperatorLayout />}>
+              <Route index element={<Navigate to={ROUTES.OPERATOR_ORGS} replace />} />
+              <Route path="organizations" element={<OperatorOrgsPage />} />
+              <Route path="plans" element={<OperatorPlansPage />} />
+              <Route path="operators" element={<OperatorOperatorsPage />} />
+              <Route path="audit" element={<OperatorAuditPage />} />
+            </Route>
+          </Route>
           <Route element={<GuestGuard />}>
             <Route path={ROUTES.LOGIN} element={<LoginPage />} />
             <Route path={ROUTES.FORGOT_PASSWORD} element={<ForgotPasswordPage />} />
@@ -63,6 +81,7 @@ function App() {
               <Route path="/roles/:id" element={<RolesPage />} />
               <Route path={ROUTES.GROUPS} element={<GroupsPage />} />
               <Route path={ROUTES.APPS} element={<AppsPage />} />
+              <Route path={ROUTES.SUBSCRIPTION} element={<SubscriptionPage />} />
               <Route path={ROUTES.SECURITY} element={<SecurityPage />} />
               <Route path={ROUTES.AUDIT_LOGS} element={<AuditLogsPage />} />
               <Route path={ROUTES.POLICIES} element={<PoliciesPage />} />

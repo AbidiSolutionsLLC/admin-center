@@ -4,13 +4,15 @@ import fs from 'fs';
 import crypto from 'crypto';
 import {
   ADMIN_AUDIENCE, ADMIN_SPA_CLIENT_ID, PRODUCTS_AUDIENCE, PRODUCTS_SPA_CLIENT_ID, PRODUCTS_BACKEND_CLIENT_ID,
+  OPERATOR_AUDIENCE, OPERATOR_SPA_CLIENT_ID, OPERATOR_SESSION_IDLE_S,
   PLATFORM_API_AUDIENCE, PLATFORM_API_SCOPES, PRODUCTS_INTERNAL_AUDIENCE, PRODUCTS_INTERNAL_SCOPES,
   ACCESS_TOKEN_TTL_S, SESSION_ABSOLUTE_MS, Realm, getIdentityConfig,
 } from './config';
 import { loadRealmKeys, loadCookieKeys } from './keys';
-import { makeAdapter, initAdapterIndexes, TENANT_MODELS, SERVICES_MODELS } from './mongoAdapter';
+import { makeAdapter, initAdapterIndexes, TENANT_MODELS, OPERATOR_MODELS, SERVICES_MODELS } from './mongoAdapter';
 import { findAccount, loadAccessContext } from './accounts';
 import { ensureSessionForToken, revokeSession, SessionDeniedError } from './sessions';
+import { findOperatorAccount } from '../operator/accounts';
 import { escapeHtml, newNonce, pageCsp, pageShell } from './html';
 
 // ESM-only package loaded through require(esm) (03 §10.2); the library ships no TS types.
@@ -29,6 +31,12 @@ const CLIENT_RESOURCE: Record<string, string> = {
 
 let tenantProvider: OidcProvider | undefined;
 let servicesProvider: OidcProvider | undefined;
+let operatorProvider: OidcProvider | undefined;
+
+export function getOperatorProvider(): OidcProvider {
+  if (!operatorProvider) throw new Error('[identity] operator provider not initialised');
+  return operatorProvider;
+}
 
 export function getTenantProvider(): OidcProvider {
   if (!tenantProvider) throw new Error('[identity] tenant provider not initialised');
@@ -293,13 +301,118 @@ async function buildServices(cookieKeys: string[]): Promise<OidcProvider> {
   return provider;
 }
 
-/** Build both realms (keys, adapter indexes, providers). Requires an open Mongoose connection. */
-export async function initProviders(): Promise<{ tenant: OidcProvider; services: OidcProvider }> {
-  if (tenantProvider && servicesProvider) return { tenant: tenantProvider, services: servicesProvider };
+/** 09 §2 — separate realm for Karbexa staff: own issuer, key, audience, accounts (OperatorAccount). */
+async function buildOperator(cookieKeys: string[]): Promise<OidcProvider> {
+  const cfg = getIdentityConfig();
+  const { privateJwks } = await loadRealmKeys('operator');
+  await initAdapterIndexes('operator', OPERATOR_MODELS);
+  const origin = cfg.operatorSpaOrigin;
+  const provider = new oidc.Provider(cfg.operatorIssuer, {
+    ...commonConfig('operator', cookieKeys),
+    adapter: makeAdapter('operator'),
+    jwks: privateJwks,
+    clients: [{
+      client_id: OPERATOR_SPA_CLIENT_ID,
+      token_endpoint_auth_method: 'none',
+      application_type: 'web',
+      redirect_uris: [`${origin}/operator/callback`],
+      post_logout_redirect_uris: [`${origin}/operator`],
+      grant_types: ['authorization_code', 'refresh_token'],
+      response_types: ['code'],
+      scope: 'openid profile email',
+    }],
+    responseTypes: ['code'],
+    pkce: { required: () => true },
+    scopes: ['openid', 'profile', 'email'],
+    claims: { openid: ['sub'], email: ['email', 'email_verified'], profile: ['name'] },
+    clientBasedCORS: (_ctx: unknown, o: string, client: any) =>
+      client.clientAuthMethod === 'none' && client.redirectUris.some((u: string) => new URL(u).origin === o),
+    // 09 §7: session idle 30 min.
+    ttl: {
+      AccessToken: ACCESS_TOKEN_TTL_S,
+      AuthorizationCode: 60,
+      IdToken: 600,
+      Interaction: 3600,
+      Grant: OPERATOR_SESSION_IDLE_S,
+      RefreshToken: OPERATOR_SESSION_IDLE_S,
+      Session: OPERATOR_SESSION_IDLE_S,
+    },
+    features: {
+      revocation: { enabled: true },
+      userinfo: { enabled: true },
+      devInteractions: { enabled: false },
+      rpInitiatedLogout: {
+        enabled: true,
+        logoutSource: async (ctx: any, form: string) => {
+          const nonce = newNonce();
+          ctx.type = 'html';
+          ctx.set('Content-Security-Policy', pageCsp(nonce));
+          const withLogout = form.replace('</form>', '<input type="hidden" name="logout" value="yes"/><noscript><button type="submit">Sign out</button></noscript></form>');
+          ctx.body = pageShell(nonce, 'Signing out', `<h1>Signing you out…</h1>${withLogout}<script nonce="${nonce}">document.getElementById('op.logoutForm').submit();</script>`);
+        },
+        postLogoutSuccessSource: async (ctx: any) => {
+          const nonce = newNonce();
+          ctx.type = 'html';
+          ctx.set('Content-Security-Policy', pageCsp(nonce));
+          ctx.body = pageShell(nonce, 'Signed out', `<h1>You are signed out</h1><p><a href="${escapeHtml(origin)}/operator">Sign in again</a></p>`);
+        },
+      },
+      resourceIndicators: {
+        enabled: true,
+        defaultResource: () => OPERATOR_AUDIENCE,
+        useGrantedResource: () => true,
+        getResourceServerInfo: (_ctx: unknown, resource: string, client: any) => {
+          if (!client || client.clientId !== OPERATOR_SPA_CLIENT_ID || resource !== OPERATOR_AUDIENCE) throw new oidc.errors.InvalidTarget();
+          return { scope: 'api', audience: resource, accessTokenFormat: 'jwt', accessTokenTTL: ACCESS_TOKEN_TTL_S, jwt: { sign: { alg: 'RS256' } } };
+        },
+      },
+    },
+    issueRefreshToken: async (_ctx: unknown, client: any) => client.grantTypeAllowed('refresh_token'),
+    rotateRefreshToken: true,
+    interactions: { url: (_ctx: unknown, interaction: any) => `/realms/operator/interaction/${interaction.uid}` },
+    findAccount: async (_ctx: unknown, id: string) => {
+      const acct = await findOperatorAccount(id);
+      if (!acct) return undefined;
+      return {
+        accountId: id,
+        claims: async () => ({ sub: id, email: acct.email, email_verified: true, name: acct.full_name }),
+      };
+    },
+    loadExistingGrant: async (ctx: any) => {
+      const clientId = ctx.oidc.client.clientId;
+      const grantId = ctx.oidc.result?.consent?.grantId || ctx.oidc.session.grantIdFor(clientId);
+      if (grantId) {
+        const existing = await ctx.oidc.provider.Grant.find(grantId);
+        if (existing && existing.accountId === ctx.oidc.session.accountId) return existing;
+      }
+      const grant = new ctx.oidc.provider.Grant({ clientId, accountId: ctx.oidc.session.accountId });
+      grant.addOIDCScope('openid profile email');
+      grant.addResourceScope(OPERATOR_AUDIENCE, 'api');
+      await grant.save();
+      return grant;
+    },
+    extraTokenClaims: async (ctx: any, token: any) => {
+      if (token.kind !== 'AccessToken') return undefined;
+      const sid: string | undefined = token.sessionUid;
+      if (!sid) throw new oidc.errors.InvalidGrant('token is not bound to a session');
+      const acct = await findOperatorAccount(token.accountId);
+      if (!acct) throw new oidc.errors.InvalidGrant('operator has no access');
+      return { email: acct.email, roles: acct.roles, sid, token_use: 'access', amr: amrFromContext(ctx) };
+    },
+  });
+  applyProxy(provider);
+  logProviderErrors('operator', provider);
+  return provider;
+}
+
+/** Build all realms (keys, adapter indexes, providers). Requires an open Mongoose connection. */
+export async function initProviders(): Promise<{ tenant: OidcProvider; services: OidcProvider; operator: OidcProvider }> {
+  if (tenantProvider && servicesProvider && operatorProvider) return { tenant: tenantProvider, services: servicesProvider, operator: operatorProvider };
   const cookieKeys = loadCookieKeys();
   // Distinct cookie signing keys per realm (03 §10.10), derived from the shared secret list.
   const realmKeys = (realm: Realm) => cookieKeys.map((k) => crypto.createHmac('sha256', k).update(`oidc-cookies:${realm}`).digest('base64url'));
   tenantProvider = await buildTenant(realmKeys('tenant'));
   servicesProvider = await buildServices(realmKeys('services'));
-  return { tenant: tenantProvider, services: servicesProvider };
+  operatorProvider = await buildOperator(realmKeys('operator'));
+  return { tenant: tenantProvider, services: servicesProvider, operator: operatorProvider };
 }

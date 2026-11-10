@@ -27,6 +27,7 @@ import accessControlPoliciesRoutes from './accessControlPolicies.routes';
 import dataGovernancePoliciesRoutes from './dataGovernancePolicies.routes';
 import policyTemplatesRoutes from './policyTemplates.routes';
 import workflowTemplatesRoutes from './workflowTemplates.routes';
+import meRoutes from './me.routes';
 
 const router = Router();
 
@@ -42,6 +43,7 @@ router.use('/intelligence', intelligenceRoutes);
 router.post('/people/verify-invite', verifyInviteToken); // Public endpoint for onboarding
 router.use('/people', peopleRoutes);
 router.use('/apps', appsRoutes);
+router.use('/me', meRoutes);
 router.use('/overview', overviewRoutes);
 router.use('/security', securityRoutes);
 router.use('/audit-logs', auditLogsRoutes);

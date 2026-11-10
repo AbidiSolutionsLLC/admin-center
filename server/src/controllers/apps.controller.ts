@@ -16,6 +16,9 @@ import { Group } from '../models/Group.model';
 import { GroupMember } from '../models/GroupMember.model';
 import { Company } from '../models/Company.model';
 import { Types } from 'mongoose';
+import { ProductRole } from '../models/ProductRole.model';
+import { OrganizationEntitlement } from '../models/OrganizationEntitlement.model';
+import { bumpAuthzVer, resolveAssignmentMemberIds } from '../lib/effectiveAccess';
 
 /**
  * Whitelist of allowed attribute names for attribute-based app assignments.
@@ -164,6 +167,8 @@ const assignAppSchema = z.object({
   target_id: z.string().trim().optional(),
   attribute_name: z.string().trim().optional(),
   attribute_value: z.string().trim().optional(),
+  product_role_key: z.string().trim().min(1).optional(),
+  include_descendants: z.boolean().optional(),
   reason: z.string().trim().optional(),
 }).refine(data => {
   if (data.target_type === 'attribute') {
@@ -189,6 +194,7 @@ export const getApps = asyncHandler(async (req: Request, res: Response) => {
   const search = req.query.search as string;
   const status = req.query.status as string;
   const category = req.query.category as string;
+  const appType = req.query.type as string;
   const page = parseInt(req.query.page as string) || 1;
   const limit = parseInt(req.query.limit as string) || 12;
   const skip = (page - 1) * limit;
@@ -234,6 +240,14 @@ export const getApps = asyncHandler(async (req: Request, res: Response) => {
       query.$and.push({ status });
     } else {
       query.status = status;
+    }
+  }
+
+  if (appType === 'karbexa_product' || appType === 'third_party') {
+    if (query.$and) {
+      query.$and.push({ app_type: appType });
+    } else {
+      query.app_type = appType;
     }
   }
 
@@ -509,7 +523,7 @@ export const deleteApp = asyncHandler(async (req: Request, res: Response) => {
 
   const app = await App.findOne({
     _id: appId,
-    company_id: companyId,
+    $or: [{ company_id: companyId }, { company_id: { $exists: false } }],
   });
 
   if (!app) {
@@ -565,7 +579,7 @@ export const assignApp = asyncHandler(async (req: Request, res: Response) => {
   // Verify app exists
   const app = await App.findOne({
     _id: appId,
-    company_id: companyId,
+    $or: [{ company_id: companyId }, { company_id: { $exists: false } }],
   });
 
   if (!app) {
@@ -574,6 +588,22 @@ export const assignApp = asyncHandler(async (req: Request, res: Response) => {
 
   if (!app.is_active || app.status === 'inactive') {
     throw new AppError('Cannot assign a disabled app. Enable it first.', 400, 'APP_DISABLED');
+  }
+
+  // 04 §7: product apps need an active entitlement and a valid, assignable catalog role
+  let productRoleKey: string | undefined;
+  if (app.app_type === 'karbexa_product') {
+    const entitlement = await OrganizationEntitlement.findOne({ company_id: companyId, product_key: app.product_key, status: 'active' }).lean();
+    if (!entitlement) {
+      throw new AppError('Organization has no active entitlement for this product', 400, 'NO_ENTITLEMENT');
+    }
+    productRoleKey = validated.product_role_key || app.default_role_key;
+    const role = await ProductRole.findOne({ product_key: app.product_key, key: productRoleKey }).lean();
+    if (!role || !role.assignable) {
+      throw new AppError('Invalid or non-assignable product role', 400, 'INVALID_ROLE');
+    }
+  } else if (validated.product_role_key) {
+    throw new AppError('This app has no role catalog', 400, 'INVALID_ROLE');
   }
 
   // Verify target exists
@@ -725,10 +755,13 @@ export const assignApp = asyncHandler(async (req: Request, res: Response) => {
     granted_at: new Date(),
     is_active: true,
     reason: validated.reason,
+    product_role_key: productRoleKey,
+    include_descendants: validated.include_descendants ?? true,
   };
   
   // @ts-ignore
   const assignment = await AppAssignment.create(assignmentData) as IAppAssignment;
+  await bumpAuthzVer(await resolveAssignmentMemberIds(assignment));
 
   // Calculate affected users count
   let affectedUsers = 0;
@@ -839,6 +872,7 @@ export const revokeApp = asyncHandler(async (req: Request, res: Response) => {
   assignment.revoked_by = new Types.ObjectId(req.user!.userId);
   assignment.revoked_at = new Date();
   await assignment.save();
+  await bumpAuthzVer(await resolveAssignmentMemberIds(assignment));
 
   const targetLabel = assignment.target_type === 'attribute' 
     ? `${assignment.attribute_name}=${assignment.attribute_value}`

@@ -9,6 +9,7 @@ import { useResendInvite } from '@/features/people/hooks/useResendInvite';
 import { useCallback, useState } from 'react';
 import { ReportingLinesPanel } from '@/features/people/components/ReportingLinesPanel';
 import { EffectivePermissionsPanel } from '@/features/people/components/EffectivePermissionsPanel';
+import { EffectiveAccessPanel } from '@/features/people/components/EffectiveAccessPanel';
 import { UserAppAccessPanel } from '@/features/people/components/UserAppAccessPanel';
 import { UserDelegatesPanel } from '@/features/people/components/UserDelegatesPanel';
 import { formatTimeInTimezone, getTimezoneOffset } from '@/lib/timezone';
@@ -324,6 +325,13 @@ export default function UserDetailPage() {
       <div className="pt-4">
         <EffectivePermissionsPanel userId={user._id} />
       </div>
+
+      {/* ── Effective Product Access ── */}
+      <div className="flex items-center gap-2 mb-2 pt-4">
+        <Monitor className="w-5 h-5 text-ink-secondary" />
+        <h2 className="text-base font-semibold text-ink">Effective Access</h2>
+      </div>
+      <EffectiveAccessPanel userId={user._id} />
 
       {/* ── App Access Panel ── */}
       <div className="flex items-center gap-2 mb-2 pt-4">

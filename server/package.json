@@ -10,11 +10,14 @@
     "test-datafield-validation": "ts-node -T src/scripts/test-datafield-validation.ts",
     "test-datafield-api": "ts-node -T src/scripts/test-datafield-api.ts",
     "test-ip-restrictions": "ts-node -T src/scripts/test-ip-restrictions.ts",
+    "seed:operator": "ts-node -T src/scripts/seed-operator.ts",
     "seed:first": "ts-node -T src/scripts/seed-first-user.ts",
+    "seed:products": "ts-node -T src/scripts/seed-products.ts",
     "prestart": "npm run build",
     "test": "node --require ts-node/register/transpile-only --test \"src/**/__tests__/*.test.ts\"",
     "migrate:identities": "ts-node -T src/scripts/migrate-identities.ts",
-    "smoke:login": "ts-node -T src/scripts/smoke-oidc-login.ts"
+    "smoke:login": "ts-node -T src/scripts/smoke-oidc-login.ts",
+    "smoke:sprint2": "ts-node -T src/scripts/smoke-sprint2.ts"
   },
   "dependencies": {
     "@azure/communication-email": "^1.1.0",

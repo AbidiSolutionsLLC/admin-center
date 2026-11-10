@@ -66,3 +66,9 @@ export * from './HolidayAssignment.model';
 // Location models
 export * from './Location.model';
 export * from './IpRestriction.model';
+
+export * from './ProductRole.model';
+export * from './Plan.model';
+export * from './OrganizationEntitlement.model';
+export * from './OperatorAccount.model';
+export * from './OperatorAuditEvent.model';

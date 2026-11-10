@@ -1,0 +1,9 @@
+{"t":0,"agent":"aserver","agent_type":"server-oidc","event":"agent_start","parent_mode":"none"}
+{"t":0,"agent":"aspa-oi","agent_type":"spa-oidc","event":"agent_start","parent_mode":"none"}
+{"t":0,"agent":"a421476","agent_type":"untracked-native-fork","event":"agent_stop","success":true,"synthetic":true,"telemetry_status":"unmatched_stop","reason":"SubagentStop arrived without a matching SubagentStart; native Agent/Task start telemetry was not observed."}
+{"t":0,"agent":"a2508c7","agent_type":"untracked-native-fork","event":"agent_stop","success":true,"synthetic":true,"telemetry_status":"unmatched_stop","reason":"SubagentStop arrived without a matching SubagentStart; native Agent/Task start telemetry was not observed."}
+{"t":0,"agent":"aspa-oi","agent_type":"spa-oidc","event":"agent_stop","success":true,"duration_ms":424723}
+{"t":0,"agent":"ab67cda","agent_type":"server-oidc","event":"agent_stop","success":true,"duration_ms":690982}
+{"t":0,"agent":"aserver","agent_type":"server-oidc","event":"agent_stop","success":true,"duration_ms":1192601}
+{"t":0,"agent":"aserver","agent_type":"server-oidc","event":"agent_start","parent_mode":"none"}
+{"t":0,"agent":"aserver","agent_type":"server-oidc","event":"agent_stop","success":true,"duration_ms":21607}

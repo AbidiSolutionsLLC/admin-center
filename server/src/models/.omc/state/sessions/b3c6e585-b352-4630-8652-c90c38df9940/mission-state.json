@@ -1,0 +1,79 @@
+{
+  "updatedAt": "2026-11-10T16:45:01.709Z",
+  "missions": [
+    {
+      "id": "session:b3c6e585-b352-4630-8652-c90c38df9940:none",
+      "source": "session",
+      "name": "none",
+      "objective": "Session mission",
+      "createdAt": "2026-11-10T16:24:41.216Z",
+      "updatedAt": "2026-11-10T16:45:01.709Z",
+      "status": "done",
+      "workerCount": 2,
+      "taskCounts": {
+        "total": 2,
+        "pending": 0,
+        "blocked": 0,
+        "inProgress": 0,
+        "completed": 2,
+        "failed": 0
+      },
+      "agents": [
+        {
+          "name": "server-oidc:aserver",
+          "role": "server-oidc",
+          "ownership": "aserver-oidc-e6416473e8edb306",
+          "status": "done",
+          "currentStep": null,
+          "latestUpdate": "completed",
+          "completedSummary": null,
+          "updatedAt": "2026-11-10T16:45:01.709Z"
+        },
+        {
+          "name": "spa-oidc:aspa-oi",
+          "role": "spa-oidc",
+          "ownership": "aspa-oidc-e765a57762eba597",
+          "status": "done",
+          "currentStep": null,
+          "latestUpdate": "completed",
+          "completedSummary": null,
+          "updatedAt": "2026-11-10T16:31:46.362Z"
+        }
+      ],
+      "timeline": [
+        {
+          "id": "session-stop:ab67cdaf130919cf3:2026-11-10T16:36:12.198Z",
+          "at": "2026-11-10T16:36:12.198Z",
+          "kind": "completion",
+          "agent": "server-oidc:aserver",
+          "detail": "completed",
+          "sourceKey": "session-stop:ab67cdaf130919cf3"
+        },
+        {
+          "id": "session-stop:aserver-oidc-e6416473e8edb306:2026-11-10T16:44:33.817Z",
+          "at": "2026-11-10T16:44:33.817Z",
+          "kind": "completion",
+          "agent": "server-oidc:aserver",
+          "detail": "completed",
+          "sourceKey": "session-stop:aserver-oidc-e6416473e8edb306"
+        },
+        {
+          "id": "session-start:aserver-oidc-e6416473e8edb306:2026-11-10T16:44:40.102Z",
+          "at": "2026-11-10T16:44:40.102Z",
+          "kind": "update",
+          "agent": "server-oidc:aserver",
+          "detail": "started server-oidc:aserver",
+          "sourceKey": "session-start:aserver-oidc-e6416473e8edb306"
+        },
+        {
+          "id": "session-stop:aserver-oidc-e6416473e8edb306:2026-11-10T16:45:01.709Z",
+          "at": "2026-11-10T16:45:01.709Z",
+          "kind": "completion",
+          "agent": "server-oidc:aserver",
+          "detail": "completed",
+          "sourceKey": "session-stop:aserver-oidc-e6416473e8edb306"
+        }
+      ]
+    }
+  ]
+}

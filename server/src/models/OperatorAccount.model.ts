@@ -1,0 +1,28 @@
+// server/src/models/OperatorAccount.model.ts — 09 §2
+import { Schema, model, Document } from 'mongoose';
+
+export interface IOperatorAccount extends Document {
+  email: string;
+  full_name: string;
+  password_hash: string;
+  mfa: { enabled: boolean; secret_enc?: string; verified_at?: Date };
+  roles: string[]; // launch: ['platform_admin']
+  status: 'active' | 'suspended' | 'invited';
+  last_login_at?: Date;
+}
+
+const OperatorAccountSchema = new Schema<IOperatorAccount>({
+  email: { type: String, required: true, unique: true, lowercase: true, trim: true },
+  full_name: { type: String, required: true },
+  password_hash: { type: String, required: true },
+  mfa: {
+    enabled: { type: Boolean, default: false },
+    secret_enc: String,
+    verified_at: Date,
+  },
+  roles: { type: [String], default: ['platform_admin'] },
+  status: { type: String, enum: ['active', 'suspended', 'invited'], default: 'active' },
+  last_login_at: Date,
+}, { timestamps: { createdAt: 'created_at', updatedAt: 'updated_at' } });
+
+export const OperatorAccount = model<IOperatorAccount>('OperatorAccount', OperatorAccountSchema);

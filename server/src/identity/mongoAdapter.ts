@@ -12,6 +12,7 @@ export interface AdapterDoc {
 }
 
 export const TENANT_MODELS = ['Session', 'Interaction', 'Grant', 'AuthorizationCode', 'RefreshToken', 'AccessToken', 'ReplayDetection'];
+export const OPERATOR_MODELS = TENANT_MODELS;
 export const SERVICES_MODELS = ['ClientCredentials', 'ReplayDetection'];
 
 export function realmCollection(realm: Realm, name: string) {

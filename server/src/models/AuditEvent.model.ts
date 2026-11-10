@@ -17,6 +17,8 @@ export interface IAuditEvent extends Document {
   ip_address?: string;
   user_agent?: string;
   hash?: string;
+  /** 09 §7 — 'operator' when mirrored from the operator realm */
+  source?: string;
   created_at: Date;
 }
 
@@ -35,6 +37,7 @@ const AuditEventSchema = new Schema<IAuditEvent>({
   ip_address: String,
   user_agent: String,
   hash: { type: String },
+  source: { type: String },
 }, { timestamps: { createdAt: 'created_at' }, versionKey: false });
 
 // ── Indexes for efficient querying ──────────────────────────────────────────

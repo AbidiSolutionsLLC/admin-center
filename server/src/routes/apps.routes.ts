@@ -16,6 +16,7 @@ import {
   getAppUsers,
   getAppAssignmentsByTarget,
 } from '../controllers/apps.controller';
+import { getAppRoles, updateAssignment } from '../controllers/appAccess.controller';
 
 const router = Router();
 
@@ -25,7 +26,9 @@ router.use(requireAuth);
 // Public read routes (any authenticated user can view apps)
 router.get('/', getApps);
 router.get('/target/:target_type/:target_id', getAppAssignmentsByTarget);
+router.patch('/assignments/:id', requireRole(PERMISSION_GROUPS.IT_ADMINS), updateAssignment);
 router.get('/:id', getAppById);
+router.get('/:id/roles', getAppRoles);
 router.get('/:id/timeline', getAppAssignmentTimeline);
 router.get('/:id/users', getAppUsers);
 router.get('/:id/dependencies', checkAppDependencies);

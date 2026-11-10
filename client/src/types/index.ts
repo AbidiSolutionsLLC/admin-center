@@ -860,6 +860,8 @@ export interface App {
   created_at: string;
   updated_at: string;
   assignment_count?: number;
+  type?: string;
+  product_key?: string;
 }
 
 export interface AppAssignment {
@@ -870,6 +872,8 @@ export interface AppAssignment {
   target_id?: string;
   attribute_name?: string;
   attribute_value?: string;
+  product_role_key?: string;
+  include_descendants?: boolean;
   granted_by: string;
   granted_at: string;
   revoked_by?: string;
@@ -888,6 +892,8 @@ export interface AssignAppInput {
   attribute_name?: string;
   attribute_value?: string;
   reason?: string;
+  product_role_key?: string;
+  include_descendants?: boolean;
 }
 
 export interface DependencyCheckResult {

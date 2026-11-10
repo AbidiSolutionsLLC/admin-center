@@ -11,7 +11,7 @@ import { Realm, getIdentityConfig } from './config';
 // src/identity -> server/.local (also correct for dist/identity)
 export const LOCAL_DIR = path.resolve(__dirname, '..', '..', '.local');
 
-const KEY_ENV: Record<Realm, string> = { tenant: 'IDENTITY_TENANT_KEY', services: 'IDENTITY_SERVICES_KEY' };
+const KEY_ENV: Record<Realm, string> = { tenant: 'IDENTITY_TENANT_KEY', services: 'IDENTITY_SERVICES_KEY', operator: 'IDENTITY_OPERATOR_KEY' };
 const PRIVATE_FIELDS = ['d', 'p', 'q', 'dp', 'dq', 'qi'] as const;
 
 interface RealmKeys { privateJwks: { keys: jose.JWK[] }; publicJwks: { keys: jose.JWK[] } }

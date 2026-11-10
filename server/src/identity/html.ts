@@ -13,13 +13,13 @@ export const newNonce = () => crypto.randomBytes(16).toString('base64');
  * apply it to the redirect chain that follows a submission (login → resume → SPA callback).
  */
 export function pageCsp(nonce: string): string {
-  const { adminSpaOrigin, productsSpaOrigin } = getIdentityConfig();
+  const { adminSpaOrigin, productsSpaOrigin, operatorSpaOrigin } = getIdentityConfig();
   return [
     "default-src 'none'",
     `style-src 'nonce-${nonce}'`,
     `script-src 'nonce-${nonce}'`,
     "img-src 'self' data:",
-    `form-action 'self' ${adminSpaOrigin} ${productsSpaOrigin}`,
+    `form-action 'self' ${adminSpaOrigin} ${productsSpaOrigin} ${operatorSpaOrigin}`,
     "frame-ancestors 'none'",
     "base-uri 'none'",
   ].join('; ');

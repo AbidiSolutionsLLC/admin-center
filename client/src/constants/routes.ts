@@ -12,6 +12,7 @@ export const ROUTES = {
   ROLE_DETAIL: (id: string) => `/roles/${id}`,
   GROUPS: '/groups',
   APPS: '/apps',
+  SUBSCRIPTION: '/subscription',
   COMPANY_SETTINGS: '/company/settings',
   POLICIES: '/policies',
   POLICY_DETAIL: (id: string) => `/policies/${id}`,
@@ -32,4 +33,10 @@ export const ROUTES = {
   HOLIDAYS: '/holidays',
   HOLIDAY_CALENDAR_DETAIL: (id: string) => `/holidays/${id}/calendars`,
   WORK_SCHEDULES: '/work-schedules',
+  OPERATOR: '/operator',
+  OPERATOR_CALLBACK: '/operator/callback',
+  OPERATOR_ORGS: '/operator/organizations',
+  OPERATOR_PLANS: '/operator/plans',
+  OPERATOR_OPERATORS: '/operator/operators',
+  OPERATOR_AUDIT: '/operator/audit',
 } as const;

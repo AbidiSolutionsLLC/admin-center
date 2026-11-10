@@ -1,0 +1,26 @@
+{
+  "version": 1,
+  "entries": {
+    "445ed27a3872b681d98190bae61ccb84954e1bc4e140df5370be958dee776b3a": {
+      "last_emitted_at_ms": 1794328965514,
+      "message": "Verify changes work after editing. Test functionality before marking complete."
+    },
+    "79a93d4a2f8f50b95f852280616242fee1855dc99a3c75211917f55e72e95fae": {
+      "last_emitted_at_ms": 1794328787843,
+      "message": "Use parallel execution for independent tasks. Use run_in_background for long operations (npm install, builds, tests)."
+    },
+    "466399dafa2d20f60587180bad0a07358eb7f2bce724df0ff682f038ad33f5ad": {
+      "last_emitted_at_ms": 1794327883728,
+      "message": "Read multiple files in parallel when possible for faster analysis."
+    },
+    "8630d134c4b0219aebfd669f773567604e6029fdce94b95cd2e90171a05d996a": {
+      "last_emitted_at_ms": 1794327880757,
+      "message": "Spawning agent: oh-my-claudecode:executor (sonnet) | Task: Admin SPA OIDC login migration"
+    },
+    "b3a48143065056d1576e95fea83b81ae1fd448acf252ee93532f3d8d0c3f7097": {
+      "last_emitted_at_ms": 1794327861122,
+      "message": "Spawning agent: oh-my-claudecode:executor (opus) | Task: Server OIDC engine + E2 auth"
+    }
+  },
+  "updated_at": "2026-11-10T16:42:45.514Z"
+}

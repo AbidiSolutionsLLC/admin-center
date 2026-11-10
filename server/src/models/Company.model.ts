@@ -30,6 +30,8 @@ export interface ICompany extends Document {
     ip_restrictions_enabled: boolean; // Enable/disable IP-based access restrictions globally
   };
   plan: 'free' | 'starter' | 'pro';
+  /** 04 §2 - written only by operator realm or seed; kept in sync with legacy is_active */
+  status: 'provisioning' | 'active' | 'suspended' | 'closed';
   is_active: boolean;
   created_at: Date;
   updated_at: Date;
@@ -98,6 +100,7 @@ const CompanySchema = new Schema<ICompany>({
     },
   },
   plan: { type: String, enum: ['free', 'starter', 'pro'], default: 'free' },
+  status: { type: String, enum: ['provisioning', 'active', 'suspended', 'closed'], default: 'active' },
   is_active: { type: Boolean, default: true },
 }, { timestamps: { createdAt: 'created_at', updatedAt: 'updated_at' } });
 
