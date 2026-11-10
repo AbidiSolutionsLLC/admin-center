@@ -1,7 +1,8 @@
 import { Request } from 'express';
-import { Types } from 'mongoose';
+import { Types, ClientSession } from 'mongoose';
 import { AuditEvent } from '../models/AuditEvent.model';
 import { sendSecurityAlert } from './notificationEngine';
+import { correlationIdFor } from './platformEvents';
 
 interface LogParams {
   req?: Request;
@@ -13,6 +14,9 @@ interface LogParams {
   object_label: string;
   before_state?: unknown | null;
   after_state?: unknown | null;
+  source?: string;
+  correlation_id?: string;
+  session?: ClientSession;
   actor_override?: {
     userId: string;
     email: string;
@@ -49,6 +53,8 @@ export const auditLogger = {
         after_state: params.after_state as any,
         ip_address: params.req?.ip,
         user_agent: params.req?.headers ? params.req.headers['user-agent'] : undefined,
+        source: params.source ?? 'admin',
+        correlation_id: params.correlation_id ?? (params.req ? correlationIdFor(params.req) : undefined),
       });
 
       // Admin Change Alerts Evaluation
@@ -81,5 +87,28 @@ export const auditLogger = {
       console.error('Audit Log failed to write:', error);
       // We don't throw here to avoid failing the user action if audit logging fails
     }
+  },
+  /** Transactional write: same session as the business change, throws on failure, no side effects. */
+  logTx: async (session: ClientSession | undefined, params: LogParams): Promise<void> => {
+    const company_id = params.actor_override?.company_id || params.req?.user?.company_id;
+    if (!company_id) throw new Error(`[AuditLog] Missing company_id for action: ${params.action}`);
+    const actor_id = params.actor_override?.userId || params.req?.user?.userId;
+    await AuditEvent.create([{
+      company_id: Types.ObjectId.isValid(company_id) ? new Types.ObjectId(company_id) : company_id,
+      actor_id: actor_id && Types.ObjectId.isValid(actor_id) ? new Types.ObjectId(actor_id) : undefined,
+      actor_email: params.actor_override?.email || params.req?.user?.email || 'system@admin-center.com',
+      action: params.action,
+      module: params.module,
+      category: params.category || 'System',
+      object_type: params.object_type,
+      object_id: params.object_id,
+      object_label: params.object_label,
+      before_state: params.before_state as any,
+      after_state: params.after_state as any,
+      ip_address: params.req?.ip,
+      user_agent: params.req?.headers ? params.req.headers['user-agent'] : undefined,
+      source: params.source ?? 'admin',
+      correlation_id: params.correlation_id ?? (params.req ? correlationIdFor(params.req) : undefined),
+    }], { session });
   },
 };

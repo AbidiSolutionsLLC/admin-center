@@ -10,7 +10,8 @@ import { AppAssignment } from '../models/AppAssignment.model';
 import { ProductRole } from '../models/ProductRole.model';
 import { OrganizationEntitlement } from '../models/OrganizationEntitlement.model';
 import { User } from '../models/User.model';
-import { computeEffectiveAccess, bumpAuthzVer, resolveAssignmentMemberIds } from '../lib/effectiveAccess';
+import { computeEffectiveAccess, resolveAssignmentMemberIds } from '../lib/effectiveAccess';
+import { runInTransaction, emitAppAccessChanged, correlationIdFor } from '../lib/platformEvents';
 
 const oid = (v: string, what = 'id') => {
   if (!Types.ObjectId.isValid(v)) throw new AppError(`Invalid ${what}`, 400, 'INVALID_ID');
@@ -41,27 +42,33 @@ const patchAssignmentSchema = z.object({
 export const updateAssignment = asyncHandler(async (req: Request, res: Response) => {
   const companyId = req.user!.company_id;
   const body = patchAssignmentSchema.parse(req.body);
-  const assignment = await AppAssignment.findOne({ _id: oid(req.params.id as string), company_id: companyId, is_active: true });
-  if (!assignment) throw new AppError('Active assignment not found', 404, 'ASSIGNMENT_NOT_FOUND');
-  const app = await App.findById(assignment.app_id);
-  if (!app) throw new AppError('App not found', 404, 'APP_NOT_FOUND');
+  const correlation_id = correlationIdFor(req);
+  const assignment = await runInTransaction(async (session) => {
+    const assignment = await AppAssignment.findOne({ _id: oid(req.params.id as string), company_id: companyId, is_active: true }).session(session ?? null);
+    if (!assignment) throw new AppError('Active assignment not found', 404, 'ASSIGNMENT_NOT_FOUND');
+    const app = await App.findById(assignment.app_id).session(session ?? null);
+    if (!app) throw new AppError('App not found', 404, 'APP_NOT_FOUND');
 
-  if (body.product_role_key !== undefined) {
-    if (app.app_type !== 'karbexa_product') throw new AppError('App has no role catalog', 400, 'INVALID_ROLE');
-    const role = await ProductRole.findOne({ product_key: app.product_key, key: body.product_role_key }).lean();
-    if (!role || !role.assignable) throw new AppError('Invalid or non-assignable product role', 400, 'INVALID_ROLE');
-    assignment.product_role_key = body.product_role_key;
-  }
-  if (body.include_descendants !== undefined) assignment.include_descendants = body.include_descendants;
-  if (body.reason !== undefined) assignment.reason = body.reason;
-  const before = await AppAssignment.findById(assignment._id).lean();
-  await assignment.save();
+    if (body.product_role_key !== undefined) {
+      if (app.app_type !== 'karbexa_product') throw new AppError('App has no role catalog', 400, 'INVALID_ROLE');
+      const role = await ProductRole.findOne({ product_key: app.product_key, key: body.product_role_key }).session(session ?? null).lean();
+      if (!role || !role.assignable) throw new AppError('Invalid or non-assignable product role', 400, 'INVALID_ROLE');
+      assignment.product_role_key = body.product_role_key;
+    }
+    if (body.include_descendants !== undefined) assignment.include_descendants = body.include_descendants;
+    if (body.reason !== undefined) assignment.reason = body.reason;
+    const before = await AppAssignment.findById(assignment._id).session(session ?? null).lean();
+    await assignment.save({ session: session ?? undefined });
 
-  await bumpAuthzVer(await resolveAssignmentMemberIds(assignment));
-  await auditLogger.log({
-    req, action: 'apps.assignment_updated', module: 'apps', object_type: 'AppAssignment',
-    object_id: assignment._id.toString(), object_label: app.name,
-    before_state: before as any, after_state: assignment.toObject(),
+    await emitAppAccessChanged(session, companyId, await resolveAssignmentMemberIds(assignment, session), {
+      actor: { type: 'member', id: String(req.user!.userId) }, correlation_id,
+    });
+    await auditLogger.logTx(session, {
+      req, action: 'apps.assignment_updated', module: 'apps', object_type: 'AppAssignment',
+      object_id: assignment._id.toString(), object_label: app.name,
+      before_state: before as any, after_state: assignment.toObject(), correlation_id,
+    });
+    return assignment;
   });
   res.status(200).json({ success: true, data: assignment });
 });

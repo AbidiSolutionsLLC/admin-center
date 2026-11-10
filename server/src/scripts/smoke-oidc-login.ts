@@ -7,7 +7,7 @@ import crypto from 'crypto';
 import mongoose from 'mongoose';
 import bcrypt from 'bcryptjs';
 import * as jose from 'jose';
-import { MongoMemoryServer } from 'mongodb-memory-server';
+import { MongoMemoryReplSet } from 'mongodb-memory-server';
 import { generateSecret, generate as generateTotp } from 'otplib';
 
 const results: { name: string; ok: boolean; detail: string }[] = [];
@@ -42,7 +42,7 @@ const form = (data: Record<string, string>) => ({
 });
 
 async function main() {
-  const mongo = await MongoMemoryServer.create();
+  const mongo = await MongoMemoryReplSet.create({ replSet: { count: 1 } });
   const server = http.createServer();
   await new Promise<void>((r) => server.listen(0, '127.0.0.1', () => r()));
   const port = (server.address() as { port: number }).port;

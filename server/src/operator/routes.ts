@@ -1,7 +1,7 @@
 // server/src/operator/routes.ts
 // Operator API `/operator/v1` (09 §4–§7). All routes behind requireOperator. Envelope: { success, data, meta? }.
 import { Router, Request, Response, NextFunction } from 'express';
-import { Types } from 'mongoose';
+import { Types, ClientSession } from 'mongoose';
 import bcrypt from 'bcryptjs';
 import crypto from 'crypto';
 import { z } from 'zod';
@@ -21,12 +21,15 @@ import { App } from '../models/App.model';
 import { AppAssignment } from '../models/AppAssignment.model';
 import { Group } from '../models/Group.model';
 import { seedProductRegistry } from '../lib/productCatalog';
-import { bumpAuthzVer } from '../lib/effectiveAccess';
+import { runInTransaction, emitPlatformEvent, emitAppAccessChanged } from '../lib/platformEvents';
+import { RolePermission } from '../models/RolePermission.model';
+import { SecurityPolicy } from '../models/SecurityPolicy.model';
 import { seedDatabase } from '../lib/seed';
 import { sendWelcomeEmail } from '../lib/emailService';
 import { revokeSession } from '../identity/sessions';
 import { ROLES } from '../constants/roles';
 import { slugify } from '../utils/slugify';
+import { generateEmployeeId } from '../services/employeeId';
 import { AppError } from '../utils/AppError';
 import { asyncHandler } from '../utils/asyncHandler';
 import { requireOperator } from './middleware';
@@ -54,20 +57,24 @@ router.use(requireOperator);
 async function audit(req: Request, p: {
   action: string; target_type: string; target_id: string; company?: { _id: Types.ObjectId; name: string };
   details?: Record<string, unknown>; before?: unknown; after?: unknown;
-}) {
+}, session?: ClientSession) {
   const op = req.operator!;
-  await OperatorAuditEvent.create({
+  const opts = { session: session ?? undefined };
+  await OperatorAuditEvent.create([{
     operator_id: op._id, operator_email: op.email, action: p.action, target_type: p.target_type, target_id: p.target_id,
     company_id: p.company?._id, details: p.details, correlation_id: (req as any).correlationId,
-  });
+  }], opts);
   if (p.company) {
-    await AuditEvent.create({
+    await AuditEvent.create([{
       company_id: p.company._id, actor_id: null, actor_email: `operator:${op.email}`, action: p.action, module: 'operator',
       category: 'Operator', object_type: p.target_type, object_id: p.target_id, object_label: p.company.name,
       before_state: (p.before as any) ?? null, after_state: (p.after as any) ?? p.details ?? null, ip_address: req.ip, source: 'operator',
-    });
+      correlation_id: (req as any).correlationId,
+    }], opts);
   }
 }
+const actorOf = (req: Request) => ({ type: 'operator' as const, id: req.operator!._id.toString() });
+const corrOf = (req: Request): string => (req as any).correlationId;
 
 const paging = (req: Request) => {
   const limit = Math.min(Math.max(parseInt(String(req.query.limit ?? '25'), 10) || 25, 1), 100);
@@ -132,28 +139,30 @@ const ProvisionSchema = z.object({
 });
 
 /** "All Members" dynamic group + default People employee assignment (only with an active people entitlement). Idempotent. */
-async function ensureDefaultPeopleAccess(companyId: Types.ObjectId, grantedBy: Types.ObjectId) {
-  if (!(await OrganizationEntitlement.exists({ company_id: companyId, product_key: 'people', status: 'active' }))) return;
-  let app = await App.findOne({ product_key: 'people', app_type: 'karbexa_product' });
+async function ensureDefaultPeopleAccess(companyId: Types.ObjectId, grantedBy: Types.ObjectId, session?: ClientSession) {
+  const sess = session ?? null;
+  const opts = { session: session ?? undefined };
+  if (!(await OrganizationEntitlement.exists({ company_id: companyId, product_key: 'people', status: 'active' }).session(sess))) return;
+  let app = await App.findOne({ product_key: 'people', app_type: 'karbexa_product' }).session(sess);
   if (!app) {
-    await seedProductRegistry();
-    app = await App.findOne({ product_key: 'people', app_type: 'karbexa_product' });
+    await seedProductRegistry(); // global catalog, outside the txn
+    app = await App.findOne({ product_key: 'people', app_type: 'karbexa_product' }).session(sess);
   }
   if (!app) return;
-  let group = await Group.findOne({ company_id: companyId, name: 'All Members', type: 'dynamic' });
-  if (!group) group = await Group.create({ company_id: companyId, name: 'All Members', type: 'dynamic', dynamic_rules: {}, is_active: true } as never);
-  const exists = await AppAssignment.exists({ company_id: companyId, app_id: app._id, target_type: 'group', target_id: group._id, product_role_key: 'employee' });
+  let group = await Group.findOne({ company_id: companyId, name: 'All Members', type: 'dynamic' }).session(sess);
+  if (!group) [group] = await Group.create([{ company_id: companyId, name: 'All Members', type: 'dynamic', dynamic_rules: {}, is_active: true } as never], opts);
+  const exists = await AppAssignment.exists({ company_id: companyId, app_id: app._id, target_type: 'group', target_id: group._id, product_role_key: 'employee' }).session(sess);
   if (!exists) {
-    await AppAssignment.create({
+    await AppAssignment.create([{
       company_id: companyId, app_id: app._id, target_type: 'group', target_id: group._id, product_role_key: 'employee', granted_by: grantedBy, is_active: true,
-    } as never);
+    } as never], opts);
   }
 }
 
 /** Entitlement/plan/status changes alter every member's effective access (04 §8.2). */
-async function bumpOrgAuthz(companyId: Types.ObjectId) {
-  const ids = await User.find({ company_id: companyId }).distinct('_id');
-  await bumpAuthzVer(ids);
+async function bumpOrgAuthz(req: Request, companyId: Types.ObjectId, session?: ClientSession) {
+  const ids = await User.find({ company_id: companyId }).session(session ?? null).distinct('_id');
+  await emitAppAccessChanged(session, companyId, ids, { actor: actorOf(req), correlation_id: corrOf(req) });
 }
 
 router.post('/orgs', asyncHandler(async (req: Request, res: Response) => {
@@ -169,29 +178,68 @@ router.post('/orgs', asyncHandler(async (req: Request, res: Response) => {
   if (!plan) throw new AppError('Plan not found or archived', 404, 'PLAN_NOT_FOUND');
 
   const company = await Company.create({ name: input.name, slug, status: 'provisioning', is_active: false });
+  const rawToken = crypto.randomBytes(32).toString('hex');
+  const passwordHash = await bcrypt.hash(crypto.randomBytes(24).toString('hex'), 10); // placeholder until invite acceptance
   try {
+    // seedDatabase() takes no session: it runs before the txn and is undone in the catch below on failure.
     await seedDatabase(company._id.toString()); // permissions + system roles + default security policy
-    if (plan.products.length) {
-      await OrganizationEntitlement.insertMany(plan.products.map((pk) => ({
-        company_id: company._id, product_key: pk, status: 'active', source: 'plan', plan_key: plan.key, updated_by_operator_id: req.operator!._id,
-      })));
-    }
+    const user = await runInTransaction(async (session) => {
+      const opts = { session: session ?? undefined };
+      const actor = actorOf(req);
+      const correlation_id = corrOf(req);
+      if (plan.products.length) {
+        await OrganizationEntitlement.insertMany(plan.products.map((pk) => ({
+          company_id: company._id, product_key: pk, status: 'active', source: 'plan', plan_key: plan.key, updated_by_operator_id: req.operator!._id,
+        })), opts);
+      }
 
-    const user = await User.create({
-      company_id: company._id,
-      full_name: input.first_admin.full_name,
-      email: input.first_admin.email,
-      password_hash: await bcrypt.hash(crypto.randomBytes(24).toString('hex'), 10), // placeholder until invite acceptance
-      role: ROLES.SUPER_ADMIN,
-      lifecycle_state: 'invited',
-      is_active: false,
-      employment_type: 'full_time',
+      const [user] = await User.create([{
+        company_id: company._id,
+        full_name: input.first_admin.full_name,
+        email: input.first_admin.email,
+        password_hash: passwordHash,
+        role: ROLES.SUPER_ADMIN,
+        lifecycle_state: 'invited',
+        is_active: false,
+        employment_type: 'full_time',
+        // Pre-set so User's pre-save hook (which bumps the counter outside any session) is skipped; the counter is saved with the company below.
+        employee_id: generateEmployeeId(company.employee_id_format, {
+          date: new Date(), company: { name: company.name, code: company.slug },
+          user: { department: undefined, departmentCode: undefined, location: undefined, jobTitle: undefined }, counter: 1,
+        }),
+      }], opts);
+      const superRole = await Role.findOne({ company_id: company._id, name: ROLES.SUPER_ADMIN }).session(session ?? null);
+      if (superRole) await UserRole.create([{ user_id: user._id, role_id: superRole._id, company_id: company._id, assigned_by: user._id, assigned_at: new Date() }], opts);
+      await InviteToken.create([{ user_id: user._id, token_hash: crypto.createHash('sha256').update(rawToken).digest('hex'), expires_at: new Date(Date.now() + 72 * 3600 * 1000) }], opts);
+
+      await ensureDefaultPeopleAccess(company._id, user._id, session);
+
+      company.status = 'active';
+      company.is_active = true;
+      company.employee_id_counter = 1;
+      await company.save(opts);
+
+      const orgId = company._id.toString();
+      await emitPlatformEvent(session, {
+        org_id: orgId, type: 'org.provisioned', subject: { type: 'org', id: orgId }, actor, correlation_id,
+        data: { slug, name: company.name, status: company.status },
+      });
+      for (const pk of plan.products) {
+        await emitPlatformEvent(session, {
+          org_id: orgId, type: 'entitlement.changed', subject: { type: 'org', id: orgId }, actor, correlation_id,
+          data: { product_key: pk, status: 'active' },
+        });
+      }
+      await emitPlatformEvent(session, {
+        org_id: orgId, type: 'member.provisioned', subject: { type: 'member', id: user._id.toString() }, actor, correlation_id,
+        data: { email: user.email, full_name: user.full_name, lifecycle_state: user.lifecycle_state },
+      });
+      await emitAppAccessChanged(session, company._id, [user._id], { actor, correlation_id });
+      await audit(req, { action: 'org.provisioned', target_type: 'Organization', target_id: orgId, company, details: { slug, plan_key: plan.key, first_admin_email: user.email } }, session);
+      return user;
     });
-    const superRole = await Role.findOne({ company_id: company._id, name: ROLES.SUPER_ADMIN });
-    if (superRole) await UserRole.create({ user_id: user._id, role_id: superRole._id, company_id: company._id, assigned_by: user._id, assigned_at: new Date() });
 
-    const rawToken = crypto.randomBytes(32).toString('hex');
-    await InviteToken.create({ user_id: user._id, token_hash: crypto.createHash('sha256').update(rawToken).digest('hex'), expires_at: new Date(Date.now() + 72 * 3600 * 1000) });
+    // Side effects after commit.
     let emailSent = true;
     try {
       await sendWelcomeEmail({
@@ -203,17 +251,20 @@ router.post('/orgs', asyncHandler(async (req: Request, res: Response) => {
       console.error('[operator] invite email failed', e);
     }
 
-    await ensureDefaultPeopleAccess(company._id, user._id);
-
-    company.status = 'active';
-    company.is_active = true;
-    await company.save();
-    await audit(req, { action: 'org.provisioned', target_type: 'Organization', target_id: company._id.toString(), company, details: { slug, plan_key: plan.key, first_admin_email: user.email } });
     const detail = await orgDetail(company._id.toString());
     ok(res, { ...detail, invite_email_sent: emailSent, ...(isProd() ? {} : { invite_token: rawToken }) }, 201);
   } catch (err) {
-    // No transactions on standalone Mongo: leave the org in 'provisioning' (blocked) so a retry is explicit.
+    // The txn rolled back; undo the pre-txn company + seeded roles/policy so the slug is free for a clean retry.
     console.error('[operator] provisioning failed for', slug, err);
+    try {
+      const roleIds = await Role.find({ company_id: company._id }).distinct('_id');
+      await RolePermission.deleteMany({ role_id: { $in: roleIds } });
+      await Role.deleteMany({ company_id: company._id });
+      await SecurityPolicy.deleteMany({ company_id: company._id });
+      await Company.deleteOne({ _id: company._id, status: 'provisioning' });
+    } catch (cleanupErr) {
+      console.error('[operator] provisioning cleanup failed for', slug, cleanupErr);
+    }
     throw err;
   }
 }));
@@ -223,18 +274,22 @@ async function setOrgStatus(req: Request, res: Response, status: 'active' | 'sus
   if (!company) throw new AppError('Organization not found', 404, 'NOT_FOUND');
   if (company.status === 'closed' && status !== 'closed') throw new AppError('Closed organizations cannot be changed', 409, 'ORG_CLOSED');
   const before = company.status;
-  company.status = status;
-  company.is_active = status === 'active';
-  await company.save();
-  await bumpOrgAuthz(company._id);
-  let revoked = 0;
-  if (status !== 'active') {
-    const live = await Session.find({ company_id: company._id, revoked_at: { $exists: false } }).select('_id');
-    for (const s of live) await revokeSession(s._id, `org_${status}`);
-    revoked = live.length;
-  }
-  await audit(req, { action, target_type: 'Organization', target_id: company._id.toString(), company, before: { status: before }, after: { status }, details: { from: before, to: status, sessions_revoked: revoked } });
-  ok(res, { ...(await orgDetail(company._id.toString())), sessions_revoked: revoked });
+  const reason = typeof req.body?.reason === 'string' && req.body.reason.trim() ? req.body.reason.trim() : status;
+  const eventType = action as 'org.suspended' | 'org.reactivated' | 'org.closed';
+  const live = status !== 'active' ? await Session.find({ company_id: company._id, revoked_at: { $exists: false } }).select('_id') : [];
+  await runInTransaction(async (session) => {
+    company.status = status;
+    company.is_active = status === 'active';
+    await company.save({ session: session ?? undefined });
+    await bumpOrgAuthz(req, company._id, session);
+    await emitPlatformEvent(session, {
+      org_id: company._id.toString(), type: eventType, subject: { type: 'org', id: company._id.toString() },
+      actor: actorOf(req), correlation_id: corrOf(req), data: { reason },
+    });
+    await audit(req, { action, target_type: 'Organization', target_id: company._id.toString(), company, before: { status: before }, after: { status }, details: { from: before, to: status, sessions_revoked: live.length } }, session);
+  });
+  for (const s of live) await revokeSession(s._id, `org_${status}`);
+  ok(res, { ...(await orgDetail(company._id.toString())), sessions_revoked: live.length });
 }
 router.post('/orgs/:id/suspend', asyncHandler((req: Request, res: Response) => setOrgStatus(req, res, 'suspended', 'org.suspended')));
 router.post('/orgs/:id/reactivate', asyncHandler((req: Request, res: Response) => setOrgStatus(req, res, 'active', 'org.reactivated')));
@@ -247,17 +302,25 @@ router.patch('/orgs/:id', asyncHandler(async (req: Request, res: Response) => {
   if (!company) throw new AppError('Organization not found', 404, 'NOT_FOUND');
   const plan = await Plan.findOne({ key: body.plan_key, status: 'active' });
   if (!plan) throw new AppError('Plan not found', 404, 'PLAN_NOT_FOUND');
-  for (const key of plan.products) {
-    await OrganizationEntitlement.updateOne(
-      { company_id: company._id, product_key: key },
-      { $setOnInsert: { status: 'active' }, $set: { source: 'plan', plan_key: plan.key, updated_by_operator_id: req.operator!._id } },
-      { upsert: true },
-    );
-  }
-  const firstAdmin = await User.findOne({ company_id: company._id, role: ROLES.SUPER_ADMIN }).sort({ created_at: 1 }).select('_id');
-  if (firstAdmin) await ensureDefaultPeopleAccess(company._id, firstAdmin._id);
-  await bumpOrgAuthz(company._id);
-  await audit(req, { action: 'org.plan_assigned', target_type: 'Company', target_id: String(company._id), company, before: null, after: { plan_key: plan.key, products: plan.products } });
+  await runInTransaction(async (session) => {
+    const orgId = company._id.toString();
+    for (const key of plan.products) {
+      await OrganizationEntitlement.updateOne(
+        { company_id: company._id, product_key: key },
+        { $setOnInsert: { status: 'active' }, $set: { source: 'plan', plan_key: plan.key, updated_by_operator_id: req.operator!._id } },
+        { upsert: true, session: session ?? undefined },
+      );
+      const ent = await OrganizationEntitlement.findOne({ company_id: company._id, product_key: key }).session(session ?? null);
+      await emitPlatformEvent(session, {
+        org_id: orgId, type: 'entitlement.changed', subject: { type: 'org', id: orgId }, actor: actorOf(req), correlation_id: corrOf(req),
+        data: { product_key: key, status: ent?.status ?? 'active' },
+      });
+    }
+    const firstAdmin = await User.findOne({ company_id: company._id, role: ROLES.SUPER_ADMIN }).sort({ created_at: 1 }).select('_id').session(session ?? null);
+    if (firstAdmin) await ensureDefaultPeopleAccess(company._id, firstAdmin._id, session);
+    await bumpOrgAuthz(req, company._id, session);
+    await audit(req, { action: 'org.plan_assigned', target_type: 'Company', target_id: String(company._id), company, before: null, after: { plan_key: plan.key, products: plan.products } }, session);
+  });
   ok(res, { id: String(company._id), plan_key: plan.key, products: plan.products });
 }));
 
@@ -271,16 +334,23 @@ router.put('/orgs/:id/entitlements/:productKey',asyncHandler(async (req: Request
   const unset: Record<string, 1> = {};
   if (body.seats_limit === null) unset.seats_limit = 1;
   else if (body.seats_limit !== undefined) set.seats_limit = body.seats_limit;
-  const ent = await OrganizationEntitlement.findOneAndUpdate(
-    { company_id: company._id, product_key: key },
-    { $set: set, ...(Object.keys(unset).length ? { $unset: unset } : {}) },
-    { upsert: true, returnDocument: 'after', setDefaultsOnInsert: true },
-  );
-  await bumpOrgAuthz(company._id);
-  await audit(req, {
-    action: 'entitlement.updated', target_type: 'Entitlement', target_id: `${company._id}:${key}`, company,
-    before: prior ? { status: prior.status, seats_limit: prior.seats_limit ?? null } : null,
-    after: { product_key: key, status: ent!.status, seats_limit: ent!.seats_limit ?? null },
+  const ent = await runInTransaction(async (session) => {
+    const ent = await OrganizationEntitlement.findOneAndUpdate(
+      { company_id: company._id, product_key: key },
+      { $set: set, ...(Object.keys(unset).length ? { $unset: unset } : {}) },
+      { upsert: true, returnDocument: 'after', setDefaultsOnInsert: true, session: session ?? undefined },
+    );
+    await emitPlatformEvent(session, {
+      org_id: company._id.toString(), type: 'entitlement.changed', subject: { type: 'org', id: company._id.toString() },
+      actor: actorOf(req), correlation_id: corrOf(req), data: { product_key: key, status: ent!.status },
+    });
+    await bumpOrgAuthz(req, company._id, session);
+    await audit(req, {
+      action: 'entitlement.updated', target_type: 'Entitlement', target_id: `${company._id}:${key}`, company,
+      before: prior ? { status: prior.status, seats_limit: prior.seats_limit ?? null } : null,
+      after: { product_key: key, status: ent!.status, seats_limit: ent!.seats_limit ?? null },
+    }, session);
+    return ent;
   });
   ok(res, { product_key: ent!.product_key, status: ent!.status, seats_limit: ent!.seats_limit ?? null, source: ent!.source });
 }));

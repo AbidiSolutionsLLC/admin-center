@@ -18,7 +18,8 @@ import { Company } from '../models/Company.model';
 import { Types } from 'mongoose';
 import { ProductRole } from '../models/ProductRole.model';
 import { OrganizationEntitlement } from '../models/OrganizationEntitlement.model';
-import { bumpAuthzVer, resolveAssignmentMemberIds } from '../lib/effectiveAccess';
+import { resolveAssignmentMemberIds } from '../lib/effectiveAccess';
+import { runInTransaction, emitAppAccessChanged, correlationIdFor } from '../lib/platformEvents';
 
 /**
  * Whitelist of allowed attribute names for attribute-based app assignments.
@@ -759,9 +760,14 @@ export const assignApp = asyncHandler(async (req: Request, res: Response) => {
     include_descendants: validated.include_descendants ?? true,
   };
   
+  const correlation_id = correlationIdFor(req);
+  const { assignment, affectedUsers } = await runInTransaction(async (session) => {
   // @ts-ignore
-  const assignment = await AppAssignment.create(assignmentData) as IAppAssignment;
-  await bumpAuthzVer(await resolveAssignmentMemberIds(assignment));
+  const [created] = await AppAssignment.create([assignmentData], { session: session ?? undefined });
+  const assignment = created as IAppAssignment;
+  await emitAppAccessChanged(session, companyId, await resolveAssignmentMemberIds(assignment, session), {
+    actor: { type: 'member', id: String(req.user!.userId) }, correlation_id,
+  });
 
   // Calculate affected users count
   let affectedUsers = 0;
@@ -811,8 +817,9 @@ export const assignApp = asyncHandler(async (req: Request, res: Response) => {
     : `${validated.target_type}:${validated.target_id}`;
 
   // Audit log
-  await auditLogger.log({
+  await auditLogger.logTx(session, {
     req,
+    correlation_id,
     action: 'apps.assigned',
     module: 'apps',
     object_type: 'AppAssignment',
@@ -822,6 +829,8 @@ export const assignApp = asyncHandler(async (req: Request, res: Response) => {
       assignment: (assignment as IAppAssignment).toObject(),
       affected_users: affectedUsers,
     },
+  });
+  return { assignment, affectedUsers };
   });
 
   res.status(201).json({
@@ -846,7 +855,7 @@ export const revokeApp = asyncHandler(async (req: Request, res: Response) => {
   // Verify app exists
   const app = await App.findOne({
     _id: appId,
-    company_id: companyId,
+    $or: [{ company_id: companyId }, { company_id: { $exists: false } }],
   });
 
   if (!app) {
@@ -866,21 +875,26 @@ export const revokeApp = asyncHandler(async (req: Request, res: Response) => {
   }
 
   const beforeState = { ...assignment.toObject() };
+  const correlation_id = correlationIdFor(req);
 
+  await runInTransaction(async (session) => {
   // Revoke (soft delete)
   assignment.is_active = false;
   assignment.revoked_by = new Types.ObjectId(req.user!.userId);
   assignment.revoked_at = new Date();
-  await assignment.save();
-  await bumpAuthzVer(await resolveAssignmentMemberIds(assignment));
+  await assignment.save({ session: session ?? undefined });
+  await emitAppAccessChanged(session, companyId, await resolveAssignmentMemberIds(assignment, session), {
+    actor: { type: 'member', id: String(req.user!.userId) }, correlation_id,
+  });
 
   const targetLabel = assignment.target_type === 'attribute' 
     ? `${assignment.attribute_name}=${assignment.attribute_value}`
     : `${assignment.target_type}:${assignment.target_id}`;
 
   // Audit log
-  await auditLogger.log({
+  await auditLogger.logTx(session, {
     req,
+    correlation_id,
     action: 'apps.revoked',
     module: 'apps',
     object_type: 'AppAssignment',
@@ -888,6 +902,7 @@ export const revokeApp = asyncHandler(async (req: Request, res: Response) => {
     object_label: `${app.name} <- ${targetLabel}`,
     before_state: beforeState,
     after_state: { ...assignment.toObject() },
+  });
   });
 
   res.status(200).json({

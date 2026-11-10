@@ -8,7 +8,7 @@ import crypto from 'crypto';
 import mongoose from 'mongoose';
 import bcrypt from 'bcryptjs';
 import * as jose from 'jose';
-import { MongoMemoryServer } from 'mongodb-memory-server';
+import { MongoMemoryReplSet } from 'mongodb-memory-server';
 import { generate as generateTotp } from 'otplib';
 
 const results: { name: string; ok: boolean; detail: string }[] = [];
@@ -35,12 +35,13 @@ const form = (data: Record<string, string>) => ({
 });
 
 async function main() {
-  const mongo = await MongoMemoryServer.create();
+  const mongo = await MongoMemoryReplSet.create({ replSet: { count: 1 } });
   const server = http.createServer();
   await new Promise<void>((r) => server.listen(0, '127.0.0.1', () => r()));
   const ORIGIN = `http://127.0.0.1:${(server.address() as { port: number }).port}`;
   const gen = async () => jose.exportJWK((await jose.generateKeyPair('RS256', { extractable: true })).privateKey);
   const backend = await jose.generateKeyPair('RS256', { extractable: true });
+  const tenantPrivateJwk = { ...(await gen()), kid: 'tenant-smoke' };
   const backendPublic = { ...(await jose.exportJWK(backend.publicKey)), kid: 'smoke-backend-1', alg: 'RS256', use: 'sig' };
   Object.assign(process.env, {
     NODE_ENV: 'development', MONGODB_URI: mongo.getUri(), DB_NAME: 'smoke_s2',
@@ -48,7 +49,7 @@ async function main() {
     TRUST_PROXY: '0', AUTH_RATE_LIMIT: '10000', GLOBAL_RATE_LIMIT: '10000',
     ENCRYPTION_KEY: crypto.randomBytes(32).toString('hex'),
     OIDC_COOKIE_KEYS: crypto.randomBytes(32).toString('base64url'),
-    IDENTITY_TENANT_KEY: JSON.stringify({ ...(await gen()), kid: 'tenant-smoke' }),
+    IDENTITY_TENANT_KEY: JSON.stringify(tenantPrivateJwk),
     IDENTITY_SERVICES_KEY: JSON.stringify({ ...(await gen()), kid: 'services-smoke' }),
     IDENTITY_OPERATOR_KEY: JSON.stringify({ ...(await gen()), kid: 'operator-smoke' }),
     SERVICES_PRODUCTS_BACKEND_JWKS: JSON.stringify({ keys: [backendPublic] }),
@@ -60,9 +61,10 @@ async function main() {
   const { createServer } = await import('../app');
   const app = await createServer();
   server.on('request', app);
-  const { OperatorAccount, Company, User, Plan, App, AppAssignment, ProductRole, OrganizationEntitlement, OperatorAuditEvent, Group } = await import('../models');
+  const { OperatorAccount, Company, User, Plan, App, AppAssignment, ProductRole, OrganizationEntitlement, OperatorAuditEvent, Group, AuditEvent, PlatformEvent, OrgEventCounter, Session } = await import('../models');
   const { seedProductRegistry } = await import('../lib/productCatalog');
   const { computeEffectiveAccess } = await import('../lib/effectiveAccess');
+  const { runInTransaction, emitPlatformEvent } = await import('../lib/platformEvents');
 
   try {
     // ── E3: product registry ─────────────────────────────────────────────────────────────
@@ -129,6 +131,19 @@ async function main() {
     const admin = await User.findOne({ company_id: orgId, email: 'admin@acme.test' });
     check('E10 first admin membership created', !!admin, admin?.lifecycle_state);
 
+    // ── E4a: provisioning emits platform events in the same txn, one correlation id ─────────
+    {
+      const evs = await PlatformEvent.find({ org_id: orgId }).sort({ seq: 1 }).lean();
+      const provAudit = await AuditEvent.findOne({ company_id: orgId, action: 'org.provisioned' }).lean();
+      const types = new Set(evs.map((e) => e.type));
+      check('E4a provisioning events: org.provisioned, entitlement.changed, member.provisioned, app_access.changed',
+        ['org.provisioned', 'entitlement.changed', 'member.provisioned', 'app_access.changed'].every((t) => types.has(t)), [...types]);
+      check('E4a provisioning seq is 1..N contiguous, no gaps/dupes', evs.length > 0 && evs.every((e, i) => e.seq === i + 1), evs.map((e) => e.seq));
+      check('E4a provisioning AuditEvent has source operator + correlation_id', provAudit?.source === 'operator' && !!provAudit?.correlation_id, provAudit?.correlation_id);
+      check('E4a every provisioning event shares the AuditEvent correlation_id', evs.length > 0 && evs.every((e) => e.correlation_id === provAudit?.correlation_id), evs.map((e) => e.correlation_id));
+      check('E4a OrgEventCounter equals last seq', (await OrgEventCounter.findById(orgId))?.seq === evs.length);
+    }
+
     // ── E3: effective access ──────────────────────────────────────────────────────────────
     const people = await App.findOne({ product_key: 'people', app_type: 'karbexa_product' });
     const projects = await App.findOne({ product_key: 'projects', app_type: 'karbexa_product' });
@@ -193,6 +208,117 @@ async function main() {
     check('E10 Company.status suspended and is_active false', (await Company.findById(orgId))?.status === 'suspended' && (await Company.findById(orgId))?.is_active === false);
     res = await op(`/orgs/${orgId}/reactivate`, 'POST');
     check('E10 reactivate org = 200', res.status === 200 && (await Company.findById(orgId))?.status === 'active', res.status);
+
+    // ── E4a: suspend/reactivate events carry data.reason ─────────────────────────────────
+    res = await op(`/orgs/${orgId}/suspend`, 'POST', { reason: 'billing-hold' });
+    res = await op(`/orgs/${orgId}/reactivate`, 'POST', { reason: 'paid' });
+    {
+      const sus = await PlatformEvent.find({ org_id: orgId, type: 'org.suspended' }).sort({ seq: 1 }).lean();
+      const rea = await PlatformEvent.find({ org_id: orgId, type: 'org.reactivated' }).sort({ seq: 1 }).lean();
+      check('E4a org.suspended event has data.reason (default + explicit)', sus.length === 2 && (sus[0].data as any).reason === 'suspended' && (sus[1].data as any).reason === 'billing-hold', sus.map((e) => e.data));
+      check('E4a org.reactivated event has data.reason (default + explicit)', rea.length === 2 && (rea[0].data as any).reason === 'active' && (rea[1].data as any).reason === 'paid', rea.map((e) => e.data));
+      check('E4a suspend/reactivate events are operator-actor with correlation_id', [...sus, ...rea].every((e) => e.actor.type === 'operator' && !!e.correlation_id));
+    }
+
+    // ── E4a: tenant assignment create/update/revoke → app_access.changed ──────────────────
+    {
+      const sid = crypto.randomUUID();
+      await Session.create({
+        _id: sid, identity_id: new mongoose.Types.ObjectId(), member_id: me._id, company_id: orgId, realm: 'tenant',
+        idle_expires_at: new Date(Date.now() + 3600e3), absolute_expires_at: new Date(Date.now() + 3600e3), amr: ['pwd'],
+      });
+      const tenantKey = await jose.importJWK(tenantPrivateJwk, 'RS256');
+      const tAt = await new jose.SignJWT({ token_use: 'access', org: String(orgId), sid, email: me.email })
+        .setProtectedHeader({ alg: 'RS256', kid: 'tenant-smoke', typ: 'at+jwt' })
+        .setIssuer(`${ORIGIN}/realms/tenant`).setAudience('urn:karbexa:admin').setSubject(String(me._id))
+        .setIssuedAt().setExpirationTime('10m').sign(tenantKey);
+      const API = `${ORIGIN}/api/v1`;
+      const tenant = (path: string, method: string, body: unknown, cid: string) => fetch(`${API}${path}`, {
+        method, headers: { authorization: `Bearer ${tAt}`, 'content-type': 'application/json', 'x-correlation-id': cid }, body: body ? JSON.stringify(body) : undefined,
+      });
+      const signApp = await App.findOne({ product_key: 'sign', app_type: 'karbexa_product' });
+      const signRoles = await ProductRole.find({ product_key: 'sign', assignable: true }).sort({ key: 1 });
+      const r1 = signRoles[0]?.key, r2 = signRoles[1]?.key;
+      const liveAccess = async () => {
+        const r = await tenant(`/people/${me._id}/effective-access`, 'GET', undefined, 'smoke-ea');
+        const j = await r.json() as { data?: { products: Record<string, { role: string }> } };
+        return Object.fromEntries(Object.entries(j.data?.products || {}).map(([k, v]) => [k, v.role]));
+      };
+      const verify = async (label: string, cid: string, action: string) => {
+        const evts = await PlatformEvent.find({ org_id: orgId, type: 'app_access.changed', correlation_id: cid }).lean();
+        const evt = evts.find((e) => e.subject.id === String(me._id));
+        const user = await User.findById(me._id);
+        const d = evt?.data as { authz_ver?: number; products?: Record<string, string> } | undefined;
+        check(`E4a ${label}: app_access.changed emitted for affected member`, !!evt && evt.actor.type === 'member' && evt.actor.id === String(me._id), evts.map((e) => e.subject));
+        check(`E4a ${label}: data.authz_ver equals User.authz_ver`, d?.authz_ver === user?.authz_ver, { evt: d?.authz_ver, user: user?.authz_ver });
+        check(`E4a ${label}: data.products matches effective-access`, JSON.stringify(Object.entries(d?.products || {}).sort()) === JSON.stringify(Object.entries(await liveAccess()).sort()), d?.products);
+        const ae = await AuditEvent.findOne({ company_id: orgId, action, correlation_id: cid }).lean();
+        check(`E4a ${label}: AuditEvent correlation_id equals the event's`, !!ae && ae.correlation_id === evt?.correlation_id, ae?.correlation_id);
+      };
+      check('E4a signing roles available for assignment test', !!signApp && !!r1 && !!r2, signRoles.map((r) => r.key));
+
+      res = await tenant(`/apps/${signApp!._id}/assign`, 'POST', { target_type: 'user', target_id: String(me._id), product_role_key: r1 }, 'smoke-assign');
+      check('E4a tenant POST assign = 200/201', res.status === 200 || res.status === 201, `${res.status} ${(await res.text()).slice(0, 200)}`);
+      const asg = await AppAssignment.findOne({ company_id: orgId, app_id: signApp!._id, target_type: 'user', target_id: me._id, is_active: true });
+      check('E4a assign: effective-access shows the granted sign role', (await liveAccess()).sign === r1, await liveAccess());
+      await verify('assign', 'smoke-assign', 'apps.assigned');
+
+      res = await tenant(`/apps/assignments/${asg?._id}`, 'PATCH', { product_role_key: r2 }, 'smoke-update');
+      check('E4a tenant PATCH assignment = 200', res.status === 200, `${res.status}`);
+      await verify('update', 'smoke-update', 'apps.assignment_updated');
+
+      res = await tenant(`/apps/${signApp!._id}/revoke`, 'POST', { assignment_id: String(asg?._id) }, 'smoke-revoke');
+      check('E4a tenant POST revoke = 200', res.status === 200, `${res.status}`);
+      check('E4a revoke: sign no longer in effective-access', !(await liveAccess()).sign, await liveAccess());
+      await verify('revoke', 'smoke-revoke', 'apps.revoked');
+    }
+
+    // ── E4a: atomicity — a failure after emit rolls back event + seq ──────────────────────
+    {
+      const seqBefore = (await OrgEventCounter.findById(orgId))?.seq;
+      const countBefore = await PlatformEvent.countDocuments({ org_id: orgId });
+      let threw = false;
+      try {
+        await runInTransaction(async (session) => {
+          await emitPlatformEvent(session, { org_id: orgId, type: 'smoke.rollback', subject: { type: 'org', id: orgId }, actor: { type: 'system' } });
+          throw new Error('forced failure');
+        });
+      } catch { threw = true; }
+      check('E4a forced failure propagates', threw);
+      check('E4a rollback: no PlatformEvent persisted', (await PlatformEvent.countDocuments({ org_id: orgId, type: 'smoke.rollback' })) === 0 && (await PlatformEvent.countDocuments({ org_id: orgId })) === countBefore);
+      check('E4a rollback: OrgEventCounter seq unchanged', (await OrgEventCounter.findById(orgId))?.seq === seqBefore, { before: seqBefore, after: (await OrgEventCounter.findById(orgId))?.seq });
+      const fresh = new mongoose.Types.ObjectId();
+      try {
+        await runInTransaction(async (session) => {
+          await emitPlatformEvent(session, { org_id: fresh, type: 'smoke.rollback', subject: { type: 'org', id: String(fresh) }, actor: { type: 'system' } });
+          throw new Error('forced failure');
+        });
+      } catch { /* expected */ }
+      check('E4a rollback: fresh org gets no counter row nor event', !(await OrgEventCounter.findById(fresh)) && (await PlatformEvent.countDocuments({ org_id: fresh })) === 0);
+      const seqs = (await PlatformEvent.find({ org_id: orgId }).sort({ seq: 1 }).lean()).map((e) => e.seq);
+      check('E4a org seq still contiguous after assignments/suspends/rollback', seqs.every((v, i) => v === i + 1), seqs);
+    }
+
+    // ── E10: OPERATOR_IP_ALLOWLIST (read per request from env; req.ip with TRUST_PROXY=0, so X-Forwarded-For is ignored) ──
+    {
+      const prev = process.env.OPERATOR_IP_ALLOWLIST;
+      const status = async (extra: Record<string, string> = {}) => (await fetch(`${OP}/orgs`, { headers: { authorization: `Bearer ${tok.access_token}`, ...extra } })).status;
+      try {
+        process.env.OPERATOR_IP_ALLOWLIST = '127.0.0.1';
+        check('E10 allow-list: listed IP (127.0.0.1) passes', (await status()) === 200);
+        process.env.OPERATOR_IP_ALLOWLIST = '10.9.8.7, 127.0.0.0/8';
+        check('E10 allow-list: CIDR match (with spaces) passes', (await status()) === 200);
+        process.env.OPERATOR_IP_ALLOWLIST = '203.0.113.0/24,198.51.100.5';
+        check('E10 allow-list: non-listed IP = 403', (await status()) === 403);
+        check('E10 allow-list: X-Forwarded-For cannot spoof an allowed IP (proxy not trusted)', (await status({ 'x-forwarded-for': '203.0.113.9' })) === 403);
+        process.env.OPERATOR_IP_ALLOWLIST = '203.0.113.0/24';
+        const noTok = await fetch(`${OP}/orgs`);
+        check('E10 allow-list: 403 precedes auth for non-listed IP', noTok.status === 403, noTok.status);
+      } finally {
+        if (prev === undefined) delete process.env.OPERATOR_IP_ALLOWLIST; else process.env.OPERATOR_IP_ALLOWLIST = prev;
+      }
+      check('E10 allow-list restored: operator API passes again', (await status()) === 200);
+    }
 
     // ── plan assignment activates products ───────────────────────────────────────────────
     res = await op(`/orgs/${orgId}`, 'PATCH', { plan_key: 'enterprise' });

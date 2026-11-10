@@ -19,6 +19,7 @@ export interface IAuditEvent extends Document {
   hash?: string;
   /** 09 §7 — 'operator' when mirrored from the operator realm */
   source?: string;
+  correlation_id?: string;
   created_at: Date;
 }
 
@@ -38,6 +39,7 @@ const AuditEventSchema = new Schema<IAuditEvent>({
   user_agent: String,
   hash: { type: String },
   source: { type: String },
+  correlation_id: { type: String, index: true },
 }, { timestamps: { createdAt: 'created_at' }, versionKey: false });
 
 // ── Indexes for efficient querying ──────────────────────────────────────────

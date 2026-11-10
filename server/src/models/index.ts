@@ -72,3 +72,5 @@ export * from './Plan.model';
 export * from './OrganizationEntitlement.model';
 export * from './OperatorAccount.model';
 export * from './OperatorAuditEvent.model';
+export * from './PlatformEvent.model';
+export * from './OrgEventCounter.model';

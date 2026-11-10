@@ -1,5 +1,5 @@
 // server/src/lib/effectiveAccess.ts — 04 §1, §8: member x product -> role
-import { Types } from 'mongoose';
+import { Types, ClientSession } from 'mongoose';
 import { User } from '../models/User.model';
 import { Identity } from '../models/Identity.model';
 import { Company } from '../models/Company.model';
@@ -25,9 +25,9 @@ const DYNAMIC_RULE_FIELDS = ['department_id', 'lifecycle_state', 'employment_typ
 const escapeRe = (s: string) => s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
 
 /** Increment authz_ver for the given members (04 §8.2). */
-export async function bumpAuthzVer(memberIds: Array<string | Types.ObjectId>): Promise<void> {
+export async function bumpAuthzVer(memberIds: Array<string | Types.ObjectId>, session?: ClientSession): Promise<void> {
   if (memberIds.length === 0) return;
-  await User.updateMany({ _id: { $in: memberIds } }, { $inc: { authz_ver: 1 } });
+  await User.updateMany({ _id: { $in: memberIds } }, { $inc: { authz_ver: 1 } }, { session });
 }
 
 function dynamicGroupFilter(rules: Record<string, unknown> | undefined): Record<string, unknown> {
@@ -39,11 +39,11 @@ function dynamicGroupFilter(rules: Record<string, unknown> | undefined): Record<
 }
 
 /** root + descendants (parent_id tree), company scoped */
-async function descendantIds(Model: any, companyId: Types.ObjectId | string, rootId: Types.ObjectId): Promise<Types.ObjectId[]> {
+async function descendantIds(Model: any, companyId: Types.ObjectId | string, rootId: Types.ObjectId, session?: ClientSession): Promise<Types.ObjectId[]> {
   const seen = new Set<string>([rootId.toString()]);
   let frontier: Types.ObjectId[] = [rootId];
   while (frontier.length) {
-    const kids = await Model.find({ company_id: companyId, parent_id: { $in: frontier } }).select('_id').lean();
+    const kids = await Model.find({ company_id: companyId, parent_id: { $in: frontier } }).select('_id').session(session ?? null).lean();
     frontier = kids.map((k: any) => k._id).filter((id: Types.ObjectId) => !seen.has(id.toString()));
     frontier.forEach(id => seen.add(id.toString()));
   }
@@ -51,44 +51,44 @@ async function descendantIds(Model: any, companyId: Types.ObjectId | string, roo
 }
 
 /** node + ancestors chain */
-async function ancestorIds(Model: any, companyId: Types.ObjectId | string, startId: Types.ObjectId): Promise<Types.ObjectId[]> {
+async function ancestorIds(Model: any, companyId: Types.ObjectId | string, startId: Types.ObjectId, session?: ClientSession): Promise<Types.ObjectId[]> {
   const out: Types.ObjectId[] = [];
   const seen = new Set<string>();
   let cur: Types.ObjectId | undefined = startId;
   while (cur && !seen.has(cur.toString())) {
     seen.add(cur.toString());
     out.push(cur);
-    const node: any = await Model.findOne({ _id: cur, company_id: companyId }).select('parent_id').lean();
+    const node: any = await Model.findOne({ _id: cur, company_id: companyId }).select('parent_id').session(session ?? null).lean();
     cur = node?.parent_id ?? undefined;
   }
   return out;
 }
 
 /** Member ids an assignment currently applies to (used to bump authz_ver). */
-export async function resolveAssignmentMemberIds(a: Pick<IAppAssignment, 'company_id' | 'target_type' | 'target_id' | 'attribute_name' | 'attribute_value' | 'include_descendants'>): Promise<Types.ObjectId[]> {
+export async function resolveAssignmentMemberIds(a: Pick<IAppAssignment, 'company_id' | 'target_type' | 'target_id' | 'attribute_name' | 'attribute_value' | 'include_descendants'>, session?: ClientSession): Promise<Types.ObjectId[]> {
   const companyId = a.company_id;
   let filter: any;
   switch (a.target_type) {
     case 'user':
       return a.target_id ? [a.target_id] : [];
     case 'group': {
-      const g = await Group.findById(a.target_id).lean();
+      const g = await Group.findById(a.target_id).session(session ?? null).lean();
       if (g?.type === 'dynamic') { filter = dynamicGroupFilter(g.dynamic_rules); break; }
-      const gm = await GroupMember.find({ group_id: a.target_id }).select('user_id').lean();
+      const gm = await GroupMember.find({ group_id: a.target_id }).select('user_id').session(session ?? null).lean();
       return gm.map(m => m.user_id as Types.ObjectId);
     }
     case 'department': {
-      const ids = a.include_descendants === false ? [a.target_id!] : await descendantIds(Department, companyId, a.target_id!);
+      const ids = a.include_descendants === false ? [a.target_id!] : await descendantIds(Department, companyId, a.target_id!, session);
       filter = { department_id: { $in: ids } };
       break;
     }
     case 'location': {
-      const ids = a.include_descendants === false ? [a.target_id!] : await descendantIds(Location, companyId, a.target_id!);
+      const ids = a.include_descendants === false ? [a.target_id!] : await descendantIds(Location, companyId, a.target_id!, session);
       filter = { location_id: { $in: ids } };
       break;
     }
     case 'role': {
-      const ur = await UserRole.find({ role_id: a.target_id, company_id: companyId }).select('user_id').lean();
+      const ur = await UserRole.find({ role_id: a.target_id, company_id: companyId }).select('user_id').session(session ?? null).lean();
       return ur.map(r => r.user_id as Types.ObjectId);
     }
     case 'attribute': {
@@ -101,32 +101,33 @@ export async function resolveAssignmentMemberIds(a: Pick<IAppAssignment, 'compan
     }
     default: return [];
   }
-  const users = await User.find({ company_id: companyId, ...filter }).select('_id').lean();
+  const users = await User.find({ company_id: companyId, ...filter }).select('_id').session(session ?? null).lean();
   return users.map(u => u._id as Types.ObjectId);
 }
 
-export async function computeEffectiveAccess(companyId: string | Types.ObjectId, memberId: string | Types.ObjectId): Promise<EffectiveAccess> {
-  const user = await User.findOne({ _id: memberId, company_id: companyId }).lean();
+export async function computeEffectiveAccess(companyId: string | Types.ObjectId, memberId: string | Types.ObjectId, opts?: { session?: ClientSession }): Promise<EffectiveAccess> {
+  const session = opts?.session ?? null;
+  const user = await User.findOne({ _id: memberId, company_id: companyId }).session(session).lean();
   const result: EffectiveAccess = { member_id: String(memberId), authz_ver: user?.authz_ver ?? 0, products: {}, denials: {} };
   if (!user) return result;
 
-  const products = await App.find({ app_type: 'karbexa_product', company_id: { $exists: false } }).lean();
+  const products = await App.find({ app_type: 'karbexa_product', company_id: { $exists: false } }).session(session).lean();
   const denyAll = (reason: string) => { for (const p of products) if (p.product_key) result.denials[p.product_key] = reason; return result; };
 
-  const company = await Company.findById(companyId).select('status').lean();
+  const company = await Company.findById(companyId).select('status').session(session).lean();
   if (!company || (company.status ?? 'active') !== 'active') return denyAll('ORG_SUSPENDED');
   if (!(ACCESS_STATES as readonly string[]).includes(user.lifecycle_state) || user.is_active === false) return denyAll('MEMBER_NOT_ACTIVE');
   if (user.identity_id) {
-    const identity = await Identity.findById(user.identity_id).select('status').lean();
+    const identity = await Identity.findById(user.identity_id).select('status').session(session).lean();
     if (!identity || identity.status !== 'active') return denyAll('IDENTITY_NOT_ACTIVE');
   }
 
   const [groupMemberships, userRoles, deptChain, locChain, dynGroups] = await Promise.all([
-    GroupMember.find({ user_id: user._id }).select('group_id').lean(),
-    UserRole.find({ user_id: user._id, company_id: companyId }).select('role_id').lean(),
-    user.department_id ? ancestorIds(Department, companyId, user.department_id) : Promise.resolve([] as Types.ObjectId[]),
-    user.location_id ? ancestorIds(Location, companyId, user.location_id) : Promise.resolve([] as Types.ObjectId[]),
-    Group.find({ company_id: companyId, type: 'dynamic', is_active: true }).lean(),
+    GroupMember.find({ user_id: user._id }).select('group_id').session(session).lean(),
+    UserRole.find({ user_id: user._id, company_id: companyId }).select('role_id').session(session).lean(),
+    user.department_id ? ancestorIds(Department, companyId, user.department_id, opts?.session) : Promise.resolve([] as Types.ObjectId[]),
+    user.location_id ? ancestorIds(Location, companyId, user.location_id, opts?.session) : Promise.resolve([] as Types.ObjectId[]),
+    Group.find({ company_id: companyId, type: 'dynamic', is_active: true }).session(session).lean(),
   ]);
   const groupIds = new Set(groupMemberships.map(g => g.group_id.toString()));
   for (const g of dynGroups) {
@@ -140,7 +141,7 @@ export async function computeEffectiveAccess(companyId: string | Types.ObjectId,
   const locAnc = new Set(locChain.map(String));
   const domain = user.email?.split('@')[1]?.toLowerCase();
 
-  const assignments = await AppAssignment.find({ company_id: companyId, is_active: true, app_id: { $in: products.map(p => p._id) } }).lean();
+  const assignments = await AppAssignment.find({ company_id: companyId, is_active: true, app_id: { $in: products.map(p => p._id) } }).session(session).lean();
   const appById = new Map(products.map(p => [p._id.toString(), p]));
 
   const matches = (a: any): boolean => {
@@ -160,9 +161,9 @@ export async function computeEffectiveAccess(companyId: string | Types.ObjectId,
   };
   const matched = assignments.filter(matches);
 
-  const entitlements = await OrganizationEntitlement.find({ company_id: companyId, status: 'active' }).select('product_key').lean();
+  const entitlements = await OrganizationEntitlement.find({ company_id: companyId, status: 'active' }).select('product_key').session(session).lean();
   const entitled = new Set<string>(entitlements.map(e => e.product_key));
-  const roleCatalog = await ProductRole.find({ product_key: { $in: products.map(p => p.product_key!) } }).lean();
+  const roleCatalog = await ProductRole.find({ product_key: { $in: products.map(p => p.product_key!) } }).session(session).lean();
   const roleByKey = new Map(roleCatalog.map(r => [`${r.product_key}:${r.key}`, r]));
 
   const byProduct = new Map<string, any[]>();

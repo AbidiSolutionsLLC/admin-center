@@ -4,7 +4,7 @@ import { asyncHandler } from '../utils/asyncHandler';
 import { Group } from '../models/Group.model';
 import { GroupMember } from '../models/GroupMember.model';
 import { User } from '../models/User.model';
-import { bumpAuthzVer } from '../lib/effectiveAccess';
+import { runInTransaction, emitAppAccessChanged, correlationIdFor } from '../lib/platformEvents';
 import { auditLogger } from '../lib/auditLogger';
 import { AppError } from '../utils/AppError';
 import { Types } from 'mongoose';
@@ -144,14 +144,19 @@ export const updateGroup = asyncHandler(async (req: Request, res: Response) => {
     && JSON.stringify(input.dynamic_rules) !== JSON.stringify(group.dynamic_rules ?? {});
   if (rulesChanged) group.dynamic_rules = input.dynamic_rules;
 
-  await group.save();
+  const correlation_id = correlationIdFor(req);
+  await runInTransaction(async (session) => {
+  await group.save({ session: session ?? undefined });
   if (rulesChanged) {
-    const ids = await User.find({ company_id: req.user.company_id }).distinct('_id');
-    await bumpAuthzVer(ids);
+    const ids = await User.find({ company_id: req.user.company_id }).session(session ?? null).distinct('_id');
+    await emitAppAccessChanged(session, req.user.company_id, ids, {
+      actor: { type: 'member', id: String(req.user.userId) }, correlation_id,
+    });
   }
 
-  await auditLogger.log({
+  await auditLogger.logTx(session, {
     req,
+    correlation_id,
     action: 'group.updated',
     module: 'roles_and_permissions',
     object_type: 'Group',
@@ -159,6 +164,7 @@ export const updateGroup = asyncHandler(async (req: Request, res: Response) => {
     object_label: group.name,
     before_state,
     after_state: group.toObject(),
+  });
   });
 
   res.status(200).json({ success: true, data: group });
