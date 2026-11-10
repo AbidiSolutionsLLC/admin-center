@@ -62,3 +62,4 @@ export * from './HolidayAssignment.model';
 
 // Location models
 export * from './Location.model';
+export * from './IpRestriction.model';

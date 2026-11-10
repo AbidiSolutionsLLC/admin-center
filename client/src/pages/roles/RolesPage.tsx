@@ -1,5 +1,6 @@
 // client/src/pages/roles/RolesPage.tsx
-import { useState, useMemo } from 'react';
+import { useState, useMemo, useEffect } from 'react';
+import { useParams, useNavigate } from 'react-router-dom';
 import { Shield, Plus, Edit2, Trash2, Key, Search, X, Loader2, Copy, Users, UserPlus, UserMinus, Monitor } from 'lucide-react';
 import type { ColumnDef } from '@tanstack/react-table';
 import { useRoles, useCreateRole, useUpdateRole, useDeleteRole, useRoleUsers, useAssignRole, useUnassignRole } from '@/features/roles/useRoles';
@@ -27,6 +28,9 @@ const MAX_NAME_LENGTH = 100;
  * Main page for managing roles and their permission matrix.
  */
 export default function RolesPage() {
+  const navigate = useNavigate();
+  const { id } = useParams<{ id: string }>();
+
   // ── Auth & RBAC ──────────────────────────────────────────────────────
   const { userRole } = useAuthStore();
   const canMutate = useMemo(() => 
@@ -84,6 +88,17 @@ export default function RolesPage() {
   // For adding new users: fetch all users
   const { data: people } = useUsers();
 
+  // ── Effect: Auto-open matrix modal if ID is in URL ───────────────────
+  useEffect(() => {
+    if (id && roles && !selectedRole && !isMatrixModalOpen) {
+      const role = roles.find((r) => r._id === id);
+      if (role) {
+        setSelectedRole(role);
+        setIsMatrixModalOpen(true);
+      }
+    }
+  }, [id, roles, selectedRole, isMatrixModalOpen]);
+
   // ── Handlers ─────────────────────────────────────────────────────────
   const handleOpenCreateModal = () => {
     if (!canMutate) return;
@@ -123,6 +138,14 @@ export default function RolesPage() {
   const handleOpenMatrixModal = (role: Role) => {
     setSelectedRole(role);
     setIsMatrixModalOpen(true);
+  };
+
+  const handleCloseMatrixModal = () => {
+    setIsMatrixModalOpen(false);
+    setSelectedRole(null);
+    if (id) {
+      navigate('/roles', { replace: true });
+    }
   };
 
   const handleOpenUsersModal = (role: Role) => {
@@ -517,7 +540,7 @@ export default function RolesPage() {
       {/* Permission Matrix Modal */}
       <Modal
         isOpen={isMatrixModalOpen}
-        onClose={() => setIsMatrixModalOpen(false)}
+        onClose={handleCloseMatrixModal}
         title={`Edit Permissions: ${selectedRole?.name}`}
         size="xl"
       >

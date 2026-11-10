@@ -8,7 +8,7 @@ import { EmptyState } from '@/components/ui/EmptyState';
 import { ROUTES } from '@/constants/routes';
 import { cn } from '@/utils/cn';
 import { format } from 'date-fns';
-import { CellContext } from '@tanstack/react-table';
+import type { CellContext } from '@tanstack/react-table';
 import type { InsightHistoryResponse } from '@/features/overview/useInsightHistory';
 
 type HistoryInsight = InsightHistoryResponse['data'][0];
@@ -134,7 +134,7 @@ export default function InsightHistoryPage() {
       <div className="flex items-start gap-4">
         <button
           onClick={() => navigate(ROUTES.OVERVIEW)}
-          className="mt-1 flex items-center justify-center w-8 h-8 rounded-md bg-white border border-line text-ink-secondary hover:text-ink hover:bg-surface-alt transition-colors shadow-sm"
+          className="mt-1 flex items-center justify-center w-8 h-8 rounded-md bg-surface border border-line text-ink-secondary hover:text-ink hover:bg-surface-alt transition-colors shadow-sm"
         >
           <ArrowLeft className="w-4 h-4" />
         </button>
@@ -157,7 +157,7 @@ export default function InsightHistoryPage() {
       ) : (
         <>
           {/* Trends Chart */}
-          <div className="bg-white p-5 rounded-lg border border-line shadow-card h-80">
+          <div className="bg-surface p-5 rounded-lg border border-line shadow-card h-80">
             <h2 className="text-sm font-semibold text-ink mb-4">Resolution Trends (Monthly)</h2>
             {isLoading ? (
               <div className="w-full h-full flex items-center justify-center bg-surface-alt animate-pulse rounded-md" />
@@ -194,9 +194,9 @@ export default function InsightHistoryPage() {
           </div>
 
           {/* Filters & Table */}
-          <div className="bg-white rounded-lg border border-line shadow-card overflow-hidden">
+          <div className="bg-surface rounded-lg border border-line shadow-card overflow-hidden">
             {/* Toolbar */}
-            <div className="p-4 border-b border-line flex flex-wrap items-center gap-3 bg-[#F7F8FA]">
+            <div className="p-4 border-b border-line flex flex-wrap items-center gap-3 bg-surface-alt">
               <div className="relative flex-1 min-w-[250px] max-w-sm">
                 <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-ink-muted" />
                 <input
@@ -204,14 +204,14 @@ export default function InsightHistoryPage() {
                   value={filters.search}
                   onChange={(e) => handleFilterChange('search', e.target.value)}
                   placeholder="Search historical insights..."
-                  className="w-full h-9 pl-9 pr-4 text-sm rounded-md border border-line bg-white text-ink placeholder:text-ink-muted focus:outline-none focus:ring-2 focus:ring-primary/30 focus:border-primary transition-all duration-150"
+                  className="w-full h-9 pl-9 pr-4 text-sm rounded-md border border-line bg-surface text-ink placeholder:text-ink-muted focus:outline-none focus:ring-2 focus:ring-primary/30 focus:border-primary transition-all duration-150"
                 />
               </div>
 
               <select
                 value={filters.severity}
                 onChange={(e) => handleFilterChange('severity', e.target.value)}
-                className="h-9 px-3 text-sm rounded-md border border-line bg-white text-ink focus:outline-none focus:border-primary"
+                className="h-9 px-3 text-sm rounded-md border border-line bg-surface text-ink focus:outline-none focus:border-primary"
               >
                 <option value="all">All Severities</option>
                 <option value="critical">Critical</option>
@@ -223,7 +223,7 @@ export default function InsightHistoryPage() {
               <select
                 value={filters.status}
                 onChange={(e) => handleFilterChange('status', e.target.value)}
-                className="h-9 px-3 text-sm rounded-md border border-line bg-white text-ink focus:outline-none focus:border-primary"
+                className="h-9 px-3 text-sm rounded-md border border-line bg-surface text-ink focus:outline-none focus:border-primary"
               >
                 <option value="all">All Statuses</option>
                 <option value="resolved">Resolved Only</option>

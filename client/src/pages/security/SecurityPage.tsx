@@ -4,9 +4,10 @@ import { Shield, Activity } from 'lucide-react';
 import { SecurityPolicyForm } from '@/features/security/components/SecurityPolicyForm';
 import { AccessLogTable } from '@/features/security/components/AccessLogTable';
 import { ActiveSessionsTable } from '@/features/security/components/ActiveSessionsTable';
-import { Users } from 'lucide-react';
+import { IpRestrictionsTable } from '@/features/security/components/IpRestrictionsTable';
+import { Users, GlobeLock } from 'lucide-react';
 
-type TabType = 'policy' | 'access-log' | 'active-sessions';
+type TabType = 'policy' | 'ip-restrictions' | 'access-log' | 'active-sessions';
 
 /**
  * Security Page
@@ -44,6 +45,17 @@ export default function SecurityPage() {
           Security Policy
         </button>
         <button
+          onClick={() => setActiveTab('ip-restrictions')}
+          className={`flex items-center gap-2 px-4 py-2 text-sm font-medium rounded-md transition-colors ${
+            activeTab === 'ip-restrictions'
+              ? 'bg-primary text-white'
+              : 'text-ink-secondary hover:text-ink hover:bg-surface-alt'
+          }`}
+        >
+          <GlobeLock className="w-4 h-4" />
+          IP Restrictions
+        </button>
+        <button
           onClick={() => setActiveTab('access-log')}
           className={`flex items-center gap-2 px-4 py-2 text-sm font-medium rounded-md transition-colors ${
             activeTab === 'access-log'
@@ -70,6 +82,8 @@ export default function SecurityPage() {
       {/* Tab Content */}
       {activeTab === 'policy' ? (
         <SecurityPolicyForm />
+      ) : activeTab === 'ip-restrictions' ? (
+        <IpRestrictionsTable />
       ) : activeTab === 'access-log' ? (
         <AccessLogTable />
       ) : (

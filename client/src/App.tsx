@@ -58,6 +58,7 @@ function App() {
               <Route path={ROUTES.PEOPLE} element={<PeoplePage />} />
               <Route path="/people/:id" element={<UserDetailPage />} />
               <Route path={ROUTES.ROLES} element={<RolesPage />} />
+              <Route path="/roles/:id" element={<RolesPage />} />
               <Route path={ROUTES.GROUPS} element={<GroupsPage />} />
               <Route path={ROUTES.APPS} element={<AppsPage />} />
               <Route path={ROUTES.SECURITY} element={<SecurityPage />} />

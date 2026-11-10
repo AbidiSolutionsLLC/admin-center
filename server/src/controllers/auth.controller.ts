@@ -3,7 +3,7 @@ import { Request, Response } from 'express';
 import bcrypt from 'bcryptjs';
 import crypto from 'crypto';
 import { asyncHandler } from '../utils/asyncHandler';
-import { User, LifecycleState, UserRole, Role, RefreshToken, SecurityEvent, SecurityPolicy, InviteToken, PasswordResetToken, Company } from '../models';
+import { User, LifecycleState, UserRole, Role, RefreshToken, SecurityEvent, SecurityPolicy, InviteToken, PasswordResetToken, Company, GroupMember, IpRestriction } from '../models';
 import { signAccessToken, signRefreshToken, AdminClaim, signMfaToken, verifyMfaToken } from '../lib/tokenService';
 import { sendPasswordResetEmail, sendMfaOtpEmail } from '../lib/emailService';
 import { validatePasswordAgainstPolicy } from '../utils/passwordPolicy';
@@ -153,6 +153,71 @@ export const login = asyncHandler(async (req: Request, res: Response) => {
     }
   }
 
+  // New Identity-Scoped IP Restrictions Check
+  const companySettings = await Company.findById(user.company_id).select('settings.ip_restrictions_enabled');
+  if (companySettings?.settings?.ip_restrictions_enabled) {
+    const clientIp = req.ip || '127.0.0.1';
+    
+    // For login, we only evaluate 'portal' rules since they are trying to log into the admin portal.
+    const targetRestrictions = await IpRestriction.find({ 
+      company_id: user.company_id, 
+      is_enabled: true,
+      target_type: { $in: ['portal', 'all_apps'] }
+    });
+
+    if (targetRestrictions.length > 0) {
+      const userIdStr = user._id.toString();
+      const userRoleAssignment = await UserRole.findOne({ user_id: user._id });
+      const userRoleId = userRoleAssignment?.role_id?.toString() || null;
+      const memberships = await GroupMember.find({ user_id: user._id });
+      const userGroups = memberships.map(m => m.group_id.toString());
+      const userDepartment = user.department_id ? user.department_id.toString() : null;
+
+      const applicableRestrictions = targetRestrictions.filter(r => {
+        if (r.subject_type === 'all_users') return true;
+        if (!r.subject_id) return false;
+        
+        const sid = r.subject_id.toString();
+        if (r.subject_type === 'user') return sid === userIdStr;
+        if (r.subject_type === 'group') return userGroups.includes(sid);
+        if (r.subject_type === 'role') return sid === userRoleId;
+        if (r.subject_type === 'department') return sid === userDepartment;
+        return false;
+      });
+
+      if (applicableRestrictions.length === 0) {
+        await logSecurityEvent({
+          company_id: user.company_id,
+          user_id: user._id,
+          email: email.toLowerCase(),
+          event_type: 'login_failure',
+          ip_address: req.ip,
+          user_agent: req.headers['user-agent'],
+          req,
+          is_suspicious: true,
+          metadata: { reason: 'ip_implicit_deny' },
+        });
+        throw new AppError('Access denied. You are not authorized by any IP restriction rule.', 403, 'FORBIDDEN');
+      }
+
+      const isAllowed = applicableRestrictions.some(rule => isIpInRange(clientIp, rule.ip_address));
+      if (!isAllowed) {
+         await logSecurityEvent({
+          company_id: user.company_id,
+          user_id: user._id,
+          email: email.toLowerCase(),
+          event_type: 'login_failure',
+          ip_address: req.ip,
+          user_agent: req.headers['user-agent'],
+          req,
+          is_suspicious: true,
+          metadata: { reason: 'ip_not_whitelisted_abac' },
+        });
+        throw new AppError('Access denied from this IP address based on Company IP Restrictions', 403, 'FORBIDDEN');
+      }
+    }
+  }
+
   if (user.locked_until && user.locked_until > new Date()) {
     await logSecurityEvent({
       company_id: user.company_id,
@@ -254,7 +319,7 @@ export const login = asyncHandler(async (req: Request, res: Response) => {
     if (aggregatedPolicy?.settings.require_mfa) mfaRequired = true;
   }
 
-  // WI-07: MFA enforced. MFA_DISABLED=true is a local-development escape hatch only.
+  // WI-07: MFA re-enabled. MFA_DISABLED=true is a local-development escape hatch only.
   if (process.env.MFA_DISABLED === 'true') {
     if (process.env.NODE_ENV === 'production') {
       throw new AppError('Server misconfiguration: MFA cannot be disabled in production', 500, 'MISCONFIGURED');
@@ -569,6 +634,48 @@ export const refresh = asyncHandler(async (req: Request, res: Response) => {
 
   if (user.lifecycle_state === 'deactivated' || user.lifecycle_state === 'archived' || user.lifecycle_state === 'terminated') {
     throw new AppError('Your account is currently inactive. Please contact support if you believe this is an error.', 403, 'FORBIDDEN');
+  }
+
+  // Identity-Scoped IP Restrictions Check
+  const companySettings = await Company.findById(user.company_id).select('settings.ip_restrictions_enabled');
+  if (companySettings?.settings?.ip_restrictions_enabled) {
+    const clientIp = req.ip || '127.0.0.1';
+    
+    const targetRestrictions = await IpRestriction.find({ 
+      company_id: user.company_id, 
+      is_enabled: true,
+      target_type: { $in: ['portal', 'all_apps'] }
+    });
+
+    if (targetRestrictions.length > 0) {
+      const userIdStr = user._id.toString();
+      const userRoleAssignment = await UserRole.findOne({ user_id: user._id });
+      const userRoleId = userRoleAssignment?.role_id?.toString() || null;
+      const memberships = await GroupMember.find({ user_id: user._id });
+      const userGroups = memberships.map(m => m.group_id.toString());
+      const userDepartment = user.department_id ? user.department_id.toString() : null;
+
+      const applicableRestrictions = targetRestrictions.filter(r => {
+        if (r.subject_type === 'all_users') return true;
+        if (!r.subject_id) return false;
+        
+        const sid = r.subject_id.toString();
+        if (r.subject_type === 'user') return sid === userIdStr;
+        if (r.subject_type === 'group') return userGroups.includes(sid);
+        if (r.subject_type === 'role') return sid === userRoleId;
+        if (r.subject_type === 'department') return sid === userDepartment;
+        return false;
+      });
+
+      if (applicableRestrictions.length === 0) {
+        throw new AppError('Access denied. You are not authorized by any IP restriction rule.', 403, 'FORBIDDEN');
+      }
+
+      const isAllowed = applicableRestrictions.some(rule => isIpInRange(clientIp, rule.ip_address));
+      if (!isAllowed) {
+        throw new AppError('Access denied from this IP address based on Company IP Restrictions', 403, 'FORBIDDEN');
+      }
+    }
   }
 
   // Issue new access token with actual role

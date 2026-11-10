@@ -9,7 +9,10 @@ import routes from './routes';
 
 const app = express();
 
-app.set('trust proxy', 1); // Trust first proxy (e.g. Nginx, Azure) if deploying behind one
+const trustProxyConfig = process.env.TRUST_PROXY || 1;
+// Convert to number if it's a numeric string, otherwise keep as string (for IP/subnet configs)
+app.set('trust proxy', isNaN(Number(trustProxyConfig)) ? trustProxyConfig : Number(trustProxyConfig));
+
 app.use(cors({ 
   origin: (origin, callback) => {
     // WI-13: reflecting any origin requires NODE_ENV=development AND ALLOW_ANY_ORIGIN=true

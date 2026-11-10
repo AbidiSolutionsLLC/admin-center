@@ -27,6 +27,7 @@ export interface ICompany extends Document {
     default_location_id?: string;     // Default location for users without location assignment
     audit_log_retention_days: number; // 0 for infinite, otherwise days to retain
     insight_sensitivity: 'low' | 'medium' | 'high'; // low: critical/high, medium: +medium, high: all
+    ip_restrictions_enabled: boolean; // Enable/disable IP-based access restrictions globally
   };
   plan: 'free' | 'starter' | 'pro';
   is_active: boolean;
@@ -90,6 +91,10 @@ const CompanySchema = new Schema<ICompany>({
       type: String,
       enum: ['low', 'medium', 'high'],
       default: 'medium',
+    },
+    ip_restrictions_enabled: {
+      type: Boolean,
+      default: false,
     },
   },
   plan: { type: String, enum: ['free', 'starter', 'pro'], default: 'free' },

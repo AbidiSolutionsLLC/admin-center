@@ -13,6 +13,7 @@ import {
   getActiveSessions,
   terminateSession,
 } from '../controllers/security.controller';
+import ipRestrictionsRoutes from './ipRestrictions.routes';
 
 const router = Router();
 
@@ -32,5 +33,8 @@ router.get('/events', getSecurityEvents);
 router.post('/force-logout/:userId', requireRole(PERMISSION_GROUPS.IT_ADMINS), forceLogoutUser);
 router.get('/sessions', requireRole(PERMISSION_GROUPS.IT_ADMINS), getActiveSessions);
 router.delete('/sessions/:tokenId', requireRole(PERMISSION_GROUPS.IT_ADMINS), terminateSession);
+
+// IP Restrictions routes
+router.use('/ip-restrictions', ipRestrictionsRoutes);
 
 export default router;
