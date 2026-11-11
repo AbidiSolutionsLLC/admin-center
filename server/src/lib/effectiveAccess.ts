@@ -30,7 +30,7 @@ export async function bumpAuthzVer(memberIds: Array<string | Types.ObjectId>, se
   await User.updateMany({ _id: { $in: memberIds } }, { $inc: { authz_ver: 1 } }, { session });
 }
 
-function dynamicGroupFilter(rules: Record<string, unknown> | undefined): Record<string, unknown> {
+export function dynamicGroupFilter(rules: Record<string, unknown> | undefined): Record<string, unknown> {
   const f: Record<string, unknown> = {};
   for (const [k, v] of Object.entries(rules ?? {})) {
     if (DYNAMIC_RULE_FIELDS.includes(k) && (typeof v === 'string' || typeof v === 'number' || typeof v === 'boolean')) f[k] = v;
@@ -72,8 +72,9 @@ export async function resolveAssignmentMemberIds(a: Pick<IAppAssignment, 'compan
     case 'user':
       return a.target_id ? [a.target_id] : [];
     case 'group': {
-      const g = await Group.findById(a.target_id).session(session ?? null).lean();
-      if (g?.type === 'dynamic') { filter = dynamicGroupFilter(g.dynamic_rules); break; }
+      const g = await Group.findOne({ _id: a.target_id, company_id: companyId, is_active: true }).session(session ?? null).lean();
+      if (!g) return []; // missing, other-tenant or inactive group grants nothing
+      if (g.type === 'dynamic') { filter = dynamicGroupFilter(g.dynamic_rules); break; }
       const gm = await GroupMember.find({ group_id: a.target_id }).select('user_id').session(session ?? null).lean();
       return gm.map(m => m.user_id as Types.ObjectId);
     }
@@ -122,7 +123,14 @@ export async function computeEffectiveAccess(companyId: string | Types.ObjectId,
     if (!identity || identity.status !== 'active') return denyAll('IDENTITY_NOT_ACTIVE');
   }
 
-  const loadGroupMemberships = () => GroupMember.find({ user_id: user._id }).select('group_id').session(session).lean();
+  // Static memberships only count for active groups of this company (H1: deactivating a group removes its grants).
+  const loadGroupMemberships = async () => {
+    const rows = await GroupMember.find({ user_id: user._id }).select('group_id').session(session).lean();
+    if (rows.length === 0) return rows;
+    const active = await Group.find({ _id: { $in: rows.map(r => r.group_id) }, company_id: companyId, is_active: true }).select('_id').session(session).lean();
+    const activeIds = new Set(active.map(g => g._id.toString()));
+    return rows.filter(r => activeIds.has(r.group_id.toString()));
+  };
   const loadUserRoles = () => UserRole.find({ user_id: user._id, company_id: companyId }).select('role_id').session(session).lean();
   const loadDeptChain = () => user.department_id ? ancestorIds(Department, companyId, user.department_id, opts?.session) : Promise.resolve([] as Types.ObjectId[]);
   const loadLocChain = () => user.location_id ? ancestorIds(Location, companyId, user.location_id, opts?.session) : Promise.resolve([] as Types.ObjectId[]);
