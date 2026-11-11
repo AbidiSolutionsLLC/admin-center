@@ -61,7 +61,7 @@ async function main() {
   const { createServer } = await import('../app');
   const app = await createServer();
   server.on('request', app);
-  const { OperatorAccount, Company, User, Plan, App, AppAssignment, ProductRole, OrganizationEntitlement, OperatorAuditEvent, Group, AuditEvent, PlatformEvent, OrgEventCounter, Session } = await import('../models');
+  const { OperatorAccount, Company, User, Plan, App, AppAssignment, ProductRole, OrganizationEntitlement, OperatorAuditEvent, Group, GroupMember, AuditEvent, PlatformEvent, OrgEventCounter, Session } = await import('../models');
   const { seedProductRegistry } = await import('../lib/productCatalog');
   const { computeEffectiveAccess } = await import('../lib/effectiveAccess');
   const { runInTransaction, emitPlatformEvent } = await import('../lib/platformEvents');
@@ -312,6 +312,123 @@ async function main() {
       check('E4a rollback: fresh org gets no counter row nor event', !(await OrgEventCounter.findById(fresh)) && (await PlatformEvent.countDocuments({ org_id: fresh })) === 0);
       const seqs = (await PlatformEvent.find({ org_id: orgId }).sort({ seq: 1 }).lean()).map((e) => e.seq);
       check('E4a org seq still contiguous after assignments/suspends/rollback', seqs.every((v, i) => v === i + 1), seqs);
+    }
+
+    // ── L3-2 (H1): group membership / state changes propagate (event + authz_ver + audit, one transaction) ─────────
+    {
+      const gSid = crypto.randomUUID();
+      await Session.create({
+        _id: gSid, identity_id: new mongoose.Types.ObjectId(), member_id: me._id, company_id: orgId, realm: 'tenant',
+        idle_expires_at: new Date(Date.now() + 3600e3), absolute_expires_at: new Date(Date.now() + 3600e3), amr: ['pwd'],
+      });
+      const gKey = await jose.importJWK(tenantPrivateJwk, 'RS256');
+      const gAt = await new jose.SignJWT({ token_use: 'access', org: String(orgId), sid: gSid, email: me.email })
+        .setProtectedHeader({ alg: 'RS256', kid: 'tenant-smoke', typ: 'at+jwt' })
+        .setIssuer(`${ORIGIN}/realms/tenant`).setAudience('urn:karbexa:admin').setSubject(String(me._id))
+        .setIssuedAt().setExpirationTime('10m').sign(gKey);
+      const gt = async (path: string, method: string, body: unknown, cid: string) => {
+        const rr = await fetch(`${ORIGIN}/api/v1${path}`, {
+          method, headers: { authorization: `Bearer ${gAt}`, 'content-type': 'application/json', 'x-correlation-id': cid }, body: body ? JSON.stringify(body) : undefined,
+        });
+        const text = await rr.text();
+        let json: any = {};
+        try { json = JSON.parse(text); } catch { /* not json */ }
+        return { status: rr.status, json, text };
+      };
+      const aacFor = (cid: string, memberId: unknown) => PlatformEvent.find({ org_id: orgId, type: 'app_access.changed', correlation_id: cid, 'subject.id': String(memberId) }).lean();
+      const authzOf = async (id: unknown) => (await User.findById(id))?.authz_ver ?? 0;
+      const signAppG = await App.findOne({ product_key: 'sign', app_type: 'karbexa_product' });
+      const [grpMember, outsider] = await User.insertMany([
+        { company_id: orgId, full_name: 'Grp Member', email: 'grp.member@acme.test', password_hash: 'x', role: 'Employee', lifecycle_state: 'active', is_active: true, employment_type: 'full_time', employee_id: 'GRP-1' },
+        { company_id: orgId, full_name: 'Grp Outsider', email: 'grp.outsider@acme.test', password_hash: 'x', role: 'Employee', lifecycle_state: 'active', is_active: true, employment_type: 'part_time', employee_id: 'GRP-2' },
+      ]);
+
+      // static group + assignment of sign_administrator to the group
+      let r = await gt('/groups', 'POST', { name: 'H1 Static', type: 'static' }, 'h1-create');
+      const sgId: string = r.json.data?._id;
+      check('L3-2 create static group = 201', r.status === 201 && !!sgId, `${r.status} ${r.text.slice(0, 160)}`);
+      r = await gt(`/apps/${signAppG!._id}/assign`, 'POST', { target_type: 'group', target_id: sgId, product_role_key: 'sign_administrator' }, 'h1-assign');
+      const sgAssignId: string = r.json.data?._id || r.json.data?.id || (await AppAssignment.findOne({ company_id: orgId, target_type: 'group', target_id: sgId, is_active: true }))?._id?.toString();
+      check('L3-2 assign sign_administrator to the group = 200/201', (r.status === 200 || r.status === 201) && !!sgAssignId, `${r.status} ${r.text.slice(0, 160)}`);
+
+      // add member
+      let v0 = await authzOf(grpMember._id);
+      r = await gt(`/groups/${sgId}/users`, 'POST', { userIds: [String(grpMember._id)] }, 'h1-add');
+      let ev = await aacFor('h1-add', grpMember._id);
+      check('L3-2 add member = 200 and added 1', r.status === 200 && r.json.data?.added === 1, `${r.status} ${r.text.slice(0, 160)}`);
+      check('L3-2 add: app_access.changed carries the group grant (sign = sign_administrator)', ev.length === 1 && (ev[0].data as any).products?.sign === 'sign_administrator', ev.map((e) => e.data));
+      check('L3-2 add: authz_ver bumped and equals event data.authz_ver', (await authzOf(grpMember._id)) === v0 + 1 && (ev[0]?.data as any)?.authz_ver === v0 + 1, { v0, now: await authzOf(grpMember._id) });
+      check('L3-2 add: audit row shares the correlation id', !!(await AuditEvent.findOne({ company_id: orgId, action: 'group.user_added', correlation_id: 'h1-add' })));
+      r = await gt(`/groups/${sgId}/users`, 'POST', { userIds: [String(grpMember._id)] }, 'h1-add-dup');
+      check('L3-2 add duplicate: no event and no authz_ver bump', (await aacFor('h1-add-dup', grpMember._id)).length === 0 && (await authzOf(grpMember._id)) === v0 + 1, r.text.slice(0, 120));
+
+      // remove member
+      r = await gt(`/groups/${sgId}/users`, 'DELETE', { userIds: [String(grpMember._id)] }, 'h1-remove');
+      ev = await aacFor('h1-remove', grpMember._id);
+      check('L3-2 remove member = 200 and removed 1', r.status === 200 && r.json.data?.removed === 1, `${r.status} ${r.text.slice(0, 160)}`);
+      check('L3-2 remove: app_access.changed WITHOUT the group grant, authz_ver bumped', ev.length === 1 && (ev[0].data as any).products?.sign === undefined && (ev[0].data as any).authz_ver === v0 + 2 && (await authzOf(grpMember._id)) === v0 + 2, ev.map((e) => e.data));
+      check('L3-2 remove: audit row shares the correlation id', !!(await AuditEvent.findOne({ company_id: orgId, action: 'group.user_removed', correlation_id: 'h1-remove' })));
+
+      // deactivate / reactivate
+      await gt(`/groups/${sgId}/users`, 'POST', { userIds: [String(grpMember._id)] }, 'h1-readd');
+      check('L3-2 re-added member has the grant again', (await computeEffectiveAccess(orgId, String(grpMember._id))).products.sign?.role === 'sign_administrator');
+      r = await gt(`/groups/${sgId}`, 'PUT', { is_active: false }, 'h1-deactivate');
+      ev = await aacFor('h1-deactivate', grpMember._id);
+      check('L3-2 deactivate group = 200', r.status === 200, `${r.status} ${r.text.slice(0, 160)}`);
+      check('L3-2 deactivate: event emitted and carries no sign grant', ev.length === 1 && (ev[0].data as any).products?.sign === undefined, ev.map((e) => e.data));
+      check('L3-2 deactivate: effective access excludes the inactive static group', (await computeEffectiveAccess(orgId, String(grpMember._id))).products.sign === undefined);
+      r = await gt(`/groups/${sgId}`, 'PUT', { is_active: true }, 'h1-reactivate');
+      ev = await aacFor('h1-reactivate', grpMember._id);
+      check('L3-2 reactivate: event emitted with the grant restored', r.status === 200 && ev.length === 1 && (ev[0].data as any).products?.sign === 'sign_administrator', ev.map((e) => e.data));
+      r = await gt(`/groups/${sgId}`, 'PUT', { description: 'rename only' }, 'h1-describe');
+      check('L3-2 update without rule/active change emits nothing', (await aacFor('h1-describe', grpMember._id)).length === 0, r.status);
+
+      // delete: members first (HAS_DEPENDENTS), then GROUP_IN_USE while the assignment is active, then success after revoke
+      await gt(`/groups/${sgId}/users`, 'DELETE', { userIds: [String(grpMember._id)] }, 'h1-remove2');
+      r = await gt(`/groups/${sgId}`, 'DELETE', undefined, 'h1-del-inuse');
+      check('L3-2 delete group targeted by an active assignment = 409 GROUP_IN_USE', r.status === 409 && r.json.code === 'GROUP_IN_USE', `${r.status} ${r.text.slice(0, 160)}`);
+      check('L3-2 409 leaves the group, assignment and event log untouched', !!(await Group.findById(sgId)) && (await PlatformEvent.countDocuments({ org_id: orgId, correlation_id: 'h1-del-inuse' })) === 0 && (await AuditEvent.countDocuments({ company_id: orgId, correlation_id: 'h1-del-inuse' })) === 0);
+      r = await gt(`/apps/${signAppG!._id}/revoke`, 'POST', { assignment_id: sgAssignId }, 'h1-revoke');
+      r = await gt(`/groups/${sgId}`, 'DELETE', undefined, 'h1-del');
+      check('L3-2 delete after the assignment is revoked = 200', r.status === 200 && !(await Group.findById(sgId)), `${r.status} ${r.text.slice(0, 160)}`);
+
+      // dynamic group: rule change touches old + new matches only; delete emits for the matched members
+      r = await gt('/groups', 'POST', { name: 'H1 Dynamic', type: 'dynamic', dynamic_rules: { employment_type: 'full_time' } }, 'h1-dyn-create');
+      const dgId: string = r.json.data?._id;
+      check('L3-2 create dynamic group = 201', r.status === 201 && !!dgId, `${r.status} ${r.text.slice(0, 160)}`);
+      r = await gt(`/groups/${dgId}`, 'PUT', { dynamic_rules: { employment_type: 'part_time' } }, 'h1-dyn-rules');
+      check('L3-2 dynamic rule change: event for the old match (full_time member) and the new match (part_time outsider)', (await aacFor('h1-dyn-rules', grpMember._id)).length === 1 && (await aacFor('h1-dyn-rules', outsider._id)).length === 1, r.status);
+      const totalMembers = await User.countDocuments({ company_id: orgId });
+      const dynEvents = await PlatformEvent.countDocuments({ org_id: orgId, type: 'app_access.changed', correlation_id: 'h1-dyn-rules' });
+      const expectDyn = await User.countDocuments({ company_id: orgId, employment_type: { $in: ['full_time', 'part_time'] } });
+      check('L3-2 dynamic rule change emits only for affected members (not the whole org)', dynEvents === expectDyn && dynEvents <= totalMembers, { dynEvents, expectDyn, totalMembers });
+      r = await gt(`/groups/${dgId}`, 'DELETE', undefined, 'h1-dyn-del');
+      const delEvents = await PlatformEvent.find({ org_id: orgId, type: 'app_access.changed', correlation_id: 'h1-dyn-del' }).lean();
+      check('L3-2 delete dynamic group = 200 with events for its rule-matched members (resolved before delete)', r.status === 200 && !(await Group.findById(dgId)) && delEvents.some((e) => e.subject.id === String(outsider._id)) && delEvents.length === (await User.countDocuments({ company_id: orgId, employment_type: 'part_time' })), { status: r.status, events: delEvents.length });
+      check('L3-2 delete audit row shares the correlation id', !!(await AuditEvent.findOne({ company_id: orgId, action: 'group.deleted', correlation_id: 'h1-dyn-del' })));
+
+      // tenant isolation: another org's admin cannot touch this org's group
+      const foreignGroup = await Group.create({ company_id: new mongoose.Types.ObjectId(), name: 'Foreign', type: 'static' });
+      r = await gt(`/groups/${foreignGroup._id}/users`, 'POST', { userIds: [String(grpMember._id)] }, 'h1-foreign');
+      check('L3-2 foreign-tenant group is 404 (no membership, no event)', r.status === 404 && (await GroupMember.countDocuments({ group_id: foreignGroup._id })) === 0, r.status);
+
+      // bounded fan-out: more members than the inline limit -> authz_ver bumped in the txn, events emitted after commit
+      const bulk = await User.insertMany(Array.from({ length: 5 }, (_, i) => ({
+        company_id: orgId, full_name: `Bounded ${i}`, email: `bounded${i}@acme.test`, password_hash: 'x', role: 'Employee',
+        lifecycle_state: 'active', is_active: true, employment_type: 'intern', employee_id: `BND-${i}`,
+      })));
+      const bulkIds = bulk.map((u) => String(u._id));
+      const { emitAppAccessChangedBounded } = await import('../lib/platformEvents');
+      let seenInsideTxn = -1;
+      await runInTransaction(async (session) => {
+        await emitAppAccessChangedBounded(session, orgId, bulkIds, { actor: { type: 'system' }, correlation_id: 'h1-bounded', limit: 3, batchSize: 2 });
+        seenInsideTxn = await PlatformEvent.countDocuments({ org_id: orgId, correlation_id: 'h1-bounded' }).session(session ?? null);
+      });
+      const bEvents = await PlatformEvent.find({ org_id: orgId, correlation_id: 'h1-bounded' }).lean();
+      check('L3-2 bounded: over the limit no per-member event is written inside the transaction', seenInsideTxn === 0, seenInsideTxn);
+      check('L3-2 bounded: after commit every member gets exactly one event with the bumped authz_ver', bEvents.length === 5 && (await Promise.all(bulkIds.map(async (id) => (bEvents.find((e) => e.subject.id === id)?.data as any)?.authz_ver === (await authzOf(id))))).every(Boolean), bEvents.length);
+      const bSeqs = (await PlatformEvent.find({ org_id: orgId }).sort({ seq: 1 }).lean()).map((e) => e.seq);
+      check('L3-2 org seq stays contiguous after group changes and the bounded fan-out', bSeqs.every((v, i) => v === i + 1));
     }
 
     // ── E10: OPERATOR_IP_ALLOWLIST (read per request from env; req.ip with TRUST_PROXY=0, so X-Forwarded-For is ignored) ──

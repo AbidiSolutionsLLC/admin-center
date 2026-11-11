@@ -107,6 +107,40 @@ export async function emitAppAccessChanged(
   }
 }
 
+/** Above this many affected members an app_access.changed fan-out leaves the originating transaction. */
+export const APP_ACCESS_INLINE_LIMIT = 200;
+
+/**
+ * Like emitAppAccessChanged, but bounded: up to APP_ACCESS_INLINE_LIMIT members are emitted inside the caller's
+ * transaction; for more, authz_ver is bumped inside it (one updateMany) and the per-member events are fanned out
+ * in batched transactions after commit (same pattern as org-level changes). Errors in the post-commit part are logged.
+ */
+export async function emitAppAccessChangedBounded(
+  session: ClientSession | undefined,
+  companyId: string | Types.ObjectId,
+  memberIds: Array<string | Types.ObjectId>,
+  ctx: { actor: PlatformEventInput['actor']; correlation_id?: string; limit?: number; batchSize?: number },
+): Promise<void> {
+  const ids = Array.from(new Set(memberIds.map(String)));
+  if (ids.length === 0) return;
+  if (ids.length <= (ctx.limit ?? APP_ACCESS_INLINE_LIMIT)) {
+    await emitAppAccessChanged(session, companyId, ids, { actor: ctx.actor, correlation_id: ctx.correlation_id });
+    return;
+  }
+  await bumpAuthzVer(ids, session);
+  const batchSize = ctx.batchSize ?? APP_ACCESS_INLINE_LIMIT;
+  onCommit(session, async () => {
+    for (let i = 0; i < ids.length; i += batchSize) {
+      const chunk = ids.slice(i, i + batchSize);
+      try {
+        await runInTransaction((s) => emitAppAccessChanged(s, companyId, chunk, { actor: ctx.actor, correlation_id: ctx.correlation_id, bump: false }));
+      } catch (err) {
+        console.error('[emitAppAccessChangedBounded] batch failed', String(companyId), err);
+      }
+    }
+  });
+}
+
 /**
  * After an org-level change committed (members' authz_ver already bumped in that txn), fan out per-member
  * app_access.changed in batches, each in its own transaction, without bumping again. Errors are logged, never thrown.
