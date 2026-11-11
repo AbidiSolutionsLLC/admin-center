@@ -60,12 +60,19 @@ import crypto from 'crypto';
 import { InviteToken } from '../models/InviteToken.model';
 
 /** Admin-owned member fields carried on member.provisioned / member.updated (07 §1.2). */
-const MEMBER_ADMIN_FIELDS = ['full_name', 'email', 'department_id', 'location_id', 'manager_id', 'employment_type'] as const;
+const MEMBER_ADMIN_FIELDS = [
+  'full_name', 'email', 'department_id', 'location_id', 'manager_id', 'employment_type',
+  'employee_id', 'phone', 'avatar_url', 'hire_date', 'termination_date',
+] as const;
+/** Snapshot of the admin-owned fields as comparable primitives: ObjectIds -> hex, Dates -> ISO string (so `!==` compares values). */
 const memberAdminFields = (u: any): Record<string, unknown> => {
   const out: Record<string, unknown> = {};
   for (const f of MEMBER_ADMIN_FIELDS) {
     const v = u[f];
-    out[f] = v == null ? null : (v instanceof Types.ObjectId ? v.toString() : v);
+    out[f] = v == null ? null
+      : v instanceof Types.ObjectId ? v.toString()
+      : v instanceof Date ? (Number.isNaN(v.getTime()) ? null : v.toISOString())
+      : v;
   }
   return out;
 };
