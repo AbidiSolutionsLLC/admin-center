@@ -105,7 +105,7 @@ async function buildTenant(cookieKeys: string[]): Promise<OidcProvider> {
     token_endpoint_auth_method: 'none',
     application_type: 'web',
     redirect_uris: [`${origin}/auth/callback`],
-    post_logout_redirect_uris: [`${origin}/login`],
+    post_logout_redirect_uris: [`${origin}/login`, `${origin}/login?signed_out=1`],
     grant_types: ['authorization_code', 'refresh_token'],
     response_types: ['code'],
     scope: 'openid profile email',

@@ -252,22 +252,33 @@ export const logout = asyncHandler(async (req: Request, res: Response) => {
   });
 
   const { tenantIssuer, adminSpaOrigin } = getIdentityConfig();
-  const end_session_url = `${tenantIssuer}/oauth/end_session?client_id=${ADMIN_SPA_CLIENT_ID}&post_logout_redirect_uri=${encodeURIComponent(`${adminSpaOrigin}/login`)}`;
+  const end_session_url = `${tenantIssuer}/oauth/end_session?client_id=${ADMIN_SPA_CLIENT_ID}&post_logout_redirect_uri=${encodeURIComponent(`${adminSpaOrigin}/login?signed_out=1`)}`;
   res.status(200).json({ success: true, data: { end_session_url } });
 });
 
+/** Allow-list projection (never the raw user document: password history, MFA counters, risk score, ...). */
 export const getMe = asyncHandler(async (req: Request, res: Response) => {
-  const user = await User.findById(req.user.userId).select('-password_hash -refresh_token_hash');
+  const user = await User.findOne({ _id: req.user.userId, company_id: req.user.company_id })
+    .select('_id company_id role email full_name')
+    .lean();
 
   if (!user) {
     throw new AppError('User not found', 404, 'NOT_FOUND');
   }
+  const company = await Company.findById(user.company_id).select('name').lean();
 
   res.status(200).json({
     success: true,
     data: {
-      user
-    }
+      user: {
+        _id: user._id,
+        company_id: user.company_id,
+        role: user.role,
+        email: user.email,
+        full_name: user.full_name,
+        company_name: company?.name ?? null,
+      },
+    },
   });
 });
 

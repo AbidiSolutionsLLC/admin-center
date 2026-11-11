@@ -29,7 +29,7 @@ export interface ICompany extends Document {
     insight_sensitivity: 'low' | 'medium' | 'high'; // low: critical/high, medium: +medium, high: all
     ip_restrictions_enabled: boolean; // Enable/disable IP-based access restrictions globally
   };
-  plan: 'free' | 'starter' | 'pro';
+  plan: string; // operator plan key (Plan.key); legacy values free/starter/pro remain valid
   /** 04 §2 - written only by operator realm or seed; kept in sync with legacy is_active */
   status: 'provisioning' | 'active' | 'suspended' | 'closed';
   is_active: boolean;
@@ -99,7 +99,7 @@ const CompanySchema = new Schema<ICompany>({
       default: false,
     },
   },
-  plan: { type: String, enum: ['free', 'starter', 'pro'], default: 'free' },
+  plan: { type: String, default: 'free' },
   status: { type: String, enum: ['provisioning', 'active', 'suspended', 'closed'], default: 'active' },
   is_active: { type: Boolean, default: true },
 }, { timestamps: { createdAt: 'created_at', updatedAt: 'updated_at' } });
