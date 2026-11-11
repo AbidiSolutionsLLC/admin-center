@@ -484,6 +484,24 @@ async function main() {
       const pb = await tokenCall('karbexa-products-backend', backend.privateKey, 'smoke-backend-1', 'platform.org.read', 'urn:karbexa:platform-api');
       check('L3-4 products-backend still gets its platform-api token (typ at+jwt)', pb.status === 200 && String(jose.decodeProtectedHeader(pb.json.access_token).typ).toLowerCase().replace('application/', '') === 'at+jwt', pb.status);
       resetProductsInternalToken();
+
+      // L3-6 (M4): Platform API budget is per authenticated client (router-level auth, then limiter)
+      const orgsCall = (tok: string) => fetch(`${ORIGIN}/platform/v1/orgs`, { headers: { authorization: `Bearer ${tok}` } });
+      const okCall = await orgsCall(pb.json.access_token);
+      check('L3-6 platform call with a valid token = 200 and reports the per-client budget (RateLimit-Limit 1200)', okCall.status === 200 && Number(okCall.headers.get('ratelimit-limit')) === 1200, { status: okCall.status, limit: okCall.headers.get('ratelimit-limit') });
+      process.env.PLATFORM_RATE_LIMIT_PER_MIN = '1';
+      try {
+        const over = await orgsCall(pb.json.access_token);
+        check('L3-6 exceeding the client budget = 429 RATE_LIMITED', over.status === 429 && ((await over.json()) as { code?: string }).code === 'RATE_LIMITED', over.status);
+        const noTok = await fetch(`${ORIGIN}/platform/v1/orgs`);
+        const badTok = await orgsCall('not-a-jwt');
+        check('L3-6 authentication precedes the limiter: no token = 401, bad token = 401 (not charged to the client)', noTok.status === 401 && badTok.status === 401, { noTok: noTok.status, badTok: badTok.status });
+      } finally {
+        delete process.env.PLATFORM_RATE_LIMIT_PER_MIN;
+      }
+      check('L3-6 default budget restored: the same client passes again', (await orgsCall(pb.json.access_token)).status === 200);
+      const wrongScope = await fetch(`${ORIGIN}/platform/v1/orgs/${orgId}/events`, { headers: { authorization: `Bearer ${pb.json.access_token}` } });
+      check('L3-6 per-route scope check still applies (platform.org.read token on events = 403 INSUFFICIENT_SCOPE)', wrongScope.status === 403 && ((await wrongScope.json()) as { code?: string }).code === 'INSUFFICIENT_SCOPE', wrongScope.status);
     }
 
     // ── E10: OPERATOR_IP_ALLOWLIST (read per request from env; req.ip with TRUST_PROXY=0, so X-Forwarded-For is ignored) ──

@@ -6,7 +6,8 @@ import { User } from '../models/User.model';
 import { platformReadRouter } from './readApi';
 import { OrganizationEntitlement } from '../models/OrganizationEntitlement.model';
 import { computeEffectiveAccess } from '../lib/effectiveAccess';
-import { requireServiceToken } from './requireServiceToken';
+import { requireServiceToken, authenticateService } from './requireServiceToken';
+import { platformAuthFailureLimiter, platformRateLimiter } from './rateLimit';
 
 export const platformRouter = Router();
 
@@ -15,6 +16,9 @@ platformRouter.use((req: Request, res: Response, next: NextFunction) => {
   if (typeof cid === 'string' && cid) res.setHeader('X-Correlation-Id', cid);
   next();
 });
+
+// M4: authenticate once at router level, then rate-limit per service client (the global per-IP limiter skips /platform/v1).
+platformRouter.use(platformAuthFailureLimiter, authenticateService, platformRateLimiter);
 
 platformRouter.use(platformReadRouter);
 

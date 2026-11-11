@@ -26,33 +26,45 @@ declare module 'express-serve-static-core' {
   interface Request { service?: ServiceClaims }
 }
 
+const invalidToken = (res: Response) => res.status(401).json({ error: 'Token invalid or expired', code: 'INVALID_TOKEN' });
+
+/**
+ * Router-level authentication: verifies the services-realm token (signature, issuer, audience, age, token_use,
+ * registered client) and sets req.service. Scope checks stay per route (requireServiceToken). Needed before the
+ * per-client rate limit so the limit key is the authenticated client_id.
+ */
+export async function authenticateService(req: Request, res: Response, next: NextFunction) {
+  const header = req.headers.authorization;
+  const token = header?.startsWith('Bearer ') ? header.slice(7).trim() : undefined;
+  if (!token) return res.status(401).json({ error: 'Unauthorized', code: 'NO_TOKEN' });
+  let claims: jose.JWTPayload;
+  try {
+    ({ payload: claims } = await jose.jwtVerify(token, servicesKeySet(), {
+      issuer: getIdentityConfig().servicesIssuer,
+      audience: PLATFORM_API_AUDIENCE,
+      algorithms: ['RS256'],
+      maxTokenAge: '15m',
+      requiredClaims: ['exp', 'iat'],
+    }));
+  } catch {
+    return invalidToken(res);
+  }
+  if (claims.token_use !== 'service') return invalidToken(res);
+  const clientId = String(claims.client_id ?? claims.sub ?? '');
+  if (!isRegisteredClient(clientId)) return invalidToken(res);
+  const scopes = typeof claims.scope === 'string' ? claims.scope.split(' ') : [];
+  req.service = { client_id: clientId, scopes };
+  next();
+}
+
+/** Per-route scope gate. Authenticates itself when no router-level authenticateService ran before it. */
 export function requireServiceToken(scope: string) {
   return async (req: Request, res: Response, next: NextFunction) => {
-    const header = req.headers.authorization;
-    const token = header?.startsWith('Bearer ') ? header.slice(7).trim() : undefined;
-    if (!token) return res.status(401).json({ error: 'Unauthorized', code: 'NO_TOKEN' });
-    let claims: jose.JWTPayload;
-    try {
-      ({ payload: claims } = await jose.jwtVerify(token, servicesKeySet(), {
-        issuer: getIdentityConfig().servicesIssuer,
-        audience: PLATFORM_API_AUDIENCE,
-        algorithms: ['RS256'],
-        maxTokenAge: '15m',
-        requiredClaims: ['exp', 'iat'],
-      }));
-    } catch {
-      return res.status(401).json({ error: 'Token invalid or expired', code: 'INVALID_TOKEN' });
-    }
-    if (claims.token_use !== 'service') {
-      return res.status(401).json({ error: 'Token invalid or expired', code: 'INVALID_TOKEN' });
-    }
-    const scopes = typeof claims.scope === 'string' ? claims.scope.split(' ') : [];
-    if (!scopes.includes(scope)) {
-      return res.status(403).json({ error: 'Insufficient scope', code: 'INSUFFICIENT_SCOPE' });
-    }
-    const clientId = String(claims.client_id ?? claims.sub ?? '');
-    if (!isRegisteredClient(clientId)) return res.status(401).json({ error: 'Token invalid or expired', code: 'INVALID_TOKEN' });
-    req.service = { client_id: String(claims.client_id ?? claims.sub ?? ''), scopes };
-    next();
+    const check = () => {
+      if (!req.service!.scopes.includes(scope)) return res.status(403).json({ error: 'Insufficient scope', code: 'INSUFFICIENT_SCOPE' });
+      next();
+    };
+    if (req.service) return check();
+    return authenticateService(req, res, () => check());
   };
 }
