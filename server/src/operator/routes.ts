@@ -98,6 +98,7 @@ async function orgSummaries(companies: any[]) {
     name: c.name,
     status: c.status ?? (c.is_active === false ? 'suspended' : 'active'),
     members_count: m.get(String(c._id)) ?? 0,
+    plan_key: c.plan ?? null,
     entitlements: ents.filter((e) => String(e.company_id) === String(c._id)).map((e) => ({ product_key: e.product_key, status: e.status, seats_limit: e.seats_limit ?? null })),
     last_activity: l.get(String(c._id)) ?? null,
     created_at: c.created_at,
@@ -126,7 +127,7 @@ async function orgDetail(id: string) {
   if (!company) throw new AppError('Organization not found', 404, 'NOT_FOUND');
   const [summary] = await orgSummaries([company]);
   const admin = await User.findOne({ company_id: company._id, role: ROLES.SUPER_ADMIN }).sort({ created_at: 1 }).select('email full_name lifecycle_state');
-  return { ...summary, plan: company.plan, first_admin: admin ? { email: admin.email, full_name: admin.full_name, lifecycle_state: admin.lifecycle_state } : null };
+  return { ...summary, first_admin: admin ? { email: admin.email, full_name: admin.full_name, lifecycle_state: admin.lifecycle_state } : null };
 }
 
 router.get('/orgs/:id', asyncHandler(async (req: Request, res: Response) => ok(res, await orgDetail(String(req.params.id)))));
@@ -181,7 +182,7 @@ router.post('/orgs', asyncHandler(async (req: Request, res: Response) => {
   const plan = await Plan.findOne({ key: input.plan_key, status: 'active' });
   if (!plan) throw new AppError('Plan not found or archived', 404, 'PLAN_NOT_FOUND');
 
-  const company = await Company.create({ name: input.name, slug, status: 'provisioning', is_active: false });
+  const company = await Company.create({ name: input.name, slug, status: 'provisioning', is_active: false, plan: plan.key });
   const rawToken = crypto.randomBytes(32).toString('hex');
   const passwordHash = await bcrypt.hash(crypto.randomBytes(24).toString('hex'), 10); // placeholder until invite acceptance
   try {
@@ -256,7 +257,7 @@ router.post('/orgs', asyncHandler(async (req: Request, res: Response) => {
     }
 
     const detail = await orgDetail(company._id.toString());
-    ok(res, { ...detail, invite_email_sent: emailSent, ...(isProd() ? {} : { invite_token: rawToken }) }, 201);
+    ok(res, { ...detail, invite_email_sent: emailSent, ...(!isProd() && process.env.EXPOSE_INVITE_TOKEN === 'true' ? { invite_token: rawToken } : {}) }, 201);
   } catch (err) {
     // The txn rolled back; undo the pre-txn company + seeded roles/policy so the slug is free for a clean retry.
     console.error('[operator] provisioning failed for', slug, err);
@@ -318,6 +319,7 @@ router.patch('/orgs/:id', asyncHandler(async (req: Request, res: Response) => {
   if (!plan) throw new AppError('Plan not found', 404, 'PLAN_NOT_FOUND');
   await runInTransaction(async (session) => {
     const orgId = company._id.toString();
+    await Company.updateOne({ _id: company._id }, { $set: { plan: plan.key } }, { session: session ?? undefined });
     for (const key of plan.products) {
       await OrganizationEntitlement.updateOne(
         { company_id: company._id, product_key: key },

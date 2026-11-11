@@ -204,6 +204,13 @@ async function main() {
     res = await me(tokens.access_token);
     const meBody = await res.json() as { data?: { user?: { _id?: string } } };
     check('GET /api/v1/auth/me with Bearer = 200', res.status === 200 && meBody.data?.user?._id === user._id.toString(), res.status);
+    {
+      // L3-9: allow-list projection, never the raw user document
+      const u = (meBody.data?.user ?? {}) as Record<string, unknown>;
+      check('GET /auth/me returns exactly _id, company_id, role, email, full_name, company_name', Object.keys(u).sort().join() === '_id,company_id,company_name,email,full_name,role', Object.keys(u));
+      check('GET /auth/me carries no secrets (password hash/history, MFA counters, risk score, tokens)', !Object.keys(u).some((k) => /pass|hash|mfa|risk|token|secret|otp|locked|refresh/i.test(k)), Object.keys(u));
+      check('GET /auth/me company_name is the member\'s company name and company_id matches', u.company_name === 'Smoke Co' && String(u.company_id) === company._id.toString(), { company_name: u.company_name, company_id: u.company_id });
+    }
     res = await fetch(`${ORIGIN}/api/v1/auth/me`);
     check('GET /auth/me without token = 401 NO_TOKEN', res.status === 401 && (await res.json() as { code: string }).code === 'NO_TOKEN', res.status);
 
@@ -245,6 +252,7 @@ async function main() {
     const lo = await res.json() as { data?: { end_session_url?: string } };
     const endUrl = lo.data?.end_session_url || '';
     check('POST /auth/logout = 200 with end_session_url', res.status === 200 && endUrl.startsWith(`${TENANT}/oauth/end_session?client_id=${CLIENT}&post_logout_redirect_uri=`), `${res.status} ${endUrl}`);
+    check('L3-9 end_session_url redirects back to /login?signed_out=1', new URL(endUrl).searchParams.get('post_logout_redirect_uri') === `${ORIGIN}/login?signed_out=1`, endUrl);
     const revoked = await Session.findById(sid);
     check('Session revoked (user_logout)', revoked?.revoked_at && revoked.revoked_reason === 'user_logout', revoked?.revoked_reason);
 
@@ -292,16 +300,18 @@ async function main() {
       grant_type: 'authorization_code', code: code2 || '', redirect_uri: REDIRECT, client_id: CLIENT, code_verifier: verifier, resource: RESOURCE,
     }))).json() as Record<string, string>;
     const sid2 = t2.access_token ? String(jose.decodeJwt(t2.access_token).sid) : '';
-    res = await jarFetch(`${TENANT}/oauth/end_session?client_id=${CLIENT}&post_logout_redirect_uri=${encodeURIComponent(`${ORIGIN}/login`)}`);
+    res = await jarFetch(`${TENANT}/oauth/end_session?client_id=${CLIENT}&post_logout_redirect_uri=${encodeURIComponent(`${ORIGIN}/login?signed_out=1`)}`);
     const logoutHtml = await res.text();
     const action = /<form id="op.logoutForm" method="post" action="([^"]+)"/.exec(logoutHtml)?.[1];
     const xsrf = /name="xsrf" value="([^"]+)"/.exec(logoutHtml)?.[1];
     check('end_session renders auto-submitting logout form', res.status === 200 && action && xsrf && /name="logout" value="yes"/.test(logoutHtml) && /<script nonce=/.test(logoutHtml), res.status);
     res = await jarFetch(new URL(action || '/', ORIGIN).toString(), form({ xsrf: xsrf || '', logout: 'yes' }));
-    check('logout confirm redirects to post_logout_redirect_uri', res.status === 303 && (res.headers.get('location') || '').startsWith(`${ORIGIN}/login`), `${res.status} ${res.headers.get('location')}`);
+    check('logout confirm redirects to the registered post_logout_redirect_uri (/login?signed_out=1)', res.status === 303 && (res.headers.get('location') || '').startsWith(`${ORIGIN}/login?signed_out=1`), `${res.status} ${res.headers.get('location')}`);
     await new Promise((r) => setTimeout(r, 200)); // revoke runs from the end_session.success event
     const s2 = await Session.findById(sid2);
     check('end_session revokes the Session (reason end_session)', sid2 && s2?.revoked_at && s2.revoked_reason === 'end_session', s2?.revoked_reason);
+    res = await jarFetch(`${TENANT}/oauth/end_session?client_id=${CLIENT}&post_logout_redirect_uri=${encodeURIComponent(`${ORIGIN}/login`)}`);
+    check('L3-9 the plain /login post_logout_redirect_uri stays registered (no error page)', res.status === 200 || (res.status === 303 && (res.headers.get('location') || '').startsWith(`${ORIGIN}/login`)), `${res.status} ${res.headers.get('location')}`);
     res = await me(t2.access_token || '');
     check('AT from logged-out session rejected (SESSION_REVOKED)', res.status === 401 && (await res.json() as { code?: string }).code === 'SESSION_REVOKED', res.status);
   } finally {

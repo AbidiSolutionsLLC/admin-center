@@ -58,6 +58,7 @@ async function main() {
     IDENTITY_SERVICES_KEY: JSON.stringify(servicesPrivateJwk),
     IDENTITY_OPERATOR_KEY: JSON.stringify({ ...(await gen()), kid: 'operator-smoke' }),
     SERVICES_PRODUCTS_BACKEND_JWKS: JSON.stringify({ keys: [backendPublic] }),
+    EXPOSE_INVITE_TOKEN: 'true',
     SERVICES_ADMIN_BACKEND_JWKS: JSON.stringify({ keys: [adminBackendPublic] }),
     ADMIN_BACKEND_CLIENT_KEY: adminBackendPem,
   });
@@ -601,11 +602,26 @@ async function main() {
       check('E10 allow-list restored: operator API passes again', (await status()) === 200);
     }
 
+    {
+      // L3-9: PATCH plan_key persists Company.plan (same txn); list + detail return plan_key
+      const planBefore = (await Company.findById(orgId))?.plan;
+      const planBad = await op(`/orgs/${orgId}`, 'PATCH', { plan_key: 'no-such-plan' });
+      check('L3-9 provisioning stored the plan on the Company (professional)', planBefore === 'professional', planBefore);
+      check('L3-9 PATCH with an unknown plan = 404 and leaves Company.plan untouched', planBad.status === 404 && (await Company.findById(orgId))?.plan === 'professional', planBad.status);
+    }
+
     // ── plan assignment activates products ───────────────────────────────────────────────
     res = await op(`/orgs/${orgId}`, 'PATCH', { plan_key: 'enterprise' });
     const enterprise = await Plan.findOne({ key: 'enterprise' });
     const activeKeys = (await OrganizationEntitlement.find({ company_id: orgId, status: 'active' })).map((e) => e.product_key);
     check('E10 PATCH /orgs/:id {plan_key} activates plan products (suspended ones stay suspended)', res.status === 200 && !!enterprise && enterprise.products.includes('desk') && activeKeys.includes('desk') && !activeKeys.includes('projects'), { status: res.status, activeKeys });
+
+    {
+      const detailAfter = await (await op(`/orgs/${orgId}`)).json() as { data?: Record<string, unknown> };
+      const listAfter = await (await op('/orgs?limit=100')).json() as { data?: { id: string; plan_key?: string | null }[] };
+      check('L3-9 PATCH plan_key persists Company.plan and the detail returns plan_key (legacy plan field gone)', (await Company.findById(orgId))?.plan === 'enterprise' && detailAfter.data?.plan_key === 'enterprise' && !('plan' in (detailAfter.data || {})), detailAfter.data?.plan_key);
+      check('L3-9 org list items return plan_key', listAfter.data?.find((o) => o.id === String(orgId))?.plan_key === 'enterprise', listAfter.data?.find((o) => o.id === String(orgId)));
+    }
 
     // ── E4: platform read API, ack hook, dispatcher ───────────────────────────────────────
     {
@@ -1267,6 +1283,37 @@ async function main() {
       const leaked = blocked.filter((a) => !isPrivateAddress(a));
       check('E4d ssrfGuard rejects NAT64/6to4/Teredo/IPv4-compatible/discard/benchmark/doc ranges', leaked.length === 0 && !isPrivateAddress('8.8.8.8') && !isPrivateAddress('2606:4700:4700::1111'), leaked);
     } catch (e) { check('E4d section did not crash', false, (e as Error).stack?.split(String.fromCharCode(10)).slice(0, 4).join(' | ')); }
+
+    // ── L3-9: invite_token is exposed only outside production AND with EXPOSE_INVITE_TOKEN=true ───────────────
+    {
+      const prevExpose = process.env.EXPOSE_INVITE_TOKEN;
+      const prevAllow = process.env.OPERATOR_IP_ALLOWLIST;
+      const prevNodeEnv = process.env.NODE_ENV;
+      const mkOrg = async (slug: string) => {
+        const rr = await op('/orgs', 'POST', { name: `Invite ${slug}`, slug, plan_key: 'starter', first_admin: { email: `admin@${slug}.test`, full_name: 'Inv Admin' } });
+        return { status: rr.status, data: ((await rr.json()) as { data?: Record<string, unknown> }).data ?? {} };
+      };
+      try {
+        process.env.EXPOSE_INVITE_TOKEN = 'true';
+        const on = await mkOrg('invtok-on');
+        check('L3-9 invite_token present when not production and EXPOSE_INVITE_TOKEN=true', on.status === 201 && typeof on.data.invite_token === 'string' && String(on.data.invite_token).length >= 32, on.status);
+        process.env.EXPOSE_INVITE_TOKEN = 'false';
+        const off = await mkOrg('invtok-off');
+        check('L3-9 invite_token absent when EXPOSE_INVITE_TOKEN=false', off.status === 201 && !('invite_token' in off.data), off.status);
+        delete process.env.EXPOSE_INVITE_TOKEN;
+        const unset = await mkOrg('invtok-unset');
+        check('L3-9 invite_token absent when EXPOSE_INVITE_TOKEN is unset', unset.status === 201 && !('invite_token' in unset.data), unset.status);
+        process.env.EXPOSE_INVITE_TOKEN = 'true';
+        process.env.NODE_ENV = 'production';
+        process.env.OPERATOR_IP_ALLOWLIST = '127.0.0.1'; // production fails closed on an empty list (L3-5)
+        const prod = await mkOrg('invtok-prod');
+        check('L3-9 invite_token absent in production even with EXPOSE_INVITE_TOKEN=true', prod.status === 201 && !('invite_token' in prod.data), prod.status);
+      } finally {
+        process.env.NODE_ENV = prevNodeEnv;
+        if (prevAllow === undefined) delete process.env.OPERATOR_IP_ALLOWLIST; else process.env.OPERATOR_IP_ALLOWLIST = prevAllow;
+        if (prevExpose === undefined) delete process.env.EXPOSE_INVITE_TOKEN; else process.env.EXPOSE_INVITE_TOKEN = prevExpose;
+      }
+    }
 
     // ── audit ─────────────────────────────────────────────────────────────────────────────
     const actions = (await OperatorAuditEvent.find()).map((e) => e.action);
