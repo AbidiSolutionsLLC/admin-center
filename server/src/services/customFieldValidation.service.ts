@@ -1,7 +1,7 @@
 // server/src/services/customFieldValidation.service.ts
-import { CustomField, FieldType } from '../models/CustomField.model';
+import { CustomField, FieldType, TargetObject as CustomFieldTarget } from '../models/CustomField.model';
 import { CustomFieldVersion } from '../models/CustomFieldVersion.model';
-import { ProfileLayout } from '../models/ProfileLayout.model';
+import { ProfileLayout, IProfileLayout } from '../models/ProfileLayout.model';
 import { FieldPermission, STANDARD_FIELDS, FieldVisibility } from '../models/FieldPermission.model';
 import { UserRole } from '../models/UserRole.model';
 import { AppError } from '../utils/AppError';
@@ -19,7 +19,7 @@ export function isAdminRole(roleName: string | undefined): boolean {
 export async function getActiveCustomFields(companyId: string | Types.ObjectId, targetObject: string) {
   return CustomField.find({
     company_id: companyId,
-    target_object: targetObject,
+    target_object: targetObject as CustomFieldTarget,
     is_active: true,
   })
     .sort({ is_system_field: -1, display_order: 1, created_at: 1 })
@@ -372,7 +372,7 @@ export async function resolveEffectiveCustomFields(
 ): Promise<{ fields: Array<Record<string, unknown> & { can_view: boolean; can_edit: boolean }>; layout_name: string | null; layout_id: string | null }> {
   const [fields, layouts] = await Promise.all([
     getActiveCustomFields(companyId, targetObject),
-    ProfileLayout.find({ company_id: companyId, target_object: targetObject, is_active: true }).lean(),
+    ProfileLayout.find({ company_id: companyId, target_object: targetObject as IProfileLayout['target_object'], is_active: true }).lean(),
   ]);
 
   const { viewerRoleIds, viewerHasAdminAccess } = await resolveViewerAccess(companyId, viewerUserId);

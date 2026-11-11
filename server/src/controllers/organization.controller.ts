@@ -3,7 +3,7 @@ import { Request, Response } from 'express';
 import { z } from 'zod';
 import { Types } from 'mongoose';
 import { asyncHandler } from '../utils/asyncHandler';
-import { Department } from '../models/Department.model';
+import { Department, IDepartment } from '../models/Department.model';
 import { User } from '../models/User.model';
 import { Team } from '../models/Team.model';
 import { TeamMember } from '../models/TeamMember.model';
@@ -26,7 +26,7 @@ interface DepartmentFilter {
   is_active?: boolean;
   slug?: string;
   _id?: string | Types.ObjectId | { $ne: string | Types.ObjectId };
-  type?: string | { $in: string[] };
+  type?: IDepartment['type'] | { $in: Array<IDepartment['type']> };
   parent_id?: string | Types.ObjectId | null;
 }
 

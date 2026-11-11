@@ -12,7 +12,7 @@ import { UserRole } from '../models/UserRole.model';
 import { InviteToken } from '../models/InviteToken.model';
 import { AuditEvent } from '../models/AuditEvent.model';
 import { Plan } from '../models/Plan.model';
-import { PRODUCT_KEYS } from '../models/ProductRole.model';
+import { PRODUCT_KEYS, ProductKey } from '../models/ProductRole.model';
 import { OrganizationEntitlement } from '../models/OrganizationEntitlement.model';
 import { OperatorAccount } from '../models/OperatorAccount.model';
 import { OperatorAuditEvent } from '../models/OperatorAuditEvent.model';
@@ -35,7 +35,7 @@ import { asyncHandler } from '../utils/asyncHandler';
 import { requireOperator } from './middleware';
 
 const router = Router();
-const productKey = z.enum(PRODUCT_KEYS as [string, ...string[]]);
+const productKey = z.enum(PRODUCT_KEYS as [ProductKey, ...ProductKey[]]);
 const ok = (res: Response, data: unknown, status = 200, meta?: unknown) => res.status(status).json({ success: true, data, ...(meta ? { meta } : {}) });
 const oid = (id: string, what = 'id') => {
   if (!Types.ObjectId.isValid(id)) throw new AppError(`Invalid ${what}`, 400, 'VALIDATION_ERROR');
