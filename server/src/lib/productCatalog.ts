@@ -22,6 +22,7 @@ export const PRODUCT_DEFS: ProductDef[] = [
       { key: 'project_administrator', name: 'Project Administrator', rank: 30 },
       { key: 'project_manager', name: 'Project Manager', rank: 20 },
       { key: 'team_member', name: 'Team Member', rank: 10, is_default: true },
+      { key: 'read_only', name: 'Read Only', rank: 5 },
     ],
   },
   {
@@ -29,6 +30,7 @@ export const PRODUCT_DEFS: ProductDef[] = [
     roles: [
       { key: 'sign_administrator', name: 'Sign Administrator', rank: 20 },
       { key: 'sign_user', name: 'Sign User', rank: 10, is_default: true },
+      { key: 'read_only', name: 'Read Only', rank: 5 },
     ],
   },
   {
@@ -38,6 +40,7 @@ export const PRODUCT_DEFS: ProductDef[] = [
       { key: 'support_lead', name: 'Support Lead', rank: 30 },
       { key: 'technician', name: 'Technician', rank: 20 },
       { key: 'requester', name: 'Requester', rank: 10, is_default: true },
+      { key: 'read_only', name: 'Read Only', rank: 5 },
     ],
   },
 ];
