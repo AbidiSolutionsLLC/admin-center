@@ -16,6 +16,7 @@ export const OPERATOR_SESSION_IDLE_S = 30 * 60; // 09 §7
 export const ADMIN_SPA_CLIENT_ID = 'karbexa-admin-spa';
 export const PRODUCTS_SPA_CLIENT_ID = 'karbexa-products-spa';
 export const PRODUCTS_BACKEND_CLIENT_ID = 'karbexa-products-backend';
+export const ADMIN_BACKEND_CLIENT_ID = 'karbexa-admin-backend';
 
 /** 03 §4.1 — membership lifecycle states that may sign in. */
 export const ACCESS_STATES = ['onboarding', 'active', 'probation', 'on_leave'] as const;
