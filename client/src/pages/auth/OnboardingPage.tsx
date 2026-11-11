@@ -90,7 +90,7 @@ export default function OnboardingPage() {
           <div className="mx-auto w-10 h-10 rounded-xl bg-primary-light flex items-center justify-center mb-2">
             <CheckCircle2 className="w-5 h-5 text-primary" />
           </div>
-          <CardTitle className="text-2xl font-semibold tracking-tight">Welcome to Sowaye</CardTitle>
+          <CardTitle className="text-2xl font-semibold tracking-tight">Welcome to Karbexa Admin</CardTitle>
           <CardDescription className="text-ink-muted">
             Let's get your account ready by setting up your password.
           </CardDescription>

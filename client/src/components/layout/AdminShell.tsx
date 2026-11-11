@@ -39,7 +39,7 @@ export const AdminShell = ({ children }: { children?: React.ReactNode }) => {
           >
             <Menu className="w-6 h-6" />
           </button>
-          <span className="ml-3 font-semibold text-slate-200">Sowaye</span>
+          <span className="ml-3 font-semibold text-slate-200">Karbexa Admin</span>
         </header>
 
         <TopBar className="hidden lg:flex" />

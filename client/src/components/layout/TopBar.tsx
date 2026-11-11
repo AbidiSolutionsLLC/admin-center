@@ -5,6 +5,7 @@ import { useInAppNotifications, useUnreadNotificationCount, useMarkAsRead, useMa
 import { formatDate } from '@/utils/formatDate';
 import { useLocation } from 'react-router-dom';
 import { ROUTES } from '@/constants/routes';
+import { AppLauncher } from './AppLauncher';
 
 interface TopBarProps {
   className?: string;
@@ -94,6 +95,9 @@ export const TopBar = ({ className }: TopBarProps) => {
             }}
           />
         </div>
+
+        {/* ── App Launcher ── */}
+        <AppLauncher />
 
         {/* ── Notification Bell ── */}
         <div className="relative" ref={dropdownRef}>

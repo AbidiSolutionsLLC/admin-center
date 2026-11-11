@@ -1,17 +1,16 @@
 // src/pages/people/UserDetailPage.tsx
-import { useParams, useNavigate } from 'react-router-dom';
+import { useParams, useNavigate, useSearchParams } from 'react-router-dom';
 import { UserHistoryPanel } from '@/features/people/components/UserHistoryPanel';
 import { TableSkeleton } from '@/components/ui/TableSkeleton';
-import { History, ArrowLeft, Users, Edit2, Mail, RefreshCw, Monitor, PlaneTakeoff, Clock, CalendarDays, FileText, Briefcase, MapPin, ShieldAlert, Lock, Unlock, ArrowRight, WifiOff } from 'lucide-react';
+import { History, ArrowLeft, Users, Edit2, Mail, RefreshCw, Monitor, PlaneTakeoff, Clock, CalendarDays, FileText, Briefcase, MapPin, ShieldAlert, Lock, Unlock, ArrowRight, WifiOff, ShieldCheck } from 'lucide-react';
 import { useUserDetail } from '@/features/people/hooks/useUserDetail';
 import { useUnlockUser } from '@/features/people/hooks/useUnlockUser';
 import { useResendInvite } from '@/features/people/hooks/useResendInvite';
 import { useCallback, useState } from 'react';
 import { ReportingLinesPanel } from '@/features/people/components/ReportingLinesPanel';
 import { EffectivePermissionsPanel } from '@/features/people/components/EffectivePermissionsPanel';
-import { EffectiveAccessPanel } from '@/features/people/components/EffectiveAccessPanel';
-import { UserAppAccessPanel } from '@/features/people/components/UserAppAccessPanel';
 import { UserDelegatesPanel } from '@/features/people/components/UserDelegatesPanel';
+import { UserProductAccessTab } from '@/features/people/components/UserProductAccessTab';
 import { formatTimeInTimezone, getTimezoneOffset } from '@/lib/timezone';
 import { useUserEffectiveSettings } from '@/features/locations/hooks/useUserEffectiveSettings';
 
@@ -39,10 +38,17 @@ import { cn } from '@/utils/cn';
 export default function UserDetailPage() {
   const { id } = useParams<{ id: string }>();
   const navigate = useNavigate();
+  const [searchParams, setSearchParams] = useSearchParams();
   const { data: user, isLoading, isError, refetch } = useUserDetail(id!);
   const { data: effectiveSettings } = useUserEffectiveSettings(id!);
   const resendInvite = useResendInvite();
   const unlockUser = useUnlockUser(id!);
+
+  type DetailTab = 'profile' | 'org_placement' | 'product_access' | 'roles' | 'activity';
+  const activeTab = (searchParams.get('tab') as DetailTab) || 'profile';
+  const setActiveTab = (tab: DetailTab) => {
+    setSearchParams({ tab });
+  };
 
   const [isEditModalOpen, setIsEditModalOpen] = useState(false);
   const [isLocationModalOpen, setIsLocationModalOpen] = useState(false);
@@ -207,152 +213,192 @@ export default function UserDetailPage() {
         </div>
       </div>
 
-      {/* ── User Info Cards ── */}
-      <div className="grid grid-cols-4 gap-4">
-        <InfoCard label="Department" value={user.department?.name || 'Not assigned'} />
-        <InfoCard label="Employment Type" value={formatEmploymentType(user.employment_type)} />
-        <div className="bg-white rounded-lg border border-line shadow-card p-4 relative">
-          <p className="text-xs font-medium text-ink-secondary mb-1">Location</p>
-          <p className="text-sm font-semibold text-ink">
-            {user.location ? user.location.name : 'Not assigned'}
-          </p>
-          {user.location?.timezone && (
-            <p className="text-xs font-mono text-ink-muted mt-0.5">
-              {user.location.timezone} ({getTimezoneOffset(user.location.timezone)})
-            </p>
-          )}
-          <button
-            onClick={() => setIsLocationModalOpen(true)}
-            className="absolute top-2 right-2 h-7 w-7 flex items-center justify-center rounded-md text-ink-muted hover:text-ink hover:bg-surface-alt transition-colors"
-            title="Change Location"
-          >
-            <MapPin className="w-3.5 h-3.5" />
-          </button>
-        </div>
-        <InfoCard
-          label="Hire Date"
-          value={user.hire_date ? formatDate(user.hire_date) : 'Not set'}
-        />
+      {/* ── Navigation Tabs (08 §2 IA) ── */}
+      <div className="flex items-center gap-2 border-b border-line pb-0">
+        {[
+          { id: 'profile', label: 'Profile', icon: Briefcase },
+          { id: 'org_placement', label: 'Org placement', icon: Users },
+          { id: 'product_access', label: 'Product access', icon: Monitor },
+          { id: 'roles', label: 'Roles', icon: ShieldCheck },
+          { id: 'activity', label: 'Activity', icon: History },
+        ].map((tab) => {
+          const isActive = activeTab === tab.id;
+          const Icon = tab.icon;
+          return (
+            <button
+              key={tab.id}
+              onClick={() => setActiveTab(tab.id as DetailTab)}
+              className={cn(
+                'flex items-center gap-2 px-4 py-2.5 text-sm font-medium border-b-2 transition-all -mb-[1px]',
+                isActive
+                  ? 'border-primary text-primary font-semibold'
+                  : 'border-transparent text-ink-secondary hover:text-ink hover:border-line'
+              )}
+            >
+              <Icon className="w-4 h-4" />
+              {tab.label}
+              {tab.id === 'product_access' && (
+                <span className="w-1.5 h-1.5 rounded-full bg-primary" />
+              )}
+            </button>
+          );
+        })}
       </div>
 
-      {/* ── Timezone Info ── */}
-      {user.location?.timezone && (
-        <div className="flex items-center gap-3 px-4 py-3 bg-surface-alt border border-line rounded-lg">
-          <Clock className="w-4 h-4 text-ink-secondary" />
-          <div className="flex items-center gap-2 text-sm">
-            <span className="text-ink-secondary">Local time at location:</span>
-            <span className="font-mono font-medium text-ink">
-              {formatTimeInTimezone(new Date(), user.location.timezone, 'datetime')}
-            </span>
+      {/* ── Tab Content: Profile ── */}
+      {activeTab === 'profile' && (
+        <div className="space-y-5">
+          {/* User Info Cards */}
+          <div className="grid grid-cols-4 gap-4">
+            <InfoCard label="Department" value={user.department?.name || 'Not assigned'} />
+            <InfoCard label="Employment Type" value={formatEmploymentType(user.employment_type)} />
+            <div className="bg-white rounded-lg border border-line shadow-card p-4 relative">
+              <p className="text-xs font-medium text-ink-secondary mb-1">Location</p>
+              <p className="text-sm font-semibold text-ink">
+                {user.location ? user.location.name : 'Not assigned'}
+              </p>
+              {user.location?.timezone && (
+                <p className="text-xs font-mono text-ink-muted mt-0.5">
+                  {user.location.timezone} ({getTimezoneOffset(user.location.timezone)})
+                </p>
+              )}
+              <button
+                onClick={() => setIsLocationModalOpen(true)}
+                className="absolute top-2 right-2 h-7 w-7 flex items-center justify-center rounded-md text-ink-muted hover:text-ink hover:bg-surface-alt transition-colors"
+                title="Change Location"
+              >
+                <MapPin className="w-3.5 h-3.5" />
+              </button>
+            </div>
+            <InfoCard
+              label="Hire Date"
+              value={user.hire_date ? formatDate(user.hire_date) : 'Not set'}
+            />
+          </div>
+
+          {/* Timezone Info */}
+          {user.location?.timezone && (
+            <div className="flex items-center gap-3 px-4 py-3 bg-surface-alt border border-line rounded-lg">
+              <Clock className="w-4 h-4 text-ink-secondary" />
+              <div className="flex items-center gap-2 text-sm">
+                <span className="text-ink-secondary">Local time at location:</span>
+                <span className="font-mono font-medium text-ink">
+                  {formatTimeInTimezone(new Date(), user.location.timezone, 'datetime')}
+                </span>
+              </div>
+            </div>
+          )}
+
+          {/* Effective Settings (Location Inheritance) */}
+          <div className="rounded-xl p-5" style={{ background: 'rgba(255,255,255,0.03)', border: '1px solid rgba(255,255,255,0.07)' }}>
+            <div className="flex items-center gap-2 mb-4">
+              <Briefcase className="w-4 h-4" style={{ color: '#f5b02a' }} />
+              <h2 className="text-sm font-bold" style={{ color: 'var(--text-main)' }}>Effective Settings (Location Inheritance)</h2>
+            </div>
+            <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+              <div>
+                <div className="flex items-center gap-1.5 mb-1">
+                  <Clock className="w-3 h-3" style={{ color: '#60a5fa' }} />
+                  <span className="text-[10px] font-semibold uppercase tracking-wider" style={{ color: '#94a3b8' }}>Timezone</span>
+                  {effectiveSettings?.timezone && <ArrowRight className="w-2.5 h-2.5" style={{ color: '#60a5fa' }} />}
+                </div>
+                <p className="text-sm font-semibold font-mono" style={{ color: 'var(--text-main)' }}>{effectiveSettings?.timezone || 'Company default'}</p>
+              </div>
+              <div>
+                <div className="flex items-center gap-1.5 mb-1">
+                  <CalendarDays className="w-3 h-3" style={{ color: '#34d399' }} />
+                  <span className="text-[10px] font-semibold uppercase tracking-wider" style={{ color: '#94a3b8' }}>Holiday Calendar</span>
+                  {effectiveSettings?.holiday_calendar && <ArrowRight className="w-2.5 h-2.5" style={{ color: '#34d399' }} />}
+                </div>
+                <p className="text-sm font-semibold" style={{ color: 'var(--text-main)' }}>{effectiveSettings?.holiday_calendar?.name || 'None assigned'}</p>
+              </div>
+              <div>
+                <div className="flex items-center gap-1.5 mb-1">
+                  <Clock className="w-3 h-3" style={{ color: '#fbbf24' }} />
+                  <span className="text-[10px] font-semibold uppercase tracking-wider" style={{ color: '#94a3b8' }}>Work Schedule</span>
+                  {effectiveSettings?.work_schedule && <ArrowRight className="w-2.5 h-2.5" style={{ color: '#fbbf24' }} />}
+                </div>
+                <p className="text-sm font-semibold" style={{ color: 'var(--text-main)' }}>{effectiveSettings?.work_schedule?.name || 'None assigned'}</p>
+                {effectiveSettings?.work_schedule?.working_hours ? (
+                  <p className="text-[10px]" style={{ color: '#94a3b8' }}>{effectiveSettings.work_schedule.working_hours.start} – {effectiveSettings.work_schedule.working_hours.end}</p>
+                ) : (
+                  <p className="text-[10px]" style={{ color: '#94a3b8' }}>No hours configured</p>
+                )}
+              </div>
+              <div>
+                <div className="flex items-center gap-1.5 mb-1">
+                  <FileText className="w-3 h-3" style={{ color: '#c084fc' }} />
+                  <span className="text-[10px] font-semibold uppercase tracking-wider" style={{ color: '#94a3b8' }}>Resolved Policies</span>
+                  {effectiveSettings?.policies && effectiveSettings.policies.length > 0 && <ArrowRight className="w-2.5 h-2.5" style={{ color: '#c084fc' }} />}
+                </div>
+                <p className="text-sm font-semibold" style={{ color: 'var(--text-main)' }}>{effectiveSettings?.policies?.length ?? 0} polic{(effectiveSettings?.policies?.length ?? 0) !== 1 ? 'ies' : 'y'}</p>
+                {effectiveSettings?.policies && effectiveSettings.policies.length > 0 && (
+                  <div className="mt-1 space-y-0.5">
+                    {effectiveSettings.policies.slice(0, 3).map((p: any) => (
+                      <p key={p.policy_version_id} className="text-[10px]" style={{ color: '#94a3b8' }}>
+                        {p.title}
+                        <span className="ml-1 opacity-60">({p.source})</span>
+                      </p>
+                    ))}
+                    {effectiveSettings.policies.length > 3 && (
+                      <p className="text-[10px]" style={{ color: 'rgba(148,163,184,0.5)' }}>+{effectiveSettings.policies.length - 3} more</p>
+                    )}
+                  </div>
+                )}
+              </div>
+            </div>
+            {typeof navigator !== 'undefined' && !navigator.onLine && (
+              <div className="mt-3 flex items-center gap-1.5 text-[10px]" style={{ color: '#f59e0b' }}>
+                <WifiOff className="w-3 h-3" />
+                <span>Some settings may be stale — you are offline.</span>
+              </div>
+            )}
+          </div>
+
+          {/* Delegates Panel */}
+          <div className="pt-2">
+            <div className="flex items-center gap-2 mb-2">
+              <PlaneTakeoff className="w-5 h-5 text-ink-secondary" />
+              <h2 className="text-base font-semibold text-ink">Approval Delegates</h2>
+            </div>
+            <UserDelegatesPanel userId={user._id} />
           </div>
         </div>
       )}
 
-      {/* ── Effective Settings (Location Inheritance) ── */}
-      <div className="rounded-xl p-5" style={{ background: 'rgba(255,255,255,0.03)', border: '1px solid rgba(255,255,255,0.07)' }}>
-        <div className="flex items-center gap-2 mb-4">
-          <Briefcase className="w-4 h-4" style={{ color: '#f5b02a' }} />
-          <h2 className="text-sm font-bold" style={{ color: 'var(--text-main)' }}>Effective Settings (Location Inheritance)</h2>
+      {/* ── Tab Content: Org placement ── */}
+      {activeTab === 'org_placement' && (
+        <div className="space-y-4">
+          <div className="flex items-center gap-2 mb-2">
+            <Users className="w-5 h-5 text-ink-secondary" />
+            <h2 className="text-base font-semibold text-ink">Reporting Structure</h2>
+          </div>
+          <ReportingLinesPanel userId={user._id} />
         </div>
-        <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-          <div>
-            <div className="flex items-center gap-1.5 mb-1">
-              <Clock className="w-3 h-3" style={{ color: '#60a5fa' }} />
-              <span className="text-[10px] font-semibold uppercase tracking-wider" style={{ color: '#94a3b8' }}>Timezone</span>
-              {effectiveSettings?.timezone && <ArrowRight className="w-2.5 h-2.5" style={{ color: '#60a5fa' }} />}
-            </div>
-            <p className="text-sm font-semibold font-mono" style={{ color: 'var(--text-main)' }}>{effectiveSettings?.timezone || 'Company default'}</p>
-          </div>
-          <div>
-            <div className="flex items-center gap-1.5 mb-1">
-              <CalendarDays className="w-3 h-3" style={{ color: '#34d399' }} />
-              <span className="text-[10px] font-semibold uppercase tracking-wider" style={{ color: '#94a3b8' }}>Holiday Calendar</span>
-              {effectiveSettings?.holiday_calendar && <ArrowRight className="w-2.5 h-2.5" style={{ color: '#34d399' }} />}
-            </div>
-            <p className="text-sm font-semibold" style={{ color: 'var(--text-main)' }}>{effectiveSettings?.holiday_calendar?.name || 'None assigned'}</p>
-          </div>
-          <div>
-            <div className="flex items-center gap-1.5 mb-1">
-              <Clock className="w-3 h-3" style={{ color: '#fbbf24' }} />
-              <span className="text-[10px] font-semibold uppercase tracking-wider" style={{ color: '#94a3b8' }}>Work Schedule</span>
-              {effectiveSettings?.work_schedule && <ArrowRight className="w-2.5 h-2.5" style={{ color: '#fbbf24' }} />}
-            </div>
-            <p className="text-sm font-semibold" style={{ color: 'var(--text-main)' }}>{effectiveSettings?.work_schedule?.name || 'None assigned'}</p>
-            {effectiveSettings?.work_schedule?.working_hours ? (
-              <p className="text-[10px]" style={{ color: '#94a3b8' }}>{effectiveSettings.work_schedule.working_hours.start} – {effectiveSettings.work_schedule.working_hours.end}</p>
-            ) : (
-              <p className="text-[10px]" style={{ color: '#94a3b8' }}>No hours configured</p>
-            )}
-          </div>
-          <div>
-            <div className="flex items-center gap-1.5 mb-1">
-              <FileText className="w-3 h-3" style={{ color: '#c084fc' }} />
-              <span className="text-[10px] font-semibold uppercase tracking-wider" style={{ color: '#94a3b8' }}>Resolved Policies</span>
-              {effectiveSettings?.policies && effectiveSettings.policies.length > 0 && <ArrowRight className="w-2.5 h-2.5" style={{ color: '#c084fc' }} />}
-            </div>
-            <p className="text-sm font-semibold" style={{ color: 'var(--text-main)' }}>{effectiveSettings?.policies?.length ?? 0} polic{(effectiveSettings?.policies?.length ?? 0) !== 1 ? 'ies' : 'y'}</p>
-            {effectiveSettings?.policies && effectiveSettings.policies.length > 0 && (
-              <div className="mt-1 space-y-0.5">
-                {effectiveSettings.policies.slice(0, 3).map((p: any) => (
-                  <p key={p.policy_version_id} className="text-[10px]" style={{ color: '#94a3b8' }}>
-                    {p.title}
-                    <span className="ml-1 opacity-60">({p.source})</span>
-                  </p>
-                ))}
-                {effectiveSettings.policies.length > 3 && (
-                  <p className="text-[10px]" style={{ color: 'rgba(148,163,184,0.5)' }}>+{effectiveSettings.policies.length - 3} more</p>
-                )}
-              </div>
-            )}
-          </div>
+      )}
+
+      {/* ── Tab Content: Product access (08 §3.2) ── */}
+      {activeTab === 'product_access' && (
+        <UserProductAccessTab userId={user._id} userName={user.full_name} />
+      )}
+
+      {/* ── Tab Content: Roles ── */}
+      {activeTab === 'roles' && (
+        <div className="space-y-4">
+          <EffectivePermissionsPanel userId={user._id} />
         </div>
-        {typeof navigator !== 'undefined' && !navigator.onLine && (
-          <div className="mt-3 flex items-center gap-1.5 text-[10px]" style={{ color: '#f59e0b' }}>
-            <WifiOff className="w-3 h-3" />
-            <span>Some settings may be stale — you are offline.</span>
+      )}
+
+      {/* ── Tab Content: Activity ── */}
+      {activeTab === 'activity' && (
+        <div className="space-y-4">
+          <div className="flex items-center gap-2 mb-2">
+            <History className="w-5 h-5 text-ink-secondary" />
+            <h2 className="text-base font-semibold text-ink">User History & Audit Trail</h2>
           </div>
-        )}
-      </div>
-
-      {/* ── Reporting Lines Panel ── */}
-      <div className="flex items-center gap-2 mb-2">
-        <Users className="w-5 h-5 text-ink-secondary" />
-        <h2 className="text-base font-semibold text-ink">Reporting Structure</h2>
-      </div>
-      <ReportingLinesPanel userId={user._id} />
-
-      {/* ── Effective Permissions Panel ── */}
-      <div className="pt-4">
-        <EffectivePermissionsPanel userId={user._id} />
-      </div>
-
-      {/* ── Effective Product Access ── */}
-      <div className="flex items-center gap-2 mb-2 pt-4">
-        <Monitor className="w-5 h-5 text-ink-secondary" />
-        <h2 className="text-base font-semibold text-ink">Effective Access</h2>
-      </div>
-      <EffectiveAccessPanel userId={user._id} />
-
-      {/* ── App Access Panel ── */}
-      <div className="flex items-center gap-2 mb-2 pt-4">
-        <Monitor className="w-5 h-5 text-ink-secondary" />
-        <h2 className="text-base font-semibold text-ink">App Access History</h2>
-      </div>
-      <UserAppAccessPanel userId={user._id} />
-
-      {/* ── Delegates Panel ── */}
-      <div className="flex items-center gap-2 mb-2 pt-4">
-        <PlaneTakeoff className="w-5 h-5 text-ink-secondary" />
-        <h2 className="text-base font-semibold text-ink">Approval Delegates</h2>
-      </div>
-      <UserDelegatesPanel userId={user._id} />
-
-      {/* ── History Panel ── */}
-      <div className="flex items-center gap-2 mb-2 pt-4">
-        <History className="w-5 h-5 text-ink-secondary" />
-        <h2 className="text-base font-semibold text-ink">User History</h2>
-      </div>
-      <UserHistoryPanel userId={user._id} />
+          <UserHistoryPanel userId={user._id} />
+        </div>
+      )}
 
       {/* ── Location Assignment Modal ── */}
       <UserLocationAssignmentModal

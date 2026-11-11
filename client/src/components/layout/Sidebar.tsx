@@ -15,6 +15,7 @@ import {
   MapPin,
   Database,
   ClipboardList,
+  CalendarDays,
 } from 'lucide-react';
 import { useAuthStore } from '@/store/useAuthStore';
 import { apiClient } from '@/lib/apiClient';
@@ -27,44 +28,56 @@ interface SidebarProps {
 
 const navGroups = [
   {
-    label: 'Dashboard',
+    label: 'Home',
     roles: [...PERMISSION_GROUPS.ALL, 'super_admin', 'hr_admin', 'manager', 'employee'],
     items: [
       { label: 'Overview', href: ROUTES.OVERVIEW, icon: LayoutDashboard },
     ],
   },
   {
-    label: 'Structure',
+    label: 'Directory',
+    roles: [...PERMISSION_GROUPS.ALL, 'super_admin', 'hr_admin', 'manager', 'employee'],
+    items: [
+      { label: 'Users', href: ROUTES.PEOPLE, icon: Users },
+      { label: 'Groups', href: ROUTES.GROUPS, icon: Users },
+    ],
+  },
+  {
+    label: 'Organisation',
     roles: [...PERMISSION_GROUPS.ROLE_ADMINS, 'super_admin', 'hr_admin', 'ops_admin'],
     items: [
-      { label: 'Organization', href: ROUTES.ORGANIZATION, icon: Building2 },
+      { label: 'Organisation', href: ROUTES.ORGANIZATION, icon: Building2 },
       { label: 'Teams', href: ROUTES.TEAMS, icon: Users },
-      { label: 'Roles & Permissions', href: ROUTES.ROLES, icon: Shield },
-      { label: 'Groups', href: ROUTES.GROUPS, icon: Users },
       { label: 'Locations', href: ROUTES.LOCATIONS, icon: MapPin },
-      { label: 'Apps', href: ROUTES.APPS, icon: Package },
+    ],
+  },
+  {
+    label: 'Apps & Access',
+    roles: [...PERMISSION_GROUPS.ROLE_ADMINS, 'super_admin', 'hr_admin', 'ops_admin', 'it_admin'],
+    items: [
+      { label: 'Apps & Access', href: ROUTES.APPS, icon: Package },
       { label: 'Subscription', href: ROUTES.SUBSCRIPTION, icon: Package },
+    ],
+  },
+  {
+    label: 'Security & Governance',
+    roles: [...PERMISSION_GROUPS.ROLE_ADMINS, 'super_admin', 'it_admin', 'hr_admin'],
+    items: [
+      { label: 'Admin roles', href: ROUTES.ROLES, icon: Shield },
+      { label: 'Security', href: ROUTES.SECURITY, icon: Shield },
+      { label: 'Calendars & schedules', href: '/locations?tab=holidays', icon: CalendarDays },
+    ],
+  },
+  {
+    label: 'Settings & Audit',
+    roles: [...PERMISSION_GROUPS.IT_ADMINS, 'super_admin', 'ops_admin'],
+    items: [
+      { label: 'Settings', href: ROUTES.COMPANY_SETTINGS, icon: Settings },
+      { label: 'Audit log', href: ROUTES.AUDIT_LOGS, icon: ClipboardList, requiredPermission: 'audit:read:all', roles: [...PERMISSION_GROUPS.IT_ADMINS, 'super_admin'] },
       { label: 'Policies', href: ROUTES.POLICIES, icon: FileText },
       { label: 'Workflows', href: ROUTES.WORKFLOWS, icon: GitBranch },
       { label: 'Approvals', href: ROUTES.APPROVALS, icon: CheckSquare },
       { label: 'Data Fields', href: ROUTES.DATA_FIELDS, icon: Database },
-    ],
-  },
-
-  {
-    label: 'People',
-    roles: [...PERMISSION_GROUPS.ALL, 'super_admin', 'hr_admin', 'manager', 'employee'],
-    items: [
-      { label: 'People', href: ROUTES.PEOPLE, icon: Users },
-    ],
-  },
-  {
-    label: 'Settings',
-    roles: [...PERMISSION_GROUPS.IT_ADMINS, 'super_admin'],
-    items: [
-      { label: 'Company settings', href: ROUTES.COMPANY_SETTINGS, icon: Settings },
-      { label: 'Security', href: ROUTES.SECURITY, icon: Shield },
-      { label: 'Audit Logs', href: ROUTES.AUDIT_LOGS, icon: ClipboardList, requiredPermission: 'audit:read:all', roles: [...PERMISSION_GROUPS.IT_ADMINS, 'super_admin'] },
     ],
   },
 ];
@@ -93,7 +106,7 @@ export const Sidebar = ({ className }: SidebarProps) => {
   const { data: myPermissions } = useMyPermissions();
 
   const userInitials = userName?.charAt(0)?.toUpperCase() || 'U';
-  const displayCompanyName = companyName || 'Sowaye';
+  const displayCompanyName = companyName || 'Karbexa Admin';
 
   return (
     <aside 
@@ -132,7 +145,7 @@ export const Sidebar = ({ className }: SidebarProps) => {
             textDecoration: 'none'
           }}
         >
-          <span style={{ color: '#000', fontWeight: 'bold', fontSize: 14 }}>SW</span>
+          <span style={{ color: '#000', fontWeight: 'bold', fontSize: 13 }}>KA</span>
         </Link>
         <Link to={ROUTES.OVERVIEW} onClick={closeSidebar} style={{ textDecoration: 'none' }}>
           <span style={{

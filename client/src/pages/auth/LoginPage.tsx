@@ -14,7 +14,7 @@ export default function LoginPage() {
     <div className="flex h-screen w-full items-center justify-center bg-surface-base p-4 text-ink font-sans">
       <Card className="w-full max-w-md border-line">
         <CardHeader className="space-y-2 text-center pb-6">
-          <CardTitle className="text-2xl font-semibold tracking-tight">Sowaye</CardTitle>
+          <CardTitle className="text-2xl font-semibold tracking-tight">Karbexa Admin</CardTitle>
           <CardDescription className="text-ink-muted">Sign in to your account to continue</CardDescription>
         </CardHeader>
         <CardContent className="space-y-4">
