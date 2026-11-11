@@ -43,6 +43,7 @@ export async function authenticateService(req: Request, res: Response, next: Nex
       issuer: getIdentityConfig().servicesIssuer,
       audience: PLATFORM_API_AUDIENCE,
       algorithms: ['RS256'],
+      typ: 'at+jwt', // RFC 9068; jose compares case-insensitively and accepts application/at+jwt
       maxTokenAge: '15m',
       requiredClaims: ['exp', 'iat'],
     }));
