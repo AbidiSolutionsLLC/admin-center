@@ -6,7 +6,8 @@ export const globalLimiter = rateLimit({
   max: Number(process.env.GLOBAL_RATE_LIMIT) || (process.env.NODE_ENV === 'development' ? 10000 : 6000), // WI-07: prod default sized for dashboard polling (~0.8 req/s per open tab)
   standardHeaders: true, 
   legacyHeaders: false,
-  skip: (req) => req.method === 'OPTIONS', // WI-07: re-enabled; only CORS preflight is skipped
+  // WI-07: only CORS preflight is skipped. M4: /platform/v1 has its own per-client limiter (platform/rateLimit.ts).
+  skip: (req) => req.method === 'OPTIONS' || req.path === '/platform/v1' || req.path.startsWith('/platform/v1/'),
   message: {
     success: false,
     message: 'Too many requests from this IP, please try again after 15 minutes',
