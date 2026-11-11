@@ -13,7 +13,7 @@
 import { Workflow, WorkflowStatus } from '../models/Workflow.model';
 import { WorkflowStep } from '../models/WorkflowStep.model';
 import { WorkflowRun, WorkflowRunStatus } from '../models/WorkflowRun.model';
-import { Insight } from '../models/Insight.model';
+import { Insight, IInsight } from '../models/Insight.model';
 import { User } from '../models/User.model';
 import { Company } from '../models/Company.model';
 import { ApprovalRequest } from '../models/ApprovalRequest.model';
@@ -515,7 +515,7 @@ export async function resumeWorkflow(runId: string, approved: boolean, decidedBy
     await Insight.create({
       company_id: run.company_id,
       category: 'health',
-      severity: 'warning',
+      severity: 'warning' as unknown as IInsight['severity'], // not in the Insight enum (pre-existing)
       title: `Workflow "${workflow.name}" rejected`,
       description: `Workflow execution was rejected for user ${run.triggered_by_label}.`,
       reasoning: run.error_message,

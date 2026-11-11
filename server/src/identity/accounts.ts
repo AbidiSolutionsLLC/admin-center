@@ -1,7 +1,7 @@
 // server/src/identity/accounts.ts
 // Account resolution for the tenant realm: accountId = membership `User._id` (03 §5.1 `sub`).
 import { Types } from 'mongoose';
-import { User, IUser } from '../models/User.model';
+import { User, IUser, LifecycleState } from '../models/User.model';
 import { Identity, IIdentity } from '../models/Identity.model';
 import { Company } from '../models/Company.model';
 import { UserRole } from '../models/UserRole.model';
@@ -39,7 +39,7 @@ export async function loadAccessContext(memberId: string): Promise<AccessContext
 export async function pickMembership(identityId: Types.ObjectId, companyId?: Types.ObjectId): Promise<IUser | null> {
   return User.findOne({
     identity_id: identityId,
-    lifecycle_state: { $in: ACCESS_STATES as unknown as string[] },
+    lifecycle_state: { $in: ACCESS_STATES as unknown as LifecycleState[] },
     ...(companyId ? { company_id: companyId } : {}),
   }).sort({ created_at: 1 });
 }

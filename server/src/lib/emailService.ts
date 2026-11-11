@@ -5,7 +5,7 @@
  * Used by: people.controller.ts (invite endpoints)
  */
 
-import nodemailer from 'nodemailer';
+import nodemailer, { type Transporter } from 'nodemailer';
 import { EmailClient } from '@azure/communication-email';
 
 interface WelcomeEmailParams {
@@ -70,9 +70,9 @@ const createTransporter = async () => {
   });
 };
 
-let transporter: nodemailer.Transporter | null = null;
+let transporter: Transporter | null = null;
 
-export const getTransporter = async (): Promise<nodemailer.Transporter> => {
+export const getTransporter = async (): Promise<Transporter> => {
   if (!transporter) {
     transporter = await createTransporter();
   }

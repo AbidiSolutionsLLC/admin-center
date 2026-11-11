@@ -2,7 +2,7 @@
 import { Request, Response } from 'express';
 import { z } from 'zod';
 import { asyncHandler } from '../utils/asyncHandler';
-import { PolicyVersion } from '../models/PolicyVersion.model';
+import { PolicyVersion, PolicyCategory } from '../models/PolicyVersion.model';
 import { PolicyAcknowledgment } from '../models/PolicyAcknowledgment.model';
 import { PolicyAssignment } from '../models/PolicyAssignment.model';
 import { User } from '../models/User.model';
@@ -1309,7 +1309,7 @@ export const checkPolicyConflicts = async (
     company_id: new Types.ObjectId(companyId),
     policy_key: { $ne: policyKey }, // Different policy keys
     status: 'published',
-    category: category,
+    category: category as PolicyCategory,
     is_active: true,
   });
 

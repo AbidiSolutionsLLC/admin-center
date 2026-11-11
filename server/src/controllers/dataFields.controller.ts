@@ -2,9 +2,9 @@
 import { Request, Response } from 'express';
 import { z } from 'zod';
 import { asyncHandler } from '../utils/asyncHandler';
-import { CustomField, ICustomField, FieldType } from '../models/CustomField.model';
+import { CustomField, ICustomField, FieldType, TargetObject } from '../models/CustomField.model';
 import { CustomFieldVersion } from '../models/CustomFieldVersion.model';
-import { ProfileLayout } from '../models/ProfileLayout.model';
+import { ProfileLayout, IProfileLayout } from '../models/ProfileLayout.model';
 import { User } from '../models/User.model';
 import { Department } from '../models/Department.model';
 import { PolicyVersion } from '../models/PolicyVersion.model';
@@ -162,7 +162,7 @@ async function validateConditionalLogic(
 
   const existingSlugs = await CustomField.find({
     company_id: companyId,
-    target_object: targetObject,
+    target_object: targetObject as TargetObject,
     is_active: true,
   })
     .select('slug label')
@@ -462,7 +462,7 @@ async function updateConditionalLogicReferences(
   const result = await CustomField.updateMany(
     {
       company_id: companyId,
-      target_object: targetObject,
+      target_object: targetObject as TargetObject,
       is_active: true,
       'conditional_logic.field_slug': oldSlug,
     },
@@ -1728,7 +1728,7 @@ export const createProfileLayout = asyncHandler(async (req: Request, res: Respon
     await ProfileLayout.updateMany(
       {
         company_id: req.user.company_id,
-        target_object: input.target_object,
+        target_object: input.target_object as IProfileLayout['target_object'],
         is_default: true,
       },
       { is_default: false },
@@ -1737,6 +1737,7 @@ export const createProfileLayout = asyncHandler(async (req: Request, res: Respon
 
   const layout = await ProfileLayout.create({
     ...input,
+    target_object: input.target_object as IProfileLayout['target_object'],
     role_id: input.role_id || undefined,
     company_id: req.user.company_id,
   });

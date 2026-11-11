@@ -985,7 +985,7 @@ export const getAppAssignmentTimeline = asyncHandler(async (req: Request, res: R
 export const checkAppDependencies = asyncHandler(async (req: Request, res: Response) => {
   const companyId = req.user!.company_id;
   const appId = req.params.id;
-  const targetType = req.query.target_type as string;
+  const targetType = req.query.target_type as IAppAssignment['target_type'];
   const targetId = req.query.target_id as string;
   const attributeName = req.query.attribute_name as string;
   const attributeValue = req.query.attribute_value as string;
@@ -1115,7 +1115,7 @@ export const getAppAssignmentsByTarget = asyncHandler(async (req: Request, res: 
 
   const assignments = await AppAssignment.find({
     company_id: companyId,
-    target_type,
+    target_type: target_type as IAppAssignment['target_type'],
     // @ts-ignore
     target_id: new Types.ObjectId(target_id),
     is_active: true,

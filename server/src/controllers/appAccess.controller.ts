@@ -7,7 +7,7 @@ import { AppError } from '../utils/AppError';
 import { auditLogger } from '../lib/auditLogger';
 import { App } from '../models/App.model';
 import { AppAssignment } from '../models/AppAssignment.model';
-import { ProductRole } from '../models/ProductRole.model';
+import { ProductRole, ProductKey } from '../models/ProductRole.model';
 import { OrganizationEntitlement } from '../models/OrganizationEntitlement.model';
 import { User } from '../models/User.model';
 import { computeEffectiveAccess, resolveAssignmentMemberIds } from '../lib/effectiveAccess';
@@ -100,7 +100,7 @@ export const getSubscription = asyncHandler(async (req: Request, res: Response) 
 /** GET /me/apps -> { success, data: [{ id, name, product_key, launch_url, icon_url, description, role, role_name }] } */
 export const getMyApps = asyncHandler(async (req: Request, res: Response) => {
   const access = await computeEffectiveAccess(req.user!.company_id, req.user!.userId);
-  const keys = Object.keys(access.products);
+  const keys = Object.keys(access.products) as ProductKey[];
   const apps = keys.length
     ? await App.find({ app_type: 'karbexa_product', product_key: { $in: keys }, is_active: true, company_id: { $exists: false } }).lean()
     : [];

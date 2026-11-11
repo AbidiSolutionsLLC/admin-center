@@ -3,7 +3,7 @@ import { Request, Response } from 'express';
 import { z } from 'zod';
 import bcrypt from 'bcryptjs';
 import { asyncHandler } from '../utils/asyncHandler';
-import { User, EmploymentType } from '../models/User.model';
+import { User, IUser, EmploymentType } from '../models/User.model';
 import { Company } from '../models/Company.model';
 import { RefreshToken } from '../models/RefreshToken.model';
 import { Role } from '../models/Role.model';
@@ -885,7 +885,7 @@ export const getUserAppAccessHistory = asyncHandler(async (req: Request, res: Re
       { target_type: 'user', target_id: userId },
       { target_type: 'role', target_id: { $in: roleIds } },
       { target_type: 'group', target_id: { $in: groupIds } },
-      ...(user.department_id ? [{ target_type: 'department', target_id: user.department_id }] : []),
+      ...(user.department_id ? [{ target_type: 'department' as const, target_id: user.department_id }] : []),
       ...(matchedAttributeIds.length > 0 ? [{ _id: { $in: matchedAttributeIds } }] : []),
     ]
   })
@@ -1095,7 +1095,7 @@ export const inviteUser = asyncHandler(async (req: Request, res: Response) => {
       ...filteredInput,
       company_id: req.user.company_id as any, // Needed due to Mongoose Types.ObjectId vs string mismatch
       password_hash,
-      role: input.role || 'Employee', // Default to 'Employee' if not provided
+      role: (input.role || 'Employee') as IUser['role'], // Default to 'Employee' if not provided
       lifecycle_state: 'invited',
       is_active: false, // User is not active until they complete onboarding
       phone: input.phone ?? undefined,

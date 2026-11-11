@@ -21,7 +21,7 @@ import { InAppNotification } from '../models/InAppNotification.model';
 import { NotificationEvent } from '../models/NotificationEvent.model';
 import { getTransporter, sendEmail } from './emailService';
 import { Company } from '../models/Company.model';
-import { User } from '../models/User.model';
+import { User, IUser } from '../models/User.model';
 import { PERMISSION_GROUPS } from '../constants/roles';
 import nodemailer from 'nodemailer';
 import { Types } from 'mongoose';
@@ -522,7 +522,7 @@ export async function sendInsightAlert(
   // Target all types of admins for insights
   const recipients = await User.find({
     company_id: companyId,
-    role: { $in: ['super_admin', 'Super Admin', 'it_admin', 'IT Admin', ...PERMISSION_GROUPS.SUPER_ADMINS] },
+    role: { $in: ['super_admin', 'Super Admin', 'it_admin', 'IT Admin', ...PERMISSION_GROUPS.SUPER_ADMINS] as IUser['role'][] },
     is_active: true,
     email: { $exists: true, $ne: '' },
   });

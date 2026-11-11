@@ -13,7 +13,7 @@ import { PolicyAssignment } from '../models/PolicyAssignment.model';
 import { Location } from '../models/Location.model';
 import { HolidayAssignment } from '../models/HolidayAssignment.model';
 import { WorkScheduleAssignment } from '../models/WorkScheduleAssignment.model';
-import { InAppNotification } from '../models/InAppNotification.model';
+import { InAppNotification, IInAppNotification } from '../models/InAppNotification.model';
 import { Company } from '../models/Company.model';
 import { PERMISSION_GROUPS } from '../constants/roles';
 
@@ -1019,7 +1019,7 @@ export const runIntelligenceRules = async (companyId: string | Types.ObjectId): 
     // Find Company Admins to notify
     const adminRecipients = await User.find({
       company_id: companyObjectId,
-      role: { $in: ['super_admin', 'Super Admin', 'it_admin', 'IT Admin', ...PERMISSION_GROUPS.SUPER_ADMINS] },
+      role: { $in: ['super_admin', 'Super Admin', 'it_admin', 'IT Admin', ...PERMISSION_GROUPS.SUPER_ADMINS] as IUser['role'][] },
       is_active: true,
     }).lean();
 
@@ -1051,7 +1051,7 @@ export const runIntelligenceRules = async (companyId: string | Types.ObjectId): 
               user_id: admin._id,
               title: `Misconfiguration Detected: ${insight.title}`,
               message: `${insight.description}\n\n${insight.reasoning || ''}`,
-              severity: insight.severity,
+              severity: insight.severity as unknown as IInAppNotification['severity'], // Insight and notification severity enums differ (pre-existing)
               status: 'unread',
               link_url: insight.remediation_url || '/overview',
             });
