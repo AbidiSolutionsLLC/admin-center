@@ -501,6 +501,37 @@ async function main() {
         process.env.OPERATOR_IP_ALLOWLIST = '203.0.113.0/24';
         const noTok = await fetch(`${OP}/orgs`);
         check('E10 allow-list: 403 precedes auth for non-listed IP', noTok.status === 403, noTok.status);
+        // L3-5 (M2): the operator OIDC realm is gated by the same list; the tenant realm is not
+        const realmStatus = async (extra: Record<string, string> = {}) => (await fetch(`${REALM}/.well-known/openid-configuration`, { headers: extra })).status;
+        check('L3-5 /realms/operator discovery: non-listed IP = 403', (await realmStatus()) === 403);
+        check('L3-5 /realms/operator: X-Forwarded-For cannot spoof an allowed IP', (await realmStatus({ 'x-forwarded-for': '203.0.113.9' })) === 403);
+        check('L3-5 /realms/operator token endpoint is gated too', (await fetch(`${REALM}/oauth/token`, form({ grant_type: 'authorization_code', code: 'x', client_id: 'karbexa-operator-spa' }))).status === 403);
+        check('L3-5 /realms/tenant is NOT gated by the operator allow-list', (await fetch(`${ORIGIN}/realms/tenant/.well-known/openid-configuration`)).status === 200);
+        process.env.OPERATOR_IP_ALLOWLIST = '127.0.0.1';
+        check('L3-5 /realms/operator: listed IP passes', (await realmStatus()) === 200);
+        // L3-5 (D-4): production + empty list fails closed; production + list passes; development + empty list stays open
+        const prevNodeEnv = process.env.NODE_ENV;
+        try {
+          process.env.NODE_ENV = 'production';
+          process.env.OPERATOR_IP_ALLOWLIST = '';
+          check('L3-5 production + empty allow-list: /operator/v1 with a valid token = 403 (fail closed)', (await status()) === 403);
+          check('L3-5 production + empty allow-list: /operator/v1 without a token = 403', (await fetch(`${OP}/orgs`)).status === 403);
+          check('L3-5 production + empty allow-list: /realms/operator = 403', (await realmStatus()) === 403);
+          process.env.OPERATOR_IP_ALLOWLIST = ' , ,';
+          check('L3-5 production + whitespace/comma-only allow-list is also empty = 403', (await status()) === 403);
+          process.env.OPERATOR_IP_ALLOWLIST = '127.0.0.1';
+          check('L3-5 production + allow-list containing the caller: /operator/v1 = 200', (await status()) === 200);
+          delete process.env.TRUST_PROXY;
+          let bootError = '';
+          try { await createServer(); } catch (err) { bootError = (err as Error).message; }
+          check('L3-5 production boot without TRUST_PROXY throws', /TRUST_PROXY must be set explicitly/.test(bootError), bootError);
+        } finally {
+          process.env.NODE_ENV = prevNodeEnv;
+          process.env.TRUST_PROXY = '0';
+        }
+        process.env.OPERATOR_IP_ALLOWLIST = '';
+        check('L3-5 development + empty allow-list still allows (smoke default)', (await status()) === 200 && (await realmStatus()) === 200);
+        process.env.OPERATOR_IP_ALLOWLIST = '203.0.113.0/24';
       } finally {
         if (prev === undefined) delete process.env.OPERATOR_IP_ALLOWLIST; else process.env.OPERATOR_IP_ALLOWLIST = prev;
       }

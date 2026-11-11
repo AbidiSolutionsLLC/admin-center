@@ -9,19 +9,23 @@ import routes from './routes';
 import { initIdentity, mountIdentity } from './identity';
 import operatorRoutes from './operator/routes';
 import { platformRouter } from './platform';
+import { resolveTrustProxy } from './lib/trustProxy';
+import { requireOperatorIp } from './operator/middleware';
 
 /**
  * Build the Express app. Requires an open Mongoose connection (identity adapter indexes + keys).
  * Used by src/index.ts and by in-process scripts (scripts/smoke-oidc-login.ts).
  */
 export async function createServer(): Promise<Express> {
+  // M2: validated before anything else; production refuses to boot without an explicit TRUST_PROXY.
+  const trustProxy = resolveTrustProxy();
   await initIdentity();
 
   const app = express();
+  app.set('trust proxy', trustProxy);
 
-  const trustProxyConfig = process.env.TRUST_PROXY || 1;
-  // Convert to number if it's a numeric string, otherwise keep as string (for IP/subnet configs)
-  app.set('trust proxy', isNaN(Number(trustProxyConfig)) ? trustProxyConfig : Number(trustProxyConfig));
+  // M2: the operator OIDC realm (login, MFA, discovery, tokens) is behind the same IP allow-list as /operator/v1.
+  app.use('/realms/operator', requireOperatorIp);
 
   // E1: identity realms first — before cors/helmet/body parsing (the provider handles its own).
   mountIdentity(app);

@@ -23,11 +23,26 @@ const INVALID = { success: false, error: 'Token invalid or expired', code: 'INVA
 let operatorJwks: ReturnType<typeof jose.createLocalJWKSet> | undefined;
 const keySet = () => (operatorJwks ??= jose.createLocalJWKSet(getPublicJwks('operator')));
 
-export const requireOperator = asyncHandler(async (req: Request, res: Response, next: NextFunction) => {
+const FORBIDDEN = { success: false, error: 'Forbidden', code: 'FORBIDDEN' };
+
+/**
+ * OPERATOR_IP_ALLOWLIST (comma-separated IPs/CIDRs, read per request). Non-empty: only listed IPs pass.
+ * Empty: allowed outside production; in production it fails closed (D-4) so the operator surface is never open by omission.
+ */
+function operatorIpAllowed(req: Request): boolean {
   const allow = (process.env.OPERATOR_IP_ALLOWLIST || '').split(',').map((s) => s.trim()).filter(Boolean);
-  if (allow.length && !allow.some((r) => isIpInRange(req.ip || '', r))) {
-    return res.status(403).json({ success: false, error: 'Forbidden', code: 'FORBIDDEN' });
-  }
+  if (allow.length === 0) return process.env.NODE_ENV !== 'production';
+  return allow.some((r) => isIpInRange(req.ip || '', r));
+}
+
+/** IP allow-list gate; mounted in front of /realms/operator and applied again by requireOperator. */
+export function requireOperatorIp(req: Request, res: Response, next: NextFunction) {
+  if (!operatorIpAllowed(req)) return res.status(403).json(FORBIDDEN);
+  next();
+}
+
+export const requireOperator = asyncHandler(async (req: Request, res: Response, next: NextFunction) => {
+  if (!operatorIpAllowed(req)) return res.status(403).json(FORBIDDEN);
   const header = req.headers.authorization;
   const token = header?.startsWith('Bearer ') ? header.slice(7).trim() : undefined;
   if (!token) return res.status(401).json({ success: false, error: 'Unauthorized', code: 'NO_TOKEN' });
