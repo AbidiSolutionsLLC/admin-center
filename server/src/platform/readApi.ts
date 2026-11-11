@@ -89,7 +89,8 @@ platformReadRouter.get('/orgs/:orgId/events', requireServiceToken('platform.even
   } catch (err) { next(err); }
 });
 
-const MEMBER_FIELDS = '_id email full_name department_id location_id custom_fields employment_type manager_id lifecycle_state authz_ver updated_at';
+const MEMBER_FIELDS = '_id email full_name department_id location_id custom_fields employment_type manager_id lifecycle_state authz_ver updated_at employee_id hire_date termination_date phone avatar_url identity_id';
+const isoOrNull = (d: unknown): string | null => (d instanceof Date && !Number.isNaN(d.getTime()) ? d.toISOString() : null);
 const memberView = (u: any) => ({
   id: u._id,
   email: u.email,
@@ -101,6 +102,12 @@ const memberView = (u: any) => ({
   manager_id: idStr(u.manager_id),
   reports_to: idStr(u.manager_id),
   lifecycle_state: u.lifecycle_state,
+  employee_id: u.employee_id ?? null,
+  hire_date: isoOrNull(u.hire_date),
+  termination_date: isoOrNull(u.termination_date),
+  phone: u.phone ?? null,
+  avatar_url: u.avatar_url ?? null,
+  identity_id: idStr(u.identity_id),
   authz_ver: u.authz_ver ?? 1,
   updated_at: u.updated_at,
 });
@@ -122,6 +129,7 @@ platformReadRouter.get('/orgs/:orgId/members', requireServiceToken('platform.mem
     if (cursor) filter._id = { $gt: cursor };
     const rows = await User.find(filter).select(MEMBER_FIELDS).sort({ _id: 1 }).limit(limit + 1).lean();
     const page = rows.slice(0, limit);
+    res.setHeader('Cache-Control', 'no-store');
     res.json({
       items: page.map(memberView),
       next_cursor: rows.length > limit ? String(page[page.length - 1]._id) : null,

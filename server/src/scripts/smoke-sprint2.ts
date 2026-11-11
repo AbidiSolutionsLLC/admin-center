@@ -748,6 +748,37 @@ async function main() {
       evs = await evsOf('e4b-member-noop');
       check('E4b member update with no admin-field change emits no member.updated', r.status === 200 && ofType(evs, 'member.updated').length === 0, `${r.status} ${evs.map((e) => e.type)}`);
 
+      // L3-3 (D3): phone / hire_date / avatar_url are admin-owned fields carried on member.updated; Dates compare by value
+      r = await t(`/people/${memId}`, 'PUT', { phone: '5551234567' }, 'l33-phone');
+      evs = await evsOf('l33-phone');
+      const phoneEv = ofType(evs, 'member.updated');
+      check('L3-3 changing phone = 200 -> member.updated {changed:{phone}} only', r.status === 200 && phoneEv.length === 1 && JSON.stringify((phoneEv[0].data as any).changed) === JSON.stringify({ phone: '5551234567' }), `${r.status} ${JSON.stringify(phoneEv.map((e) => e.data))}`);
+      r = await t(`/people/${memId}`, 'PUT', { phone: '5551234567', hire_date: '2024-03-01' }, 'l33-hire');
+      evs = await evsOf('l33-hire');
+      const hireEv = ofType(evs, 'member.updated');
+      check('L3-3 same phone + new hire_date -> changed has only hire_date (ISO string)', r.status === 200 && hireEv.length === 1 && JSON.stringify(Object.keys((hireEv[0].data as any).changed)) === JSON.stringify(['hire_date']) && /^2024-03-01T/.test((hireEv[0].data as any).changed.hire_date), `${r.status} ${JSON.stringify(hireEv.map((e) => e.data))}`);
+      r = await t(`/people/${memId}`, 'PUT', { phone: '5551234567', hire_date: '2024-03-01' }, 'l33-hire-same');
+      evs = await evsOf('l33-hire-same');
+      check('L3-3 resending an identical hire_date (Date value) emits NO member.updated', r.status === 200 && ofType(evs, 'member.updated').length === 0, `${r.status} ${evs.map((e) => e.type)}`);
+      r = await t(`/people/${memId}`, 'PUT', { avatar_url: 'https://cdn.acme.test/a.png' }, 'l33-avatar');
+      evs = await evsOf('l33-avatar');
+      check('L3-3 changing avatar_url -> member.updated {changed:{avatar_url}}', r.status === 200 && JSON.stringify((ofType(evs, 'member.updated')[0]?.data as any)?.changed) === JSON.stringify({ avatar_url: 'https://cdn.acme.test/a.png' }), `${r.status} ${JSON.stringify(ofType(evs, 'member.updated').map((e) => e.data))}`);
+      {
+        const tkM = await mintSvc('platform.members.read');
+        const mv = await fetch(`${ORIGIN}/platform/v1/orgs/${orgId}/members/${memId}`, { headers: { authorization: `Bearer ${tkM}` } });
+        const mj = await mv.json() as Record<string, unknown>;
+        const memFresh = await User.findById(memId);
+        check('L3-3 member view carries employee_id, hire_date (ISO), termination_date null, phone, avatar_url, identity_id', mv.status === 200
+          && mj.employee_id === memFresh?.employee_id && !!memFresh?.employee_id && typeof mj.hire_date === 'string' && /^2024-03-01T/.test(String(mj.hire_date)) && mj.termination_date === null
+          && mj.phone === '5551234567' && mj.avatar_url === 'https://cdn.acme.test/a.png' && 'identity_id' in mj && (mj.identity_id === null || typeof mj.identity_id === 'string'), mj);
+        check('L3-3 member view still has no timezone key (D-3 open)', !('timezone' in mj) && !('time_zone' in mj), Object.keys(mj));
+        const ml = await fetch(`${ORIGIN}/platform/v1/orgs/${orgId}/members?limit=500`, { headers: { authorization: `Bearer ${tkM}` } });
+        const mlj = await ml.json() as { items: Record<string, unknown>[] };
+        check('L3-3 members list uses the same view and is no-store', ml.status === 200 && /no-store/.test(ml.headers.get('cache-control') || '') && mlj.items.some((m) => m.id === memId && m.phone === '5551234567' && 'employee_id' in m && 'identity_id' in m), ml.status);
+        const mOther = await fetch(`${ORIGIN}/platform/v1/orgs/${orgId}/members/${new mongoose.Types.ObjectId()}`, { headers: { authorization: `Bearer ${tkM}` } });
+        check('L3-3 unknown member is 404', mOther.status === 404, mOther.status);
+      }
+
       // lifecycle
       r = await t(`/people/${memId}/lifecycle`, 'PUT', { lifecycle_state: 'active' }, 'e4b-activate');
       check('E4b lifecycle invited->active = 200', r.status === 200, `${r.status} ${r.text.slice(0, 300)}`);
