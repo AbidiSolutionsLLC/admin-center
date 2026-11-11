@@ -187,11 +187,14 @@ platformReadRouter.get('/sessions/revocations', requireServiceToken('platform.se
     if (limit === undefined) return bad(res, 'limit must be an integer between 1 and 1000');
     const afterSid = req.query.after_sid;
     if (afterSid !== undefined && typeof afterSid !== 'string') return bad(res, 'invalid after_sid');
+    const realm = req.query.realm;
+    if (realm !== undefined && realm !== 'tenant' && realm !== 'operator') return bad(res, 'realm must be tenant or operator');
     let filter: Record<string, unknown> = { revoked_at: since ? { $gte: since } : { $exists: true, $ne: null } };
     // Keyset continuation within identical revoked_at values (pass since=X-Next-Since, after_sid=X-Next-After-Sid).
     if (since && afterSid) {
       filter = { $or: [{ revoked_at: { $gt: since } }, { revoked_at: since, _id: { $gt: afterSid } }] };
     }
+    if (realm) filter = { $and: [filter, { realm }] }; // default (absent) = all realms, for compatibility
     const found = await Session.find(filter).sort({ revoked_at: 1, _id: 1 }).limit(limit + 1).lean();
     const rows = found.slice(0, limit);
     res.setHeader('Cache-Control', 'no-store');

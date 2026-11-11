@@ -42,6 +42,7 @@ async function main() {
   const gen = async () => jose.exportJWK((await jose.generateKeyPair('RS256', { extractable: true })).privateKey);
   const backend = await jose.generateKeyPair('RS256', { extractable: true });
   const tenantPrivateJwk = { ...(await gen()), kid: 'tenant-smoke' };
+  const servicesPrivateJwk = { ...(await gen()), kid: 'services-smoke' };
   const backendPublic = { ...(await jose.exportJWK(backend.publicKey)), kid: 'smoke-backend-1', alg: 'RS256', use: 'sig' };
   const adminBackend = await jose.generateKeyPair('RS256', { extractable: true });
   const adminBackendPublicJwk = await jose.exportJWK(adminBackend.publicKey);
@@ -54,7 +55,7 @@ async function main() {
     ENCRYPTION_KEY: crypto.randomBytes(32).toString('hex'),
     OIDC_COOKIE_KEYS: crypto.randomBytes(32).toString('base64url'),
     IDENTITY_TENANT_KEY: JSON.stringify(tenantPrivateJwk),
-    IDENTITY_SERVICES_KEY: JSON.stringify({ ...(await gen()), kid: 'services-smoke' }),
+    IDENTITY_SERVICES_KEY: JSON.stringify(servicesPrivateJwk),
     IDENTITY_OPERATOR_KEY: JSON.stringify({ ...(await gen()), kid: 'operator-smoke' }),
     SERVICES_PRODUCTS_BACKEND_JWKS: JSON.stringify({ keys: [backendPublic] }),
     SERVICES_ADMIN_BACKEND_JWKS: JSON.stringify({ keys: [adminBackendPublic] }),
@@ -502,6 +503,50 @@ async function main() {
       check('L3-6 default budget restored: the same client passes again', (await orgsCall(pb.json.access_token)).status === 200);
       const wrongScope = await fetch(`${ORIGIN}/platform/v1/orgs/${orgId}/events`, { headers: { authorization: `Bearer ${pb.json.access_token}` } });
       check('L3-6 per-route scope check still applies (platform.org.read token on events = 403 INSUFFICIENT_SCOPE)', wrongScope.status === 403 && ((await wrongScope.json()) as { code?: string }).code === 'INSUFFICIENT_SCOPE', wrongScope.status);
+
+      // L3-7 (L7): service tokens must carry typ at+jwt (RFC 9068); forged with the services key so only the header differs
+      {
+        const svcKey = await jose.importJWK(servicesPrivateJwk, 'RS256');
+        const forge = (typ: string | undefined) => new jose.SignJWT({ token_use: 'service', client_id: 'karbexa-products-backend', scope: 'platform.org.read' })
+          .setProtectedHeader({ alg: 'RS256', kid: 'services-smoke', ...(typ ? { typ } : {}) })
+          .setIssuer(`${ORIGIN}/realms/services`).setAudience('urn:karbexa:platform-api').setSubject('karbexa-products-backend')
+          .setIssuedAt().setExpirationTime('5m').sign(svcKey);
+        const st = async (typ: string | undefined) => (await orgsCall(await forge(typ))).status;
+        check('L3-7 forged service token with typ at+jwt is accepted (control: only the header varies below)', (await st('at+jwt')) === 200);
+        check('L3-7 typ application/at+jwt and AT+JWT are accepted', (await st('application/at+jwt')) === 200 && (await st('AT+JWT')) === 200);
+        check('L3-7 typ JWT is rejected (401)', (await st('JWT')) === 401);
+        check('L3-7 missing typ is rejected (401)', (await st(undefined)) === 401);
+        check('L3-7 typ at+jwt+x (lookalike) is rejected (401)', (await st('at+jwt+x')) === 401);
+      }
+
+      // L3-7 (D6): /sessions/revocations realm filter (default = all realms)
+      {
+        const mkRevoked = async (realm: 'tenant' | 'operator') => {
+          const sid = crypto.randomUUID();
+          await Session.create({
+            _id: sid, identity_id: new mongoose.Types.ObjectId(), member_id: me._id, company_id: orgId, realm, revoked_at: new Date(), revoked_reason: 'smoke-d6',
+            idle_expires_at: new Date(Date.now() + 3600e3), absolute_expires_at: new Date(Date.now() + 3600e3), amr: ['pwd'],
+          });
+          return sid;
+        };
+        const tSid = await mkRevoked('tenant');
+        const oSid = await mkRevoked('operator');
+        const tkSess = (await tokenCall('karbexa-products-backend', backend.privateKey, 'smoke-backend-1', 'platform.sessions.read', 'urn:karbexa:platform-api')).json.access_token;
+        const revs = async (qs: string) => {
+          const rr = await fetch(`${ORIGIN}/platform/v1/sessions/revocations${qs}`, { headers: { authorization: `Bearer ${tkSess}` } });
+          return { status: rr.status, rows: (await rr.json().catch(() => [])) as { sid: string }[] };
+        };
+        const all = await revs('?limit=1000');
+        check('L3-7 revocations without realm = all realms (tenant and operator rows both present)', all.status === 200 && all.rows.some((r) => r.sid === tSid) && all.rows.some((r) => r.sid === oSid), all.rows.length);
+        const ten = await revs('?realm=tenant&limit=1000');
+        check('L3-7 revocations realm=tenant excludes operator sessions', ten.status === 200 && ten.rows.some((r) => r.sid === tSid) && !ten.rows.some((r) => r.sid === oSid), ten.rows.length);
+        const opr = await revs('?realm=operator&limit=1000');
+        check('L3-7 revocations realm=operator returns only operator sessions', opr.status === 200 && opr.rows.some((r) => r.sid === oSid) && !opr.rows.some((r) => r.sid === tSid), opr.rows.length);
+        check('L3-7 revocations realm=bogus = 400', (await revs('?realm=admin')).status === 400);
+        const since = new Date(Date.now() - 60_000).toISOString();
+        const tenSince = await revs(`?realm=tenant&since=${since}&after_sid=${tSid}&limit=1000`);
+        check('L3-7 realm filter composes with the since/after_sid keyset cursor', tenSince.status === 200 && !tenSince.rows.some((r) => r.sid === oSid), tenSince.rows.length);
+      }
     }
 
     // ── E10: OPERATOR_IP_ALLOWLIST (read per request from env; req.ip with TRUST_PROXY=0, so X-Forwarded-For is ignored) ──
@@ -707,9 +752,36 @@ async function main() {
           await emitPlatformEvent(session, { org_id: orgId, type: 'smoke.e4', subject: { type: 'org', id: String(orgId) }, actor: { type: 'system' } });
         });
         const newSeq = await seqOf(orgId);
+        let nudgedBeforeFailure = newSeq; // advanced by the L3-7 lease block below
         const r3 = await dispatchOnce();
         const last = hits[hits.length - 1] && JSON.parse(hits[hits.length - 1].body);
         check('E4 new event -> exactly one new nudge with new latest_seq', r3.nudged === 1 && hits.length === before + 1 && last?.latest_seq === newSeq && last?.org_id === String(orgId), { r3, last });
+
+        // L3-7 (L9): cross-instance lease; two dispatchers, one sends
+        {
+          const { dispatchCycle } = await import('../lib/platformDispatcher');
+          const { acquireLease, releaseLease } = await import('../lib/platformLease');
+          check('L3-7 lease: first holder acquires, a second holder is refused', (await acquireLease('smoke-lease', 'A', 60_000)) === true && (await acquireLease('smoke-lease', 'B', 60_000)) === false);
+          check('L3-7 lease: the holder can renew, the other is still refused', (await acquireLease('smoke-lease', 'A', 60_000)) === true && (await acquireLease('smoke-lease', 'B', 60_000)) === false);
+          await releaseLease('smoke-lease', 'B');
+          check('L3-7 lease: a non-holder cannot release it', (await acquireLease('smoke-lease', 'B', 60_000)) === false);
+          await releaseLease('smoke-lease', 'A');
+          check('L3-7 lease: after release another holder acquires', (await acquireLease('smoke-lease', 'B', 1)) === true);
+          await new Promise((r) => setTimeout(r, 25));
+          check('L3-7 lease: an expired lease is taken over', (await acquireLease('smoke-lease', 'A', 60_000)) === true);
+          await releaseLease('smoke-lease', 'A');
+
+          await runInTransaction(async (session) => {
+            await emitPlatformEvent(session, { org_id: orgId, type: 'smoke.l9', subject: { type: 'org', id: String(orgId) }, actor: { type: 'system' } });
+          });
+          const hitsBeforeL9 = hits.length;
+          const [d1, d2] = await Promise.all([dispatchCycle('holder-A'), dispatchCycle('holder-B')]);
+          check('L3-7 two concurrent dispatchers: exactly one runs, the other is skipped', [d1, d2].filter((d) => d.skipped).length === 1 && [d1, d2].filter((d) => !d.skipped).length === 1, { d1, d2 });
+          check('L3-7 two concurrent dispatchers: exactly one nudge reaches the subscriber', hits.length === hitsBeforeL9 + 1 && d1.nudged + d2.nudged === 1, { hits: hits.length - hitsBeforeL9, d1, d2 });
+          await releaseLease('platform-dispatcher', 'holder-A');
+          await releaseLease('platform-dispatcher', 'holder-B');
+          nudgedBeforeFailure = await seqOf(orgId);
+        }
 
         // failure: 500 -> recorded, backoff, no storm
         failMode = true;
@@ -719,7 +791,7 @@ async function main() {
         const h0 = hits.length;
         const r4 = await dispatchOnce();
         cur = await SubscriptionCursor.findOne({ subscription_id: sub._id, org_id: orgId });
-        check('E4 subscriber 500 -> failure recorded (last_error, attempts, next_attempt_at in future)', r4.failed === 1 && r4.nudged === 0 && /500/.test(cur?.last_error || '') && (cur?.attempts ?? 0) >= 1 && !!cur?.next_attempt_at && cur.next_attempt_at.getTime() > Date.now() && cur.last_nudged_seq === newSeq, { r4, cur: cur?.toObject() });
+        check('E4 subscriber 500 -> failure recorded (last_error, attempts, next_attempt_at in future)', r4.failed === 1 && r4.nudged === 0 && /500/.test(cur?.last_error || '') && (cur?.attempts ?? 0) >= 1 && !!cur?.next_attempt_at && cur.next_attempt_at.getTime() > Date.now() && cur.last_nudged_seq === nudgedBeforeFailure, { r4, cur: cur?.toObject() });
         const r5 = await dispatchOnce();
         check('E4 no nudge storm: immediate retry skipped during backoff', r5.failed === 0 && r5.nudged === 0 && hits.length === h0 + 1, { r5, hits: hits.length - h0 });
         failMode = false;

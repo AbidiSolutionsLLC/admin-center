@@ -27,15 +27,21 @@ export function onCommit(session: ClientSession | undefined, fn: () => unknown):
   void (async () => { try { await fn(); } catch (err) { console.error('[onCommit] hook failed:', err); } })();
 }
 
-/** Run fn inside a Mongo transaction. Standalone Mongo is tolerated outside production (no atomicity). */
+/**
+ * Run fn inside a Mongo transaction. A standalone MongoDB (no atomicity) is refused unless ALLOW_STANDALONE_MONGO=true
+ * AND NODE_ENV is not production (E4 review L6): silently losing atomicity must be an explicit local-dev choice.
+ */
 export async function runInTransaction<T>(fn: (session: ClientSession | undefined) => Promise<T>): Promise<T> {
   if ((await detectTopology()) === 'standalone') {
     if (process.env.NODE_ENV === 'production') {
       throw new Error('MongoDB transactions require a replica set; standalone topology is not allowed in production.');
     }
+    if (process.env.ALLOW_STANDALONE_MONGO !== 'true') {
+      throw new Error('MongoDB transactions require a replica set (see .env.example). For local development only, set ALLOW_STANDALONE_MONGO=true to run without transactions.');
+    }
     if (!warnedStandalone) {
       warnedStandalone = true;
-      console.warn('[platformEvents] Standalone MongoDB detected: running WITHOUT transactions (dev only).');
+      console.warn('[platformEvents] ALLOW_STANDALONE_MONGO=true: running WITHOUT transactions (local development only).');
     }
     return fn(undefined);
   }

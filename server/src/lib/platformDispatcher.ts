@@ -1,14 +1,20 @@
 // server/src/lib/platformDispatcher.ts — 06 §4: signed nudges after commit, coalesced, with backoff
 import crypto from 'crypto';
+import os from 'os';
 import { PlatformEvent } from '../models/PlatformEvent.model';
 import { OrgEventCounter } from '../models/OrgEventCounter.model';
 import { PlatformEventSubscription, IPlatformEventSubscription } from '../models/PlatformEventSubscription.model';
 import { SubscriptionCursor } from '../models/SubscriptionCursor.model';
-import { assertSafeSubscriberUrl } from './ssrfGuard';
+import { resolveSafeSubscriber, postPinned } from './ssrfGuard';
+import { acquireLease, releaseLease } from './platformLease';
 
 const TIMEOUT_MS = 5000;
 const SAFETY_RENUDGE_MS = 60_000;
 const MAX_BACKOFF_MS = 60 * 60 * 1000;
+const CONCURRENCY = 4;               // (subscription, org) nudges in flight
+const LEASE_NAME = 'platform-dispatcher';
+const LEASE_TTL_MS = 30_000;
+const HOLDER_ID = `${os.hostname()}:${process.pid}:${crypto.randomBytes(4).toString('hex')}`;
 
 function sign(secret: string, t: number, body: string): string {
   return crypto.createHmac('sha256', secret).update(`${t}.${body}`).digest('hex');
@@ -53,16 +59,13 @@ async function nudge(sub: IPlatformEventSubscription, orgId: string, latestSeq: 
   if (!SECRET_REF_RE.test(sub.secret_ref)) throw new Error('Subscription secret_ref must match PLATFORM_SUB_SECRET_*');
   const secret = process.env[sub.secret_ref];
   if (!secret) throw new Error(`Secret env var ${sub.secret_ref} is not set`);
-  const url = await assertSafeSubscriberUrl(sub.url);
+  // Resolve once, validate every address, connect only to the validated one (no DNS-rebinding window).
+  const target = await resolveSafeSubscriber(sub.url);
   const evt = await PlatformEvent.findOne({ org_id: orgId, seq: latestSeq }).select('id').lean();
   const body = JSON.stringify({ org_id: orgId, latest_seq: latestSeq });
   const t = Math.floor(Date.now() / 1000);
-  // NOTE: assertSafeSubscriberUrl validates the resolved addresses but fetch() re-resolves at connect time (DNS-rebinding window);
-  // pinning needs an undici Agent with a custom lookup, which would add a dependency.
-  const res = await fetch(url, {
-    method: 'POST',
-    redirect: 'manual',
-    signal: AbortSignal.timeout(TIMEOUT_MS),
+  const status = await postPinned(target, {
+    timeoutMs: TIMEOUT_MS,
     headers: {
       'Content-Type': 'application/json',
       'X-Karbexa-Signature': `t=${t},v1=${sign(secret, t, body)}`,
@@ -70,11 +73,18 @@ async function nudge(sub: IPlatformEventSubscription, orgId: string, latestSeq: 
     },
     body,
   });
-  await res.body?.cancel().catch(() => undefined); // release the connection; the body is never read
-  if (res.status < 200 || res.status > 299) throw new Error(`Subscriber responded ${res.status}`);
+  if (status < 200 || status > 299) throw new Error(`Subscriber responded ${status}`);
 }
 
-export async function dispatchOnce(): Promise<{ nudged: number; failed: number }> {
+/** Run fn over items with at most `limit` in flight. */
+export async function runPool<T>(items: T[], limit: number, fn: (item: T) => Promise<void>): Promise<void> {
+  let next = 0;
+  await Promise.all(Array.from({ length: Math.min(limit, items.length) }, async () => {
+    while (next < items.length) await fn(items[next++]);
+  }));
+}
+
+export async function dispatchOnce(opts: { renew?: () => Promise<boolean> } = {}): Promise<{ nudged: number; failed: number }> {
   let nudged = 0;
   let failed = 0;
   const subs = await PlatformEventSubscription.find({ status: 'active' });
@@ -82,6 +92,8 @@ export async function dispatchOnce(): Promise<{ nudged: number; failed: number }
   const counters = await OrgEventCounter.find({ seq: { $gt: 0 } }).lean();
   const now = Date.now();
 
+  type Work = { sub: IPlatformEventSubscription; counter: (typeof counters)[number]; cur?: { attempts?: number } };
+  const work: Work[] = [];
   for (const sub of subs) {
     const cursors = await SubscriptionCursor.find({ subscription_id: sub._id }).lean();
     const byOrg = new Map(cursors.map(c => [String(c.org_id), c]));
@@ -92,31 +104,45 @@ export async function dispatchOnce(): Promise<{ nudged: number; failed: number }
         && (!cur?.last_nudged_at || now - cur.last_nudged_at.getTime() >= SAFETY_RENUDGE_MS);
       if (!newEvents && !lagging) continue;
       if (cur?.next_attempt_at && cur.next_attempt_at.getTime() > now) continue;
-
-      const filter = { subscription_id: sub._id, org_id: counter._id };
-      try {
-        await nudge(sub, String(counter._id), counter.seq);
-        await SubscriptionCursor.updateOne(filter, {
-          $max: { last_nudged_seq: counter.seq },
-          $set: { last_nudged_at: new Date(), attempts: 0 },
-          $unset: { last_error: '', next_attempt_at: '' },
-        }, { upsert: true });
-        nudged++;
-      } catch (err) {
-        const attempts = (cur?.attempts ?? 0) + 1;
-        const delay = Math.min(MAX_BACKOFF_MS, 1000 * 2 ** Math.min(attempts, 20));
-        await SubscriptionCursor.updateOne(filter, {
-          $set: {
-            last_error: String((err as Error)?.message ?? err).slice(0, 500),
-            attempts,
-            next_attempt_at: new Date(Date.now() + delay),
-          },
-        }, { upsert: true });
-        failed++;
-      }
+      work.push({ sub, counter, cur });
     }
   }
+
+  let leaseLost = false;
+  // Bounded concurrency: one slow or dead subscriber no longer blocks every other (subscription, org) pair.
+  await runPool(work, CONCURRENCY, async ({ sub, counter, cur }) => {
+    if (leaseLost) return;
+    if (opts.renew && !(await opts.renew())) { leaseLost = true; return; }
+    const filter = { subscription_id: sub._id, org_id: counter._id };
+    try {
+      await nudge(sub, String(counter._id), counter.seq);
+      await SubscriptionCursor.updateOne(filter, {
+        $max: { last_nudged_seq: counter.seq },
+        $set: { last_nudged_at: new Date(), attempts: 0 },
+        $unset: { last_error: '', next_attempt_at: '' },
+      }, { upsert: true });
+      nudged++;
+    } catch (err) {
+      const attempts = (cur?.attempts ?? 0) + 1;
+      const delay = Math.min(MAX_BACKOFF_MS, 1000 * 2 ** Math.min(attempts, 20));
+      await SubscriptionCursor.updateOne(filter, {
+        $set: {
+          last_error: String((err as Error)?.message ?? err).slice(0, 500),
+          attempts,
+          next_attempt_at: new Date(Date.now() + delay),
+        },
+      }, { upsert: true });
+      failed++;
+    }
+  });
   return { nudged, failed };
+}
+
+/** One dispatcher cycle under the cross-instance lease: only the lease holder sends; others return skipped. */
+export async function dispatchCycle(holder: string = HOLDER_ID): Promise<{ nudged: number; failed: number; skipped: boolean }> {
+  if (!(await acquireLease(LEASE_NAME, holder, LEASE_TTL_MS))) return { nudged: 0, failed: 0, skipped: true };
+  const r = await dispatchOnce({ renew: () => acquireLease(LEASE_NAME, holder, LEASE_TTL_MS) });
+  return { ...r, skipped: false };
 }
 
 let timer: NodeJS.Timeout | undefined;
@@ -129,7 +155,7 @@ export function startPlatformDispatcher(): void {
   timer = setInterval(() => {
     if (running) return;
     running = true;
-    dispatchOnce()
+    dispatchCycle()
       .catch(err => console.error('[PlatformDispatcher] run failed', err))
       .finally(() => { running = false; });
   }, interval);
@@ -140,4 +166,5 @@ export function startPlatformDispatcher(): void {
 export function stopPlatformDispatcher(): void {
   if (timer) clearInterval(timer);
   timer = undefined;
+  releaseLease(LEASE_NAME, HOLDER_ID).catch(() => undefined); // let another instance take over immediately
 }

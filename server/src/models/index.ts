@@ -75,4 +75,5 @@ export * from './OperatorAuditEvent.model';
 export * from './PlatformEvent.model';
 export * from './OrgEventCounter.model';
 export * from './PlatformEventSubscription.model';
+export * from './PlatformLease.model';
 export * from './SubscriptionCursor.model';
