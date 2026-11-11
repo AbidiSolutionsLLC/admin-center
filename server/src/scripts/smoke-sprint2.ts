@@ -43,6 +43,10 @@ async function main() {
   const backend = await jose.generateKeyPair('RS256', { extractable: true });
   const tenantPrivateJwk = { ...(await gen()), kid: 'tenant-smoke' };
   const backendPublic = { ...(await jose.exportJWK(backend.publicKey)), kid: 'smoke-backend-1', alg: 'RS256', use: 'sig' };
+  const adminBackend = await jose.generateKeyPair('RS256', { extractable: true });
+  const adminBackendPublicJwk = await jose.exportJWK(adminBackend.publicKey);
+  const adminBackendPublic = { ...adminBackendPublicJwk, kid: await jose.calculateJwkThumbprint(adminBackendPublicJwk), alg: 'RS256', use: 'sig' };
+  const adminBackendPem = await jose.exportPKCS8(adminBackend.privateKey);
   Object.assign(process.env, {
     NODE_ENV: 'development', MONGODB_URI: mongo.getUri(), DB_NAME: 'smoke_s2',
     ID_ISSUER_ORIGIN: ORIGIN, ADMIN_SPA_ORIGIN: ORIGIN, OPERATOR_SPA_ORIGIN: ORIGIN, PRODUCTS_SPA_ORIGIN: ORIGIN, CLIENT_URL: ORIGIN,
@@ -53,6 +57,8 @@ async function main() {
     IDENTITY_SERVICES_KEY: JSON.stringify({ ...(await gen()), kid: 'services-smoke' }),
     IDENTITY_OPERATOR_KEY: JSON.stringify({ ...(await gen()), kid: 'operator-smoke' }),
     SERVICES_PRODUCTS_BACKEND_JWKS: JSON.stringify({ keys: [backendPublic] }),
+    SERVICES_ADMIN_BACKEND_JWKS: JSON.stringify({ keys: [adminBackendPublic] }),
+    ADMIN_BACKEND_CLIENT_KEY: adminBackendPem,
   });
   delete process.env.ENTRA_CLIENT_ID;
 
@@ -429,6 +435,55 @@ async function main() {
       check('L3-2 bounded: after commit every member gets exactly one event with the bumped authz_ver', bEvents.length === 5 && (await Promise.all(bulkIds.map(async (id) => (bEvents.find((e) => e.subject.id === id)?.data as any)?.authz_ver === (await authzOf(id))))).every(Boolean), bEvents.length);
       const bSeqs = (await PlatformEvent.find({ org_id: orgId }).sort({ seq: 1 }).lean()).map((e) => e.seq);
       check('L3-2 org seq stays contiguous after group changes and the bounded fan-out', bSeqs.every((v, i) => v === i + 1));
+    }
+
+    // ── L3-4 (D4): karbexa-admin-backend services client → products-internal token ────────────────────────────────
+    {
+      const { getProductsInternalToken, resetProductsInternalToken } = await import('../platform/productsInternalToken');
+      const SVC = `${ORIGIN}/realms/services`;
+      let calls = 0;
+      const countingFetch: typeof fetch = (u, i) => { calls++; return fetch(u, i); };
+      resetProductsInternalToken();
+      const t1 = await getProductsInternalToken({ fetchImpl: countingFetch });
+      const t2 = await getProductsInternalToken({ fetchImpl: countingFetch });
+      const c1 = jose.decodeJwt(t1);
+      check('L3-4 getProductsInternalToken issues aud urn:karbexa:products-internal', c1.aud === 'urn:karbexa:products-internal', c1.aud);
+      check('L3-4 token scope is exactly products.internal.read and client_id karbexa-admin-backend', c1.scope === 'products.internal.read' && (c1.client_id === 'karbexa-admin-backend' || c1.sub === 'karbexa-admin-backend'), { scope: c1.scope, client_id: c1.client_id, sub: c1.sub });
+      check('L3-4 token is token_use service, RS256 at+jwt (services realm issues typ at+jwt)', c1.token_use === 'service' && jose.decodeProtectedHeader(t1).alg === 'RS256' && String(jose.decodeProtectedHeader(t1).typ).toLowerCase().replace('application/', '') === 'at+jwt', jose.decodeProtectedHeader(t1));
+      check('L3-4 second call is served from cache (one token request)', t1 === t2 && calls === 1, { calls });
+      resetProductsInternalToken(); calls = 0;
+      const [s1, s2] = await Promise.all([getProductsInternalToken({ fetchImpl: countingFetch }), getProductsInternalToken({ fetchImpl: countingFetch })]);
+      check('L3-4 concurrent callers are single-flight (one request, same token)', s1 === s2 && calls === 1, { calls });
+      const exp = Number(jose.decodeJwt(s1).exp) * 1000;
+      const t3 = await getProductsInternalToken({ fetchImpl: countingFetch, now: () => exp - 30_000 }); // inside the 60 s refresh margin
+      check('L3-4 token is refreshed once it is within 60 s of exp', calls === 2 && !!t3, { calls });
+      check('L3-4 the internal token is rejected by the Platform API (audience mismatch)', (await fetch(`${ORIGIN}/platform/v1/orgs`, { headers: { authorization: `Bearer ${t1}` } })).status === 401);
+
+      const assertion = async (clientId: string, key: crypto.KeyObject | jose.CryptoKey, kid: string) => new jose.SignJWT({})
+        .setProtectedHeader({ alg: 'RS256', kid }).setIssuer(clientId).setSubject(clientId).setAudience(SVC)
+        .setJti(crypto.randomUUID()).setIssuedAt().setExpirationTime('2m').sign(key);
+      const tokenCall = async (clientId: string, key: crypto.KeyObject | jose.CryptoKey, kid: string, scope: string, resource: string) => {
+        const rr = await fetch(`${SVC}/oauth/token`, form({
+          grant_type: 'client_credentials', client_id: clientId,
+          client_assertion_type: 'urn:ietf:params:oauth:client-assertion-type:jwt-bearer', client_assertion: await assertion(clientId, key, kid), scope, resource,
+        }));
+        return { status: rr.status, json: await rr.json() as Record<string, string> };
+      };
+      const adminKey = crypto.createPrivateKey(process.env.ADMIN_BACKEND_CLIENT_KEY!);
+      const adminKid = await jose.calculateJwkThumbprint(crypto.createPublicKey(adminKey).export({ format: 'jwk' }) as jose.JWK);
+      const ok = await tokenCall('karbexa-admin-backend', adminKey, adminKid, 'products.internal.read', 'urn:karbexa:products-internal');
+      check('L3-4 admin-backend token request with its own key = 200', ok.status === 200 && !!ok.json.access_token, ok);
+      const bad1 = await tokenCall('karbexa-admin-backend', adminKey, adminKid, 'platform.org.read', 'urn:karbexa:platform-api');
+      check('L3-4 admin-backend CANNOT obtain urn:karbexa:platform-api', bad1.status >= 400 && !bad1.json.access_token, bad1);
+      const bad2 = await tokenCall('karbexa-admin-backend', adminKey, adminKid, 'platform.org.read', 'urn:karbexa:products-internal');
+      check('L3-4 admin-backend CANNOT obtain a platform scope on products-internal', bad2.status >= 400 && !bad2.json.access_token, bad2);
+      const bad3 = await tokenCall('karbexa-products-backend', backend.privateKey, 'smoke-backend-1', 'products.internal.read', 'urn:karbexa:products-internal');
+      check('L3-4 karbexa-products-backend CANNOT obtain products-internal', bad3.status >= 400 && !bad3.json.access_token, bad3);
+      const bad4 = await tokenCall('karbexa-admin-backend', backend.privateKey, 'smoke-backend-1', 'products.internal.read', 'urn:karbexa:products-internal');
+      check('L3-4 an assertion signed with another client\'s key is rejected', bad4.status === 400 || bad4.status === 401, bad4);
+      const pb = await tokenCall('karbexa-products-backend', backend.privateKey, 'smoke-backend-1', 'platform.org.read', 'urn:karbexa:platform-api');
+      check('L3-4 products-backend still gets its platform-api token (typ at+jwt)', pb.status === 200 && String(jose.decodeProtectedHeader(pb.json.access_token).typ).toLowerCase().replace('application/', '') === 'at+jwt', pb.status);
+      resetProductsInternalToken();
     }
 
     // ── E10: OPERATOR_IP_ALLOWLIST (read per request from env; req.ip with TRUST_PROXY=0, so X-Forwarded-For is ignored) ──

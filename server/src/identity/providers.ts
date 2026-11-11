@@ -3,7 +3,7 @@
 import fs from 'fs';
 import crypto from 'crypto';
 import {
-  ADMIN_AUDIENCE, ADMIN_SPA_CLIENT_ID, PRODUCTS_AUDIENCE, PRODUCTS_SPA_CLIENT_ID, PRODUCTS_BACKEND_CLIENT_ID,
+  ADMIN_AUDIENCE, ADMIN_SPA_CLIENT_ID, PRODUCTS_AUDIENCE, PRODUCTS_SPA_CLIENT_ID, PRODUCTS_BACKEND_CLIENT_ID, ADMIN_BACKEND_CLIENT_ID,
   OPERATOR_AUDIENCE, OPERATOR_SPA_CLIENT_ID, OPERATOR_SESSION_IDLE_S,
   PLATFORM_API_AUDIENCE, PLATFORM_API_SCOPES, PRODUCTS_INTERNAL_AUDIENCE, PRODUCTS_INTERNAL_SCOPES,
   ACCESS_TOKEN_TTL_S, SESSION_ABSOLUTE_MS, Realm, getIdentityConfig,
@@ -235,8 +235,9 @@ async function buildTenant(cookieKeys: string[]): Promise<OidcProvider> {
   return provider;
 }
 
-function readServicesClientJwks(): { keys: unknown[] } | undefined {
-  const raw = process.env.SERVICES_PRODUCTS_BACKEND_JWKS?.trim();
+/** Public JWKS of a services-realm client: env var holds inline JSON (JWKS or single JWK) or a path to such a file. */
+function readServicesClientJwks(envVar: string): { keys: unknown[] } | undefined {
+  const raw = process.env[envVar]?.trim();
   if (!raw) return undefined;
   const text = raw.startsWith('{') ? raw : fs.readFileSync(raw, 'utf8');
   const parsed = JSON.parse(text);
@@ -249,6 +250,7 @@ const SERVICE_RESOURCES: Record<string, string> = {
 };
 const SERVICE_CLIENT_RESOURCE: Record<string, string> = {
   [PRODUCTS_BACKEND_CLIENT_ID]: PLATFORM_API_AUDIENCE,
+  [ADMIN_BACKEND_CLIENT_ID]: PRODUCTS_INTERNAL_AUDIENCE, // 03 §2: karbexa-admin-backend -> products-internal only
 };
 
 async function buildServices(cookieKeys: string[]): Promise<OidcProvider> {
@@ -256,19 +258,20 @@ async function buildServices(cookieKeys: string[]): Promise<OidcProvider> {
   const { privateJwks } = await loadRealmKeys('services');
   await initAdapterIndexes('services', SERVICES_MODELS);
   const clients: unknown[] = [];
-  const backendJwks = readServicesClientJwks();
-  if (backendJwks) {
-    clients.push({
-      client_id: PRODUCTS_BACKEND_CLIENT_ID,
-      token_endpoint_auth_method: 'private_key_jwt',
-      token_endpoint_auth_signing_alg: 'RS256',
-      jwks: backendJwks,
-      grant_types: ['client_credentials'],
-      response_types: [],
-      redirect_uris: [],
-      scope: PLATFORM_API_SCOPES,
-    });
-  }
+  const serviceClient = (clientId: string, jwks: { keys: unknown[] }, scope: string) => ({
+    client_id: clientId,
+    token_endpoint_auth_method: 'private_key_jwt',
+    token_endpoint_auth_signing_alg: 'RS256',
+    jwks,
+    grant_types: ['client_credentials'],
+    response_types: [],
+    redirect_uris: [],
+    scope,
+  });
+  const backendJwks = readServicesClientJwks('SERVICES_PRODUCTS_BACKEND_JWKS');
+  if (backendJwks) clients.push(serviceClient(PRODUCTS_BACKEND_CLIENT_ID, backendJwks, PLATFORM_API_SCOPES));
+  const adminBackendJwks = readServicesClientJwks('SERVICES_ADMIN_BACKEND_JWKS');
+  if (adminBackendJwks) clients.push(serviceClient(ADMIN_BACKEND_CLIENT_ID, adminBackendJwks, PRODUCTS_INTERNAL_SCOPES));
 
   const provider = new oidc.Provider(cfg.servicesIssuer, {
     ...commonConfig('services', cookieKeys),
