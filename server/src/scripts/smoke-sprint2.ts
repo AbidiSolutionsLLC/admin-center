@@ -73,7 +73,17 @@ async function main() {
     const apps = await App.find({ app_type: 'karbexa_product' });
     check('E3 registry seeds people/projects/sign/desk', apps.map((a) => a.product_key).sort().join() === 'desk,people,projects,sign', apps.map((a) => a.product_key));
     const deskRoles = await ProductRole.find({ product_key: 'desk' });
-    check('E3 desk catalog (4 roles, default requester)', deskRoles.length === 4 && deskRoles.find((r) => r.is_default)?.key === 'requester', deskRoles.map((r) => r.key));
+    check('E3 desk catalog (5 roles, default requester)', deskRoles.length === 5 && deskRoles.find((r) => r.is_default)?.key === 'requester', deskRoles.map((r) => r.key));
+    {
+      // L3-1 (D5): read_only rank 5 in every product catalog; default roles unchanged after a second seed
+      const defaults: Record<string, string> = { people: 'employee', projects: 'team_member', sign: 'sign_user', desk: 'requester' };
+      for (const pk of Object.keys(defaults)) {
+        const rows = await ProductRole.find({ product_key: pk }).lean();
+        const ro = rows.filter((r) => r.key === 'read_only');
+        check(`L3-1 ${pk}: read_only rank 5 named 'Read Only', not default, exactly one row`, ro.length === 1 && ro[0].rank === 5 && ro[0].name === 'Read Only' && !ro[0].is_default, ro);
+        check(`L3-1 ${pk}: default role still ${defaults[pk]} (only one default)`, rows.filter((r) => r.is_default).map((r) => r.key).join() === defaults[pk], rows.map((r) => r.key));
+      }
+    }
     check('E3 default plans seeded', (await Plan.countDocuments({ key: { $in: ['starter', 'professional', 'enterprise'] } })) === 3);
 
     // ── E10: operator login (operator realm, PKCE, mandatory TOTP enrolment) ──────────────
@@ -255,6 +265,11 @@ async function main() {
         const ae = await AuditEvent.findOne({ company_id: orgId, action, correlation_id: cid }).lean();
         check(`E4a ${label}: AuditEvent correlation_id equals the event's`, !!ae && ae.correlation_id === evt?.correlation_id, ae?.correlation_id);
       };
+      {
+        const rr = await tenant(`/apps/${signApp!._id}/roles`, 'GET', undefined, 'smoke-roles');
+        const rj = await rr.json() as { data?: { key?: string; role_key?: string; rank?: number }[] | { roles?: { key?: string; rank?: number }[] } };
+        check('L3-1 GET /apps/:id/roles lists read_only', rr.status === 200 && JSON.stringify(rj).includes('read_only'), `${rr.status} ${JSON.stringify(rj).slice(0, 200)}`);
+      }
       check('E4a signing roles available for assignment test', !!signApp && !!r1 && !!r2, signRoles.map((r) => r.key));
 
       res = await tenant(`/apps/${signApp!._id}/assign`, 'POST', { target_type: 'user', target_id: String(me._id), product_role_key: r1 }, 'smoke-assign');
