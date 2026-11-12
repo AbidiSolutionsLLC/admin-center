@@ -14,6 +14,9 @@ import {
   runE11Seed,
 } from '../../scripts/seed-e11';
 import { ROLES } from '../../constants/roles';
+import bcrypt from 'bcryptjs';
+import { OperatorAccount } from '../../models';
+import { MongoClient } from 'mongodb';
 
 describe('E11 Seeding Script — Unit & Normalization Tests', () => {
   test('mapEmploymentType maps legacy empType to canonical employment_type', () => {
@@ -229,14 +232,33 @@ describe('E11 Seeding Script — In-Memory Database Execution', () => {
     const testMonoConn = await mongoose.createConnection(monolithUri).asPromise();
     const monoUsers = await testMonoConn.db!.collection('users').find({}).toArray();
     for (const mu of monoUsers) {
-      assert.ok(mu.platformMemberId, 'platformMemberId must be written back');
-      assert.ok(mu.platformIdentityId, 'platformIdentityId must be written back');
+      // The monolith schemas type these as String and query them with string claims (token orgId/memberId).
+      assert.equal(typeof mu.platformMemberId, 'string', 'platformMemberId must be written back as a string');
+      assert.equal(typeof mu.platformIdentityId, 'string', 'platformIdentityId must be written back as a string');
       assert.equal(mu.platformStatus, 'active');
     }
+    const monoCompany = await testMonoConn.db!.collection('companies').findOne({});
+    assert.equal(typeof monoCompany!.platformOrgId, 'string', 'platformOrgId must be a string');
+    const monoDept = await testMonoConn.db!.collection('departments').findOne({});
+    assert.equal(typeof monoDept!.platformDepartmentId, 'string', 'platformDepartmentId must be a string');
+    // What the monolith isLoggedIn does with token claims must find the projected org.
+    assert.ok(await testMonoConn.db!.collection('companies').findOne({ platformOrgId: String(monoCompany!.platformOrgId) }));
 
-    // Verify Monolith MemberAccess projection
+    // Verify Monolith MemberAccess projection (from Admin effective access, keyed by string member id)
     const accessRows = await testMonoConn.db!.collection('memberaccesses').find({}).toArray();
     assert.equal(accessRows.length, 2);
+    const aliceMono = monoUsers.find((u) => u.email === 'alice@karbexa.internal');
+    const aliceAccess = accessRows.find((r) => r.platformMemberId === aliceMono!.platformMemberId);
+    assert.ok(aliceAccess, 'MemberAccess row is found by the string member id');
+    assert.equal(aliceAccess.products.desk?.role, 'desk_admin');
+    assert.equal(aliceAccess.products.sign?.role, 'sign_administrator');
+    assert.equal(aliceAccess.authzVer, alice.authz_ver);
+
+    // Consumer cursor starts at the org's seq recorded before S8 (11 §3 step 5)
+    const syncRow = await testMonoConn.db!.collection('platformsyncstates').findOne({ platformOrgId: monoCompany!.platformOrgId });
+    assert.ok(syncRow, 'PlatformSyncState row created for the org');
+    assert.equal(syncRow.lastAppliedSeq, 0);
+    assert.equal(String(syncRow.company), String(monoCompany!._id));
 
     await testAdminConn.close();
     await testMonoConn.close();
@@ -249,5 +271,40 @@ describe('E11 Seeding Script — In-Memory Database Execution', () => {
       verbose: false,
     });
     assert.equal(rerunResult.stats.users, 2);
+  });
+
+  test('operator account: no built-in credentials, and a re-run never resets the password', async () => {
+    const saved = { email: process.env.OPERATOR_SEED_EMAIL, password: process.env.OPERATOR_SEED_PASSWORD };
+    const opCollection = OperatorAccount.collection.collectionName;
+    const client = await new MongoClient(adminUri).connect(); // survives the script's mongoose.disconnect()
+    const ops = client.db().collection(opCollection);
+    try {
+      // Without env credentials nothing is seeded (no fallback password).
+      delete process.env.OPERATOR_SEED_EMAIL;
+      delete process.env.OPERATOR_SEED_PASSWORD;
+      await ops.deleteMany({});
+      const skipped = await runE11Seed({ dryRun: false, adminUri, monolithUri, verbose: false });
+      assert.equal(skipped.stats.operatorAccounts, 0);
+      assert.equal(await ops.countDocuments(), 0);
+
+      process.env.OPERATOR_SEED_EMAIL = 'Ops@Karbexa.Internal';
+      process.env.OPERATOR_SEED_PASSWORD = 'first-password-123';
+      await runE11Seed({ dryRun: false, adminUri, monolithUri, verbose: false });
+      const created = await ops.findOne({ email: 'ops@karbexa.internal' });
+      assert.ok(created, 'operator created from env credentials');
+      assert.ok(await bcrypt.compare('first-password-123', created.password_hash));
+
+      process.env.OPERATOR_SEED_PASSWORD = 'second-password-456';
+      await runE11Seed({ dryRun: false, adminUri, monolithUri, verbose: false });
+      const after = await ops.findOne({ email: 'ops@karbexa.internal' });
+      assert.equal(after!.password_hash, created.password_hash, 're-run must not reset the operator password');
+
+      process.env.OPERATOR_SEED_PASSWORD = 'short';
+      await assert.rejects(runE11Seed({ dryRun: true, adminUri, monolithUri, verbose: false }), /at least 12 characters/);
+    } finally {
+      if (saved.email === undefined) delete process.env.OPERATOR_SEED_EMAIL; else process.env.OPERATOR_SEED_EMAIL = saved.email;
+      if (saved.password === undefined) delete process.env.OPERATOR_SEED_PASSWORD; else process.env.OPERATOR_SEED_PASSWORD = saved.password;
+      await client.close();
+    }
   });
 });

@@ -21,7 +21,9 @@ import {
   Holiday as AdminHoliday,
   AppAssignment as AdminAppAssignment,
   OperatorAccount as AdminOperatorAccount,
+  OrgEventCounter,
 } from '../models';
+import { computeEffectiveAccess } from '../lib/effectiveAccess';
 import { PRODUCT_DEFS, DEFAULT_PLANS } from '../lib/productCatalog';
 import { seedSystemRoles, seedPermissions } from '../lib/seed';
 import { ROLES, UserRole as AdminUserRoleEnum } from '../constants/roles';
@@ -91,7 +93,7 @@ const MonolithCompanySchema = new Schema(
     logo: String,
     companyLogo: String,
     isDeleted: { type: Boolean, default: false },
-    platformOrgId: { type: Schema.Types.ObjectId },
+    platformOrgId: { type: String },
     platformStatus: { type: String },
   },
   { collection: 'companies', strict: false }
@@ -102,7 +104,7 @@ const MonolithDepartmentSchema = new Schema(
     name: { type: String, required: true },
     company: { type: Schema.Types.ObjectId },
     isActive: { type: Boolean, default: true },
-    platformDepartmentId: { type: Schema.Types.ObjectId },
+    platformDepartmentId: { type: String },
     deletedAt: Date,
   },
   { collection: 'departments', strict: false }
@@ -132,8 +134,8 @@ const MonolithUserSchema = new Schema(
     hasDeskPortalAccess: { type: Boolean, default: true },
     deskRole: String,
     isTechnician: { type: Boolean, default: false },
-    platformMemberId: { type: Schema.Types.ObjectId },
-    platformIdentityId: { type: Schema.Types.ObjectId },
+    platformMemberId: { type: String },
+    platformIdentityId: { type: String },
     platformStatus: String,
   },
   { collection: 'users', strict: false }
@@ -153,7 +155,7 @@ const MonolithHolidaySchema = new Schema(
 const MonolithMemberAccessSchema = new Schema(
   {
     company: { type: Schema.Types.ObjectId, required: true, index: true },
-    platformMemberId: { type: Schema.Types.ObjectId, required: true, index: true },
+    platformMemberId: { type: String, required: true, index: true },
     authzVer: { type: Number, default: 1 },
     products: { type: Schema.Types.Mixed, default: {} },
     updatedAt: { type: Date, default: Date.now },
@@ -374,25 +376,31 @@ export async function runE11Seed(options: CliOptions): Promise<{
     }
     stats.plans++;
 
-    // Upsert operator account
-    const operatorEmail = (process.env.OPERATOR_SEED_EMAIL || 'operator@karbexa.internal').toLowerCase().trim();
-    const operatorPassword = process.env.OPERATOR_SEED_PASSWORD || 'PlatformOperator2026!';
-    if (!dryRun) {
-      const opHash = await bcrypt.hash(operatorPassword, 12);
-      await AdminOperatorAccount.findOneAndUpdate(
-        { email: operatorEmail },
-        {
-          $set: {
-            full_name: 'Platform Operator',
-            password_hash: opHash,
-            roles: ['platform_admin'],
-            status: 'active',
+    // Operator account: credentials come only from the environment (same rules as seed-operator.ts).
+    // An existing operator is left untouched, so re-running the seed never resets its password.
+    const operatorEmail = process.env.OPERATOR_SEED_EMAIL?.trim().toLowerCase();
+    const operatorPassword = process.env.OPERATOR_SEED_PASSWORD;
+    if (!operatorEmail || !operatorPassword) {
+      console.warn('[S1] OPERATOR_SEED_EMAIL / OPERATOR_SEED_PASSWORD not set: operator account not seeded.');
+    } else {
+      if (operatorPassword.length < 12) throw new Error('OPERATOR_SEED_PASSWORD must be at least 12 characters');
+      if (!dryRun) {
+        const opHash = await bcrypt.hash(operatorPassword, 12);
+        await AdminOperatorAccount.updateOne(
+          { email: operatorEmail },
+          {
+            $setOnInsert: {
+              full_name: 'Platform Operator',
+              password_hash: opHash,
+              roles: ['platform_admin'],
+              status: 'active',
+            },
           },
-        },
-        { upsert: true, new: true, setDefaultsOnInsert: true }
-      );
+          { upsert: true }
+        );
+      }
+      stats.operatorAccounts++;
     }
-    stats.operatorAccounts++;
 
     // ──────────────────────────────────────────────────────────────────────────
     // S2: Admin Company from Monolith Company & Entitlements & Entra IdP
@@ -438,7 +446,7 @@ export async function runE11Seed(options: CliOptions): Promise<{
       // Write back to Monolith Company
       await MonolithCompany.updateOne(
         { _id: monolithOrg._id },
-        { $set: { platformOrgId: adminCompany._id, platformStatus: 'active' } }
+        { $set: { platformOrgId: String(adminCompany._id), platformStatus: 'active' } }
       );
     } else {
       adminCompany = {
@@ -540,7 +548,7 @@ export async function runE11Seed(options: CliOptions): Promise<{
         // Write back on monolith Department
         await MonolithDepartment.updateOne(
           { _id: d._id },
-          { $set: { platformDepartmentId: adminDept._id } }
+          { $set: { platformDepartmentId: String(adminDept._id) } }
         );
       } else {
         adminDept = { _id: new Types.ObjectId(), name: d.name };
@@ -709,8 +717,8 @@ export async function runE11Seed(options: CliOptions): Promise<{
           { _id: mUser._id },
           {
             $set: {
-              platformMemberId: adminUserDoc._id,
-              platformIdentityId: identityDoc._id,
+              platformMemberId: String(adminUserDoc._id),
+              platformIdentityId: String(identityDoc._id),
               platformStatus: lifecycleState,
             },
           }
@@ -887,12 +895,33 @@ export async function runE11Seed(options: CliOptions): Promise<{
     // ──────────────────────────────────────────────────────────────────────────
     // S8: Monolith MemberAccess projection
     // ──────────────────────────────────────────────────────────────────────────
+    // 11 §3 step 5: record the org's current seq S before S8, and start the monolith consumer at S, so the first
+    // pull applies only Admin changes made after S (nothing skipped, no duplicate projections).
     console.log(`[S8] Projecting MemberAccess in monolith...`);
+    const seqBeforeS8 = dryRun
+      ? 0
+      : ((await OrgEventCounter.findById(adminCompany._id).lean())?.seq ?? 0);
 
     for (const diff of diffs) {
       const adminUser = Array.from(monolithIdToAdminUser.values()).find((u) => u.email === diff.email);
       if (!adminUser) continue;
 
+      if (!dryRun) {
+        // 11 §2 S8: the projection comes from Admin's effective-access service, so lifecycle state, entitlements,
+        // group/rule grants and org status are applied exactly as the live platform would apply them.
+        const effective = await computeEffectiveAccess(adminCompany._id, adminUser._id);
+        const products: Record<string, { role: string }> = {};
+        for (const [productKey, grant] of Object.entries(effective.products)) products[productKey] = { role: grant.role };
+        await MonolithMemberAccess.findOneAndUpdate(
+          { company: monolithOrg._id, platformMemberId: String(adminUser._id) },
+          { $set: { authzVer: effective.authz_ver, products, updatedAt: new Date() } },
+          { upsert: true, new: true, setDefaultsOnInsert: true }
+        );
+        stats.memberAccessProjected++;
+        continue;
+      }
+
+      // Dry run: nothing exists in Admin yet, so report the projection the seeded roles would produce.
       const projectedProducts: Record<string, { role: string }> = {};
       if (diff.seededProductRoles.people && diff.seededProductRoles.people !== 'none') {
         projectedProducts.people = { role: diff.seededProductRoles.people };
@@ -906,21 +935,18 @@ export async function runE11Seed(options: CliOptions): Promise<{
       if (diff.seededProductRoles.desk && diff.seededProductRoles.desk !== 'none') {
         projectedProducts.desk = { role: diff.seededProductRoles.desk };
       }
-
-      if (!dryRun) {
-        await MonolithMemberAccess.findOneAndUpdate(
-          { company: monolithOrg._id, platformMemberId: adminUser._id },
-          {
-            $set: {
-              authzVer: adminUser.authz_ver || 1,
-              products: projectedProducts,
-              updatedAt: new Date(),
-            },
-          },
-          { upsert: true, new: true, setDefaultsOnInsert: true }
-        );
-      }
+      if (verbose) console.log(`  [dry-run] ${diff.email}: ${JSON.stringify(projectedProducts)}`);
       stats.memberAccessProjected++;
+    }
+
+    if (!dryRun) {
+      // $max: a re-run never moves the cursor backwards past what the pull worker has already applied.
+      await monolithConn.collection('platformsyncstates').updateOne(
+        { platformOrgId: String(adminCompany._id) },
+        { $set: { company: monolithOrg._id }, $max: { lastAppliedSeq: seqBeforeS8, pendingSeq: seqBeforeS8 } },
+        { upsert: true }
+      );
+      console.log(`[S8] Consumer cursor for org ${adminCompany._id} starts at seq ${seqBeforeS8}.`);
     }
 
     // ──────────────────────────────────────────────────────────────────────────
