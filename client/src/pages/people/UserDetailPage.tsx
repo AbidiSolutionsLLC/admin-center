@@ -2,7 +2,7 @@
 import { useParams, useNavigate, useSearchParams } from 'react-router-dom';
 import { UserHistoryPanel } from '@/features/people/components/UserHistoryPanel';
 import { TableSkeleton } from '@/components/ui/TableSkeleton';
-import { History, ArrowLeft, Users, Edit2, Mail, RefreshCw, Monitor, PlaneTakeoff, Clock, CalendarDays, FileText, Briefcase, MapPin, ShieldAlert, Lock, Unlock, ArrowRight, WifiOff, ShieldCheck } from 'lucide-react';
+import { History, ArrowLeft, Users, Edit2, Mail, RefreshCw, Monitor, PlaneTakeoff, Clock, CalendarDays, FileText, Briefcase, MapPin, ShieldAlert, Lock, Unlock, ArrowRight, WifiOff, ShieldCheck, Shield, UserX } from 'lucide-react';
 import { useUserDetail } from '@/features/people/hooks/useUserDetail';
 import { useUnlockUser } from '@/features/people/hooks/useUnlockUser';
 import { useResendInvite } from '@/features/people/hooks/useResendInvite';
@@ -11,6 +11,8 @@ import { ReportingLinesPanel } from '@/features/people/components/ReportingLines
 import { EffectivePermissionsPanel } from '@/features/people/components/EffectivePermissionsPanel';
 import { UserDelegatesPanel } from '@/features/people/components/UserDelegatesPanel';
 import { UserProductAccessTab } from '@/features/people/components/UserProductAccessTab';
+import { UserSecurityPanel } from '@/features/people/components/UserSecurityPanel';
+import { OffboardingModal } from '@/features/people/components/OffboardingModal';
 import { formatTimeInTimezone, getTimezoneOffset } from '@/lib/timezone';
 import { useUserEffectiveSettings } from '@/features/locations/hooks/useUserEffectiveSettings';
 
@@ -44,7 +46,7 @@ export default function UserDetailPage() {
   const resendInvite = useResendInvite();
   const unlockUser = useUnlockUser(id!);
 
-  type DetailTab = 'profile' | 'org_placement' | 'product_access' | 'roles' | 'activity';
+  type DetailTab = 'profile' | 'org_placement' | 'product_access' | 'roles' | 'security' | 'activity';
   const activeTab = (searchParams.get('tab') as DetailTab) || 'profile';
   const setActiveTab = (tab: DetailTab) => {
     setSearchParams({ tab });
@@ -52,6 +54,7 @@ export default function UserDetailPage() {
 
   const [isEditModalOpen, setIsEditModalOpen] = useState(false);
   const [isLocationModalOpen, setIsLocationModalOpen] = useState(false);
+  const [isOffboardingModalOpen, setIsOffboardingModalOpen] = useState(false);
   const updateUser = useUpdateUser(id!);
   const { data: departments = [] } = useDepartments();
   const { data: locations = [] } = useLocations();
@@ -203,6 +206,15 @@ export default function UserDetailPage() {
               Resend Invite
             </button>
           )}
+          {user.lifecycle_state !== 'terminated' && user.lifecycle_state !== 'archived' && (
+            <button
+              onClick={() => setIsOffboardingModalOpen(true)}
+              className="h-9 px-4 text-sm font-medium rounded-md border border-line bg-white text-red-600 hover:bg-red-50 hover:border-red-200 transition-colors flex items-center gap-2"
+            >
+              <UserX className="w-4 h-4" />
+              Offboard
+            </button>
+          )}
           <button
             onClick={() => setIsEditModalOpen(true)}
             className="h-9 px-4 text-sm font-medium rounded-md border border-line bg-white text-ink hover:bg-surface-alt transition-colors flex items-center gap-2"
@@ -220,6 +232,7 @@ export default function UserDetailPage() {
           { id: 'org_placement', label: 'Org placement', icon: Users },
           { id: 'product_access', label: 'Product access', icon: Monitor },
           { id: 'roles', label: 'Roles', icon: ShieldCheck },
+          { id: 'security', label: 'Security', icon: Shield },
           { id: 'activity', label: 'Activity', icon: History },
         ].map((tab) => {
           const isActive = activeTab === tab.id;
@@ -389,6 +402,11 @@ export default function UserDetailPage() {
         </div>
       )}
 
+      {/* ── Tab Content: Security (03 §4.4, A2-6) ── */}
+      {activeTab === 'security' && (
+        <UserSecurityPanel user={user} />
+      )}
+
       {/* ── Tab Content: Activity ── */}
       {activeTab === 'activity' && (
         <div className="space-y-4">
@@ -451,6 +469,18 @@ export default function UserDetailPage() {
             requiredFields={formMetadata?.required_fields || ['email', 'full_name']}
           />
         </Modal>
+      )}
+
+      {/* ── Offboarding Modal (08 §3.3, A2-5) ── */}
+      {isOffboardingModalOpen && (
+        <OffboardingModal
+          user={user}
+          isOpen={isOffboardingModalOpen}
+          onClose={() => setIsOffboardingModalOpen(false)}
+          onSuccess={() => {
+            refetch();
+          }}
+        />
       )}
     </div>
   );
