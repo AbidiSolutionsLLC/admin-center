@@ -7,6 +7,7 @@
 
 import nodemailer, { type Transporter } from 'nodemailer';
 import { EmailClient } from '@azure/communication-email';
+import { escapeHtml } from '../identity/html';
 
 interface WelcomeEmailParams {
   email: string;
@@ -474,10 +475,66 @@ If you didn't request this code, please ignore this email.
   await sendEmailInternal({ to: email, subject: 'Your Verification Code', html, text });
 };
 
+export const sendMfaResetEmail = async (params: {
+  email: string;
+  full_name: string;
+  company_name: string;
+}): Promise<void> => {
+  const { email, full_name, company_name } = params;
+  const html = `
+    <!DOCTYPE html>
+    <html>
+      <head>
+        <meta charset="utf-8">
+        <style>
+          body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif; line-height: 1.6; color: #333; margin: 0; padding: 0; }
+          .container { max-width: 600px; margin: 0 auto; padding: 20px; }
+          .header { background: #3b5bdb; color: white; padding: 20px; text-align: center; border-radius: 8px 8px 0 0; }
+          .content { background: #ffffff; padding: 30px; border: 1px solid #e1e4e8; border-top: none; border-radius: 0 0 8px 8px; }
+          .warning { background: #fff3cd; border-left: 4px solid #ffc107; padding: 12px; margin: 20px 0; font-size: 14px; }
+        </style>
+      </head>
+      <body>
+        <div class="container">
+          <div class="header">
+            <h2>Two-Factor Authentication Reset</h2>
+          </div>
+          <div class="content">
+            <p>Hi ${escapeHtml(full_name)},</p>
+            <p>An administrator has reset your Multi-Factor Authentication (MFA) settings for <strong>${escapeHtml(company_name)}</strong>.</p>
+            <p>At your next sign-in, you will be required to set up your authenticator app again before you can access the platform.</p>
+            <div class="warning">
+              <strong>Notice:</strong> If you did not request this reset or speak with your administrator, please contact your security team immediately.
+            </div>
+          </div>
+        </div>
+      </body>
+    </html>
+  `.trim();
+
+  const text = `
+Hi ${full_name},
+
+An administrator has reset your Multi-Factor Authentication (MFA) settings for ${company_name}.
+
+At your next sign-in, you will be required to set up your authenticator app again before you can access the platform.
+
+If you did not request this reset or speak with your administrator, please contact your security team immediately.
+  `.trim();
+
+  await sendEmailInternal({
+    to: email,
+    subject: `Two-Factor Authentication Reset — ${company_name}`,
+    html,
+    text,
+  });
+};
+
 export const emailService = {
   sendWelcomeEmail,
   sendBulkWelcomeEmails,
   sendPasswordResetEmail,
   sendPolicyNotificationEmail,
   sendMfaOtpEmail,
+  sendMfaResetEmail,
 };

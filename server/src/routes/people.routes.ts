@@ -21,6 +21,7 @@ import {
   getUserAppAccessHistory,
   getUserEffectiveSettings,
   unlockUser,
+  resetUserMfa,
 } from '../controllers/people.controller';
 
 import { assignUserOrg } from '../controllers/organization.controller';
@@ -153,6 +154,12 @@ router.delete('/:id', requireRole(PEOPLE_MANAGERS), deleteUser);
  * Admin action to unlock a user account that was locked due to multiple failed login attempts
  */
 router.post('/:id/unlock', requireRole(PEOPLE_MANAGERS), unlockUser);
+
+/**
+ * POST /people/:id/mfa-reset
+ * Admin action to reset a user's MFA enrolment (03 §4.4, A3-4)
+ */
+router.post('/:id/mfa-reset', requireRole(PERMISSION_GROUPS.IT_ADMINS), resetUserMfa);
 
 /**
  * POST /people/:id/assign-org
