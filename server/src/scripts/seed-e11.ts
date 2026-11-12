@@ -3,6 +3,7 @@ import mongoose, { Types, Schema } from 'mongoose';
 import bcrypt from 'bcryptjs';
 import dotenv from 'dotenv';
 import path from 'path';
+import fs from 'fs';
 import { z } from 'zod';
 import {
   Company as AdminCompany,
@@ -41,6 +42,7 @@ const CliOptionsSchema = z.object({
   companyName: z.string().optional(),
   companyId: z.string().optional(),
   verbose: z.boolean().default(false),
+  reportDir: z.string().optional(),
 });
 
 export type CliOptions = z.infer<typeof CliOptionsSchema>;
@@ -69,6 +71,7 @@ export function parseArgs(args: string[]): CliOptions {
 
   const companyName = getArg('--org-name') || getArg('--company-name');
   const companyId = getArg('--org-id') || getArg('--company-id');
+  const reportDir = getArg('--report-dir');
 
   return CliOptionsSchema.parse({
     dryRun: isDryRun,
@@ -77,6 +80,7 @@ export function parseArgs(args: string[]): CliOptions {
     companyName,
     companyId,
     verbose: isVerbose,
+    reportDir,
   });
 }
 
@@ -199,6 +203,7 @@ export function normalizeProjectRole(rawRole: string | null | undefined, company
 
   if (!rawRole) return 'team_member';
   const cleaned = String(rawRole).toLowerCase().replace(/[\s_-]+/g, '');
+  if (['none', 'revoked', 'noaccess', 'denied'].includes(cleaned)) return 'none';
   if (['projectadministrator', 'projectadmin', 'superadmin', 'admin'].includes(cleaned)) return 'project_administrator';
   if (['projectmanager', 'manager'].includes(cleaned)) return 'project_manager';
   if (['readonly', 'reader'].includes(cleaned)) return 'read_only';
@@ -211,6 +216,7 @@ export function normalizeSignRole(rawRole: string | null | undefined, companyRol
 
   if (!rawRole) return 'sign_user';
   const cleaned = String(rawRole).toLowerCase().replace(/[\s_-]+/g, '');
+  if (['none', 'revoked', 'noaccess', 'denied'].includes(cleaned)) return 'none';
   if (['signadministrator', 'signadmin', 'superadmin', 'admin'].includes(cleaned)) return 'sign_administrator';
   if (['readonly', 'reader'].includes(cleaned)) return 'read_only';
   return 'sign_user';
@@ -227,6 +233,7 @@ export function normalizeDeskRole(
 
   if (!rawRole) return 'requester';
   const cleaned = String(rawRole).toLowerCase().replace(/[\s_-]+/g, '');
+  if (['none', 'revoked', 'noaccess', 'denied'].includes(cleaned)) return 'none';
   if (['deskadministrator', 'deskadmin', 'superadmin', 'admin'].includes(cleaned)) return 'desk_admin';
   if (['supportlead', 'lead'].includes(cleaned)) return 'support_lead';
   if (['technician', 'tech'].includes(cleaned)) return 'technician';
@@ -242,6 +249,162 @@ function slugify(name: string): string {
     .replace(/[\s_-]+/g, '-');
 }
 
+// ── Reports & S5 Mapping Definitions ────────────────────────────────────────
+
+export const S5_ROLE_MAPPINGS = [
+  {
+    monolithRole: 'Super Admin',
+    primaryOrgRole: 'Super Admin',
+    additionalOrgRoles: '',
+    peopleRole: 'people_administrator',
+    projectsRole: 'project_administrator',
+    signRole: 'sign_administrator',
+    deskRole: 'desk_admin',
+  },
+  {
+    monolithRole: 'Admin',
+    primaryOrgRole: 'IT Admin',
+    additionalOrgRoles: 'HR Admin',
+    peopleRole: 'people_administrator',
+    projectsRole: 'project_administrator',
+    signRole: 'sign_administrator',
+    deskRole: 'desk_admin',
+  },
+  {
+    monolithRole: 'HR',
+    primaryOrgRole: 'HR Admin',
+    additionalOrgRoles: '',
+    peopleRole: 'hr',
+    projectsRole: 'team_member (if portal access)',
+    signRole: 'sign_user (if portal access)',
+    deskRole: 'requester',
+  },
+  {
+    monolithRole: 'HR Admin',
+    primaryOrgRole: 'HR Admin',
+    additionalOrgRoles: '',
+    peopleRole: 'hr',
+    projectsRole: 'team_member (if portal access)',
+    signRole: 'sign_user (if portal access)',
+    deskRole: 'requester',
+  },
+  {
+    monolithRole: 'Manager',
+    primaryOrgRole: 'Manager',
+    additionalOrgRoles: '',
+    peopleRole: 'employee',
+    projectsRole: 'project_manager',
+    signRole: 'sign_user (if portal access)',
+    deskRole: 'requester',
+  },
+  {
+    monolithRole: 'Technician',
+    primaryOrgRole: 'Employee',
+    additionalOrgRoles: '',
+    peopleRole: 'employee',
+    projectsRole: 'team_member (if portal access)',
+    signRole: 'sign_user (if portal access)',
+    deskRole: 'technician',
+  },
+  {
+    monolithRole: 'Employee',
+    primaryOrgRole: 'Employee',
+    additionalOrgRoles: '',
+    peopleRole: 'employee',
+    projectsRole: 'team_member (if portal access)',
+    signRole: 'sign_user (if portal access)',
+    deskRole: 'requester',
+  },
+];
+
+export function toCsv(rows: Array<Record<string, any>>, headers: string[]): string {
+  const escapeCell = (val: any): string => {
+    if (val === null || val === undefined) return '';
+    const str = typeof val === 'object' ? JSON.stringify(val) : String(val);
+    if (str.includes(',') || str.includes('"') || str.includes('\n') || str.includes('\r')) {
+      return `"${str.replace(/"/g, '""')}"`;
+    }
+    return str;
+  };
+
+  const headerLine = headers.join(',');
+  const lines = rows.map((row) => headers.map((h) => escapeCell(row[h])).join(','));
+  return [headerLine, ...lines].join('\n');
+}
+
+export function writeE11Reports(params: {
+  reportDir: string;
+  diffs: CapabilityDiffItem[];
+  unmapped: UnmappedIssue[];
+}): void {
+  const { reportDir, diffs, unmapped } = params;
+  fs.mkdirSync(reportDir, { recursive: true });
+
+  // 1. Unmapped users
+  fs.writeFileSync(path.join(reportDir, 'unmapped_users.json'), JSON.stringify(unmapped, null, 2), 'utf8');
+  fs.writeFileSync(path.join(reportDir, 'unmapped_users.csv'), toCsv(unmapped, ['type', 'details']), 'utf8');
+
+  // 2. Duplicate emails
+  const duplicates = unmapped.filter((u) => u.type === 'DUPLICATE_EMAIL');
+  fs.writeFileSync(path.join(reportDir, 'duplicate_emails.json'), JSON.stringify(duplicates, null, 2), 'utf8');
+  fs.writeFileSync(path.join(reportDir, 'duplicate_emails.csv'), toCsv(duplicates, ['type', 'details']), 'utf8');
+
+  // 3. Role mapping table
+  fs.writeFileSync(path.join(reportDir, 'role_mapping.json'), JSON.stringify(S5_ROLE_MAPPINGS, null, 2), 'utf8');
+  fs.writeFileSync(
+    path.join(reportDir, 'role_mapping.csv'),
+    toCsv(S5_ROLE_MAPPINGS, [
+      'monolithRole',
+      'primaryOrgRole',
+      'additionalOrgRoles',
+      'peopleRole',
+      'projectsRole',
+      'signRole',
+      'deskRole',
+    ]),
+    'utf8'
+  );
+
+  // 4. Capability diff
+  const diffRows = diffs.map((d) => ({
+    email: d.email,
+    fullName: d.fullName,
+    monolithRole: d.monolithRole,
+    monolithProjects: d.monolithPortals.projects,
+    monolithSign: d.monolithPortals.sign,
+    monolithDesk: d.monolithPortals.desk,
+    seededOrgRole: d.seededOrgRole,
+    seededPeople: d.seededProductRoles.people,
+    seededProjects: d.seededProductRoles.projects,
+    seededSign: d.seededProductRoles.sign,
+    seededDesk: d.seededProductRoles.desk,
+    loss: d.loss ? 'true' : 'false',
+    lostCapabilities: d.lostCapabilities.join('; '),
+    diffNotes: d.diffNotes,
+  }));
+  fs.writeFileSync(path.join(reportDir, 'capability_diff.json'), JSON.stringify(diffs, null, 2), 'utf8');
+  fs.writeFileSync(
+    path.join(reportDir, 'capability_diff.csv'),
+    toCsv(diffRows, [
+      'email',
+      'fullName',
+      'monolithRole',
+      'monolithProjects',
+      'monolithSign',
+      'monolithDesk',
+      'seededOrgRole',
+      'seededPeople',
+      'seededProjects',
+      'seededSign',
+      'seededDesk',
+      'loss',
+      'lostCapabilities',
+      'diffNotes',
+    ]),
+    'utf8'
+  );
+}
+
 // ── Main Seeding Implementation ────────────────────────────────────────────
 
 export interface CapabilityDiffItem {
@@ -252,6 +415,8 @@ export interface CapabilityDiffItem {
   seededOrgRole: string;
   seededProductRoles: { people: string; projects: string; sign: string; desk: string };
   diffNotes: string;
+  loss: boolean;
+  lostCapabilities: string[];
 }
 
 export interface UnmappedIssue {
@@ -263,8 +428,13 @@ export async function runE11Seed(options: CliOptions): Promise<{
   diffs: CapabilityDiffItem[];
   unmapped: UnmappedIssue[];
   stats: Record<string, number>;
+  reportDir: string;
 }> {
   const { dryRun, adminUri, monolithUri, companyName, companyId, verbose } = options;
+  const timestamp = new Date().toISOString().replace(/[:.]/g, '-');
+  const reportDir = options.reportDir
+    ? path.resolve(options.reportDir)
+    : path.resolve(process.cwd(), 'e11-reports', timestamp);
 
   console.log(`\n===============================================================`);
   console.log(` KARBEXA E11 SEEDING & CUTOVER SCRIPT (${dryRun ? 'DRY RUN' : 'REAL CUTOVER'})`);
@@ -795,23 +965,55 @@ export async function runE11Seed(options: CliOptions): Promise<{
       }
 
       // Record Capability Diff item
+      const legacyProjects = mUser.hasProjectPortalAccess
+        ? (mUser.projectRole && mUser.projectRole !== 'none' ? mUser.projectRole : 'legacy_access')
+        : (['Super Admin', 'Admin', 'Manager'].includes(cRole || '') ? 'role_default' : 'none');
+      const legacySign = mUser.hasSignPortalAccess
+        ? (mUser.signRole && mUser.signRole !== 'none' ? mUser.signRole : 'legacy_access')
+        : (['Super Admin', 'Admin'].includes(cRole || '') ? 'role_default' : 'none');
+      const legacyDesk = mUser.hasDeskPortalAccess !== false
+        ? (mUser.deskRole && mUser.deskRole !== 'none' ? mUser.deskRole : (mUser.isTechnician ? 'technician' : 'requester'))
+        : 'none';
+
+      const seededP = projectsRole && projectsRole !== 'none' ? projectsRole : 'none';
+      const seededS = signRole && signRole !== 'none' ? signRole : 'none';
+      const seededD = deskRole && deskRole !== 'none' ? deskRole : 'none';
+
+      const lostCapabilities: string[] = [];
+      if (legacyProjects !== 'none' && seededP === 'none') {
+        lostCapabilities.push('projects');
+      }
+      if (legacySign !== 'none' && seededS === 'none') {
+        lostCapabilities.push('sign');
+      }
+      if (legacyDesk !== 'none' && seededD === 'none') {
+        lostCapabilities.push('desk');
+      }
+
+      const loss = lostCapabilities.length > 0;
+      const diffNotes = loss
+        ? `Loss of legacy access: ${lostCapabilities.join(', ')}`
+        : 'Capability preserved across all 4 products';
+
       diffs.push({
         email,
         fullName,
         monolithRole: cRole || 'Employee',
         monolithPortals: {
-          projects: mUser.hasProjectPortalAccess ? (mUser.projectRole || 'default') : 'none',
-          sign: mUser.hasSignPortalAccess ? (mUser.signRole || 'default') : 'none',
-          desk: mUser.hasDeskPortalAccess !== false ? (mUser.deskRole || 'requester') : 'none',
+          projects: legacyProjects,
+          sign: legacySign,
+          desk: legacyDesk,
         },
         seededOrgRole: orgRoleMapping.primary,
         seededProductRoles: {
           people: peopleRole,
-          projects: projectsRole || 'none',
-          sign: signRole || 'none',
-          desk: deskRole || 'none',
+          projects: seededP,
+          sign: seededS,
+          desk: seededD,
         },
-        diffNotes: 'Capability preserved across all 4 products',
+        diffNotes,
+        loss,
+        lostCapabilities,
       });
     }
 
@@ -987,6 +1189,11 @@ export async function runE11Seed(options: CliOptions): Promise<{
     console.log(`\n===============================================================`);
     console.log(` RESULT: ${dryRun ? 'DRY-RUN COMPLETED SUCCESSFULLY' : 'REAL SEEDING COMPLETED SUCCESSFULLY'}`);
     console.log(`===============================================================\n`);
+    writeE11Reports({ reportDir, diffs, unmapped });
+
+    console.log(`\n===============================================================`);
+    console.log(` REPORTS WRITTEN: ${reportDir}`);
+    console.log(`===============================================================\n`);
   } finally {
     await monolithConn.close();
     if (mongoose.connection.readyState !== 0) {
@@ -994,7 +1201,7 @@ export async function runE11Seed(options: CliOptions): Promise<{
     }
   }
 
-  return { diffs, unmapped, stats };
+  return { diffs, unmapped, stats, reportDir };
 }
 
 // ── Standalone CLI Runner ──────────────────────────────────────────────────
