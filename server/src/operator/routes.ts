@@ -19,6 +19,7 @@ import { OperatorAuditEvent } from '../models/OperatorAuditEvent.model';
 import { App } from '../models/App.model';
 import { AppAssignment } from '../models/AppAssignment.model';
 import { Group } from '../models/Group.model';
+import { IdentityProviderConnection } from '../models/IdentityProviderConnection.model';
 import { seedProductRegistry } from '../lib/productCatalog';
 import { runInTransaction, emitPlatformEvent, emitAppAccessChanged, fanOutAppAccessChanged } from '../lib/platformEvents';
 import { RefreshToken } from '../models/RefreshToken.model';
@@ -371,6 +372,42 @@ router.put('/orgs/:id/entitlements/:productKey',asyncHandler(async (req: Request
   });
   await fanOutOrgAccess(req, company._id);
   ok(res, { product_key: ent!.product_key, status: ent!.status, seats_limit: ent!.seats_limit ?? null, source: ent!.source });
+}));
+
+// ── Identity provider tenant approval (review M-2, decided 2026-11-12) ──
+// A tenant admin can't prove ownership of an Entra tenant id, so an operator approves it (after checking with the
+// customer) before the org can activate the connection. Audited; no platform event (06 has no IdP event type).
+const idpOut = (c: any) => ({
+  id: c._id.toString(), type: c.type, display_name: c.display_name, status: c.status,
+  tenant_id: c.config?.tenant_id ?? null,
+  domains: (c.domains || []).map((d: any) => ({ domain: d.domain, verified_at: d.verified_at ?? null })),
+  tenant_approval: c.tenant_approval
+    ? { tenant_id: c.tenant_approval.tenant_id, approved_at: c.tenant_approval.approved_at, operator_id: String(c.tenant_approval.operator_id) }
+    : null,
+});
+
+router.get('/orgs/:id/identity-providers', asyncHandler(async (req: Request, res: Response) => {
+  const companyId = oid(String(req.params.id));
+  ok(res, (await IdentityProviderConnection.find({ company_id: companyId }).sort({ created_at: 1 })).map(idpOut));
+}));
+
+router.post('/orgs/:id/identity-providers/:connId/approve-tenant', asyncHandler(async (req: Request, res: Response) => {
+  const company = await Company.findById(oid(String(req.params.id)));
+  if (!company) throw new AppError('Organization not found', 404, 'NOT_FOUND');
+  const conn = await IdentityProviderConnection.findOne({ _id: oid(String(req.params.connId), 'connection id'), company_id: company._id });
+  if (!conn) throw new AppError('Identity provider connection not found', 404, 'NOT_FOUND');
+  const tenantId = conn.config?.tenant_id;
+  if (conn.type !== 'entra' || !tenantId) throw new AppError('Only an Entra connection with a tenant id can be approved', 400, 'VALIDATION_ERROR');
+  const other = await IdentityProviderConnection.findOne({ _id: { $ne: conn._id }, 'tenant_approval.tenant_id': tenantId });
+  if (other) throw new AppError('This Entra tenant is already approved for another connection', 409, 'TENANT_TAKEN');
+  const before = conn.tenant_approval ? { tenant_id: conn.tenant_approval.tenant_id, approved_at: conn.tenant_approval.approved_at } : null;
+  conn.tenant_approval = { tenant_id: tenantId, approved_at: new Date(), operator_id: req.operator!._id } as any;
+  await conn.save();
+  await audit(req, {
+    action: 'identity_provider.tenant_approved', target_type: 'IdentityProviderConnection', target_id: conn._id.toString(), company,
+    before, after: { tenant_id: tenantId }, details: { tenant_id: tenantId, connection: conn.display_name },
+  });
+  ok(res, idpOut(conn));
 }));
 
 // ── Plans ────────────────────────────────────────────────────────────────────────────────────

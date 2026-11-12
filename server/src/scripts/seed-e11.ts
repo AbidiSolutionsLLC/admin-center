@@ -517,6 +517,7 @@ export async function runE11Seed(options: CliOptions): Promise<{
             { product_key: def.product_key, key: r.key },
             {
               $set: {
+                app_id: app._id,
                 name: r.name,
                 rank: r.rank,
                 is_default: !!r.is_default,
@@ -709,9 +710,10 @@ export async function runE11Seed(options: CliOptions): Promise<{
     for (const d of monolithDepts) {
       let adminDept: any;
       if (!dryRun) {
+        const deptSlug = slugify(d.name || `dept-${d._id}`) || `dept-${d._id}`;
         adminDept = await AdminDepartment.findOneAndUpdate(
-          { company_id: adminCompany._id, name: d.name },
-          { $set: { is_active: d.isActive !== false } },
+          { company_id: adminCompany._id, slug: deptSlug },
+          { $set: { name: d.name || deptSlug, is_active: d.isActive !== false, slug: deptSlug, type: 'department' } },
           { upsert: true, new: true, setDefaultsOnInsert: true }
         );
 
