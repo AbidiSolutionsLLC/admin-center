@@ -99,7 +99,7 @@ before(async () => {
       email: idn.email,
       full_name: idn.full_name,
       password_hash: 'legacy-unused',
-      role: roleName,
+      role: roleName as any,
       lifecycle_state: 'active',
       is_active: true,
     });

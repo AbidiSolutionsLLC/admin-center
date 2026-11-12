@@ -59,6 +59,7 @@ const getRouteId = (param: string | string[]): string =>
 
 import crypto from 'crypto';
 import { InviteToken } from '../models/InviteToken.model';
+import { fetchMemberOpenItems } from '../platform/openItems';
 
 /** Admin-owned member fields carried on member.provisioned / member.updated (07 §1.2). */
 const MEMBER_ADMIN_FIELDS = [
@@ -2640,3 +2641,45 @@ export const resetUserMfa = asyncHandler(async (req: Request, res: Response) => 
     },
   });
 });
+
+/**
+ * GET /people/:id/product-open-items
+ * Proxy open items for a member across all products (07 §6, contract §2.1)
+ */
+export const getProductOpenItems = asyncHandler(async (req: Request, res: Response) => {
+  const userId = getRouteId(req.params.id);
+
+  if (!Types.ObjectId.isValid(userId)) {
+    throw new AppError('Invalid user ID', 400, 'VALIDATION_ERROR');
+  }
+
+  const targetUser = await User.findOne({
+    _id: userId,
+    company_id: req.user.company_id,
+  }).select('_id company_id');
+
+  if (!targetUser) {
+    throw new AppError('User not found in your organisation', 404, 'NOT_FOUND');
+  }
+
+  const result = await fetchMemberOpenItems(
+    targetUser.company_id.toString(),
+    targetUser._id.toString()
+  );
+
+  if (!result.ok) {
+    return res.status(503).json({
+      success: false,
+      error: 'Product open items temporarily unavailable',
+      code: 'PRODUCTS_UNAVAILABLE',
+    });
+  }
+
+  res.status(200).json({
+    success: true,
+    data: {
+      products: result.products,
+    },
+  });
+});
+
