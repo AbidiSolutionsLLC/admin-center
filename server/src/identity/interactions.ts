@@ -20,6 +20,7 @@ import {
 import { getIdentityConfig, ADMIN_AUDIENCE, ADMIN_SPA_CLIENT_ID, PRODUCTS_AUDIENCE, PRODUCTS_SPA_CLIENT_ID } from './config';
 import { loadAccessContext, pickMembership } from './accounts';
 import { escapeHtml, newNonce, pageCsp, pageShell } from './html';
+import { consumeRecoveryCode } from './recoveryCodes';
 import type { OidcProvider } from './providers';
 
 const BASE = '/realms/tenant';
@@ -73,9 +74,9 @@ function renderLogin(res: Response, uid: string, opts: { error?: string; email?:
 }
 
 function renderTotp(res: Response, uid: string, error?: string) {
-  send(res, 'Verify', `<h1>Two-step verification</h1><p class="sub">Enter the 6-digit code from your authenticator app.</p>${errBox(error)}
+  send(res, 'Verify', `<h1>Two-step verification</h1><p class="sub">Enter the 6-digit code from your authenticator app, or a recovery code.</p>${errBox(error)}
 <form method="post" action="${BASE}/interaction/${uid}/totp" autocomplete="off">
-<label for="code">Code</label><input id="code" name="code" type="text" inputmode="numeric" pattern="[0-9 ]{6,7}" maxlength="7" required autofocus autocomplete="one-time-code">
+<label for="code">Code</label><input id="code" name="code" type="text" maxlength="15" required autofocus autocomplete="one-time-code">
 <button type="submit">Verify</button></form><p class="links"><a href="${BASE}/interaction/${uid}/abort">Cancel</a></p>`);
 }
 
@@ -279,6 +280,12 @@ export function registerTenantInteractions(app: Express, provider: OidcProvider)
     if (await totpValid(decrypt(identity.mfa.totp_secret_enc!), normaliseCode(req.body?.code))) {
       await logSecurityEvent({ company_id: user.company_id, user_id: user._id, email: identity.email, event_type: 'mfa_verified', ip_address: req.ip, user_agent: req.headers['user-agent'], req });
       return finishLogin(req, res, user, identity, [...pending.amr_first, 'otp']);
+    }
+
+    if (consumeRecoveryCode(identity, String(req.body?.code ?? ''))) {
+      await identity.save();
+      await logSecurityEvent({ company_id: user.company_id, user_id: user._id, email: identity.email, event_type: 'mfa_verified', ip_address: req.ip, user_agent: req.headers['user-agent'], req, metadata: { method: 'recovery_code' } });
+      return finishLogin(req, res, user, identity, [...pending.amr_first, 'mfa_recovery']);
     }
 
     pending.attempts += 1;

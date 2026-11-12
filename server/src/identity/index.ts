@@ -5,6 +5,7 @@ import { assertRequireModule, getIdentityConfig } from './config';
 import { initProviders, getTenantProvider, getServicesProvider, getOperatorProvider } from './providers';
 import { registerOperatorInteractions } from '../operator/interactions';
 import { registerTenantInteractions } from './interactions';
+import { registerAccountRoutes } from './account';
 
 /** Keys, adapter indexes and providers. Call after connectDB and before mountIdentity. */
 export async function initIdentity(): Promise<void> {
@@ -20,6 +21,7 @@ export async function initIdentity(): Promise<void> {
 export function mountIdentity(app: Express): void {
   const tenant = getTenantProvider();
   registerTenantInteractions(app, tenant);
+  registerAccountRoutes(app, tenant);
   const operator = getOperatorProvider();
   registerOperatorInteractions(app, operator);
   app.use('/realms/tenant', tenant.callback());
