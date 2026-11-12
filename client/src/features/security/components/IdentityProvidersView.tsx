@@ -175,6 +175,7 @@ const ConnectionCard: React.FC<ConnectionCardProps> = ({ connection, onTestConne
     );
   };
 
+  const tenantApproved = !!connection.tenant_approval && connection.tenant_approval.tenant_id === connection.config?.tenant_id;
   const statusVariantMap: Record<IdpStatus, 'success' | 'warning' | 'neutral'> = {
     active: 'success',
     draft: 'warning',
@@ -205,6 +206,9 @@ const ConnectionCard: React.FC<ConnectionCardProps> = ({ connection, onTestConne
             </div>
             <div className="flex items-center gap-3 mt-1 text-xs text-ink-muted font-mono">
               <span>Tenant ID: {connection.config?.tenant_id || 'Not specified'}</span>
+              {connection.type === 'entra' && !tenantApproved && (
+                <span className="font-sans text-amber-700">Awaiting Karbexa approval of this tenant</span>
+              )}
             </div>
           </div>
         </div>
@@ -223,7 +227,8 @@ const ConnectionCard: React.FC<ConnectionCardProps> = ({ connection, onTestConne
           <button
             type="button"
             onClick={handleStatusToggle}
-            disabled={updateIdp.isPending}
+            disabled={updateIdp.isPending || (connection.status !== 'active' && connection.type === 'entra' && !tenantApproved)}
+            title={connection.status !== 'active' && connection.type === 'entra' && !tenantApproved ? 'A Karbexa operator must approve this Entra tenant first' : undefined}
             className={`h-8 px-3 text-xs font-medium rounded-md transition-colors flex items-center gap-1.5 ${
               connection.status === 'active'
                 ? 'border border-amber-200 bg-amber-50 text-amber-800 hover:bg-amber-100'
@@ -348,14 +353,6 @@ interface TestConnectionModalProps {
 const TestConnectionModal: React.FC<TestConnectionModalProps> = ({ connection, onClose }) => {
   const tenantId = connection.config?.tenant_id || '';
 
-  const handleStartTest = () => {
-    // If tenant_id exists, construct Microsoft Entra login URL in a new tab
-    if (tenantId) {
-      const loginUrl = `https://login.microsoftonline.com/${encodeURIComponent(tenantId)}/v2.0`;
-      window.open(loginUrl, '_blank', 'noopener,noreferrer');
-    }
-  };
-
   return (
     <Modal
       isOpen={true}
@@ -372,16 +369,6 @@ const TestConnectionModal: React.FC<TestConnectionModalProps> = ({ connection, o
           >
             Close
           </button>
-          {tenantId && (
-            <button
-              type="button"
-              onClick={handleStartTest}
-              className="h-9 px-4 text-sm font-medium rounded-md bg-primary hover:bg-primary-hover text-white transition-colors flex items-center gap-2"
-            >
-              <ExternalLink className="w-4 h-4" />
-              Open Entra Login in New Tab
-            </button>
-          )}
         </>
       }
     >
@@ -407,10 +394,14 @@ const TestConnectionModal: React.FC<TestConnectionModalProps> = ({ connection, o
               Ensure at least one corporate domain has published its DNS TXT record and is <strong>Verified</strong>.
             </li>
             <li>
-              When your Microsoft Entra administrator logs in for the first time, Microsoft will prompt for <strong>Permissions requested: Accept for your organization</strong>.
+              Ask Karbexa support to <strong>approve your Entra tenant ID</strong>, then activate the connection.
             </li>
             <li>
-              Once consent is granted, members with matching verified email domains will authenticate seamlessly via Entra ID.
+              To test, open the Karbexa sign-in page in a private window and choose <strong>Sign in with Microsoft</strong> as a
+              member whose account is linked to this connection. The first sign-in may ask your Entra administrator to grant consent.
+            </li>
+            <li>
+              Members are not created automatically: each one needs a Karbexa account linked to Microsoft.
             </li>
           </ol>
         </div>

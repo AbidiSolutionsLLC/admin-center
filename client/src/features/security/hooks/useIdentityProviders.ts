@@ -93,6 +93,10 @@ export const useUpdateIdentityProvider = (id: string) => {
           toast.error('Cannot activate identity provider: at least one verified domain is required');
           return;
         }
+        if (code === 'OPERATOR_APPROVAL_REQUIRED') {
+          toast.error('A Karbexa operator must approve this Entra tenant before the connection can be activated. Contact Karbexa support.');
+          return;
+        }
         toast.error(msg || 'Failed to update identity provider');
         return;
       }
