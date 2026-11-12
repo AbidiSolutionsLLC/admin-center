@@ -237,6 +237,59 @@ This is an automated message from Admin Center. Please do not reply to this emai
 };
 
 /**
+ * Sends a "Claim your account" email to a migrated/seeded active user (03 §4.3).
+ */
+export const sendClaimEmail = async (params: {
+  email: string;
+  full_name: string;
+  company_name: string;
+  claim_link: string;
+}): Promise<void> => {
+  const { email, full_name, company_name, claim_link } = params;
+
+  const html = `
+    <!DOCTYPE html>
+    <html>
+      <head>
+        <style>
+          body { font-family: 'DM Sans', 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; line-height: 1.6; color: #f8fafc; background-color: #0b0f19; margin: 0; padding: 0; }
+          .container { max-width: 600px; margin: 0 auto; padding: 40px 20px; }
+          .header { background-color: #161c30; padding: 30px 20px; text-align: center; border-radius: 16px 16px 0 0; border-bottom: 1px solid rgba(255,255,255,0.05); }
+          .header h1 { margin: 0; color: #f8fafc; font-size: 24px; font-weight: 600; }
+          .content { background-color: #161c30; padding: 40px; border-radius: 0 0 16px 16px; border: 1px solid rgba(255,255,255,0.05); border-top: none; }
+          .button { display: inline-block; background-color: #f5b02a; color: #000000; padding: 14px 32px; text-decoration: none; border-radius: 12px; margin: 24px 0; font-weight: 600; text-align: center; }
+          p { color: #cbd5e1; margin-bottom: 16px; }
+        </style>
+      </head>
+      <body>
+        <div class="container">
+          <div class="header">
+            <h1>Claim Your Karbexa Account</h1>
+          </div>
+          <div class="content">
+            <p>Hi ${full_name},</p>
+            <p>Your Karbexa account for <strong>${company_name}</strong> is ready. Please click the button below to claim your account, set your password, and set up Multi-Factor Authentication.</p>
+            <div style="text-align: center;">
+              <a href="${claim_link}" class="button">Claim Account</a>
+            </div>
+            <p style="font-size: 13px; color: #94a3b8; text-align: center;">Or copy and paste this link: <br><span style="color: #f5b02a;">${claim_link}</span></p>
+          </div>
+        </div>
+      </body>
+    </html>
+  `;
+
+  const text = `Hi ${full_name},\n\nYour Karbexa account for ${company_name} is ready. Please claim your account here: ${claim_link}\n`;
+
+  await sendEmailInternal({
+    to: email,
+    subject: `Claim your Karbexa account for ${company_name}`,
+    html,
+    text,
+  });
+};
+
+/**
  * Sends welcome emails to multiple users in bulk
  * @param users - Array of email parameters for each user
  * @returns Array of results indicating success/failure for each email

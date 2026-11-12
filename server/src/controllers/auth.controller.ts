@@ -57,7 +57,7 @@ export async function logSecurityEvent(params: {
 
   await SecurityEvent.create(eventDoc);
 
-  if (params.is_suspicious) {
+  if (params.is_suspicious && params.company_id) {
     const detail = `Suspicious security event: ${params.event_type}.\nUser: ${params.email || params.user_id}\nIP: ${params.ip_address || 'Unknown'}\nLocation: ${params.metadata?.location || 'Unknown'}`;
     sendSecurityAlert(
       params.company_id.toString(),
