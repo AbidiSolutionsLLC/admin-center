@@ -6,3 +6,4 @@ dist
 bulk_upload_template.csv
 .gitignore
 .local/
+e11-reports/

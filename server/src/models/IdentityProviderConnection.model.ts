@@ -66,6 +66,12 @@ IdentityProviderConnectionSchema.index(
   { unique: true, partialFilterExpression: { type: 'entra', status: 'active' } },
 );
 
+// 03 §2: a verified domain is unique platform-wide
+IdentityProviderConnectionSchema.index(
+  { 'domains.domain': 1 },
+  { unique: true, partialFilterExpression: { 'domains.verified_at': { $exists: true } } },
+);
+
 export const IdentityProviderConnection = model<IIdentityProviderConnection>(
   'IdentityProviderConnection',
   IdentityProviderConnectionSchema,

@@ -7,6 +7,7 @@
 
 import nodemailer, { type Transporter } from 'nodemailer';
 import { EmailClient } from '@azure/communication-email';
+import { escapeHtml } from '../identity/html';
 
 interface WelcomeEmailParams {
   email: string;
@@ -237,6 +238,59 @@ This is an automated message from Admin Center. Please do not reply to this emai
 };
 
 /**
+ * Sends a "Claim your account" email to a migrated/seeded active user (03 §4.3).
+ */
+export const sendClaimEmail = async (params: {
+  email: string;
+  full_name: string;
+  company_name: string;
+  claim_link: string;
+}): Promise<void> => {
+  const { email, full_name, company_name, claim_link } = params;
+
+  const html = `
+    <!DOCTYPE html>
+    <html>
+      <head>
+        <style>
+          body { font-family: 'DM Sans', 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; line-height: 1.6; color: #f8fafc; background-color: #0b0f19; margin: 0; padding: 0; }
+          .container { max-width: 600px; margin: 0 auto; padding: 40px 20px; }
+          .header { background-color: #161c30; padding: 30px 20px; text-align: center; border-radius: 16px 16px 0 0; border-bottom: 1px solid rgba(255,255,255,0.05); }
+          .header h1 { margin: 0; color: #f8fafc; font-size: 24px; font-weight: 600; }
+          .content { background-color: #161c30; padding: 40px; border-radius: 0 0 16px 16px; border: 1px solid rgba(255,255,255,0.05); border-top: none; }
+          .button { display: inline-block; background-color: #f5b02a; color: #000000; padding: 14px 32px; text-decoration: none; border-radius: 12px; margin: 24px 0; font-weight: 600; text-align: center; }
+          p { color: #cbd5e1; margin-bottom: 16px; }
+        </style>
+      </head>
+      <body>
+        <div class="container">
+          <div class="header">
+            <h1>Claim Your Karbexa Account</h1>
+          </div>
+          <div class="content">
+            <p>Hi ${full_name},</p>
+            <p>Your Karbexa account for <strong>${company_name}</strong> is ready. Please click the button below to claim your account, set your password, and set up Multi-Factor Authentication.</p>
+            <div style="text-align: center;">
+              <a href="${claim_link}" class="button">Claim Account</a>
+            </div>
+            <p style="font-size: 13px; color: #94a3b8; text-align: center;">Or copy and paste this link: <br><span style="color: #f5b02a;">${claim_link}</span></p>
+          </div>
+        </div>
+      </body>
+    </html>
+  `;
+
+  const text = `Hi ${full_name},\n\nYour Karbexa account for ${company_name} is ready. Please claim your account here: ${claim_link}\n`;
+
+  await sendEmailInternal({
+    to: email,
+    subject: `Claim your Karbexa account for ${company_name}`,
+    html,
+    text,
+  });
+};
+
+/**
  * Sends welcome emails to multiple users in bulk
  * @param users - Array of email parameters for each user
  * @returns Array of results indicating success/failure for each email
@@ -421,10 +475,66 @@ If you didn't request this code, please ignore this email.
   await sendEmailInternal({ to: email, subject: 'Your Verification Code', html, text });
 };
 
+export const sendMfaResetEmail = async (params: {
+  email: string;
+  full_name: string;
+  company_name: string;
+}): Promise<void> => {
+  const { email, full_name, company_name } = params;
+  const html = `
+    <!DOCTYPE html>
+    <html>
+      <head>
+        <meta charset="utf-8">
+        <style>
+          body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif; line-height: 1.6; color: #333; margin: 0; padding: 0; }
+          .container { max-width: 600px; margin: 0 auto; padding: 20px; }
+          .header { background: #3b5bdb; color: white; padding: 20px; text-align: center; border-radius: 8px 8px 0 0; }
+          .content { background: #ffffff; padding: 30px; border: 1px solid #e1e4e8; border-top: none; border-radius: 0 0 8px 8px; }
+          .warning { background: #fff3cd; border-left: 4px solid #ffc107; padding: 12px; margin: 20px 0; font-size: 14px; }
+        </style>
+      </head>
+      <body>
+        <div class="container">
+          <div class="header">
+            <h2>Two-Factor Authentication Reset</h2>
+          </div>
+          <div class="content">
+            <p>Hi ${escapeHtml(full_name)},</p>
+            <p>An administrator has reset your Multi-Factor Authentication (MFA) settings for <strong>${escapeHtml(company_name)}</strong>.</p>
+            <p>At your next sign-in, you will be required to set up your authenticator app again before you can access the platform.</p>
+            <div class="warning">
+              <strong>Notice:</strong> If you did not request this reset or speak with your administrator, please contact your security team immediately.
+            </div>
+          </div>
+        </div>
+      </body>
+    </html>
+  `.trim();
+
+  const text = `
+Hi ${full_name},
+
+An administrator has reset your Multi-Factor Authentication (MFA) settings for ${company_name}.
+
+At your next sign-in, you will be required to set up your authenticator app again before you can access the platform.
+
+If you did not request this reset or speak with your administrator, please contact your security team immediately.
+  `.trim();
+
+  await sendEmailInternal({
+    to: email,
+    subject: `Two-Factor Authentication Reset — ${company_name}`,
+    html,
+    text,
+  });
+};
+
 export const emailService = {
   sendWelcomeEmail,
   sendBulkWelcomeEmails,
   sendPasswordResetEmail,
   sendPolicyNotificationEmail,
   sendMfaOtpEmail,
+  sendMfaResetEmail,
 };

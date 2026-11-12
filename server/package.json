@@ -14,9 +14,10 @@
     "seed:first": "ts-node -T src/scripts/seed-first-user.ts",
     "seed:products": "ts-node -T src/scripts/seed-products.ts",
     "seed:e11": "ts-node -T src/scripts/seed-e11.ts",
+    "send:claims": "ts-node -T src/scripts/send-claim-emails.ts",
     "gen:admin-backend-key": "ts-node -T src/scripts/gen-admin-backend-key.ts",
     "prestart": "npm run build",
-    "test": "node --require ts-node/register/transpile-only --test \"src/**/__tests__/*.test.ts\"",
+    "test": "node --require ts-node/register/transpile-only --test --test-concurrency=1 \"src/**/__tests__/*.test.ts\"",
     "migrate:identities": "ts-node -T src/scripts/migrate-identities.ts",
     "smoke:login": "ts-node -T src/scripts/smoke-oidc-login.ts",
     "smoke:sprint2": "ts-node -T src/scripts/smoke-sprint2.ts"

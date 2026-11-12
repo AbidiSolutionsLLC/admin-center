@@ -28,6 +28,7 @@ import dataGovernancePoliciesRoutes from './dataGovernancePolicies.routes';
 import policyTemplatesRoutes from './policyTemplates.routes';
 import workflowTemplatesRoutes from './workflowTemplates.routes';
 import meRoutes from './me.routes';
+import streamTicketsRoutes from './streamTickets.routes';
 
 const router = Router();
 
@@ -47,6 +48,7 @@ router.use('/me', meRoutes);
 router.use('/overview', overviewRoutes);
 router.use('/security', securityRoutes);
 router.use('/audit-logs', auditLogsRoutes);
+router.use('/stream-tickets', streamTicketsRoutes);
 router.use('/teams', teamsRoutes);
 router.use('/policies', policiesRoutes);
 router.use('/locations', locationsRoutes);

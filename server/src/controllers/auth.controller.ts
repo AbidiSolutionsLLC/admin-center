@@ -57,7 +57,7 @@ export async function logSecurityEvent(params: {
 
   await SecurityEvent.create(eventDoc);
 
-  if (params.is_suspicious) {
+  if (params.is_suspicious && params.company_id) {
     const detail = `Suspicious security event: ${params.event_type}.\nUser: ${params.email || params.user_id}\nIP: ${params.ip_address || 'Unknown'}\nLocation: ${params.metadata?.location || 'Unknown'}`;
     sendSecurityAlert(
       params.company_id.toString(),
@@ -317,7 +317,7 @@ async function identityForMember(user: IUser): Promise<IIdentity> {
 }
 
 /** Validate against policy + the identity's history, then store a bcrypt(12) hash on the Identity. */
-async function setIdentityPassword(user: IUser, identity: IIdentity, newPassword: string): Promise<void> {
+export async function setIdentityPassword(user: IUser, identity: IIdentity, newPassword: string): Promise<void> {
   const policy = await getAggregatedSecurityPolicy(user);
   const historySubject = { role: user.role, password_hash: identity.password_hash, previous_password_hashes: identity.previous_password_hashes };
   const validation = await validatePasswordAgainstPolicy(newPassword, policy?.settings, historySubject);

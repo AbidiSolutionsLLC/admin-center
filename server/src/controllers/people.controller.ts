@@ -11,9 +11,9 @@ import { UserRole } from '../models/UserRole.model';
 import { TeamMember } from '../models/TeamMember.model';
 import { auditLogger } from '../lib/auditLogger';
 import { runInTransaction, emitPlatformEvent, emitAppAccessChanged, correlationIdFor } from '../lib/platformEvents';
-import { sendWelcomeEmail, sendBulkWelcomeEmails, sendEmail } from '../lib/emailService';
+import { sendWelcomeEmail, sendBulkWelcomeEmails, sendEmail, sendMfaResetEmail } from '../lib/emailService';
 import { isValidTransition, getTransitionErrorMessage, LifecycleState, lifecycleEventFor } from '../lib/lifecycle';
-import { revokeSessionsTx, destroyProviderSession } from '../identity/sessions';
+import { revokeSessionsTx, destroyProviderSession, revokeIdentitySessions } from '../identity/sessions';
 import { AppError } from '../utils/AppError';
 import { Types } from 'mongoose';
 import { Department } from '../models/Department.model';
@@ -31,7 +31,8 @@ import { resolveUserPermissions, hasPermission } from '../lib/rbac';
 import { App } from '../models/App.model';
 import { AppAssignment } from '../models/AppAssignment.model';
 import { Group } from '../models/Group.model';
-import { assertCanAssignRoles } from '../lib/roleHierarchy';
+import { assertCanAssignRoles, getUserMaxRank, rankOf } from '../lib/roleHierarchy';
+import { Identity } from '../models/Identity.model';
 import { rbacCache } from '../lib/rbacCache';
 import { GroupMember } from '../models/GroupMember.model';
 import { applyDataGovernanceRead, applyDataGovernanceWrite } from '../lib/dataGovernance';
@@ -58,6 +59,7 @@ const getRouteId = (param: string | string[]): string =>
 
 import crypto from 'crypto';
 import { InviteToken } from '../models/InviteToken.model';
+import { fetchMemberOpenItems } from '../platform/openItems';
 
 /** Admin-owned member fields carried on member.provisioned / member.updated (07 §1.2). */
 const MEMBER_ADMIN_FIELDS = [
@@ -2545,3 +2547,139 @@ export const getUserEffectiveSettings = asyncHandler(async (req: Request, res: R
 
   res.status(200).json({ success: true, data: settings });
 });
+
+/**
+ * POST /people/:id/mfa-reset
+ * Admin action to reset a user's MFA enrolment (03 §4.4, A3-4).
+ * - Enforces grant hierarchy: admin cannot reset a higher-ranked member
+ * - Clears member's TOTP enrolment and recovery codes
+ * - Revokes all active sessions for the member (emits session.revoked)
+ * - Audits the action (people.mfa_reset)
+ * - Notifies the member via email
+ */
+export const resetUserMfa = asyncHandler(async (req: Request, res: Response) => {
+  const userId = getRouteId(req.params.id);
+  const companyId = req.user.company_id;
+  const actorUserId = req.user.userId;
+
+  const targetUser = await User.findOne({
+    _id: userId,
+    company_id: companyId,
+  });
+
+  if (!targetUser) {
+    throw new AppError('User not found in your organisation', 404, 'NOT_FOUND');
+  }
+
+  // Grant hierarchy check (03 §4.4): an admin cannot reset a higher-ranked member
+  const actorRank = Math.max(
+    await getUserMaxRank(actorUserId, companyId),
+    rankOf((req.user as any)?.user_role || '')
+  );
+  const targetRank = Math.max(
+    await getUserMaxRank(targetUser._id, companyId),
+    rankOf(targetUser.role || '')
+  );
+
+  if (targetRank > actorRank) {
+    throw new AppError('You cannot reset MFA for a user with higher privileges than yours', 403, 'ROLE_HIERARCHY_VIOLATION');
+  }
+
+  let identity = null;
+  if (targetUser.identity_id) {
+    identity = await Identity.findById(targetUser.identity_id);
+  }
+  if (!identity) {
+    identity = await Identity.findOne({ email: targetUser.email.toLowerCase() });
+  }
+
+  if (!identity) {
+    throw new AppError('Identity record not found for user', 404, 'IDENTITY_NOT_FOUND');
+  }
+
+  const prevTotpEnabled = identity.mfa?.totp_enabled;
+
+  // Clear TOTP enrolment and recovery codes
+  identity.mfa.totp_secret_enc = undefined;
+  identity.mfa.totp_enabled = false;
+  identity.mfa.recovery_codes_hash = [];
+  await identity.save();
+
+  // Revoke member's sessions (emits session.revoked platform event)
+  const revokedSids = await revokeIdentitySessions(identity._id, 'admin_mfa_reset', {
+    actor: { type: 'member', id: actorUserId.toString() },
+    correlation_id: (req.headers['x-correlation-id'] as string) || undefined,
+  });
+
+  // Audit log
+  await auditLogger.log({
+    req,
+    action: 'people.mfa_reset',
+    module: 'people',
+    object_type: 'User',
+    object_id: targetUser._id.toString(),
+    object_label: targetUser.full_name,
+    before_state: { totp_enabled: prevTotpEnabled },
+    after_state: { totp_enabled: false, sessions_revoked: revokedSids },
+  });
+
+  // Notify member by email
+  const company = await Company.findById(companyId).select('name');
+  sendMfaResetEmail({
+    email: identity.email,
+    full_name: targetUser.full_name,
+    company_name: company?.name || 'Karbexa',
+  }).catch((err) => console.error('[emailService] failed to send MFA reset email', err));
+
+  res.status(200).json({
+    success: true,
+    message: 'MFA reset successfully. The member must re-enrol at next login.',
+    data: {
+      user_id: targetUser._id.toString(),
+      email: identity.email,
+      sessions_revoked: revokedSids,
+    },
+  });
+});
+
+/**
+ * GET /people/:id/product-open-items
+ * Proxy open items for a member across all products (07 §6, contract §2.1)
+ */
+export const getProductOpenItems = asyncHandler(async (req: Request, res: Response) => {
+  const userId = getRouteId(req.params.id);
+
+  if (!Types.ObjectId.isValid(userId)) {
+    throw new AppError('Invalid user ID', 400, 'VALIDATION_ERROR');
+  }
+
+  const targetUser = await User.findOne({
+    _id: userId,
+    company_id: req.user.company_id,
+  }).select('_id company_id');
+
+  if (!targetUser) {
+    throw new AppError('User not found in your organisation', 404, 'NOT_FOUND');
+  }
+
+  const result = await fetchMemberOpenItems(
+    targetUser.company_id.toString(),
+    targetUser._id.toString()
+  );
+
+  if (!result.ok) {
+    return res.status(503).json({
+      success: false,
+      error: 'Product open items temporarily unavailable',
+      code: 'PRODUCTS_UNAVAILABLE',
+    });
+  }
+
+  res.status(200).json({
+    success: true,
+    data: {
+      products: result.products,
+    },
+  });
+});
+
