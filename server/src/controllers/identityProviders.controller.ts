@@ -18,6 +18,27 @@ export function resetDnsTxtResolver(): void {
   dnsTxtResolver = dns.promises.resolveTxt;
 }
 
+// A DNS name: labels of 1–63 [a-z0-9-] chars (not starting or ending with '-'), at least two labels, ≤ 253 chars.
+const DOMAIN_RE = /^(?=.{1,253}$)(?:[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?\.)+[a-z][a-z0-9-]{0,61}[a-z0-9]$/;
+const TENANT_ID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/;
+
+function normaliseDomains(input: unknown): string[] {
+  const list = Array.isArray(input) ? input : [];
+  const out = Array.from(new Set(list.map((d) => String(d).trim().toLowerCase()).filter(Boolean)));
+  const bad = out.find((d) => !DOMAIN_RE.test(d));
+  if (bad) throw new AppError(`Invalid domain: ${bad}`, 400, 'VALIDATION_ERROR');
+  return out;
+}
+
+/** The connection as returned to tenant admins and written to the audit log: never the secret reference (review L-5). */
+function publicView(connection: InstanceType<typeof IdentityProviderConnection>): Record<string, unknown> {
+  const o = connection.toObject() as any;
+  if (o.config) delete o.config.client_secret_ref;
+  return o;
+}
+
+const isDuplicateKey = (err: unknown) => (err as { code?: number })?.code === 11000;
+
 /**
  * GET /api/v1/security/identity-providers
  * List identity provider connections for the authenticated company.
@@ -46,10 +67,11 @@ export const createIdentityProvider = asyncHandler(async (req: Request, res: Res
     throw new AppError('display_name is required', 400, 'VALIDATION_ERROR');
   }
 
-  const rawDomains: string[] = Array.isArray(domains) ? domains : [];
-  const normalizedDomains: string[] = Array.from(
-    new Set(rawDomains.map(d => String(d).trim().toLowerCase()).filter(Boolean))
-  );
+  const normalizedDomains = normaliseDomains(domains);
+  const tenantId = tenant_id ? String(tenant_id).trim().toLowerCase() : undefined;
+  if (tenantId !== undefined && !TENANT_ID_RE.test(tenantId)) {
+    throw new AppError('tenant_id must be an Entra tenant GUID', 400, 'VALIDATION_ERROR');
+  }
 
   const domainObjects = normalizedDomains.map(d => ({
     domain: d,
@@ -62,7 +84,7 @@ export const createIdentityProvider = asyncHandler(async (req: Request, res: Res
     display_name: display_name.trim(),
     status: 'draft',
     config: {
-      tenant_id: tenant_id ? String(tenant_id).trim().toLowerCase() : undefined,
+      tenant_id: tenantId,
     },
     domains: domainObjects,
     jit_provisioning: 'off',
@@ -78,10 +100,10 @@ export const createIdentityProvider = asyncHandler(async (req: Request, res: Res
     object_id: connection._id.toString(),
     object_label: connection.display_name,
     before_state: null,
-    after_state: connection.toObject(),
+    after_state: publicView(connection),
   });
 
-  res.status(201).json({ success: true, data: connection });
+  res.status(201).json({ success: true, data: publicView(connection) });
 });
 
 /**
@@ -98,7 +120,7 @@ export const updateIdentityProvider = asyncHandler(async (req: Request, res: Res
     throw new AppError('Identity provider connection not found', 404, 'NOT_FOUND');
   }
 
-  const beforeState = connection.toObject();
+  const beforeState = publicView(connection);
 
   if (req.body.display_name !== undefined) {
     if (typeof req.body.display_name !== 'string' || !req.body.display_name.trim()) {
@@ -121,9 +143,7 @@ export const updateIdentityProvider = asyncHandler(async (req: Request, res: Res
   if (Array.isArray(req.body.domains)) {
     const existingMap = new Map(connection.domains.map(d => [d.domain.toLowerCase(), d]));
     const updatedDomains: Array<{ domain: string; verification_token: string; verified_at?: Date }> = [];
-    for (const d of req.body.domains) {
-      const norm = String(d).trim().toLowerCase();
-      if (!norm) continue;
+    for (const norm of normaliseDomains(req.body.domains)) {
       const existing = existingMap.get(norm);
       if (existing) {
         updatedDomains.push(existing);
@@ -142,17 +162,27 @@ export const updateIdentityProvider = asyncHandler(async (req: Request, res: Res
       throw new AppError('Invalid status: must be draft, active, or disabled', 400, 'VALIDATION_ERROR');
     }
 
-    if (req.body.status === 'active') {
-      const hasVerifiedDomain = connection.domains.some(d => !!d.verified_at);
-      if (!hasVerifiedDomain) {
-        throw new AppError('Cannot activate identity provider: at least one verified domain is required', 400, 'NO_VERIFIED_DOMAINS');
-      }
-    }
-
     connection.status = req.body.status;
   }
 
-  await connection.save();
+  // Checked on the final state, so a PATCH can't leave an active connection without a verified domain (review L-6).
+  if (connection.status === 'active') {
+    if (!connection.domains.some(d => !!d.verified_at)) {
+      throw new AppError('Cannot activate identity provider: at least one verified domain is required', 400, 'NO_VERIFIED_DOMAINS');
+    }
+    // Review M-2 (decided 2026-11-12): nothing in the tenant flow proves the org owns the Entra tenant, so a platform
+    // operator approves the tenant id first (POST /operator/v1/orgs/:id/identity-providers/:connId/approve-tenant).
+    if (connection.type === 'entra' && (!connection.tenant_approval || connection.tenant_approval.tenant_id !== connection.config?.tenant_id)) {
+      throw new AppError('A Karbexa operator must approve this Entra tenant before the connection can be activated', 409, 'OPERATOR_APPROVAL_REQUIRED');
+    }
+  }
+
+  try {
+    await connection.save();
+  } catch (err) {
+    if (isDuplicateKey(err)) throw new AppError('This Entra tenant is already active for another organization', 409, 'TENANT_TAKEN');
+    throw err;
+  }
 
   await auditLogger.log({
     req,
@@ -163,10 +193,10 @@ export const updateIdentityProvider = asyncHandler(async (req: Request, res: Res
     object_id: connection._id.toString(),
     object_label: connection.display_name,
     before_state: beforeState,
-    after_state: connection.toObject(),
+    after_state: publicView(connection),
   });
 
-  res.status(200).json({ success: true, data: connection });
+  res.status(200).json({ success: true, data: publicView(connection) });
 });
 
 /**
@@ -186,7 +216,8 @@ export const verifyDomain = asyncHandler(async (req: Request, res: Response) => 
   }
 
   const domainParam = Array.isArray(domain) ? domain[0] : domain;
-  const targetDomain = decodeURIComponent(domainParam || '').trim().toLowerCase();
+  // Express has already decoded the path parameter once.
+  const targetDomain = String(domainParam || '').trim().toLowerCase();
   const domainEntry = connection.domains.find(d => d.domain.toLowerCase() === targetDomain);
   if (!domainEntry) {
     throw new AppError('Domain not found in this connection', 404, 'DOMAIN_NOT_FOUND');
@@ -225,7 +256,13 @@ export const verifyDomain = asyncHandler(async (req: Request, res: Response) => 
   }
 
   domainEntry.verified_at = new Date();
-  await connection.save();
+  try {
+    await connection.save();
+  } catch (err) {
+    // The unique index on verified_domains closes the race between the check above and this write.
+    if (isDuplicateKey(err)) throw new AppError('This domain is already verified by another organization', 409, 'DOMAIN_TAKEN');
+    throw err;
+  }
 
   await auditLogger.log({
     req,
@@ -239,5 +276,5 @@ export const verifyDomain = asyncHandler(async (req: Request, res: Response) => 
     after_state: { domain: targetDomain, verified: true, verified_at: domainEntry.verified_at },
   });
 
-  res.status(200).json({ success: true, data: connection });
+  res.status(200).json({ success: true, data: publicView(connection) });
 });

@@ -2585,14 +2585,9 @@ export const resetUserMfa = asyncHandler(async (req: Request, res: Response) => 
     throw new AppError('You cannot reset MFA for a user with higher privileges than yours', 403, 'ROLE_HIERARCHY_VIOLATION');
   }
 
-  let identity = null;
-  if (targetUser.identity_id) {
-    identity = await Identity.findById(targetUser.identity_id);
-  }
-  if (!identity) {
-    identity = await Identity.findOne({ email: targetUser.email.toLowerCase() });
-  }
-
+  // Only the member's own linked identity. Never resolve by e-mail: identities are platform-wide, so an e-mail
+  // lookup would let an admin of this org reset a person whose identity belongs to another org (review H-1).
+  const identity = targetUser.identity_id ? await Identity.findById(targetUser.identity_id) : null;
   if (!identity) {
     throw new AppError('Identity record not found for user', 404, 'IDENTITY_NOT_FOUND');
   }

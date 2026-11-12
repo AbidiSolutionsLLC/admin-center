@@ -105,7 +105,7 @@ after(async () => {
   await mongo.stop();
 });
 
-async function mintTenantToken(user: IUser, sid: string): Promise<string> {
+async function mintTenantToken(user: IUser, sid: string, audience = 'urn:karbexa:admin'): Promise<string> {
   const keys = await loadRealmKeys('tenant');
   const tenantPrivateJwk = keys.privateJwks.keys[0];
   const tenantKey = await jose.importJWK(tenantPrivateJwk, 'RS256');
@@ -118,7 +118,7 @@ async function mintTenantToken(user: IUser, sid: string): Promise<string> {
   })
     .setProtectedHeader({ alg: 'RS256', kid: tenantPrivateJwk.kid, typ: 'at+jwt' })
     .setIssuer(getIdentityConfig().tenantIssuer)
-    .setAudience('urn:karbexa:admin')
+    .setAudience(audience)
     .setSubject(String(user._id))
     .setIssuedAt()
     .setExpirationTime('10m')
@@ -282,6 +282,28 @@ test('A3-3: POST /password successfully updates password and revokes other sessi
   // Restore password for other tests
   updatedIdn.password_hash = await bcrypt.hash(PASSWORD, 12);
   await updatedIdn.save();
+});
+
+test('A3-3 (review M-3): a products-audience token from the same tenant issuer cannot open the account page', async () => {
+  const { sid } = await createTestSession(testUser, testIdentity);
+  const productsToken = await mintTenantToken(testUser, sid, 'urn:karbexa:products');
+  const prior = JSON.stringify((await Identity.findById(testIdentity._id))?.mfa?.recovery_codes_hash || []);
+  const res = await fetch(`${baseUrl}/realms/tenant/account`, {
+    headers: { authorization: `Bearer ${productsToken}` },
+    redirect: 'manual',
+  });
+  assert.equal(res.status, 302);
+  assert.match(res.headers.get('location') || '', /\/login/);
+
+  const post = await fetch(`${baseUrl}/realms/tenant/account/recovery-codes`, {
+    method: 'POST',
+    headers: { authorization: `Bearer ${productsToken}`, 'content-type': 'application/x-www-form-urlencoded' },
+    body: 'csrf=x',
+    redirect: 'manual',
+  });
+  assert.notEqual(post.status, 200);
+  const latest = JSON.stringify((await Identity.findById(testIdentity._id))?.mfa?.recovery_codes_hash || []);
+  assert.equal(latest, prior);
 });
 
 test('A3-3: POST /recovery-codes generates 10 single-use recovery codes and stores hashes', async () => {

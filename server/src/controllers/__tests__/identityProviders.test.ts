@@ -251,6 +251,7 @@ test('PATCH /security/identity-providers/:id activation guard: status=active req
     type: 'entra',
     display_name: 'Draft Conn',
     status: 'draft',
+    config: { tenant_id: '11111111-2222-4333-8444-555555555555' },
     domains: [{ domain: 'unverified.com', verification_token: 'tok123' }],
   });
 
@@ -265,6 +266,18 @@ test('PATCH /security/identity-providers/:id activation guard: status=active req
 
   // Verify domain directly in DB to test successful activation
   conn.domains[0].verified_at = new Date();
+  await conn.save();
+
+  // Review M-2: a verified domain is not enough for Entra; an operator must approve the tenant id first.
+  const noApproval = await apiRequest(`/security/identity-providers/${conn._id}`, 'PATCH', { status: 'active' });
+  assert.equal(noApproval.status, 409);
+  assert.equal(noApproval.data.code, 'OPERATOR_APPROVAL_REQUIRED');
+  // An approval for a different tenant id does not count.
+  conn.tenant_approval = { tenant_id: '99999999-2222-4333-8444-555555555555', approved_at: new Date(), operator_id: new Types.ObjectId() } as any;
+  await conn.save();
+  const wrongTenant = await apiRequest(`/security/identity-providers/${conn._id}`, 'PATCH', { status: 'active' });
+  assert.equal(wrongTenant.status, 409);
+  conn.tenant_approval = { tenant_id: '11111111-2222-4333-8444-555555555555', approved_at: new Date(), operator_id: new Types.ObjectId() } as any;
   await conn.save();
 
   const { status: okStatus, data: okData } = await apiRequest(
@@ -434,4 +447,57 @@ test('03 §3 rule 2: enforce_sso affects members of that org only on verified do
     const htmlA = await postResA.text();
     assert.match(htmlA, /Single sign-on is required for your organisation/);
   }
+});
+test('Review M-1: verifying one domain does not reserve the other, unverified domains', async () => {
+  await IdentityProviderConnection.init();
+  // Org A has verified its own domain and listed victim.example (unverified) on the same connection.
+  await IdentityProviderConnection.create({
+    company_id: companyA, type: 'entra', display_name: 'A', status: 'draft',
+    domains: [
+      { domain: 'own-a.example', verification_token: 'tok-own', verified_at: new Date() },
+      { domain: 'victim.example', verification_token: 'tok-victim-a' },
+    ],
+  });
+  // The real owner (org B) can still verify victim.example.
+  const connB = await IdentityProviderConnection.create({
+    company_id: companyB, type: 'entra', display_name: 'B', status: 'draft',
+    domains: [{ domain: 'victim.example', verification_token: 'tok-b' }],
+  });
+  mockTxtRecords['victim.example'] = [['karbexa-verification=tok-b']];
+  const res = await apiRequest(`/security/identity-providers/${connB._id}/domains/victim.example/verify`, 'POST', undefined, userB, companyB);
+  assert.equal(res.status, 200);
+  assert.ok(res.data.data.domains[0].verified_at);
+
+  // The index (not only the pre-check) keeps a verified domain unique: a second verified copy can't be written.
+  await assert.rejects(
+    IdentityProviderConnection.create({
+      company_id: companyA, type: 'entra', display_name: 'A2', status: 'draft',
+      domains: [{ domain: 'victim.example', verification_token: 'x', verified_at: new Date() }],
+    }),
+    (err: any) => err.code === 11000,
+  );
+});
+
+test('Review L-5 / L-6: responses and audit rows never carry client_secret_ref; bad domains are rejected; an active connection keeps a verified domain', async () => {
+  const conn = await IdentityProviderConnection.create({
+    company_id: companyA, type: 'entra', display_name: 'Secretive', status: 'active',
+    config: { tenant_id: '11111111-2222-4333-8444-555555555555', client_secret_ref: 'kv://SECRET' },
+    tenant_approval: { tenant_id: '11111111-2222-4333-8444-555555555555', approved_at: new Date(), operator_id: new Types.ObjectId() },
+    domains: [{ domain: 'kept.example', verification_token: 't', verified_at: new Date() }],
+  });
+  const patched = await apiRequest(`/security/identity-providers/${conn._id}`, 'PATCH', { display_name: 'Renamed' });
+  assert.equal(patched.status, 200);
+  assert.equal(patched.data.data.config.client_secret_ref, undefined);
+  const audit = await AuditEvent.findOne({ action: 'identity_provider.updated', object_id: String(conn._id) }).lean();
+  assert.ok(audit);
+  assert.doesNotMatch(JSON.stringify(audit), /kv:\/\/SECRET/);
+
+  const removeAll = await apiRequest(`/security/identity-providers/${conn._id}`, 'PATCH', { domains: ['new-unverified.example'] });
+  assert.equal(removeAll.status, 400);
+  assert.equal(removeAll.data.code, 'NO_VERIFIED_DOMAINS');
+
+  const bad = await apiRequest('/security/identity-providers', 'POST', { display_name: 'X', tenant_id: 'not-a-guid', domains: ['ok.example'] });
+  assert.equal(bad.status, 400);
+  const badDomain = await apiRequest('/security/identity-providers', 'POST', { display_name: 'X', domains: ['not a domain'] });
+  assert.equal(badDomain.status, 400);
 });

@@ -11,7 +11,8 @@ export function getProductsBackendBaseUrl(): string | undefined {
     try {
       const list = JSON.parse(raw);
       if (Array.isArray(list)) {
-        const sub = list.find((s: any) => s?.name === 'karbexa-products-backend') || list[0];
+        // Only the named products subscription: never fall back to another subscriber's URL, which would receive the service token (review L-13).
+        const sub = list.find((s: any) => s?.name === 'karbexa-products-backend');
         if (sub?.url) {
           return new URL(sub.url).origin;
         }
