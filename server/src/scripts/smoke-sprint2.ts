@@ -1315,6 +1315,77 @@ async function main() {
       }
     }
 
+    // ── A3-1: Identity Providers API + DNS TXT verification ───────────────────────────────
+    {
+      const { setDnsTxtResolver, resetDnsTxtResolver } = await import('../controllers/identityProviders.controller');
+      const mockDns: Record<string, string[][]> = {};
+      setDnsTxtResolver(async (domain: string) => {
+        const r = mockDns[domain.toLowerCase()];
+        if (!r) { const err = new Error('ENODATA'); (err as any).code = 'ENODATA'; throw err; }
+        return r;
+      });
+      try {
+        const sidIdp = crypto.randomUUID();
+        await Session.create({
+          _id: sidIdp,
+          identity_id: new mongoose.Types.ObjectId(),
+          member_id: me._id,
+          company_id: orgId,
+          realm: 'tenant',
+          idle_expires_at: new Date(Date.now() + 3600e3),
+          absolute_expires_at: new Date(Date.now() + 3600e3),
+          amr: ['pwd'],
+        });
+        const tKeyIdp = await jose.importJWK(tenantPrivateJwk, 'RS256');
+        const tAtIdp = await new jose.SignJWT({ token_use: 'access', org: String(orgId), sid: sidIdp, email: me.email })
+          .setProtectedHeader({ alg: 'RS256', kid: 'tenant-smoke', typ: 'at+jwt' })
+          .setIssuer(`${ORIGIN}/realms/tenant`).setAudience('urn:karbexa:admin').setSubject(String(me._id))
+          .setIssuedAt().setExpirationTime('10m').sign(tKeyIdp);
+        const idpFetch = async (path: string, method: string, body?: unknown) => {
+          const res = await fetch(`${ORIGIN}/api/v1${path}`, {
+            method,
+            headers: { authorization: `Bearer ${tAtIdp}`, 'content-type': 'application/json' },
+            body: body ? JSON.stringify(body) : undefined,
+          });
+          const json = (await res.json().catch(() => ({}))) as any;
+          return { status: res.status, json };
+        };
+
+        // 1. Create connection
+        const createRes = await idpFetch('/security/identity-providers', 'POST', {
+          display_name: 'Smoke Entra Connection',
+          tenant_id: 'smoke-tenant-id-1234',
+          domains: ['smoke-corp.test'],
+        });
+        check('A3-1 create IdP connection = 201 draft with token', createRes.status === 201 && createRes.json.data?.status === 'draft' && typeof createRes.json.data?.domains[0]?.verification_token === 'string' && createRes.json.data.domains[0].verification_token.length === 64);
+        const idpId = createRes.json.data?._id;
+        const vToken = createRes.json.data?.domains[0]?.verification_token;
+
+        // 2. List connections (never expose client_secret_ref)
+        const listRes = await idpFetch('/security/identity-providers', 'GET');
+        check('A3-1 list IdP connections = 200 without secret_ref', listRes.status === 200 && Array.isArray(listRes.json.data) && listRes.json.data.some((c: any) => c._id === idpId && !c.config?.client_secret_ref));
+
+        // 3. Activation guard: active requires >= 1 verified domain
+        const actFail = await idpFetch(`/security/identity-providers/${idpId}`, 'PATCH', { status: 'active' });
+        check('A3-1 activation without verified domain = 400 NO_VERIFIED_DOMAINS', actFail.status === 400 && actFail.json.code === 'NO_VERIFIED_DOMAINS');
+
+        // 4. DNS verification fails on missing record
+        const vFail = await idpFetch(`/security/identity-providers/${idpId}/domains/smoke-corp.test/verify`, 'POST');
+        check('A3-1 verify domain missing TXT = 422 DNS_RECORD_NOT_FOUND', vFail.status === 422 && vFail.json.code === 'DNS_RECORD_NOT_FOUND');
+
+        // 5. DNS verification succeeds
+        mockDns['smoke-corp.test'] = [[`karbexa-verification=${vToken}`]];
+        const vOk = await idpFetch(`/security/identity-providers/${idpId}/domains/smoke-corp.test/verify`, 'POST');
+        check('A3-1 verify domain matching TXT = 200 sets verified_at', vOk.status === 200 && !!vOk.json.data?.domains[0]?.verified_at);
+
+        // 6. Activation succeeds now
+        const actOk = await idpFetch(`/security/identity-providers/${idpId}`, 'PATCH', { status: 'active', enforce_sso: true });
+        check('A3-1 activate with verified domain = 200', actOk.status === 200 && actOk.json.data?.status === 'active' && actOk.json.data?.enforce_sso === true);
+      } finally {
+        resetDnsTxtResolver();
+      }
+    }
+
     // ── audit ─────────────────────────────────────────────────────────────────────────────
     const actions = (await OperatorAuditEvent.find()).map((e) => e.action);
     check('E10 operator audit recorded', ['org.provisioned', 'entitlement.updated', 'org.suspended', 'org.reactivated'].every((a) => actions.includes(a)), actions);

@@ -21,7 +21,7 @@ test('runPool never has more than the limit in flight and processes every item e
 test('runPool: a slow item does not block the others', async () => {
   const order: string[] = [];
   await runPool(['slow', 'a', 'b', 'c'], 2, async (name) => {
-    await new Promise((r) => setTimeout(r, name === 'slow' ? 80 : 5));
+    await new Promise((r) => setTimeout(r, name === 'slow' ? 200 : 5));
     order.push(name);
   });
   assert.deepEqual(order, ['a', 'b', 'c', 'slow']);

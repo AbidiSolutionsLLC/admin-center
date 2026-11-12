@@ -217,6 +217,24 @@ export function registerTenantInteractions(app: Express, provider: OidcProvider)
       return renderLogin(res, uid, { error: passwordOk ? 'Your account has no active access. Contact your administrator.' : GENERIC_LOGIN_ERROR, email, status: 401 });
     }
 
+    // 03 §4.1.2: SSO enforcement — active membership in an org with active connection where enforce_sso=true and domain is verified.
+    const emailDomain = email.split('@')[1];
+    if (emailDomain) {
+      const ssoConn = await IdentityProviderConnection.findOne({
+        company_id: user.company_id,
+        status: 'active',
+        enforce_sso: true,
+        domains: { $elemMatch: { domain: emailDomain, verified_at: { $exists: true, $ne: null } } },
+      });
+      if (ssoConn) {
+        return renderLogin(res, uid, {
+          error: 'Single sign-on is required for your organisation. Please sign in with Microsoft.',
+          email,
+          status: 403,
+        });
+      }
+    }
+
     await logSecurityEvent({
       company_id: user.company_id, user_id: user._id, email, event_type: 'login_attempt',
       ip_address: req.ip, user_agent: req.headers['user-agent'], req, metadata: { reason: 'login_attempt_logged' },

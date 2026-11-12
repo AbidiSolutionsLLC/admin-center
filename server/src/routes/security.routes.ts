@@ -14,6 +14,7 @@ import {
   terminateSession,
 } from '../controllers/security.controller';
 import ipRestrictionsRoutes from './ipRestrictions.routes';
+import identityProvidersRoutes from './identityProviders.routes';
 
 const router = Router();
 
@@ -36,5 +37,8 @@ router.delete('/sessions/:tokenId', requireRole(PERMISSION_GROUPS.IT_ADMINS), te
 
 // IP Restrictions routes
 router.use('/ip-restrictions', ipRestrictionsRoutes);
+
+// Identity Providers routes
+router.use('/identity-providers', identityProvidersRoutes);
 
 export default router;
