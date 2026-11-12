@@ -1071,6 +1071,8 @@ export interface IdentityProviderConnection {
     scopes?: string[];
   };
   domains: IdpDomain[];
+  /** Set by a Karbexa operator; an Entra connection can be activated only for the tenant id it names (review M-2). */
+  tenant_approval?: { tenant_id: string; approved_at: string } | null;
   jit_provisioning: JitProvisioning;
   enforce_sso: boolean;
   created_at: string;
