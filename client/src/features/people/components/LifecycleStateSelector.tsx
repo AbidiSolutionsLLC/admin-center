@@ -3,6 +3,7 @@ import React, { useMemo, useState } from 'react';
 import { ArrowRight, AlertCircle } from 'lucide-react';
 import type { LifecycleState, User } from '@/types';
 import { StatusBadge } from '@/components/ui/StatusBadge';
+import { OffboardingModal } from './OffboardingModal';
 import { cn } from '@/utils/cn';
 
 interface LifecycleStateSelectorProps {
@@ -92,6 +93,7 @@ export const LifecycleStateSelector: React.FC<LifecycleStateSelectorProps> = ({
 }) => {
   const [reason, setReason] = useState('');
   const [selectedState, setSelectedState] = useState<LifecycleState | null>(null);
+  const [isOffboardingModalOpen, setIsOffboardingModalOpen] = useState(false);
   const currentState = user.lifecycle_state;
   const validNextStates = useMemo(() => {
     return VALID_TRANSITIONS[currentState] ?? [];
@@ -138,6 +140,7 @@ export const LifecycleStateSelector: React.FC<LifecycleStateSelectorProps> = ({
               variant: 'neutral',
               description: 'Transition to ' + nextState,
             };
+            const isTerminatedTransition = nextState === 'terminated';
             const requiresReason = nextState === 'deactivated' || nextState === 'archived';
             const isSelected = selectedState === nextState;
 
@@ -145,7 +148,9 @@ export const LifecycleStateSelector: React.FC<LifecycleStateSelectorProps> = ({
               <div key={nextState} className="space-y-2">
                 <button
                   onClick={() => {
-                    if (requiresReason) {
+                    if (isTerminatedTransition) {
+                      setIsOffboardingModalOpen(true);
+                    } else if (requiresReason) {
                       setSelectedState(isSelected ? null : nextState);
                       setReason('');
                     } else {
@@ -169,10 +174,22 @@ export const LifecycleStateSelector: React.FC<LifecycleStateSelectorProps> = ({
                   <span
                     className={cn(
                       'px-3 py-1.5 text-xs font-medium rounded-md transition-colors',
-                      requiresReason ? 'bg-amber-100 text-amber-700' : buttonVariantMap[nextState]
+                      isTerminatedTransition
+                        ? 'bg-red-600 hover:bg-red-700 text-white'
+                        : requiresReason
+                        ? 'bg-amber-100 text-amber-700'
+                        : buttonVariantMap[nextState]
                     )}
                   >
-                    {requiresReason ? (isSelected ? 'Cancel' : 'Select & Continue') : (isPending ? 'Processing...' : 'Transition')}
+                    {isTerminatedTransition
+                      ? 'Offboard & Terminate'
+                      : requiresReason
+                      ? isSelected
+                        ? 'Cancel'
+                        : 'Select & Continue'
+                      : isPending
+                      ? 'Processing...'
+                      : 'Transition'}
                   </span>
                 </button>
 
@@ -219,6 +236,19 @@ export const LifecycleStateSelector: React.FC<LifecycleStateSelectorProps> = ({
           })}
         </div>
       </div>
+
+      {/* Offboarding Modal for Terminated Transition (08 §3.3) */}
+      {isOffboardingModalOpen && (
+        <OffboardingModal
+          user={user}
+          isOpen={isOffboardingModalOpen}
+          onClose={() => setIsOffboardingModalOpen(false)}
+          onSuccess={() => {
+            setIsOffboardingModalOpen(false);
+            onTransition('terminated');
+          }}
+        />
+      )}
     </div>
   );
 };

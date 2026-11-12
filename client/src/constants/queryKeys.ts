@@ -19,6 +19,7 @@ export const QUERY_KEYS = {
   USER_STATS: ['users', 'stats'] as const,
   USER_REPORTING_LINE: (userId: string) => ['user', userId, 'reporting-line'] as const,
   USER_HISTORY: (userId: string) => ['user', userId, 'history'] as const,
+  USER_PRODUCT_OPEN_ITEMS: (userId: string) => ['user', userId, 'product-open-items'] as const,
   FORM_METADATA: ['form-metadata'] as const,
 
   // Roles
@@ -43,6 +44,7 @@ export const QUERY_KEYS = {
     filters ? ['overview', 'insights', filters] as const : ['overview', 'insights'] as const,
   // Security
   SECURITY_POLICY: ['security', 'policy'] as const,
+  IDENTITY_PROVIDERS: ['security', 'identity-providers'] as const,
   SECURITY_EVENTS: (filters?: Record<string, unknown>) =>
     filters ? ['security', 'events', filters] as const : ['security', 'events'] as const,
   ACTIVE_SESSIONS: ['security', 'active-sessions'] as const,

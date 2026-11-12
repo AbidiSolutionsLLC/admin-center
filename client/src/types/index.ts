@@ -1047,6 +1047,76 @@ export interface UpdateSecurityPolicyInput {
   settings?: Partial<SecurityPolicySettings>;
 }
 
+// ── Identity Provider Connections (08 §3.4, contract §2.3) ──
+export type IdpType = 'entra' | 'oidc' | 'saml';
+export type IdpStatus = 'draft' | 'active' | 'disabled';
+export type JitProvisioning = 'off' | 'create_member';
+
+export interface IdpDomain {
+  domain: string;
+  verification_token: string;
+  verified_at?: string;
+}
+
+export interface IdentityProviderConnection {
+  _id: string;
+  company_id: string;
+  type: IdpType;
+  display_name: string;
+  status: IdpStatus;
+  config: {
+    tenant_id?: string;
+    issuer?: string;
+    client_id?: string;
+    scopes?: string[];
+  };
+  domains: IdpDomain[];
+  jit_provisioning: JitProvisioning;
+  enforce_sso: boolean;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface CreateIdentityProviderInput {
+  display_name: string;
+  tenant_id: string;
+  domains: string[];
+}
+
+export interface UpdateIdentityProviderInput {
+  display_name?: string;
+  jit_provisioning?: JitProvisioning;
+  enforce_sso?: boolean;
+  status?: IdpStatus;
+  domains?: string[];
+}
+
+// ── Product Open Items (07 §6, contract §2.1) ──
+export interface ProductOpenItemsCounts {
+  people: {
+    pending_leave_requests: number;
+    pending_approvals?: number;
+    pending_approvals_as_manager?: number;
+  };
+  projects: {
+    open_tasks?: number;
+    open_assigned_tasks?: number;
+    owned_projects: number;
+  };
+  sign: {
+    agreements_as_sender_pending: number;
+    agreements_awaiting_signature: number;
+  };
+  desk: {
+    assigned_open_tickets: number;
+  };
+}
+
+export interface ProductOpenItemsResponse {
+  products: ProductOpenItemsCounts;
+}
+
+
 export interface SecurityEventsResponse {
   events: SecurityEvent[];
   pagination: {
