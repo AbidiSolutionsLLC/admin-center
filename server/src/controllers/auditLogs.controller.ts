@@ -10,49 +10,150 @@ import { Request, Response } from 'express';
 import { Types } from 'mongoose';
 import { asyncHandler } from '../utils/asyncHandler';
 import { AuditEvent } from '../models/AuditEvent.model';
+import { User } from '../models/User.model';
+import { UserRole } from '../models/UserRole.model';
+import { ROLES } from '../constants/roles';
 import { auditLogger } from '../lib/auditLogger';
 import { AppError } from '../utils/AppError';
 import { escapeRegExp } from '../utils/regex';
 import { hasPermission } from '../lib/rbac';
+import {
+  consumeStreamTicket,
+  streamAllowed,
+  StreamAuthError,
+  RECHECK_MS,
+  StreamBinding,
+} from '../platform/streamTickets';
 
 /**
  * GET /api/v1/audit-logs/stream
- * Server-Sent Events (SSE) endpoint for real-time audit logs.
- * Multi-tenant isolated via req.user.company_id.
+ * Server-Sent Events (SSE) endpoint for real-time audit logs (05 §3).
+ * Accepts single-use ticket via ?ticket= (EventSource friendly) or fallback Authorization header.
+ * Periodically re-checks session revocation every 30s; closes stream with `event: revoked` if revoked.
  */
-export const streamAuditEvents = (req: Request, res: Response) => {
+export const streamAuditEvents = async (req: Request, res: Response) => {
+  let memberId: string;
+  let companyId: string;
+  let sid: string;
+
+  if (req.query.ticket) {
+    const ticket = typeof req.query.ticket === 'string' ? req.query.ticket : '';
+    let binding: StreamBinding;
+    try {
+      binding = await consumeStreamTicket(ticket);
+    } catch (err: any) {
+      if (err instanceof StreamAuthError) {
+        return res.status(err.status).json({ success: false, error: err.message, code: err.code });
+      }
+      return res.status(401).json({ success: false, error: 'Invalid or expired stream ticket.', code: 'INVALID_STREAM_TICKET' });
+    }
+
+    const userDoc = await User.findOne({ _id: binding.member, company_id: binding.company }).select('role').lean();
+    const userRole = await UserRole.findOne({ user_id: binding.member, company_id: binding.company }).populate('role_id').lean();
+    const roleName = (userRole?.role_id as any)?.name;
+    const effectiveRole = roleName || userDoc?.role;
+
+    if (effectiveRole !== ROLES.SUPER_ADMIN && effectiveRole !== ROLES.IT_ADMIN) {
+      return res.status(403).json({ success: false, error: 'You lack the required role for this action', code: 'INSUFFICIENT_ROLE' });
+    }
+
+    memberId = binding.member.toString();
+    companyId = binding.company.toString();
+    sid = binding.sid;
+  } else {
+    if (!req.user) {
+      return res.status(401).json({ success: false, error: 'Unauthorized', code: 'NO_TOKEN' });
+    }
+    memberId = req.user.userId;
+    companyId = req.user.company_id;
+    sid = req.user.sid;
+  }
+
   res.setHeader('Content-Type', 'text/event-stream');
   res.setHeader('Cache-Control', 'no-cache');
   res.setHeader('Connection', 'keep-alive');
+  res.setHeader('X-Accel-Buffering', 'no');
   res.flushHeaders();
+  res.write(`data: ${JSON.stringify({ type: 'CONNECTED' })}\n\n`);
 
-  const companyId = req.user.company_id;
+  let closed = false;
+  let checking = false;
 
-  const changeStream = AuditEvent.watch([
-    { $match: { 'fullDocument.company_id': new Types.ObjectId(companyId), operationType: 'insert' } }
-  ]);
+  let changeStream: any = null;
+  try {
+    changeStream = AuditEvent.watch([
+      { $match: { 'fullDocument.company_id': new Types.ObjectId(companyId), operationType: 'insert' } }
+    ]);
 
-  changeStream.on('change', (change) => {
-    if (change.operationType === 'insert') {
-      const event = change.fullDocument;
-      res.write(`data: ${JSON.stringify(event)}\n\n`);
+    changeStream.on('change', (change: any) => {
+      if (closed) return;
+      if (change.operationType === 'insert') {
+        const event = change.fullDocument;
+        res.write(`data: ${JSON.stringify(event)}\n\n`);
+      }
+    });
+
+    changeStream.on('error', (err: any) => {
+      if (closed) return;
+      if (err?.code === 40573 || err?.message?.includes('replica sets')) {
+        // Change streams require a replica set; allow standalone mongod in dev/tests without dropping SSE
+        return;
+      }
+      console.error('[AuditLog SSE] Change stream error:', err);
+      try {
+        res.write(`event: error\ndata: ${JSON.stringify({ message: 'Stream error' })}\n\n`);
+      } catch {}
+      close();
+      res.end();
+    });
+  } catch {
+    // Standalone MongoDB does not support change streams; allowed in development/tests
+  }
+
+  const close = () => {
+    if (closed) return;
+    closed = true;
+    clearInterval(recheckTimer);
+    try {
+      if (changeStream) changeStream.close();
+    } catch {}
+  };
+
+  const recheckMs = process.env.STREAM_RECHECK_MS ? Number(process.env.STREAM_RECHECK_MS) : RECHECK_MS;
+
+  const recheck = async () => {
+    if (closed || checking) return;
+    checking = true;
+    let allowed = false;
+    try {
+      allowed = await streamAllowed({ member: memberId, company: companyId, sid });
+    } catch (err) {
+      console.warn('[AuditLog SSE] stream recheck failed', err);
+    } finally {
+      checking = false;
     }
-  });
 
-  changeStream.on('error', (err) => {
-    console.error('[AuditLog SSE] Change stream error:', err);
-    res.write(`event: error\ndata: ${JSON.stringify({ message: 'Stream error' })}\n\n`);
-    res.end();
-  });
+    if (closed) return;
+    if (!allowed) {
+      try {
+        res.write('event: revoked\ndata: {}\n\n');
+      } catch {
+        /* client already gone */
+      }
+      close();
+      res.end();
+      return;
+    }
 
-  const heartbeat = setInterval(() => {
-    res.write(':\n\n');
-  }, 30000);
+    try {
+      res.write(': heartbeat\n\n');
+    } catch {
+      close();
+    }
+  };
 
-  req.on('close', () => {
-    clearInterval(heartbeat);
-    changeStream.close();
-  });
+  const recheckTimer = setInterval(recheck, recheckMs);
+  req.on('close', close);
 };
 
 /**

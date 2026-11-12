@@ -10,6 +10,7 @@ export * from './User.model';
 export * from './Identity.model';
 export * from './Session.model';
 export * from './IdentityProviderConnection.model';
+export * from './StreamTicket.model';
 export * from './Department.model';
 export * from './Team.model';
 export * from './TeamMember.model';
