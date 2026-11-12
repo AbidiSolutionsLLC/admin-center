@@ -1354,7 +1354,7 @@ async function main() {
         // 1. Create connection
         const createRes = await idpFetch('/security/identity-providers', 'POST', {
           display_name: 'Smoke Entra Connection',
-          tenant_id: 'smoke-tenant-id-1234',
+          tenant_id: '0a1b2c3d-4e5f-4a6b-8c7d-9e0f1a2b3c4d',
           domains: ['smoke-corp.test'],
         });
         check('A3-1 create IdP connection = 201 draft with token', createRes.status === 201 && createRes.json.data?.status === 'draft' && typeof createRes.json.data?.domains[0]?.verification_token === 'string' && createRes.json.data.domains[0].verification_token.length === 64);
@@ -1378,7 +1378,19 @@ async function main() {
         const vOk = await idpFetch(`/security/identity-providers/${idpId}/domains/smoke-corp.test/verify`, 'POST');
         check('A3-1 verify domain matching TXT = 200 sets verified_at', vOk.status === 200 && !!vOk.json.data?.domains[0]?.verified_at);
 
-        // 6. Activation succeeds now
+        // 6. Review M-2: an Entra connection needs an operator's tenant approval before it can be activated
+        const actNoApproval = await idpFetch(`/security/identity-providers/${idpId}`, 'PATCH', { status: 'active' });
+        check('M-2 activation without operator tenant approval = 409 OPERATOR_APPROVAL_REQUIRED', actNoApproval.status === 409 && actNoApproval.json.code === 'OPERATOR_APPROVAL_REQUIRED', actNoApproval.status);
+        const tenantTok = await fetch(`${OP}/orgs/${orgId}/identity-providers/${idpId}/approve-tenant`, {
+          method: 'POST', headers: { authorization: `Bearer ${tAtIdp}` },
+        });
+        check('M-2 a tenant admin token cannot call the operator approval = 401', tenantTok.status === 401, tenantTok.status);
+        const approve = await op(`/orgs/${orgId}/identity-providers/${idpId}/approve-tenant`, 'POST');
+        const approveBody = (await approve.json().catch(() => ({}))) as any;
+        check('M-2 operator approves the Entra tenant = 200', approve.status === 200 && approveBody.data?.tenant_approval?.tenant_id === '0a1b2c3d-4e5f-4a6b-8c7d-9e0f1a2b3c4d', approve.status);
+        check('M-2 tenant approval is operator-audited', !!(await OperatorAuditEvent.findOne({ action: 'identity_provider.tenant_approved', target_id: String(idpId) })));
+
+        // 7. Activation succeeds now
         const actOk = await idpFetch(`/security/identity-providers/${idpId}`, 'PATCH', { status: 'active', enforce_sso: true });
         check('A3-1 activate with verified domain = 200', actOk.status === 200 && actOk.json.data?.status === 'active' && actOk.json.data?.enforce_sso === true);
       } finally {

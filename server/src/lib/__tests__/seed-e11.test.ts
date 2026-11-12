@@ -226,6 +226,17 @@ describe('E11 Seeding Script — In-Memory Database Execution', () => {
     assert.equal(alice.role, ROLES.SUPER_ADMIN);
     assert.equal(alice.employment_type, 'full_time');
 
+    // Upserts skip schema validation, so the seed must set every required field itself.
+    const roleRows = await testAdminConn.db!.collection('productroles').find({}).toArray();
+    assert.ok(roleRows.length > 0);
+    for (const r of roleRows) assert.ok(r.app_id, `product role ${r.product_key}:${r.key} must carry app_id`);
+    const adminDepts = await testAdminConn.db!.collection('departments').find({}).toArray();
+    assert.ok(adminDepts.length > 0);
+    for (const dpt of adminDepts) {
+      assert.ok(dpt.slug, `department ${dpt.name} must carry a slug`);
+      assert.equal(dpt.type, 'department');
+    }
+
     const bob = users.find((u) => u.email === 'bob@karbexa.internal');
     assert.ok(bob);
     assert.equal(bob.role, ROLES.EMPLOYEE);

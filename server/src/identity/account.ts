@@ -13,7 +13,7 @@ import { Session, ISession } from '../models/Session.model';
 import { encrypt, decrypt } from '../lib/cryptoService';
 import { authLimiter } from '../middleware/rateLimiter';
 import { logSecurityEvent, setIdentityPassword } from '../controllers/auth.controller';
-import { getIdentityConfig } from './config';
+import { getIdentityConfig, ADMIN_AUDIENCE } from './config';
 import { getPublicJwks, loadCookieKeys } from './keys';
 import { findLiveSession, revokeSession } from './sessions';
 import { escapeHtml, newNonce, pageCsp, pageShell } from './html';
@@ -125,10 +125,14 @@ async function resolveAccountSession(req: Request, res: Response, provider: Oidc
     const token = authHeader.slice(7).trim();
     try {
       tenantKeySet ??= jose.createLocalJWKSet(getPublicJwks('tenant'));
+      // Same checks as requireAuth: only Admin access tokens. A products or id token from the same issuer must not work here.
       const { payload } = await jose.jwtVerify(token, tenantKeySet, {
         issuer: getIdentityConfig().tenantIssuer,
+        audience: ADMIN_AUDIENCE,
         algorithms: ['RS256'],
+        typ: 'at+jwt',
       });
+      if (payload.token_use !== 'access') return null;
       const sid = String(payload.sid || '');
       const sub = String(payload.sub || '');
       if (sid && sub) {

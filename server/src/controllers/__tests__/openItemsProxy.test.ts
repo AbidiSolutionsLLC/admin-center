@@ -367,3 +367,19 @@ test('A3-5: monolith base URL extracted from PLATFORM_SUBSCRIPTIONS', async () =
     (openItemsModule as any).fetchMemberOpenItems = originalFetchMemberOpenItems;
   }
 });
+test('Review L-13: only the karbexa-products-backend subscription supplies the products URL (no first-entry fallback)', () => {
+  const saved = { subs: process.env.PLATFORM_SUBSCRIPTIONS, url: process.env.PRODUCTS_INTERNAL_URL };
+  delete process.env.PRODUCTS_INTERNAL_URL;
+  try {
+    process.env.PLATFORM_SUBSCRIPTIONS = JSON.stringify([{ name: 'some-other-subscriber', url: 'https://other.example/hook', secret_env: 'X' }]);
+    assert.equal(openItemsModule.getProductsBackendBaseUrl(), undefined);
+    process.env.PLATFORM_SUBSCRIPTIONS = JSON.stringify([
+      { name: 'some-other-subscriber', url: 'https://other.example/hook', secret_env: 'X' },
+      { name: 'karbexa-products-backend', url: 'https://products.example/api/v1/internal/platform-events', secret_env: 'Y' },
+    ]);
+    assert.equal(openItemsModule.getProductsBackendBaseUrl(), 'https://products.example');
+  } finally {
+    if (saved.subs === undefined) delete process.env.PLATFORM_SUBSCRIPTIONS; else process.env.PLATFORM_SUBSCRIPTIONS = saved.subs;
+    if (saved.url !== undefined) process.env.PRODUCTS_INTERNAL_URL = saved.url;
+  }
+});

@@ -209,6 +209,35 @@ test('A3-4: hierarchy guard: IT Admin cannot reset higher-ranked Super Admin = 4
   assert.equal(body.code, 'ROLE_HIERARCHY_VIOLATION');
 });
 
+test('A3-4 (review H-1): a member without a linked identity never resolves to another org identity by e-mail', async () => {
+  // Org A creates a shell member carrying Org B's employee e-mail (no identity_id: never accepted an invite).
+  const shell = await User.create({
+    company_id: companyA,
+    email: employeeIdnB.email,
+    full_name: 'Shell of Employee B',
+    password_hash: 'legacy-unused',
+    role: 'Employee' as any,
+    lifecycle_state: 'active',
+    is_active: true,
+  });
+  const { token: superAdminToken } = await mintToken(superAdminA, companyA);
+  const { sid: victimSid } = await mintToken(employeeB, companyB);
+
+  const res = await fetch(`${baseUrl}/api/v1/people/${shell._id}/mfa-reset`, {
+    method: 'POST',
+    headers: { authorization: `Bearer ${superAdminToken}` },
+  });
+  assert.equal(res.status, 404);
+  assert.equal(((await res.json()) as { code: string }).code, 'IDENTITY_NOT_FOUND');
+
+  const victim = await Identity.findById(employeeIdnB._id);
+  assert.equal(victim?.mfa.totp_enabled, true);
+  assert.equal(victim?.mfa.recovery_codes_hash.length, 1);
+  const victimSession = await Session.findById(victimSid);
+  assert.ok(victimSession && !victimSession.revoked_at, 'org B session must not be revoked');
+  await User.deleteOne({ _id: shell._id });
+});
+
 test('A3-4: IT Admin successfully resets MFA of lower-ranked Employee', async () => {
   const { token: itAdminToken } = await mintToken(itAdminA, companyA);
   const { token: employeeToken, sid: employeeSid } = await mintToken(employeeA, companyA);
