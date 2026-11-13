@@ -44,6 +44,13 @@ if (connectionString) {
  * Used as a fallback when Azure is not configured
  */
 const createTransporter = async () => {
+  // Test harnesses (e2e-platform, cutover smokes): MOCK_EMAIL=true keeps every e-mail in-process (nodemailer's JSON
+  // transport) instead of reaching the ethereal.email fallback over the internet. Ignored in production, so a stray
+  // flag can never silently drop real mail.
+  if (process.env.MOCK_EMAIL === 'true' && process.env.NODE_ENV !== 'production') {
+    return nodemailer.createTransport({ jsonTransport: true });
+  }
+
   // If SMTP configuration from env exists
   if (process.env.SMTP_HOST) {
     return nodemailer.createTransport({
