@@ -132,7 +132,7 @@ export const PermissionMatrix: React.FC<PermissionMatrixProps> = ({
     let styleObj: React.CSSProperties = { ...baseStyle };
 
     if (state === true) {
-      styleObj = { ...styleObj, background: 'rgba(245,176,42,0.12)', border: '1px solid rgba(245,176,42,0.25)', color: '#f5b02a' };
+      styleObj = { ...styleObj, background: 'rgba(245,158,11,0.12)', border: '1px solid rgba(245,158,11,0.25)', color: '#f59e0b' };
     } else if (state === false) {
       styleObj = { ...styleObj, background: 'rgba(239,68,68,0.12)', border: '1px solid rgba(239,68,68,0.25)', color: '#ef4444' };
     } else {
@@ -144,7 +144,7 @@ export const PermissionMatrix: React.FC<PermissionMatrixProps> = ({
         key={`${module}:${action}:${scope}`}
         onClick={() => handleCellClick(module, action, scope)}
         style={styleObj}
-        className="hover:scale-110 hover:shadow-[0_0_12px_rgba(245,176,42,0.15)] mx-auto"
+        className="hover:scale-110 hover:shadow-[0_0_12px_rgba(245,158,11,0.15)] mx-auto"
         aria-label={`${module} ${action} ${scope}: ${state === null ? 'not set' : state ? 'granted' : 'denied'}`}
       >
         {state === true && <Check className="h-4 w-4" />}
@@ -228,7 +228,7 @@ export const PermissionMatrix: React.FC<PermissionMatrixProps> = ({
                   <div className="flex gap-3 justify-center">
                     <button
                       onClick={() => handleGrantAll(module)}
-                      style={{ fontSize: 11, fontWeight: 700, color: '#f5b02a', cursor: 'pointer', background: 'transparent', border: 'none' }}
+                      style={{ fontSize: 11, fontWeight: 700, color: '#f59e0b', cursor: 'pointer', background: 'transparent', border: 'none' }}
                       className="hover:text-white transition-colors"
                     >
                       Grant All

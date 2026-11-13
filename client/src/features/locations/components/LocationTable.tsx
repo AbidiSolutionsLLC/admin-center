@@ -29,7 +29,7 @@ const TYPE_BADGE: Record<LocationType, { bg: string; color: string; border: stri
   region:  { bg: 'rgba(168,85,247,0.12)',  color: '#c084fc', border: 'rgba(168,85,247,0.25)' },
   country: { bg: 'rgba(59,130,246,0.12)',  color: '#60a5fa', border: 'rgba(59,130,246,0.25)' },
   city:    { bg: 'rgba(16,185,129,0.12)',  color: '#34d399', border: 'rgba(16,185,129,0.25)' },
-  office:  { bg: 'rgba(245,176,42,0.12)',  color: '#fbbf24', border: 'rgba(245,176,42,0.25)' },
+  office:  { bg: 'rgba(245,158,11,0.12)',  color: '#fbbf24', border: 'rgba(245,158,11,0.25)' },
 };
 
 const TYPE_ICON_COLOR: Record<LocationType, string> = {
@@ -119,7 +119,7 @@ export const LocationTable: React.FC<LocationTableProps> = ({
                           <span className="text-sm font-semibold truncate max-w-[220px]" style={{ color: 'var(--text-main)' }} title={loc.name}>{loc.name}</span>
                           {loc.is_headquarters && (
                             <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-bold"
-                              style={{ background: 'rgba(245,176,42,0.15)', color: '#fbbf24', border: '1px solid rgba(245,176,42,0.3)' }}>
+                              style={{ background: 'rgba(245,158,11,0.15)', color: '#fbbf24', border: '1px solid rgba(245,158,11,0.3)' }}>
                               <Crown className="w-2.5 h-2.5" />
                               HQ
                             </span>
@@ -175,8 +175,8 @@ export const LocationTable: React.FC<LocationTableProps> = ({
                         className="h-8 w-8 flex items-center justify-center rounded-lg transition-all"
                         style={{ color: 'var(--text-muted)' }}
                         onMouseEnter={(e) => {
-                          (e.currentTarget as HTMLElement).style.background = 'rgba(245,176,42,0.1)';
-                          (e.currentTarget as HTMLElement).style.color = '#f5b02a';
+                          (e.currentTarget as HTMLElement).style.background = 'rgba(245,158,11,0.1)';
+                          (e.currentTarget as HTMLElement).style.color = '#f59e0b';
                         }}
                         onMouseLeave={(e) => {
                           (e.currentTarget as HTMLElement).style.background = 'transparent';

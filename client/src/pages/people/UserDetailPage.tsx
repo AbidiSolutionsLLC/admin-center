@@ -305,7 +305,7 @@ export default function UserDetailPage() {
           {/* Effective Settings (Location Inheritance) */}
           <div className="rounded-xl p-5" style={{ background: 'rgba(255,255,255,0.03)', border: '1px solid rgba(255,255,255,0.07)' }}>
             <div className="flex items-center gap-2 mb-4">
-              <Briefcase className="w-4 h-4" style={{ color: '#f5b02a' }} />
+              <Briefcase className="w-4 h-4" style={{ color: '#f59e0b' }} />
               <h2 className="text-sm font-bold" style={{ color: 'var(--text-main)' }}>Effective Settings (Location Inheritance)</h2>
             </div>
             <div className="grid grid-cols-2 md:grid-cols-4 gap-4">

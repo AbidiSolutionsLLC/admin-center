@@ -1,13 +1,13 @@
 export const theme = {
   colors: {
     // ─── Primary Brand: Golden Amber with Glow ───
-    primary: '#f5b02a',
-    primaryRgb: '245, 176, 42',
-    primaryHover: '#e8a020',
-    primaryLight: 'rgba(245, 176, 42, 0.12)',
-    primaryGlow: 'rgba(245, 176, 42, 0.35)',
+    primary: '#f59e0b',
+    primaryRgb: '245, 158, 11',
+    primaryHover: '#d97706',
+    primaryLight: 'rgba(245,158,11, 0.12)',
+    primaryGlow: 'rgba(245,158,11, 0.35)',
     primaryForeground: '#000000',
-    brandGradient: 'linear-gradient(135deg, #f5b02a, #fcd34d)',
+    brandGradient: 'linear-gradient(135deg, #f59e0b, #fcd34d)',
 
     // ─── Backgrounds — Dark Layered System ───
     background: '#0b0f19',              // page bg
@@ -29,10 +29,10 @@ export const theme = {
     sidebarBg: 'transparent',           // glass panel — no solid color
     sidebarBorder: 'rgba(255,255,255,0.08)',
     sidebarText: '#94a3b8',             // slate-400
-    sidebarTextActive: '#f5b02a',
+    sidebarTextActive: '#f59e0b',
     sidebarHover: 'rgba(255,255,255,0.06)',
-    sidebarActiveBg: 'rgba(245,176,42,0.10)',
-    sidebarActiveBorder: 'rgba(245,176,42,0.20)',
+    sidebarActiveBg: 'rgba(245,158,11,0.10)',
+    sidebarActiveBorder: 'rgba(245,158,11,0.20)',
     sidebarGroupLabel: 'rgba(148,163,184,0.5)',
 
     // ─── Text ───
@@ -49,9 +49,9 @@ export const theme = {
     success: '#10b981',
     successLight: 'rgba(16,185,129,0.10)',
     successBorder: 'rgba(16,185,129,0.20)',
-    warning: '#f5b02a',
-    warningLight: 'rgba(245,176,42,0.10)',
-    warningBorder: 'rgba(245,176,42,0.20)',
+    warning: '#f59e0b',
+    warningLight: 'rgba(245,158,11,0.10)',
+    warningBorder: 'rgba(245,158,11,0.20)',
     error: '#ef4444',
     errorLight: 'rgba(239,68,68,0.10)',
     errorBorder: 'rgba(239,68,68,0.20)',
@@ -72,9 +72,9 @@ export const theme = {
     cardHover: '0 12px 40px rgba(0,0,0,0.4)',
     modal: '-12px 0 60px rgba(0,0,0,0.6)',
     dropdown: '0 8px 24px -4px rgba(0,0,0,0.5)',
-    glow: '0 0 20px rgba(245,176,42,0.35)',
-    glowButton: '0 4px 15px rgba(245,176,42,0.4)',
-    glowButtonHover: '0 6px 20px rgba(245,176,42,0.5)',
+    glow: '0 0 20px rgba(245,158,11,0.35)',
+    glowButton: '0 4px 15px rgba(245,158,11,0.4)',
+    glowButtonHover: '0 6px 20px rgba(245,158,11,0.5)',
   },
 
   borderRadius: {

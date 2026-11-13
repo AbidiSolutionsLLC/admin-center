@@ -32,7 +32,7 @@ const TYPE_ICONS: Record<string, React.FC<{ className?: string; style?: React.CS
 };
 
 const TYPE_COLORS: Record<string, string> = {
-  region: '#f5b02a',
+  region: '#f59e0b',
   country: '#60a5fa',
   city: '#34d399',
   office: '#94a3b8',
@@ -46,13 +46,13 @@ const TYPE_ACCENT_CLASSES: Record<string, string> = {
 };
 
 const DEPTH_CLASSES = [
-  'bg-[rgba(245,176,42,0.06)] border-[rgba(245,176,42,0.15)]',
+  'bg-[rgba(245,158,11,0.06)] border-[rgba(245,158,11,0.15)]',
   'bg-[rgba(255,255,255,0.03)] border-[rgba(255,255,255,0.08)]',
   'bg-[rgba(255,255,255,0.01)] border-[rgba(255,255,255,0.05)]',
 ];
 
 const INDENT_COLORS = [
-  'rgba(245,176,42,0.25)',
+  'rgba(245,158,11,0.25)',
   'rgba(148,163,184,0.2)',
   'rgba(148,163,184,0.12)',
 ];
@@ -81,7 +81,7 @@ const LocationNode: React.FC<LocationNodeProps> = ({ node, depth, parentName, on
           'flex items-center gap-3 p-3 rounded-lg border transition-colors cursor-pointer',
           dc
         )}
-        style={depth === 0 ? { borderColor: 'rgba(245,176,42,0.2)' } : {}}
+        style={depth === 0 ? { borderColor: 'rgba(245,158,11,0.2)' } : {}}
         onClick={() => { if (hasChildren) setIsExpanded(!isExpanded); onNodeClick?.(node); }}
       >
         {/* Expand/collapse */}
@@ -120,7 +120,7 @@ const LocationNode: React.FC<LocationNodeProps> = ({ node, depth, parentName, on
 
             {node.is_headquarters && (
               <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[10px] font-bold flex-shrink-0"
-                style={{ background: 'rgba(245,176,42,0.15)', color: '#fbbf24', border: '1px solid rgba(245,176,42,0.3)' }}>
+                style={{ background: 'rgba(245,158,11,0.15)', color: '#fbbf24', border: '1px solid rgba(245,158,11,0.3)' }}>
                 <Crown className="w-2.5 h-2.5" />
                 HQ
               </span>
@@ -152,7 +152,7 @@ const LocationNode: React.FC<LocationNodeProps> = ({ node, depth, parentName, on
         {/* Collapsed badge */}
         {!isExpanded && hasChildren && (
           <span className="inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-semibold flex-shrink-0"
-            style={{ background: 'rgba(245,176,42,0.12)', color: '#f5b02a' }}>
+            style={{ background: 'rgba(245,158,11,0.12)', color: '#f59e0b' }}>
             {node.children!.length} child{node.children!.length > 1 ? 'ren' : ''}
           </span>
         )}

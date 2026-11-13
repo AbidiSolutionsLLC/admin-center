@@ -25,7 +25,7 @@ export const StatCard: React.FC<StatCardProps> = ({
   trend,
 }) => {
   return (
-    <div className="group relative overflow-hidden bg-surface backdrop-blur-glass border border-line rounded-2xl p-6 transition-all duration-300 ease-out hover:bg-surface-alt hover:border-primary/30 hover:-translate-y-1 hover:shadow-[0_12px_40px_rgba(245,176,42,0.12)] cursor-pointer">
+    <div className="group relative overflow-hidden bg-surface backdrop-blur-glass border border-line rounded-2xl p-6 transition-all duration-300 ease-out hover:bg-surface-alt hover:border-primary/30 hover:-translate-y-1 hover:shadow-[0_12px_40px_rgba(245,158,11,0.12)] cursor-pointer">
       {/* Subtle top border gradient glow on hover */}
       <div className="absolute top-0 left-0 right-0 h-[2px] bg-gradient-to-r from-transparent via-primary/0 to-transparent group-hover:via-primary/50 transition-all duration-500" />
       
@@ -52,7 +52,7 @@ export const StatCard: React.FC<StatCardProps> = ({
             </div>
           )}
         </div>
-        <div className="h-14 w-14 rounded-xl bg-[rgba(245,176,42,0.1)] border border-[rgba(245,176,42,0.2)] flex items-center justify-center transition-transform duration-300 group-hover:scale-110 group-hover:shadow-[0_0_20px_rgba(245,176,42,0.2)]">
+        <div className="h-14 w-14 rounded-xl bg-[rgba(245,158,11,0.1)] border border-[rgba(245,158,11,0.2)] flex items-center justify-center transition-transform duration-300 group-hover:scale-110 group-hover:shadow-[0_0_20px_rgba(245,158,11,0.2)]">
           <Icon className="h-7 w-7 text-primary transition-transform duration-300 group-hover:rotate-[-5deg]" strokeWidth={1.5} />
         </div>
       </div>

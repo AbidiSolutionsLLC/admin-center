@@ -10,10 +10,10 @@ const config: Config = {
     extend: {
       colors: {
         primary: {
-          DEFAULT: '#f5b02a',
-          hover: '#e8a020',
-          light: 'rgba(245,176,42,0.12)',
-          glow: 'rgba(245,176,42,0.35)',
+          DEFAULT: '#f59e0b',
+          hover: '#d97706',
+          light: 'rgba(245,158,11,0.12)',
+          glow: 'rgba(245,158,11,0.35)',
           foreground: '#000000',
         },
         // Keep accent for compatibility
@@ -26,10 +26,10 @@ const config: Config = {
           bg: 'transparent',
           border: 'rgba(255,255,255,0.08)',
           text: '#94a3b8',
-          'text-active': '#f5b02a',
+          'text-active': '#f59e0b',
           hover: 'rgba(255,255,255,0.06)',
-          active: '#f5b02a',
-          'active-bg': 'rgba(245,176,42,0.10)',
+          active: '#f59e0b',
+          'active-bg': 'rgba(245,158,11,0.10)',
           'group-label': 'rgba(148,163,184,0.5)',
         },
         surface: {
@@ -49,7 +49,7 @@ const config: Config = {
         },
         // Semantic — keep names but remap to dark variants
         success: '#10b981',
-        warning: '#f5b02a',
+        warning: '#f59e0b',
         error: '#ef4444',
         info: '#3b82f6',
       },
@@ -58,8 +58,8 @@ const config: Config = {
         'card-hover': '0 12px 40px rgba(0,0,0,0.4)',
         modal: '-12px 0 60px rgba(0,0,0,0.6)',
         dropdown: '0 8px 24px -4px rgba(0,0,0,0.5)',
-        glow: '0 0 20px rgba(245,176,42,0.35)',
-        'glow-btn': '0 4px 15px rgba(245,176,42,0.4)',
+        glow: '0 0 20px rgba(245,158,11,0.35)',
+        'glow-btn': '0 4px 15px rgba(245,158,11,0.4)',
       },
       borderRadius: {
         'xl': '20px',

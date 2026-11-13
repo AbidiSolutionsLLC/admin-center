@@ -72,8 +72,8 @@ export const HolidayCalendarTable: React.FC<HolidayCalendarTableProps> = ({
                   <td className="px-5 py-4">
                     <div className="flex items-center gap-3">
                       <div className="w-8 h-8 rounded-lg flex items-center justify-center flex-shrink-0"
-                        style={{ background: 'rgba(245,176,42,0.12)' }}>
-                        <Calendar className="w-4 h-4" style={{ color: '#f5b02a' }} />
+                        style={{ background: 'rgba(245,158,11,0.12)' }}>
+                        <Calendar className="w-4 h-4" style={{ color: '#f59e0b' }} />
                       </div>
                       <div>
                         <div className="flex items-center gap-2">
@@ -142,8 +142,8 @@ export const HolidayCalendarTable: React.FC<HolidayCalendarTableProps> = ({
                         className="h-8 w-8 flex items-center justify-center rounded-lg transition-all"
                         style={{ color: 'var(--text-muted)' }}
                         onMouseEnter={(e) => {
-                          (e.currentTarget as HTMLElement).style.background = 'rgba(245,176,42,0.1)';
-                          (e.currentTarget as HTMLElement).style.color = '#f5b02a';
+                          (e.currentTarget as HTMLElement).style.background = 'rgba(245,158,11,0.1)';
+                          (e.currentTarget as HTMLElement).style.color = '#f59e0b';
                         }}
                         onMouseLeave={(e) => {
                           (e.currentTarget as HTMLElement).style.background = 'transparent';

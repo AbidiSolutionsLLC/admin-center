@@ -137,10 +137,10 @@ export const Sidebar = ({ className }: SidebarProps) => {
           onClick={closeSidebar}
           style={{
             width: 34, height: 34,
-            background: 'linear-gradient(135deg, #f5b02a, #fcd34d)',
+            background: 'linear-gradient(135deg, #f59e0b, #fcd34d)',
             borderRadius: 10,
             display: 'flex', alignItems: 'center', justifyContent: 'center',
-            boxShadow: '0 0 14px rgba(245,176,42,0.45)',
+            boxShadow: '0 0 14px rgba(245,158,11,0.45)',
             flexShrink: 0,
             textDecoration: 'none'
           }}
@@ -150,7 +150,7 @@ export const Sidebar = ({ className }: SidebarProps) => {
         <Link to={ROUTES.OVERVIEW} onClick={closeSidebar} style={{ textDecoration: 'none' }}>
           <span style={{
             fontSize: 18, fontWeight: 800,
-            color: '#f5b02a',
+            color: '#f59e0b',
             letterSpacing: '-0.3px',
             lineHeight: 1,
           }}>
@@ -218,10 +218,10 @@ export const Sidebar = ({ className }: SidebarProps) => {
                       fontWeight: 500, fontSize: 14,
                       transition: 'all 0.15s ease',
                       border: '1px solid transparent',
-                      color: isActive ? '#f5b02a' : '#94a3b8',
-                      background: isActive ? 'rgba(245,176,42,0.09)' : 'transparent',
-                      borderColor: isActive ? 'rgba(245,176,42,0.18)' : 'transparent',
-                      boxShadow: isActive ? '0 0 16px rgba(245,176,42,0.05)' : 'none',
+                      color: isActive ? '#f59e0b' : '#94a3b8',
+                      background: isActive ? 'rgba(245,158,11,0.09)' : 'transparent',
+                      borderColor: isActive ? 'rgba(245,158,11,0.18)' : 'transparent',
+                      boxShadow: isActive ? '0 0 16px rgba(245,158,11,0.05)' : 'none',
                     }}
                     onMouseEnter={e => {
                       if (!isActive) {
@@ -263,10 +263,10 @@ export const Sidebar = ({ className }: SidebarProps) => {
         >
           <div style={{
             width: 30, height: 30, borderRadius: '50%',
-            background: 'rgba(245,176,42,0.15)',
-            border: '1px solid rgba(245,176,42,0.25)',
+            background: 'rgba(245,158,11,0.15)',
+            border: '1px solid rgba(245,158,11,0.25)',
             display: 'flex', alignItems: 'center', justifyContent: 'center',
-            fontSize: 11, fontWeight: 800, color: '#f5b02a',
+            fontSize: 11, fontWeight: 800, color: '#f59e0b',
             flexShrink: 0,
           }}>
             {userInitials}

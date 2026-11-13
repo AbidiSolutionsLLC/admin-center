@@ -564,14 +564,14 @@ function HolidaysTab() {
                         >
                           <td className="h-14 px-5">
                             <div className="flex items-center gap-3">
-                              <div className="w-8 h-8 rounded-lg flex items-center justify-center flex-shrink-0" style={{ background: 'rgba(245,176,42,0.12)' }}>
-                                <Calendar className="w-4 h-4" style={{ color: '#f5b02a' }} />
+                              <div className="w-8 h-8 rounded-lg flex items-center justify-center flex-shrink-0" style={{ background: 'rgba(245,158,11,0.12)' }}>
+                                <Calendar className="w-4 h-4" style={{ color: '#f59e0b' }} />
                               </div>
                               <div>
                                 <p className="text-sm font-medium" style={{ color: 'var(--text-main)' }}>{holiday.name}</p>
                                 {holiday.is_observed && (
                                   <span className="inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-semibold mt-0.5"
-                                    style={{ background: 'rgba(245,176,42,0.12)', color: '#f5b02a', border: '1px solid rgba(245,176,42,0.25)' }}>
+                                    style={{ background: 'rgba(245,158,11,0.12)', color: '#f59e0b', border: '1px solid rgba(245,158,11,0.25)' }}>
                                     Observed
                                   </span>
                                 )}
@@ -599,8 +599,8 @@ function HolidaysTab() {
                                 className="h-8 w-8 flex items-center justify-center rounded-lg transition-all"
                                 style={{ color: '#94a3b8' }}
                                 onMouseEnter={(e) => {
-                                  (e.currentTarget as HTMLElement).style.background = 'rgba(245,176,42,0.1)';
-                                  (e.currentTarget as HTMLElement).style.color = '#f5b02a';
+                                  (e.currentTarget as HTMLElement).style.background = 'rgba(245,158,11,0.1)';
+                                  (e.currentTarget as HTMLElement).style.color = '#f59e0b';
                                 }}
                                 onMouseLeave={(e) => {
                                   (e.currentTarget as HTMLElement).style.background = 'transparent';

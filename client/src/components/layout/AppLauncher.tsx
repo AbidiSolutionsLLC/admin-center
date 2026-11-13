@@ -64,7 +64,7 @@ export const AppLauncher = () => {
       case 'desk':
         return <Headphones className="w-5 h-5 text-violet-400" />;
       case 'admin':
-        return <Shield className="w-5 h-5 text-[#f5b02a]" />;
+        return <Shield className="w-5 h-5 text-[#f59e0b]" />;
       default:
         return <Package className="w-5 h-5 text-slate-400" />;
     }
@@ -96,7 +96,7 @@ export const AppLauncher = () => {
           cursor: 'pointer',
           transition: 'all 0.2s ease',
           position: 'relative',
-          color: '#f5b02a',
+          color: '#f59e0b',
         }}
         aria-label="App Launcher"
         title="App Launcher"
@@ -131,17 +131,17 @@ export const AppLauncher = () => {
               <button
                 key="karbexa-admin"
                 onClick={() => handleAppClick('/')}
-                className="flex flex-col items-start p-3 rounded-xl border border-white/10 bg-white/5 hover:bg-white/10 hover:border-[#f5b02a]/40 transition-all text-left group"
+                className="flex flex-col items-start p-3 rounded-xl border border-white/10 bg-white/5 hover:bg-white/10 hover:border-[#f59e0b]/40 transition-all text-left group"
               >
                 <div className="flex items-center justify-between w-full mb-2">
-                  <div className="w-8 h-8 rounded-lg bg-[#f5b02a]/15 border border-[#f5b02a]/30 flex items-center justify-center">
+                  <div className="w-8 h-8 rounded-lg bg-[#f59e0b]/15 border border-[#f59e0b]/30 flex items-center justify-center">
                     {getProductIcon('admin')}
                   </div>
-                  <span className="text-[10px] uppercase font-bold tracking-wider px-1.5 py-0.5 rounded bg-[#f5b02a]/20 text-[#f5b02a]">
+                  <span className="text-[10px] uppercase font-bold tracking-wider px-1.5 py-0.5 rounded bg-[#f59e0b]/20 text-[#f59e0b]">
                     Active
                   </span>
                 </div>
-                <span className="text-sm font-semibold text-slate-100 group-hover:text-[#f5b02a] transition-colors">
+                <span className="text-sm font-semibold text-slate-100 group-hover:text-[#f59e0b] transition-colors">
                   Karbexa Admin
                 </span>
                 <span className="text-[11px] text-slate-400 truncate w-full mt-0.5">

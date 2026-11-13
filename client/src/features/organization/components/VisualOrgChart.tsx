@@ -128,7 +128,7 @@ const OrgNode: React.FC<{
                     <DropdownMenu.Item 
                       onClick={() => onNodeClick?.(node)}
                       style={{ borderRadius: 8, padding: '9px 14px', fontSize: 13, fontWeight: 500, color: '#94a3b8', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '8px' }}
-                      className="focus:bg-[rgba(245,176,42,0.10)] focus:text-[#f5b02a] hover:bg-[rgba(245,176,42,0.10)] hover:text-[#f5b02a] outline-none"
+                      className="focus:bg-[rgba(245,158,11,0.10)] focus:text-[#f59e0b] hover:bg-[rgba(245,158,11,0.10)] hover:text-[#f59e0b] outline-none"
                     >
                       <Edit2 className="w-3.5 h-3.5" />
                       Edit Department

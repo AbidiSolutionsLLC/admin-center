@@ -40,8 +40,8 @@ export const EmptyState: React.FC<EmptyStateProps> = ({
       {/* Icon container */}
       <div style={{
         width: 54, height: 54, borderRadius: 14,
-        background: 'rgba(245,176,42,0.10)',
-        border: '1px solid rgba(245,176,42,0.20)',
+        background: 'rgba(245,158,11,0.10)',
+        border: '1px solid rgba(245,158,11,0.20)',
         display: 'flex', alignItems: 'center', justifyContent: 'center',
         margin: '0 auto 20px',
       }}>

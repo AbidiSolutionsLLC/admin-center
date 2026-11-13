@@ -191,8 +191,8 @@ export const LocationForm: React.FC<LocationFormProps> = ({
 
   const handleFocus = (e: React.FocusEvent<HTMLInputElement | HTMLSelectElement>, hasError?: boolean) => {
     e.currentTarget.style.background = 'rgba(255,255,255,0.07)';
-    e.currentTarget.style.borderColor = hasError ? 'rgba(239,68,68,0.5)' : 'rgba(245,176,42,0.35)';
-    e.currentTarget.style.boxShadow = hasError ? '0 0 0 3px rgba(239,68,68,0.1)' : '0 0 0 3px rgba(245,176,42,0.06)';
+    e.currentTarget.style.borderColor = hasError ? 'rgba(239,68,68,0.5)' : 'rgba(245,158,11,0.35)';
+    e.currentTarget.style.boxShadow = hasError ? '0 0 0 3px rgba(239,68,68,0.1)' : '0 0 0 3px rgba(245,158,11,0.06)';
   };
 
   const handleBlur = (e: React.FocusEvent<HTMLInputElement | HTMLSelectElement>, hasError?: boolean) => {
@@ -239,12 +239,12 @@ export const LocationForm: React.FC<LocationFormProps> = ({
                     onClick={() => field.onChange(opt.value)}
                     className="text-left p-3 rounded-xl transition-all border"
                     style={{
-                      background: selected ? 'rgba(245,176,42,0.1)' : 'rgba(255,255,255,0.03)',
-                      borderColor: selected ? 'rgba(245,176,42,0.4)' : 'rgba(255,255,255,0.08)',
-                      boxShadow: selected ? '0 0 0 1px rgba(245,176,42,0.15)' : 'none',
+                      background: selected ? 'rgba(245,158,11,0.1)' : 'rgba(255,255,255,0.03)',
+                      borderColor: selected ? 'rgba(245,158,11,0.4)' : 'rgba(255,255,255,0.08)',
+                      boxShadow: selected ? '0 0 0 1px rgba(245,158,11,0.15)' : 'none',
                     }}
                   >
-                    <p className="text-sm font-bold" style={{ color: selected ? '#f5b02a' : 'var(--text-main)' }}>
+                    <p className="text-sm font-bold" style={{ color: selected ? '#f59e0b' : 'var(--text-main)' }}>
                       {opt.label}
                     </p>
                     <p className="text-xs mt-0.5" style={{ color: 'var(--text-muted)' }}>{opt.desc}</p>
@@ -347,7 +347,7 @@ export const LocationForm: React.FC<LocationFormProps> = ({
       </div>
       {isHQ && (
         <div className="flex items-start gap-2 p-3 rounded-xl text-xs"
-          style={{ background: 'rgba(245,176,42,0.08)', border: '1px solid rgba(245,176,42,0.2)', color: '#fbbf24' }}>
+          style={{ background: 'rgba(245,158,11,0.08)', border: '1px solid rgba(245,158,11,0.2)', color: '#fbbf24' }}>
           ⚠ Setting this as HQ will override any existing headquarters location.
         </div>
       )}
@@ -382,9 +382,9 @@ export const LocationForm: React.FC<LocationFormProps> = ({
                     }}
                     className="px-3 py-1.5 text-xs font-semibold rounded-lg transition-all border"
                     style={{
-                      background: isSelected ? 'rgba(245,176,42,0.12)' : 'rgba(255,255,255,0.03)',
-                      borderColor: isSelected ? 'rgba(245,176,42,0.4)' : 'rgba(255,255,255,0.08)',
-                      color: isSelected ? '#f5b02a' : '#94a3b8',
+                      background: isSelected ? 'rgba(245,158,11,0.12)' : 'rgba(255,255,255,0.03)',
+                      borderColor: isSelected ? 'rgba(245,158,11,0.4)' : 'rgba(255,255,255,0.08)',
+                      color: isSelected ? '#f59e0b' : '#94a3b8',
                     }}
                   >
                     {day.label}

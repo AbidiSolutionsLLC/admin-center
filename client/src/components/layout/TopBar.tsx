@@ -77,7 +77,7 @@ export const TopBar = ({ className }: TopBarProps) => {
       }}
     >
       {/* Left: Page title — dynamic from route */}
-      <div style={{ fontSize: 18, fontWeight: 600, color: '#f5b02a' }}>
+      <div style={{ fontSize: 18, fontWeight: 600, color: '#f59e0b' }}>
         {pageTitle}
       </div>
 
@@ -109,7 +109,7 @@ export const TopBar = ({ className }: TopBarProps) => {
               border: '1px solid var(--glass-border)',
               display: 'flex', alignItems: 'center', justifyContent: 'center',
               cursor: 'pointer', transition: 'all 0.2s ease',
-              position: 'relative', color: '#f5b02a',
+              position: 'relative', color: '#f59e0b',
             }}
             aria-label={`Notifications${unreadCount > 0 ? `, ${unreadCount} unread` : ''}`}
             onMouseEnter={e => (e.currentTarget.style.background = 'var(--glass-hover)')}

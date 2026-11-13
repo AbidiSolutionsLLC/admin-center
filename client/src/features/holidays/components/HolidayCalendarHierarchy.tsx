@@ -31,7 +31,7 @@ export const HolidayCalendarHierarchy: React.FC<HolidayCalendarHierarchyProps> =
 // ── Node config by depth ──────────────────────────────────────────────────────
 
 const DEPTH_STYLES = [
-  { bg: 'rgba(245,176,42,0.08)',  border: 'rgba(245,176,42,0.2)',  hoverBg: 'rgba(245,176,42,0.13)', indentBorder: 'rgba(245,176,42,0.2)'  },
+  { bg: 'rgba(245,158,11,0.08)',  border: 'rgba(245,158,11,0.2)',  hoverBg: 'rgba(245,158,11,0.13)', indentBorder: 'rgba(245,158,11,0.2)'  },
   { bg: 'rgba(255,255,255,0.04)', border: 'rgba(255,255,255,0.09)', hoverBg: 'rgba(255,255,255,0.07)', indentBorder: 'rgba(255,255,255,0.1)'  },
   { bg: 'rgba(255,255,255,0.02)', border: 'rgba(255,255,255,0.06)', hoverBg: 'rgba(255,255,255,0.05)', indentBorder: 'rgba(255,255,255,0.07)'  },
   { bg: 'rgba(255,255,255,0.01)', border: 'rgba(255,255,255,0.05)', hoverBg: 'rgba(255,255,255,0.04)', indentBorder: 'rgba(255,255,255,0.05)'  },
@@ -42,14 +42,14 @@ const TYPE_ICONS: Record<string, React.FC<{ className?: string; style?: React.CS
 };
 
 const TYPE_ICON_COLORS: Record<string, string> = {
-  region: '#f5b02a', country: '#60a5fa', city: '#34d399', office: '#fbbf24',
+  region: '#f59e0b', country: '#60a5fa', city: '#34d399', office: '#fbbf24',
 };
 
 const TYPE_BADGE_STYLES: Record<string, { bg: string; color: string; border: string }> = {
-  region:  { bg: 'rgba(245,176,42,0.12)',  color: '#f5b02a', border: 'rgba(245,176,42,0.3)'  },
+  region:  { bg: 'rgba(245,158,11,0.12)',  color: '#f59e0b', border: 'rgba(245,158,11,0.3)'  },
   country: { bg: 'rgba(59,130,246,0.12)',  color: '#60a5fa', border: 'rgba(59,130,246,0.3)'  },
   city:    { bg: 'rgba(16,185,129,0.12)',  color: '#34d399', border: 'rgba(16,185,129,0.3)'  },
-  office:  { bg: 'rgba(245,176,42,0.10)',  color: '#fbbf24', border: 'rgba(245,176,42,0.25)'  },
+  office:  { bg: 'rgba(245,158,11,0.10)',  color: '#fbbf24', border: 'rgba(245,158,11,0.25)'  },
 };
 
 // ── Recursive Node ────────────────────────────────────────────────────────────
@@ -118,7 +118,7 @@ const HolidayCalendarNode: React.FC<HolidayCalendarNodeProps> = ({ node, depth, 
             {/* HQ badge */}
             {node.is_headquarters && (
               <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-bold flex-shrink-0"
-                style={{ background: 'rgba(245,176,42,0.15)', color: '#fbbf24', border: '1px solid rgba(245,176,42,0.3)' }}>
+                style={{ background: 'rgba(245,158,11,0.15)', color: '#fbbf24', border: '1px solid rgba(245,158,11,0.3)' }}>
                 <Crown className="w-2.5 h-2.5" />
                 HQ
               </span>
@@ -133,7 +133,7 @@ const HolidayCalendarNode: React.FC<HolidayCalendarNodeProps> = ({ node, depth, 
             {/* Holiday calendars count */}
             {calCount > 0 && (
               <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-bold flex-shrink-0"
-                style={{ background: 'rgba(245,176,42,0.12)', color: '#f5b02a', border: '1px solid rgba(245,176,42,0.25)' }}>
+                style={{ background: 'rgba(245,158,11,0.12)', color: '#f59e0b', border: '1px solid rgba(245,158,11,0.25)' }}>
                 <Calendar className="w-2.5 h-2.5" />
                 {calCount} {calCount === 1 ? 'calendar' : 'calendars'}
               </span>

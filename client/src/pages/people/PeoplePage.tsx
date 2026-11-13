@@ -561,7 +561,7 @@ function StatsRow({ stats, isLoading }: StatsRowProps) {
       {statItems.map((item) => (
         <div
           key={item.label}
-          className="group relative overflow-hidden bg-surface backdrop-blur-glass border border-line rounded-2xl p-5 transition-all duration-300 ease-out hover:bg-surface-alt hover:border-primary/30 hover:-translate-y-1 hover:shadow-[0_12px_40px_rgba(245,176,42,0.12)] cursor-pointer"
+          className="group relative overflow-hidden bg-surface backdrop-blur-glass border border-line rounded-2xl p-5 transition-all duration-300 ease-out hover:bg-surface-alt hover:border-primary/30 hover:-translate-y-1 hover:shadow-[0_12px_40px_rgba(245,158,11,0.12)] cursor-pointer"
         >
           {/* Subtle top border gradient glow on hover */}
           <div className="absolute top-0 left-0 right-0 h-[2px] bg-gradient-to-r from-transparent via-primary/0 to-transparent group-hover:via-primary/50 transition-all duration-500" />
@@ -571,7 +571,7 @@ function StatsRow({ stats, isLoading }: StatsRowProps) {
 
           <div className="relative z-10 flex items-center justify-between mb-3">
             <span className="text-xs font-bold text-ink-secondary tracking-widest uppercase">{item.label}</span>
-            <div className="h-10 w-10 rounded-xl bg-surface-alt border border-line flex items-center justify-center transition-transform duration-300 group-hover:scale-110 group-hover:bg-[rgba(245,176,42,0.1)] group-hover:border-[rgba(245,176,42,0.2)]">
+            <div className="h-10 w-10 rounded-xl bg-surface-alt border border-line flex items-center justify-center transition-transform duration-300 group-hover:scale-110 group-hover:bg-[rgba(245,158,11,0.1)] group-hover:border-[rgba(245,158,11,0.2)]">
               <item.icon className={cn('w-5 h-5 transition-colors duration-300 group-hover:rotate-[-5deg]', item.color)} strokeWidth={1.5} />
             </div>
           </div>
