@@ -283,8 +283,8 @@ async function main() {
     await jarFetch(`${IX2}/login`, form({ email: EMAIL2, password: PASSWORD }));
     res = await jarFetch(IX2);
     const enrolHtml = await res.text();
-    const enrolSecret = /<label>Setup key<\/label><code>([A-Z2-7]+)<\/code>/.exec(enrolHtml)?.[1];
-    check('first login shows TOTP enrolment (secret + otpauth URI)', enrolSecret && /otpauth:\/\/totp\//.test(enrolHtml), res.status);
+    const enrolSecret = /data-copy="([A-Z2-7]+)"/.exec(enrolHtml)?.[1];
+    check('first login shows TOTP enrolment (secret + otpauth URI + QR)', enrolSecret && /otpauth:\/\/totp\//.test(enrolHtml) && /src="data:image\/png;base64,/.test(enrolHtml), res.status);
     res = await jarFetch(`${IX2}/enrol`, form({ code: await generateTotp({ secret: enrolSecret || 'AAAA' }) }));
     let code2: string | null = null;
     for (let hops = 0; hops < 10 && res.status >= 300 && res.status < 400; hops++) {

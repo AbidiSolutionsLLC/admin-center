@@ -311,7 +311,7 @@ async function renderAccountPage(
 
   const body = `
 <style nonce="${nonce}">
-  main { width: 100% !important; max-width: 680px !important; margin: 40px auto !important; padding: 24px !important; box-shadow: none !important; background: transparent !important; }
+  main { width: 100% !important; max-width: 680px !important; margin: 40px auto !important; padding: 24px !important; box-shadow: none !important; background: transparent !important; border: 0 !important; }
   .header-bar { display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 24px; }
   .card { background: #fff; border: 1px solid #e2e8f0; border-radius: 12px; padding: 24px; margin-bottom: 24px; box-shadow: 0 2px 8px rgba(0,0,0,.04); }
   .card h2 { font-size: 17px; margin: 0 0 4px; color: #0f172a; }

@@ -100,16 +100,32 @@ async function buildTenant(cookieKeys: string[]): Promise<OidcProvider> {
   const Adapter = makeAdapter('tenant');
   await initAdapterIndexes('tenant', TENANT_MODELS);
 
-  const spaClient = (clientId: string, origin: string) => ({
-    client_id: clientId,
-    token_endpoint_auth_method: 'none',
-    application_type: 'web',
-    redirect_uris: [`${origin}/auth/callback`],
-    post_logout_redirect_uris: [`${origin}/login`, `${origin}/login?signed_out=1`],
-    grant_types: ['authorization_code', 'refresh_token'],
-    response_types: ['code'],
-    scope: 'openid profile email',
-  });
+  const devOrigins = (origin: string): string[] => {
+    const list = [origin];
+    if (!cfg.isProduction) {
+      try {
+        const u = new URL(origin);
+        if (u.port) {
+          list.push(`http://localhost:${u.port}`, `http://127.0.0.1:${u.port}`);
+        }
+      } catch {}
+    }
+    return Array.from(new Set(list));
+  };
+
+  const spaClient = (clientId: string, origin: string) => {
+    const origins = devOrigins(origin);
+    return {
+      client_id: clientId,
+      token_endpoint_auth_method: 'none',
+      application_type: 'web',
+      redirect_uris: origins.map((o) => `${o}/auth/callback`),
+      post_logout_redirect_uris: origins.flatMap((o) => [`${o}/login`, `${o}/login?signed_out=1`]),
+      grant_types: ['authorization_code', 'refresh_token'],
+      response_types: ['code'],
+      scope: 'openid profile email',
+    };
+  };
 
   const provider = new oidc.Provider(cfg.tenantIssuer, {
     ...commonConfig('tenant', cookieKeys),
@@ -310,6 +326,19 @@ async function buildOperator(cookieKeys: string[]): Promise<OidcProvider> {
   const { privateJwks } = await loadRealmKeys('operator');
   await initAdapterIndexes('operator', OPERATOR_MODELS);
   const origin = cfg.operatorSpaOrigin;
+  const devOrigins = (orig: string): string[] => {
+    const list = [orig];
+    if (!cfg.isProduction) {
+      try {
+        const u = new URL(orig);
+        if (u.port) {
+          list.push(`http://localhost:${u.port}`, `http://127.0.0.1:${u.port}`);
+        }
+      } catch {}
+    }
+    return Array.from(new Set(list));
+  };
+  const operatorOrigins = devOrigins(origin);
   const provider = new oidc.Provider(cfg.operatorIssuer, {
     ...commonConfig('operator', cookieKeys),
     adapter: makeAdapter('operator'),
@@ -318,8 +347,8 @@ async function buildOperator(cookieKeys: string[]): Promise<OidcProvider> {
       client_id: OPERATOR_SPA_CLIENT_ID,
       token_endpoint_auth_method: 'none',
       application_type: 'web',
-      redirect_uris: [`${origin}/operator/callback`],
-      post_logout_redirect_uris: [`${origin}/operator`],
+      redirect_uris: operatorOrigins.map((o) => `${o}/operator/callback`),
+      post_logout_redirect_uris: operatorOrigins.map((o) => `${o}/operator`),
       grant_types: ['authorization_code', 'refresh_token'],
       response_types: ['code'],
       scope: 'openid profile email',

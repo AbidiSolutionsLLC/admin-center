@@ -8,6 +8,7 @@ import bcrypt from 'bcryptjs';
 import crypto from 'crypto';
 import * as jose from 'jose';
 import { generateSecret, generateURI, verify as verifyTotp } from 'otplib';
+import QRCode from 'qrcode';
 import { Identity, IIdentity } from '../models/Identity.model';
 import { User, IUser } from '../models/User.model';
 import { IdentityProviderConnection } from '../models/IdentityProviderConnection.model';
@@ -76,19 +77,36 @@ function renderLogin(res: Response, uid: string, opts: { error?: string; email?:
 function renderTotp(res: Response, uid: string, error?: string) {
   send(res, 'Verify', `<h1>Two-step verification</h1><p class="sub">Enter the 6-digit code from your authenticator app, or a recovery code.</p>${errBox(error)}
 <form method="post" action="${BASE}/interaction/${uid}/totp" autocomplete="off">
-<label for="code">Code</label><input id="code" name="code" type="text" maxlength="15" required autofocus autocomplete="one-time-code">
+<label for="code">Verification code</label><input id="code" class="otp" name="code" type="text" maxlength="15" placeholder="000000" required autofocus autocomplete="one-time-code">
 <button type="submit">Verify</button></form><p class="links"><a href="${BASE}/interaction/${uid}/abort">Cancel</a></p>`);
 }
 
-function renderEnrol(res: Response, uid: string, email: string, secret: string, error?: string) {
+/** Setup key in 4-character blocks for manual entry (authenticator apps ignore the spaces). */
+export const formatSetupKey = (secret: string) => secret.replace(/\s+/g, '').match(/.{1,4}/g)?.join(' ') ?? '';
+
+/** QR code for the otpauth URI, rendered locally as a PNG data URI (no external calls; CSP img-src allows data:). */
+export const totpQrDataUri = (otpauthUri: string) =>
+  QRCode.toDataURL(otpauthUri, { width: 200, margin: 2, errorCorrectionLevel: 'M' });
+
+async function renderEnrol(res: Response, uid: string, email: string, secret: string, error?: string) {
   const uri = generateURI({ issuer: 'Karbexa', label: email, secret });
+  const qr = await totpQrDataUri(uri);
   send(res, 'Set up verification', `<h1>Set up two-step verification</h1>
-<p class="sub">Add Karbexa to your authenticator app (Microsoft Authenticator, Google Authenticator, 1Password…) using this key, then enter the 6-digit code it shows.</p>${errBox(error)}
-<label>Setup key</label><code>${escapeHtml(secret)}</code>
-<label>Or open this link on your phone</label><code><a href="${escapeHtml(uri)}">${escapeHtml(uri)}</a></code>
+<p class="sub">Protect your account with an authenticator app. You’ll only need to do this once.</p>${errBox(error)}
+<section class="qr" aria-labelledby="scan-title">
+<div><p class="section-title" id="scan-title">Scan with your phone</p>
+<p class="hint">Open Microsoft Authenticator, Google Authenticator, or 1Password and scan this QR code.</p></div>
+<img src="${qr}" width="200" height="200" alt="QR code to add Karbexa to your authenticator app">
+</section>
+<details class="manual"${error ? ' open' : ''}><summary>Can’t scan? Enter key manually</summary>
+<div class="manual-body"><p class="hint">In your authenticator app, choose “Enter a setup key” and use this key (time-based):</p>
+<div class="key-row"><code class="key" id="setup-key">${escapeHtml(formatSetupKey(secret))}</code>
+<button type="button" class="copy" data-copy="${escapeHtml(secret)}" aria-describedby="setup-key">Copy key</button></div>
+<span class="sr-only" id="copy-status" role="status" aria-live="polite"></span>
+<a class="deeplink" href="${escapeHtml(uri)}">On this phone? Open in authenticator app</a></div></details>
 <form method="post" action="${BASE}/interaction/${uid}/enrol" autocomplete="off">
-<label for="code">Code</label><input id="code" name="code" type="text" inputmode="numeric" pattern="[0-9 ]{6,7}" maxlength="7" required autofocus autocomplete="one-time-code">
-<button type="submit">Confirm and continue</button></form><p class="links"><a href="${BASE}/interaction/${uid}/abort">Cancel</a></p>`);
+<label for="code">Enter the 6-digit code from your app</label><input id="code" class="otp" name="code" type="text" inputmode="numeric" pattern="[0-9 ]{6,7}" maxlength="7" placeholder="000000" required autofocus autocomplete="one-time-code">
+<button type="submit">Confirm &amp; Complete Setup</button></form><p class="links"><a href="${BASE}/interaction/${uid}/abort">Cancel</a></p>`);
 }
 
 function renderExpired(res: Response) {
