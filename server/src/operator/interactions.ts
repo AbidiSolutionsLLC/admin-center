@@ -10,7 +10,7 @@ import { encrypt, decrypt } from '../lib/cryptoService';
 import { authLimiter } from '../middleware/rateLimiter';
 import { getIdentityConfig } from '../identity/config';
 import { escapeHtml, OPERATOR_SHELL } from '../identity/html';
-import { send, errBox, normaliseCode, totpValid } from '../identity/interactions';
+import { send, errBox, normaliseCode, totpValid, totpEnrolSection } from '../identity/interactions';
 import type { OidcProvider } from '../identity/providers';
 import { OPERATOR_ROLE } from './accounts';
 
@@ -42,14 +42,13 @@ function renderMfa(res: Response, uid: string, error?: string) {
 <button type="submit">Verify</button></form><p class="links"><a href="${BASE}/interaction/${uid}/abort">Cancel</a></p>`);
 }
 
-function renderEnrol(res: Response, uid: string, email: string, secret: string, error?: string) {
+async function renderEnrol(res: Response, uid: string, email: string, secret: string, error?: string) {
   const uri = generateURI({ issuer: 'Karbexa Operator', label: email, secret });
   send(res, 'Set up verification', `<h1>Set up two-step verification</h1>
-<p class="sub">Operator accounts require an authenticator app. Add this key, then enter the 6-digit code it shows.</p>${errBox(error)}
-<label>Setup key</label><code>${escapeHtml(secret)}</code>
-<label>Or open this link on your phone</label><code><a href="${escapeHtml(uri)}">${escapeHtml(uri)}</a></code>
+<p class="sub">Operator accounts require an authenticator app. Scan the code, then enter the 6-digit code it shows.</p>${errBox(error)}
+${await totpEnrolSection(uri, secret, !!error)}
 <form method="post" action="${BASE}/interaction/${uid}/mfa" autocomplete="off">
-<label for="code">Code</label><input id="code" name="code" type="text" inputmode="numeric" pattern="[0-9 ]{6,7}" maxlength="7" required autofocus autocomplete="one-time-code">
+<label for="code">Enter the 6-digit code from your app</label><input id="code" class="otp" name="code" type="text" inputmode="numeric" pattern="[0-9 ]{6,7}" maxlength="7" placeholder="000000" required autofocus autocomplete="one-time-code">
 <button type="submit">Confirm and continue</button></form><p class="links"><a href="${BASE}/interaction/${uid}/abort">Cancel</a></p>`);
 }
 

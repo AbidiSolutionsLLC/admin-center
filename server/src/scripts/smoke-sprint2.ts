@@ -113,8 +113,9 @@ async function main() {
     res = await jarFetch(`${IX}/login`, form({ email: 'op@karbexa.test', password: PASSWORD }));
     res = await jarFetch(IX);
     const html = await res.text();
-    const secret = /([A-Z2-7]{16,})/.exec(/<code>([A-Z2-7]+)<\/code>/.exec(html)?.[1] || '')?.[1];
+    const secret = /data-copy="([A-Z2-7]{16,})"/.exec(html)?.[1];
     check('E10 operator without MFA must enrol TOTP', !!secret, res.status);
+    check('E10 operator enrolment page shows a QR code', /<img src="data:image\/png;base64,/.test(html), res.status);
     res = await jarFetch(`${IX}/mfa`, form({ code: await generateTotp({ secret: secret || 'AAAA' }) }));
     let code: string | null = null;
     for (let i = 0; i < 10 && res.status >= 300 && res.status < 400; i++) {

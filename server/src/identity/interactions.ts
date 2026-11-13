@@ -89,22 +89,30 @@ export const formatSetupKey = (secret: string) => secret.replace(/\s+/g, '').mat
 export const totpQrDataUri = (otpauthUri: string) =>
   QRCode.toDataURL(otpauthUri, { width: 200, margin: 2, errorCorrectionLevel: 'M' });
 
-async function renderEnrol(res: Response, uid: string, email: string, secret: string, error?: string) {
-  const uri = generateURI({ issuer: 'Karbexa', label: email, secret });
-  const qr = await totpQrDataUri(uri);
-  send(res, 'Set up verification', `<h1>Set up two-step verification</h1>
-<p class="sub">Protect your account with an authenticator app. You’ll only need to do this once.</p>${errBox(error)}
-<section class="qr" aria-labelledby="scan-title">
+/**
+ * QR code + "enter key manually" block of an authenticator enrolment page. Shared by the tenant and operator
+ * realms so both offer the same scan-or-type setup. The raw secret is in `data-copy` (copy button; smokes read it).
+ */
+export async function totpEnrolSection(otpauthUri: string, secret: string, open: boolean): Promise<string> {
+  const qr = await totpQrDataUri(otpauthUri);
+  return `<section class="qr" aria-labelledby="scan-title">
 <div><p class="section-title" id="scan-title">Scan with your phone</p>
 <p class="hint">Open Microsoft Authenticator, Google Authenticator, or 1Password and scan this QR code.</p></div>
 <img src="${qr}" width="200" height="200" alt="QR code to add Karbexa to your authenticator app">
 </section>
-<details class="manual"${error ? ' open' : ''}><summary>Can’t scan? Enter key manually</summary>
+<details class="manual"${open ? ' open' : ''}><summary>Can’t scan? Enter key manually</summary>
 <div class="manual-body"><p class="hint">In your authenticator app, choose “Enter a setup key” and use this key (time-based):</p>
 <div class="key-row"><code class="key" id="setup-key">${escapeHtml(formatSetupKey(secret))}</code>
 <button type="button" class="copy" data-copy="${escapeHtml(secret)}" aria-describedby="setup-key">Copy key</button></div>
 <span class="sr-only" id="copy-status" role="status" aria-live="polite"></span>
-<a class="deeplink" href="${escapeHtml(uri)}">On this phone? Open in authenticator app</a></div></details>
+<a class="deeplink" href="${escapeHtml(otpauthUri)}">On this phone? Open in authenticator app</a></div></details>`;
+}
+
+async function renderEnrol(res: Response, uid: string, email: string, secret: string, error?: string) {
+  const uri = generateURI({ issuer: 'Karbexa', label: email, secret });
+  send(res, 'Set up verification', `<h1>Set up two-step verification</h1>
+<p class="sub">Protect your account with an authenticator app. You’ll only need to do this once.</p>${errBox(error)}
+${await totpEnrolSection(uri, secret, !!error)}
 <form method="post" action="${BASE}/interaction/${uid}/enrol" autocomplete="off">
 <label for="code">Enter the 6-digit code from your app</label><input id="code" class="otp" name="code" type="text" inputmode="numeric" pattern="[0-9 ]{6,7}" maxlength="7" placeholder="000000" required autofocus autocomplete="one-time-code">
 <button type="submit">Confirm &amp; Complete Setup</button></form><p class="links"><a href="${BASE}/interaction/${uid}/abort">Cancel</a></p>`);
