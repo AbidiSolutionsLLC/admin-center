@@ -140,24 +140,37 @@ const ProvisionSchema = z.object({
   first_admin: z.object({ email: z.string().trim().email().toLowerCase(), full_name: z.string().trim().min(1).max(120) }),
 });
 
-/** "All Members" dynamic group + default People employee assignment (only with an active people entitlement). Idempotent. */
+/**
+ * Org default rules on the "All Members" dynamic group, each only with an active entitlement for that product. Idempotent.
+ * - people -> employee (04 §7).
+ * - desk -> requester: C-3 "desk for everyone", decided 2026-11-12. An admin excludes members by editing or
+ *   removing this rule; migrated orgs get per-member requester grants from the E11 seed instead (legacy
+ *   hasDeskPortalAccess === false = excluded).
+ */
+const ORG_DEFAULT_RULES: ReadonlyArray<{ product: ProductKey; role: string }> = [
+  { product: 'people', role: 'employee' },
+  { product: 'desk', role: 'requester' },
+];
+
 async function ensureDefaultPeopleAccess(companyId: Types.ObjectId, grantedBy: Types.ObjectId, session?: ClientSession) {
   const sess = session ?? null;
   const opts = { session: session ?? undefined };
-  if (!(await OrganizationEntitlement.exists({ company_id: companyId, product_key: 'people', status: 'active' }).session(sess))) return;
-  let app = await App.findOne({ product_key: 'people', app_type: 'karbexa_product' }).session(sess);
-  if (!app) {
-    await seedProductRegistry(); // global catalog, outside the txn
-    app = await App.findOne({ product_key: 'people', app_type: 'karbexa_product' }).session(sess);
-  }
-  if (!app) return;
-  let group = await Group.findOne({ company_id: companyId, name: 'All Members', type: 'dynamic' }).session(sess);
-  if (!group) [group] = await Group.create([{ company_id: companyId, name: 'All Members', type: 'dynamic', dynamic_rules: {}, is_active: true } as never], opts);
-  const exists = await AppAssignment.exists({ company_id: companyId, app_id: app._id, target_type: 'group', target_id: group._id, product_role_key: 'employee' }).session(sess);
-  if (!exists) {
-    await AppAssignment.create([{
-      company_id: companyId, app_id: app._id, target_type: 'group', target_id: group._id, product_role_key: 'employee', granted_by: grantedBy, is_active: true,
-    } as never], opts);
+  for (const rule of ORG_DEFAULT_RULES) {
+    if (!(await OrganizationEntitlement.exists({ company_id: companyId, product_key: rule.product, status: 'active' }).session(sess))) continue;
+    let app = await App.findOne({ product_key: rule.product, app_type: 'karbexa_product' }).session(sess);
+    if (!app) {
+      await seedProductRegistry(); // global catalog, outside the txn
+      app = await App.findOne({ product_key: rule.product, app_type: 'karbexa_product' }).session(sess);
+    }
+    if (!app) continue;
+    let group = await Group.findOne({ company_id: companyId, name: 'All Members', type: 'dynamic' }).session(sess);
+    if (!group) [group] = await Group.create([{ company_id: companyId, name: 'All Members', type: 'dynamic', dynamic_rules: {}, is_active: true } as never], opts);
+    const exists = await AppAssignment.exists({ company_id: companyId, app_id: app._id, target_type: 'group', target_id: group._id, product_role_key: rule.role }).session(sess);
+    if (!exists) {
+      await AppAssignment.create([{
+        company_id: companyId, app_id: app._id, target_type: 'group', target_id: group._id, product_role_key: rule.role, granted_by: grantedBy, is_active: true,
+      } as never], opts);
+    }
   }
 }
 

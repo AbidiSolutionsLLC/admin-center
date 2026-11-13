@@ -175,6 +175,21 @@ async function main() {
     })));
     check('E10 re-provision does not duplicate group/assignment', (await Group.countDocuments({ company_id: orgId, name: 'All Members' })) === 1
       && (await AppAssignment.countDocuments({ company_id: orgId, app_id: people!._id, target_type: 'group' })) === 1);
+    check('C-3 no desk default rule without a desk entitlement (professional plan)',
+      !(await AppAssignment.exists({ company_id: orgId, app_id: desk!._id, target_type: 'group' })));
+    {
+      // C-3 (decided 2026-11-12): an org entitled to Desk gets All Members -> desk requester.
+      const r = await op('/orgs', 'POST', { name: 'Delta Desk', slug: 'delta-desk', plan_key: 'enterprise', first_admin: { email: 'admin@delta.test', full_name: 'Dee Admin' } });
+      const deltaId = ((await r.json()) as { data?: { id: string } }).data?.id;
+      const dGrp = await Group.findOne({ company_id: deltaId, name: 'All Members', type: 'dynamic' });
+      check('C-3 enterprise org: All Members -> desk requester default rule', r.status === 201 && !!dGrp && !!(await AppAssignment.exists({
+        company_id: deltaId, app_id: desk!._id, target_type: 'group', target_id: dGrp!._id, product_role_key: 'requester',
+      })), r.status);
+      const dAdmin = await User.findOne({ company_id: deltaId, email: 'admin@delta.test' });
+      await User.updateOne({ _id: dAdmin!._id }, { lifecycle_state: 'active', is_active: true });
+      const dEa = await computeEffectiveAccess(deltaId!, dAdmin!._id.toString());
+      check('C-3 member effective access: desk=requester via All Members', dEa.products.desk?.role === 'requester', dEa.products);
+    }
     const mk = (app: typeof people, role: string, target: object) => AppAssignment.create({
       company_id: orgId, app_id: app!._id, granted_by: me._id, is_active: true, product_role_key: role, ...target,
     } as never);
