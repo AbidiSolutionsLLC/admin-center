@@ -9,7 +9,7 @@ import { OperatorAccount, IOperatorAccount } from '../models/OperatorAccount.mod
 import { encrypt, decrypt } from '../lib/cryptoService';
 import { authLimiter } from '../middleware/rateLimiter';
 import { getIdentityConfig } from '../identity/config';
-import { escapeHtml } from '../identity/html';
+import { escapeHtml, OPERATOR_SHELL } from '../identity/html';
 import { send, errBox, normaliseCode, totpValid } from '../identity/interactions';
 import type { OidcProvider } from '../identity/providers';
 import { OPERATOR_ROLE } from './accounts';
@@ -79,6 +79,7 @@ export function registerOperatorInteractions(app: Express, provider: OidcProvide
     provider.interactionFinished(req, res, { error: 'access_denied', error_description: description }, { mergeWithLastSubmission: false });
 
   const handle = (fn: (req: Request, res: Response) => Promise<unknown>) => async (req: Request, res: Response) => {
+    res.locals.karbexaShell = OPERATOR_SHELL;
     try {
       await fn(req, res);
     } catch (err: any) {

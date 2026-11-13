@@ -13,7 +13,7 @@ import { makeAdapter, initAdapterIndexes, TENANT_MODELS, OPERATOR_MODELS, SERVIC
 import { findAccount, loadAccessContext } from './accounts';
 import { ensureSessionForToken, revokeSession, SessionDeniedError } from './sessions';
 import { findOperatorAccount } from '../operator/accounts';
-import { escapeHtml, newNonce, pageCsp, pageShell } from './html';
+import { escapeHtml, newNonce, pageCsp, pageShell, OPERATOR_SHELL } from './html';
 
 // ESM-only package loaded through require(esm) (03 §10.2); the library ships no TS types.
 // eslint-disable-next-line @typescript-eslint/no-require-imports
@@ -386,7 +386,7 @@ async function buildOperator(cookieKeys: string[]): Promise<OidcProvider> {
           const nonce = newNonce();
           ctx.type = 'html';
           ctx.set('Content-Security-Policy', pageCsp(nonce));
-          ctx.body = pageShell(nonce, 'Signed out', `<h1>You are signed out</h1><p><a href="${escapeHtml(origin)}/operator">Sign in again</a></p>`);
+          ctx.body = pageShell(nonce, 'Signed out', `<h1>You are signed out</h1><p><a href="${escapeHtml(origin)}/operator">Sign in again</a></p>`, OPERATOR_SHELL);
         },
       },
       resourceIndicators: {

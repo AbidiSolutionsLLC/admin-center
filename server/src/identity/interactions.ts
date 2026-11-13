@@ -20,7 +20,7 @@ import {
 } from '../controllers/auth.controller';
 import { getIdentityConfig, ADMIN_AUDIENCE, ADMIN_SPA_CLIENT_ID, PRODUCTS_AUDIENCE, PRODUCTS_SPA_CLIENT_ID } from './config';
 import { loadAccessContext, pickMembership } from './accounts';
-import { escapeHtml, newNonce, pageCsp, pageShell } from './html';
+import { escapeHtml, newNonce, pageCsp, pageShell, shellForClient } from './html';
 import { consumeRecoveryCode } from './recoveryCodes';
 import type { OidcProvider } from './providers';
 
@@ -56,7 +56,8 @@ export function send(res: Response, title: string, body: string, status = 200) {
   res.setHeader('Cache-Control', 'no-store');
   res.setHeader('X-Content-Type-Options', 'nosniff');
   res.setHeader('Referrer-Policy', 'no-referrer');
-  res.type('html').send(pageShell(nonce, title, body));
+  // Skin is set by details() from the interaction's OIDC client (shellForClient); unset = follow the browser.
+  res.type('html').send(pageShell(nonce, title, body, res.locals.karbexaShell));
 }
 
 export const errBox = (msg?: string) => (msg ? `<p class="err" role="alert">${escapeHtml(msg)}</p>` : '');
@@ -143,6 +144,7 @@ export function registerTenantInteractions(app: Express, provider: OidcProvider)
       err.name = 'SessionNotFound';
       throw err;
     }
+    res.locals.karbexaShell = shellForClient(d.params.client_id);
     return d;
   }
 
