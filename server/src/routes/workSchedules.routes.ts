@@ -29,12 +29,6 @@ const SCHEDULE_ADMINS = PERMISSION_GROUPS.OPS_ADMINS;
 
 // Static Routes
 router.get('/', getWorkSchedules);
-
-// Parameterized Routes
-router.get('/:id', getWorkScheduleById);
-router.put('/:id', requireRole(SCHEDULE_ADMINS), updateWorkSchedule);
-router.delete('/:id', requireRole(SCHEDULE_ADMINS), deleteWorkSchedule);
-
 router.post('/', requireRole(SCHEDULE_ADMINS), createWorkSchedule);
 
 // ── Assignment Routes ────────────────────────────────────────────────────────
@@ -49,5 +43,11 @@ router.delete('/assignments/:id', requireRole(SCHEDULE_ADMINS), deleteWorkSchedu
 
 router.get('/integrations/user-schedule/:user_id', getUserWorkSchedule);
 router.get('/integrations/location-schedule/:location_id', getLocationWorkSchedule);
+
+// ── Parameterized Routes (last, so '/:id' cannot shadow '/assignments') ──────
+
+router.get('/:id', getWorkScheduleById);
+router.put('/:id', requireRole(SCHEDULE_ADMINS), updateWorkSchedule);
+router.delete('/:id', requireRole(SCHEDULE_ADMINS), deleteWorkSchedule);
 
 export default router;

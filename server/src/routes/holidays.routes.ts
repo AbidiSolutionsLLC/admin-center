@@ -64,13 +64,14 @@ router.post('/holidays/import', requireRole(HOLLYDAY_ADMINS), importHolidays);
 router.get('/assignments', getHolidayAssignments);
 router.get('/assignments/location/:location_id', getHolidayAssignmentsByLocation);
 router.post('/assignments', requireRole(HOLLYDAY_ADMINS), createHolidayAssignment);
+// Before '/assignments/:id', which would otherwise match 'bulk' as an id.
+router.delete('/assignments/bulk', requireRole(HOLLYDAY_ADMINS), deleteBulkHolidayAssignments);
 router.put('/assignments/:id', requireRole(HOLLYDAY_ADMINS), updateHolidayAssignment);
 router.delete('/assignments/:id', requireRole(HOLLYDAY_ADMINS), deleteHolidayAssignment);
 
 // Bulk Operations Routes
 router.post('/calendars/bulk', requireRole(HOLLYDAY_ADMINS), createBulkHolidayCalendars);
 router.post('/calendars/:calendar_id/holidays/bulk', requireRole(HOLLYDAY_ADMINS), createBulkHolidays);
-router.delete('/assignments/bulk', requireRole(HOLLYDAY_ADMINS), deleteBulkHolidayAssignments);
 
 // Holiday Movement Routes
 router.post('/holiday/move', requireRole(HOLLYDAY_ADMINS), moveHoliday);
