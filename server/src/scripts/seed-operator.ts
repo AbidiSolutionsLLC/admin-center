@@ -25,8 +25,13 @@ async function seedOperator() {
       existing.password_hash = password_hash;
       existing.status = 'active';
       if (!existing.roles.includes('platform_admin')) existing.roles.push('platform_admin');
+      if (process.argv.includes('--reset-mfa') || process.env.RESET_MFA === 'true') {
+        existing.mfa = { enabled: false };
+        console.log(`Operator ${email} updated (password reset, active, MFA cleared).`);
+      } else {
+        console.log(`Operator ${email} updated (password reset, active). MFA enrolment state unchanged.`);
+      }
       await existing.save();
-      console.log(`Operator ${email} updated (password reset, active). MFA enrolment state unchanged.`);
     } else {
       await OperatorAccount.create({
         email, full_name: process.env.OPERATOR_SEED_NAME || 'Platform Operator', password_hash, roles: ['platform_admin'], status: 'active',
