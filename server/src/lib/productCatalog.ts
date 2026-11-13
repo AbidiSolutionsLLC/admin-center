@@ -4,11 +4,20 @@ import { ProductRole, ProductKey } from '../models/ProductRole.model';
 import { Plan } from '../models/Plan.model';
 
 interface RoleDef { key: string; name: string; rank: number; is_default?: boolean }
-interface ProductDef { product_key: ProductKey; name: string; slug: string; description: string; env: string; port: number; roles: RoleDef[] }
+interface ProductDef { product_key: ProductKey; name: string; slug: string; description: string; env: string; port: number; /** Entry page in the products web app (matches its AppLauncher INTERNAL_PATHS). */ path: string; roles: RoleDef[] }
+
+/**
+ * Default launch URL: the products web app (PRODUCTS_SPA_ORIGIN, a registered OIDC origin) plus the product entry page.
+ * Was http://<product>.karbexa.localhost:5174, a host no OIDC client is registered for, so launcher tiles failed to sign in.
+ */
+export function productLaunchUrl(def: { path: string }): string {
+  const origin = (process.env.PRODUCTS_SPA_ORIGIN || 'http://app.karbexa.localhost:5174').replace(/\/+$/, '');
+  return origin + def.path;
+}
 
 export const PRODUCT_DEFS: ProductDef[] = [
   {
-    product_key: 'people', name: 'People', slug: 'karbexa-people', description: 'HR and people operations', env: 'PEOPLE_LAUNCH_URL', port: 5174,
+    product_key: 'people', name: 'People', slug: 'karbexa-people', description: 'HR and people operations', env: 'PEOPLE_LAUNCH_URL', port: 5174, path: '/people/home',
     roles: [
       { key: 'people_administrator', name: 'People Administrator', rank: 40 },
       { key: 'hr', name: 'HR', rank: 30 },
@@ -17,7 +26,7 @@ export const PRODUCT_DEFS: ProductDef[] = [
     ],
   },
   {
-    product_key: 'projects', name: 'Dictate', slug: 'karbexa-projects', description: 'Projects and work management', env: 'PROJECTS_LAUNCH_URL', port: 5174,
+    product_key: 'projects', name: 'Dictate', slug: 'karbexa-projects', description: 'Projects and work management', env: 'PROJECTS_LAUNCH_URL', port: 5174, path: '/project/projectDashboard',
     roles: [
       { key: 'project_administrator', name: 'Project Administrator', rank: 30 },
       { key: 'project_manager', name: 'Project Manager', rank: 20 },
@@ -26,7 +35,7 @@ export const PRODUCT_DEFS: ProductDef[] = [
     ],
   },
   {
-    product_key: 'sign', name: 'Sign', slug: 'karbexa-sign', description: 'Document signing', env: 'SIGN_LAUNCH_URL', port: 5174,
+    product_key: 'sign', name: 'Sign', slug: 'karbexa-sign', description: 'Document signing', env: 'SIGN_LAUNCH_URL', port: 5174, path: '/sign/dashboard',
     roles: [
       { key: 'sign_administrator', name: 'Sign Administrator', rank: 20 },
       { key: 'sign_user', name: 'Sign User', rank: 10, is_default: true },
@@ -34,7 +43,7 @@ export const PRODUCT_DEFS: ProductDef[] = [
     ],
   },
   {
-    product_key: 'desk', name: 'Desk', slug: 'karbexa-desk', description: 'Service desk', env: 'DESK_LAUNCH_URL', port: 5174,
+    product_key: 'desk', name: 'Desk', slug: 'karbexa-desk', description: 'Service desk', env: 'DESK_LAUNCH_URL', port: 5174, path: '/desk/home',
     roles: [
       { key: 'desk_admin', name: 'Desk Admin', rank: 40 },
       { key: 'support_lead', name: 'Support Lead', rank: 30 },
@@ -68,7 +77,7 @@ export async function seedProductRegistry(): Promise<void> {
           is_system_app: true,
           app_type: 'karbexa_product',
           product_key: def.product_key,
-          launch_url: process.env[def.env] || `http://${def.product_key}.karbexa.localhost:${def.port}`,
+          launch_url: process.env[def.env] || productLaunchUrl(def),
           default_role_key: defaultRole.key,
         },
         $setOnInsert: { slug: def.slug, role_catalog_version: 1 },
