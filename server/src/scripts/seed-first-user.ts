@@ -23,9 +23,12 @@ async function seedFirstUser() {
     });
     console.log('Connected successfully.');
 
-    // Default credentials if not supplied via env
+    // No default password: a committed fallback would become a known credential on any DB this runs against.
     const email = (process.env.SEED_ADMIN_EMAIL || 'admin@karbexa.local').trim().toLowerCase();
-    const password = process.env.SEED_ADMIN_PASSWORD || 'PlatformAdmin2026!';
+    const password = process.env.SEED_ADMIN_PASSWORD;
+    if (!password || password.length < 12) {
+      throw new Error('Set SEED_ADMIN_PASSWORD (at least 12 characters) to run seed:first');
+    }
     const fullName = process.env.SEED_ADMIN_NAME || 'Platform Administrator';
 
     // 1. Ensure Product Registry & Plans are seeded
