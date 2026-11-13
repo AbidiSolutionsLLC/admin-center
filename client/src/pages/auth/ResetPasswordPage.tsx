@@ -3,6 +3,7 @@ import { zodResolver } from '@hookform/resolvers/zod';
 import * as z from 'zod';
 import { useResetPassword } from '@/features/auth/hooks/useResetPassword';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
+import { AuthLayout, AUTH_CARD_CLASS } from '@/components/layout/AuthLayout';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Link, useNavigate } from 'react-router-dom';
@@ -51,8 +52,8 @@ export default function ResetPasswordPage() {
 
   if (!token || !email) {
     return (
-      <div className="flex h-screen w-full items-center justify-center bg-surface-base p-4 text-ink font-sans">
-        <Card className="w-full max-w-md border-line shadow-sm">
+      <AuthLayout>
+        <Card className={AUTH_CARD_CLASS}>
           <CardHeader className="space-y-2 text-center pb-6">
             <CardTitle className="text-2xl font-semibold tracking-tight text-red-500">Invalid Link</CardTitle>
             <CardDescription className="text-ink-muted">
@@ -65,13 +66,13 @@ export default function ResetPasswordPage() {
             </Link>
           </CardContent>
         </Card>
-      </div>
+      </AuthLayout>
     );
   }
 
   return (
-    <div className="flex h-screen w-full items-center justify-center bg-surface-base p-4 text-ink font-sans">
-      <Card className="w-full max-w-md border-line shadow-sm">
+    <AuthLayout>
+      <Card className={AUTH_CARD_CLASS}>
         <CardHeader className="space-y-2 text-center pb-6">
           <CardTitle className="text-2xl font-semibold tracking-tight">Set New Password</CardTitle>
           <CardDescription className="text-ink-muted">
@@ -110,7 +111,7 @@ export default function ResetPasswordPage() {
             </div>
             <Button
               type="submit"
-              className="w-full bg-primary hover:bg-primary-hover/90 text-white shadow-sm"
+              className="w-full bg-primary hover:bg-primary-hover/90 text-black shadow-sm"
               disabled={isPending}
             >
               {isPending ? 'Resetting...' : 'Reset Password'}
@@ -123,6 +124,6 @@ export default function ResetPasswordPage() {
           </form>
         </CardContent>
       </Card>
-    </div>
+    </AuthLayout>
   );
 }

@@ -4,6 +4,7 @@ import { zodResolver } from '@hookform/resolvers/zod';
 import * as z from 'zod';
 import { useSetupPassword } from '@/hooks/useSetupPassword';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
+import { AuthLayout, AUTH_CARD_CLASS } from '@/components/layout/AuthLayout';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { AlertCircle, CheckCircle2 } from 'lucide-react';
@@ -54,8 +55,8 @@ export default function OnboardingPage() {
 
   if (isSuccess) {
     return (
-      <div className="flex h-screen w-full items-center justify-center bg-white/5 p-4 text-ink font-sans">
-        <Card className="w-full max-w-md border-line shadow-card text-center">
+      <AuthLayout>
+        <Card className={`${AUTH_CARD_CLASS} text-center`}>
           <CardHeader className="space-y-4 pb-8">
             <div className="mx-auto w-12 h-12 rounded-full bg-emerald-50 flex items-center justify-center">
               <CheckCircle2 className="w-6 h-6 text-emerald-600" />
@@ -73,19 +74,19 @@ export default function OnboardingPage() {
             </p>
             <Button 
               onClick={() => navigate(ROUTES.LOGIN)}
-              className="w-full bg-primary hover:bg-primary-hover text-white rounded-md"
+              className="w-full bg-primary hover:bg-primary-hover text-black rounded-md"
             >
               Go to Login
             </Button>
           </CardContent>
         </Card>
-      </div>
+      </AuthLayout>
     );
   }
 
   return (
-    <div className="flex h-screen w-full items-center justify-center bg-white/5 p-4 text-ink font-sans">
-      <Card className="w-full max-w-md border-line shadow-card">
+    <AuthLayout>
+      <Card className={AUTH_CARD_CLASS}>
         <CardHeader className="space-y-2 text-center pb-6">
           <div className="mx-auto w-10 h-10 rounded-xl bg-primary-light flex items-center justify-center mb-2">
             <CheckCircle2 className="w-5 h-5 text-primary" />
@@ -156,7 +157,7 @@ export default function OnboardingPage() {
 
             <Button
               type="submit"
-              className="w-full bg-primary hover:bg-primary-hover text-white h-10 mt-2 font-semibold shadow-sm transition-all active:scale-[0.98]"
+              className="w-full bg-primary hover:bg-primary-hover text-black h-10 mt-2 font-semibold shadow-sm transition-all active:scale-[0.98]"
               disabled={isPending}
             >
               {isPending ? 'Activating Account...' : 'Set Password & Activate'}
@@ -168,7 +169,7 @@ export default function OnboardingPage() {
           </form>
         </CardContent>
       </Card>
-    </div>
+    </AuthLayout>
   );
 }
 

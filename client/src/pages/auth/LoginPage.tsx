@@ -1,6 +1,7 @@
 // src/pages/auth/LoginPage.tsx
 import { Link, useLocation } from 'react-router-dom';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
+import { AuthLayout, AUTH_CARD_CLASS } from '@/components/layout/AuthLayout';
 import { Button } from '@/components/ui/button';
 import { ROUTES } from '@/constants/routes';
 import { startLogin } from '@/lib/oidc';
@@ -11,8 +12,8 @@ export default function LoginPage() {
     || new URLSearchParams(location.search).has('signed_out');
 
   return (
-    <div className="flex h-screen w-full items-center justify-center bg-surface-base p-4 text-ink font-sans">
-      <Card className="w-full max-w-md border-line">
+    <AuthLayout>
+      <Card className={AUTH_CARD_CLASS}>
         <CardHeader className="space-y-2 text-center pb-6">
           <CardTitle className="text-2xl font-semibold tracking-tight">Karbexa Admin</CardTitle>
           <CardDescription className="text-ink-muted">Sign in to your account to continue</CardDescription>
@@ -23,7 +24,7 @@ export default function LoginPage() {
           )}
           <Button
             type="button"
-            className="w-full bg-primary hover:bg-primary-hover/90 text-white shadow-sm"
+            className="w-full bg-primary hover:bg-primary-hover/90 text-black shadow-sm"
             onClick={() => { void startLogin(); }}
           >
             Sign in
@@ -35,6 +36,6 @@ export default function LoginPage() {
           </div>
         </CardContent>
       </Card>
-    </div>
+    </AuthLayout>
   );
 }
