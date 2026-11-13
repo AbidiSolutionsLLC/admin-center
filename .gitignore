@@ -1,13 +1,17 @@
-admin-backend-structure.md
-admin-cursorrules.md
-PRD.md
-admin-design-structure.md
-admin-frontend-guidelines.md
-PROGRESS_REPORT.md
-docs
-testcases.md
-Bug.md
-presentation-deck.md
-design-system/
+# Local tool / agent state
+.omc/
 .agent/
+.claude/settings.local.json
 scratch/
+
+# TypeScript incremental build info
+*.tsbuildinfo
+
+# Environment files: only the .env.example templates are committed
+.env
+.env.*
+!.env.example
+
+# OS / editor
+.DS_Store
+Thumbs.db
