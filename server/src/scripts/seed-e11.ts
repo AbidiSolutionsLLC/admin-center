@@ -1,3 +1,5 @@
+// NOT USED FOR GO-LIVE (fresh start decided 2026-11-13: no previous data is migrated; see
+// ecosystem-planning/phase-1-architecture/11-SEEDING-AND-CUTOVER-PLAN.md §0). Kept for reference and tests only.
 // server/src/scripts/seed-e11.ts — E11 Seeding Script implementing S1–S8 from 11-SEEDING-AND-CUTOVER-PLAN.md
 import mongoose, { Types, Schema } from 'mongoose';
 import bcrypt from 'bcryptjs';

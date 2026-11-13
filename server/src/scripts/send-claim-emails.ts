@@ -1,3 +1,5 @@
+// NOT USED FOR GO-LIVE (fresh start decided 2026-11-13: no previous data is migrated; see
+// ecosystem-planning/phase-1-architecture/11-SEEDING-AND-CUTOVER-PLAN.md §0). Kept for reference and tests only.
 // server/src/scripts/send-claim-emails.ts
 /**
  * 03 §4.3, 11 §3 step 6: Send "claim your account" and invitation emails to seeded/migrated users.
