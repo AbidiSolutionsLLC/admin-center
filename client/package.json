@@ -1,13 +1,15 @@
 {
-  "name": "client",
-  "private": true,
+  "name": "@karbexa/admin-web",
   "version": "0.0.0",
+  "private": true,
+  "description": "Karbexa Admin web app: organisation administration and the /operator console",
   "type": "module",
   "scripts": {
     "dev": "vite",
     "build": "tsc -b && vite build",
     "lint": "eslint .",
-    "preview": "vite preview"
+    "preview": "vite preview",
+    "typecheck": "tsc -b"
   },
   "dependencies": {
     "@dnd-kit/core": "^6.3.1",
@@ -51,7 +53,7 @@
     "@eslint/js": "^9.39.4",
     "@playwright/test": "^1.62.1",
     "@tailwindcss/vite": "^4.2.2",
-    "@types/node": "^24.12.2",
+    "@types/node": "^22.20.5",
     "@types/react": "^19.2.14",
     "@types/react-dom": "^19.2.3",
     "@vitejs/plugin-react": "^6.0.1",
@@ -65,5 +67,8 @@
     "typescript": "~6.0.2",
     "typescript-eslint": "^8.58.0",
     "vite": "^8.0.4"
+  },
+  "engines": {
+    "node": ">=22.12.0"
   }
 }
