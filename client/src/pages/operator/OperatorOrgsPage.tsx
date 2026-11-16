@@ -1,4 +1,12 @@
-import { useState } from 'react';
+import { useMemo, useState } from 'react';
+import type { ColumnDef } from '@tanstack/react-table';
+import { Button } from '@/components/ui/button';
+import { DataTable } from '@/components/ui/DataTable';
+import { StatusBadge } from '@/components/ui/StatusBadge';
+import { Tag } from '@/components/ui/Tag';
+import { FilterChip } from '@/components/ui/Toolbar';
+import { ListPage } from '@/components/templates/ListPage';
+import { useUrlParam } from '@/hooks/useUrlParam';
 import { Modal } from '@/components/ui/Modal';
 import { ConfirmDialog } from '@/components/ui/ConfirmDialog';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
@@ -134,69 +142,157 @@ function EntitlementsDialog({ org, onClose }: { org: OperatorOrg; onClose: () =>
   );
 }
 
+const fieldCls =
+  'h-9 rounded-control border border-line bg-surface px-2 text-body text-ink focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary';
+const STATUS_VARIANT: Record<string, 'success' | 'warning' | 'neutral'> = { active: 'success', suspended: 'warning', closed: 'neutral' };
+const SORTS = [['created', 'Newest'], ['name', 'Name'], ['members', 'Most members'], ['last_activity', 'Last activity']] as const;
+const day = (v?: string | null) => (v ? new Date(v).toLocaleDateString() : '-');
+
 export default function OperatorOrgsPage() {
-  const [search, setSearch] = useState('');
-  const [status, setStatus] = useState('');
-  const [cursors, setCursors] = useState<string[]>([]); // cursor stack; top = current page
+  const [search] = useUrlParam('search');
+  const [status, setStatus] = useUrlParam('status');
+  const [plan, setPlan] = useUrlParam('plan');
+  const [tag, setTag] = useUrlParam('tag');
+  const [trial, setTrial] = useUrlParam('trial');
+  const [sort, setSort] = useUrlParam('sort', 'created');
   const [creating, setCreating] = useState(false);
   const [editing, setEditing] = useState<OperatorOrg | null>(null);
   const [confirm, setConfirm] = useState<{ org: OperatorOrg; action: 'suspend' | 'reactivate' | 'close' } | null>(null);
-  const { data, isLoading, isError } = useOrgs({ search: search || undefined, status: status || undefined, cursor: cursors[cursors.length - 1], limit: LIMIT });
+
+  const params = {
+    search: search || undefined, status: status || undefined, plan: plan || undefined, tag: tag || undefined,
+    trial: trial === 'true' ? true : undefined, sort: sort !== 'created' ? sort : undefined,
+  };
+  // Cursor stack, reset whenever any filter or the sort changes.
+  const key = JSON.stringify(params);
+  const [paging, setPaging] = useState<{ forKey: string; cursors: string[] }>({ forKey: key, cursors: [] });
+  const cursors = paging.forKey === key ? paging.cursors : [];
+
+  const { data, isLoading, isError, isFetching, refetch } = useOrgs({ ...params, cursor: cursors[cursors.length - 1], limit: LIMIT });
+  const plans = usePlans().data ?? [];
   const action = useOrgAction();
   const canWrite = useOperatorCan('tenants.write');
   const canClose = useOperatorCan('tenants.close');
   const canEntitle = useOperatorCan('entitlements.write');
   const orgs = data?.data ?? [];
+  const filtered = Object.values(params).some(Boolean);
+
+  const columns = useMemo<ColumnDef<OperatorOrg>[]>(
+    () => [
+      {
+        header: 'Organization',
+        id: 'name',
+        cell: ({ row }) => (
+          <div>
+            <p className="font-medium text-ink">{row.original.name}</p>
+            <p className="text-label text-ink-muted">{row.original.slug}</p>
+          </div>
+        ),
+      },
+      {
+        header: 'Status',
+        id: 'status',
+        cell: ({ row }) => <StatusBadge variant={STATUS_VARIANT[row.original.status] ?? 'neutral'}>{row.original.status}</StatusBadge>,
+      },
+      { header: 'Plan', id: 'plan', cell: ({ row }) => row.original.plan_key ?? '-' },
+      {
+        header: 'Members',
+        id: 'members',
+        cell: ({ row }) => (
+          <span className="tabular">{row.original.members_active ?? 0} active / {row.original.members_total ?? row.original.members_count ?? 0}</span>
+        ),
+      },
+      {
+        header: 'Products',
+        id: 'products',
+        cell: ({ row }) =>
+          row.original.products?.length ? (
+            <span className="flex flex-wrap gap-1">{row.original.products.map((p) => <Tag key={p}>{p}</Tag>)}</span>
+          ) : (
+            '-'
+          ),
+      },
+      {
+        header: 'Tags',
+        id: 'tags',
+        cell: ({ row }) =>
+          row.original.tags?.length ? (
+            <span className="flex flex-wrap gap-1">{row.original.tags.map((t) => <Tag key={t}>{t}</Tag>)}</span>
+          ) : (
+            '-'
+          ),
+      },
+      { header: 'Trial ends', id: 'trial', cell: ({ row }) => day(row.original.trial_ends_at) },
+      { header: 'Last activity', id: 'activity', cell: ({ row }) => <span className="whitespace-nowrap text-table">{day(row.original.last_activity_at)}</span> },
+      {
+        header: '',
+        id: 'actions',
+        cell: ({ row }) => {
+          const o = row.original;
+          return (
+            <div className="flex justify-end gap-2 whitespace-nowrap" onClick={(e) => e.stopPropagation()}>
+              {canEntitle && <Button variant="outline" size="sm" onClick={() => setEditing(o)}>Entitlements</Button>}
+              {canWrite && o.status === 'active' && <Button variant="outline" size="sm" onClick={() => setConfirm({ org: o, action: 'suspend' })}>Suspend</Button>}
+              {canWrite && o.status === 'suspended' && <Button variant="outline" size="sm" onClick={() => setConfirm({ org: o, action: 'reactivate' })}>Reactivate</Button>}
+              {canClose && o.status !== 'closed' && <Button variant="outline" size="sm" onClick={() => setConfirm({ org: o, action: 'close' })}>Close</Button>}
+            </div>
+          );
+        },
+      },
+    ],
+    [canEntitle, canWrite, canClose]
+  );
 
   return (
-    <div className="space-y-4">
-      <div className="flex items-center justify-between">
-        <h1 className="text-xl font-semibold">Organizations</h1>
-        {canWrite && <button onClick={() => setCreating(true)} className="h-9 px-4 bg-primary text-white text-sm rounded-md">Create organization</button>}
-      </div>
-      <div className="flex gap-2">
-        <input className={inputCls + ' max-w-xs'} placeholder="Search..." value={search} onChange={(e) => { setSearch(e.target.value); setCursors([]); }} />
-        <select className={inputCls + ' max-w-[10rem]'} value={status} onChange={(e) => { setStatus(e.target.value); setCursors([]); }}>
-          <option value="">All statuses</option>
-          <option value="active">Active</option>
-          <option value="suspended">Suspended</option>
-          <option value="closed">Closed</option>
-        </select>
-      </div>
-      <div className="bg-surface border border-line rounded-lg overflow-x-auto">
-        <table className="w-full text-sm">
-          <thead className="bg-surface-alt text-ink-muted text-xs uppercase">
-            <tr>
-              <th className="text-left p-3">Name</th><th className="text-left p-3">Status</th><th className="text-left p-3">Members</th>
-              <th className="text-left p-3">Products</th><th className="text-left p-3">Last activity</th><th className="p-3" />
-            </tr>
-          </thead>
-          <tbody className="divide-y divide-line">
-            {isLoading && <tr><td colSpan={6} className="p-6 text-center text-ink-muted">Loading...</td></tr>}
-            {isError && <tr><td colSpan={6} className="p-6 text-center text-error">Failed to load organizations.</td></tr>}
-            {orgs.map((o) => (
-              <tr key={idOf(o)}>
-                <td className="p-3"><p className="font-medium">{o.name}</p><p className="text-xs text-ink-muted">{o.slug}</p></td>
-                <td className="p-3">{o.status}</td>
-                <td className="p-3">{o.members_count ?? '-'}</td>
-                <td className="p-3 text-xs">{(o.entitlements ?? []).map((e) => `${e.product_key}:${e.status}`).join(', ') || '-'}</td>
-                <td className="p-3 text-xs">{o.last_activity ? new Date(o.last_activity).toLocaleString() : '-'}</td>
-                <td className="p-3 text-right space-x-2 whitespace-nowrap">
-                  {canEntitle && <button onClick={() => setEditing(o)} className="text-xs px-2 h-7 border border-line rounded-md hover:bg-surface-alt">Entitlements</button>}
-                  {canWrite && o.status === 'active' && <button onClick={() => setConfirm({ org: o, action: 'suspend' })} className="text-xs px-2 h-7 border border-line rounded-md hover:bg-surface-alt">Suspend</button>}
-                  {canWrite && o.status === 'suspended' && <button onClick={() => setConfirm({ org: o, action: 'reactivate' })} className="text-xs px-2 h-7 border border-line rounded-md hover:bg-surface-alt">Reactivate</button>}
-                  {canClose && o.status !== 'closed' && <button onClick={() => setConfirm({ org: o, action: 'close' })} className="text-xs px-2 h-7 border border-error/30 text-error rounded-md hover:bg-error/5">Close</button>}
-                </td>
-              </tr>
-            ))}
-            {!isLoading && !isError && orgs.length === 0 && <tr><td colSpan={6} className="p-6 text-center text-ink-muted italic">No organizations.</td></tr>}
-          </tbody>
-        </table>
-      </div>
-      <div className="flex justify-end gap-2 text-sm">
-        <button disabled={cursors.length === 0} onClick={() => setCursors(cursors.slice(0, -1))} className="h-8 px-3 border border-line rounded-md disabled:opacity-50">Prev</button>
-        <button disabled={!data?.next_cursor} onClick={() => data?.next_cursor && setCursors([...cursors, data.next_cursor])} className="h-8 px-3 border border-line rounded-md disabled:opacity-50">Next</button>
-      </div>
+    <>
+      <ListPage
+        title="Organizations"
+        subtitle="Every tenant on the platform."
+        primaryAction={canWrite ? <Button onClick={() => setCreating(true)}>Create organization</Button> : undefined}
+        toolbar={{
+          search: { urlKey: 'search', placeholder: 'Search name or slug' },
+          filters: (
+            <>
+              <select aria-label="Status" className={fieldCls} value={status} onChange={(e) => setStatus(e.target.value)}>
+                <option value="">All statuses</option>
+                <option value="active">Active</option>
+                <option value="suspended">Suspended</option>
+                <option value="closed">Closed</option>
+              </select>
+              <select aria-label="Plan" className={fieldCls} value={plan} onChange={(e) => setPlan(e.target.value)}>
+                <option value="">All plans</option>
+                {plans.map((p) => <option key={p.key} value={p.key}>{p.name}</option>)}
+              </select>
+              <input aria-label="Tag" placeholder="Tag" className={`${fieldCls} w-28`} value={tag} onChange={(e) => setTag(e.target.value)} />
+              <FilterChip label="In trial" active={trial === 'true'} onClick={() => setTrial(trial === 'true' ? '' : 'true')} />
+            </>
+          ),
+          sort: (
+            <select aria-label="Sort" className={fieldCls} value={sort} onChange={(e) => setSort(e.target.value)}>
+              {SORTS.map(([v, label]) => <option key={v} value={v}>{label}</option>)}
+            </select>
+          ),
+        }}
+        isLoading={isLoading}
+        isError={isError}
+        onRetry={() => refetch()}
+        isEmpty={!isLoading && !isError && orgs.length === 0 && cursors.length === 0}
+        emptyTitle={filtered ? 'No organizations match these filters' : 'No organizations yet'}
+        emptyDescription={filtered ? 'Change or clear the filters.' : 'Create the first organization to get started.'}
+      >
+        <DataTable
+          columns={columns}
+          data={orgs}
+          stickyHeader
+          paging={{
+            hasNext: !!data?.next_cursor,
+            hasPrev: cursors.length > 0,
+            isLoading: isFetching,
+            onNext: () => data?.next_cursor && setPaging({ forKey: key, cursors: [...cursors, data.next_cursor] }),
+            onPrev: () => setPaging({ forKey: key, cursors: cursors.slice(0, -1) }),
+          }}
+        />
+      </ListPage>
 
       {creating && <CreateOrgDialog onClose={() => setCreating(false)} />}
       {editing && <EntitlementsDialog org={editing} onClose={() => setEditing(null)} />}
@@ -210,6 +306,6 @@ export default function OperatorOrgsPage() {
         isLoading={action.isPending}
         onConfirm={() => confirm && action.mutate({ id: idOf(confirm.org), action: confirm.action }, { onSettled: () => setConfirm(null) })}
       />
-    </div>
+    </>
   );
 }

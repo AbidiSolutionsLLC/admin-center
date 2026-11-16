@@ -1570,6 +1570,37 @@ async function main() {
       }
     }
 
+    // ── Plan 4.3: tenant directory (filters, sorts, summary fields, last activity) ───────────
+    {
+      const { touchCompanyActivity } = await import('../controllers/auth.controller');
+      const orgsQ = async (q = '') => { const r = await op(`/orgs${q}`); return { status: r.status, body: (await r.json()) as any }; };
+      const acme = await Company.findOne({ slug: 'acme' });
+      await Company.updateOne({ _id: acme!._id }, { $set: { tags: ['pilot', 'emea'], trial_ends_at: new Date(Date.now() + 5 * 86400e3), last_activity_at: new Date(Date.now() - 3 * 3600e3) } });
+      const all = await orgsQ('?limit=100');
+      const row = all.body.data.find((o: any) => o.slug === 'acme');
+      check('4.3 summary has members_total, members_active, products, tags, trial_ends_at, last_activity_at', row && typeof row.members_total === 'number' && typeof row.members_active === 'number' && row.members_active <= row.members_total && Array.isArray(row.products) && row.tags.includes('pilot') && !!row.trial_ends_at && !!row.last_activity_at && row.last_activity === row.last_activity_at, JSON.stringify(row)?.slice(0, 200));
+      check('4.3 filter tag=pilot returns only acme', (await orgsQ('?tag=pilot')).body.data.map((o: any) => o.slug).join() === 'acme');
+      check('4.3 filter trial=true returns only tenants with a trial end', (await orgsQ('?trial=true')).body.data.every((o: any) => !!o.trial_ends_at) && (await orgsQ('?trial=true')).body.data.length === 1);
+      check('4.3 filter plan=professional returns only that plan', (await orgsQ('?plan=professional')).body.data.every((o: any) => o.plan_key === 'professional'));
+      const byName = (await orgsQ('?sort=name&limit=100')).body.data.map((o: any) => o.name);
+      check('4.3 sort=name is alphabetical', byName.join('|') === [...byName].sort((a: string, b: string) => a.localeCompare(b, 'en')).join('|'), byName.join('|'));
+      check('4.3 sort=last_activity puts the active tenant first', (await orgsQ('?sort=last_activity&limit=100')).body.data[0].slug === 'acme');
+      const byMembers = (await orgsQ('?sort=members&limit=100')).body.data.map((o: any) => o.members_total);
+      check('4.3 sort=members is descending', byMembers.every((n: number, i: number) => i === 0 || byMembers[i - 1] >= n), byMembers.join());
+      const p1 = await orgsQ('?sort=name&limit=1');
+      const p2 = await orgsQ(`?sort=name&limit=1&cursor=${p1.body.meta.next_cursor}`);
+      check('4.3 offset paging for non-default sorts walks forward', !!p1.body.meta.next_cursor && p2.body.data.length === 1 && p2.body.data[0].id !== p1.body.data[0].id);
+      check('4.3 invalid sort = 400', (await orgsQ('?sort=bogus')).status === 400);
+      await Company.updateOne({ _id: acme!._id }, { $set: { last_activity_at: new Date(Date.now() - 5 * 60e3) } });
+      await touchCompanyActivity(acme!._id as any);
+      check('4.3 last activity is not rewritten within the hour', Date.now() - (await Company.findById(acme!._id))!.last_activity_at!.getTime() > 4 * 60e3);
+      await Company.updateOne({ _id: acme!._id }, { $set: { last_activity_at: new Date(Date.now() - 2 * 3600e3) } });
+      await touchCompanyActivity(acme!._id as any);
+      check('4.3 last activity is rewritten after an hour', Date.now() - (await Company.findById(acme!._id))!.last_activity_at!.getTime() < 60e3);
+      check('4.3 tag longer than 30 characters is rejected by the model', await Company.updateOne({ _id: acme!._id }, { $set: { tags: ['x'.repeat(31)] } }, { runValidators: true }).then(() => false, () => true));
+      await Company.updateOne({ _id: acme!._id }, { $set: { tags: [], trial_ends_at: null } });
+    }
+
     // ── Plan 4.2: operator audit (category, before/after, filters, CSV export) ──────────────
     {
       const list = async (q = '') => ((await (await op(`/audit${q}`)).json()) as any).data as any[];

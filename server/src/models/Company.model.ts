@@ -33,6 +33,12 @@ export interface ICompany extends Document {
   /** 04 §2 - written only by operator realm or seed; kept in sync with legacy is_active */
   status: 'provisioning' | 'active' | 'suspended' | 'closed';
   is_active: boolean;
+  /** Operator tags (Plan 4.3): at most 10, each at most 30 characters. */
+  tags: string[];
+  /** Informational plus a signal; nothing is suspended automatically (DRD 3.2 rule 7). */
+  trial_ends_at?: Date | null;
+  /** Set at sign-in, at most once per hour per tenant (`recordLoginSuccess`). */
+  last_activity_at?: Date;
   created_at: Date;
   updated_at: Date;
 }
@@ -102,7 +108,19 @@ const CompanySchema = new Schema<ICompany>({
   plan: { type: String, default: 'free' },
   status: { type: String, enum: ['provisioning', 'active', 'suspended', 'closed'], default: 'active' },
   is_active: { type: Boolean, default: true },
+  tags: {
+    type: [{ type: String, trim: true, maxlength: [30, 'A tag must be 30 characters or fewer'] }],
+    default: [],
+    validate: { validator: (v: string[]) => v.length <= 10, message: 'A tenant can have at most 10 tags' },
+  },
+  trial_ends_at: { type: Date, default: null },
+  last_activity_at: Date,
 }, { timestamps: { createdAt: 'created_at', updatedAt: 'updated_at' } });
+
+CompanySchema.index({ status: 1, created_at: -1 });
+CompanySchema.index({ plan: 1 });
+CompanySchema.index({ tags: 1 });
+CompanySchema.index({ trial_ends_at: 1 }, { sparse: true });
 
 // Auto-generate slug from name if modified
 CompanySchema.pre('validate', function() {

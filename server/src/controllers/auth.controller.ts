@@ -10,7 +10,7 @@ import { sendPasswordResetEmail } from '../lib/emailService';
 import { validatePasswordAgainstPolicy } from '../utils/passwordPolicy';
 import { AppError } from '../utils/AppError';
 import { z } from 'zod';
-import type { ClientSession } from 'mongoose';
+import type { ClientSession, Types } from 'mongoose';
 import { auditLogger } from '../lib/auditLogger';
 import { resolveUserPermissions } from '../lib/rbac';
 import { sendSecurityAlert } from '../lib/notificationEngine';
@@ -221,11 +221,20 @@ export async function checkPasswordExpired(req: Request, user: IUser, identity: 
   return { code: 'PASSWORD_EXPIRED', message: 'Password has expired. Please reset your password.' };
 }
 
+/** Tenant last-activity marker for the Command Center (Plan 4.3): one conditional write, at most once per hour per tenant. */
+export async function touchCompanyActivity(companyId: Types.ObjectId, now = new Date()): Promise<void> {
+  await Company.updateOne(
+    { _id: companyId, $or: [{ last_activity_at: { $exists: false } }, { last_activity_at: { $lt: new Date(now.getTime() - 3600_000) } }] },
+    { $set: { last_activity_at: now } },
+  );
+}
+
 export async function recordLoginSuccess(req: Request, user: IUser, identity: IIdentity, amr: string[]): Promise<void> {
   identity.failed_login_attempts = 0;
   identity.last_login_at = new Date();
   await identity.save();
   await User.updateOne({ _id: user._id }, { $set: { last_login: new Date() }, $unset: { locked_until: 1 } });
+  await touchCompanyActivity(user.company_id);
   await logSecurityEvent({
     company_id: user.company_id,
     user_id: user._id,

@@ -93,43 +93,86 @@ const paging = (req: Request) => {
 const escapeRe = (s: string) => s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
 
 // ── Orgs ─────────────────────────────────────────────────────────────────────────────────────
+// One member aggregation for the page (total and active); the last sign-in time is read from the company (Plan 4.3).
 async function orgSummaries(companies: any[]) {
   const ids = companies.map((c) => c._id);
-  const [members, logins, ents] = await Promise.all([
-    User.aggregate([{ $match: { company_id: { $in: ids } } }, { $group: { _id: '$company_id', n: { $sum: 1 } } }]),
-    User.aggregate([{ $match: { company_id: { $in: ids }, last_login: { $exists: true } } }, { $group: { _id: '$company_id', at: { $max: '$last_login' } } }]),
+  const [members, ents] = await Promise.all([
+    User.aggregate([
+      { $match: { company_id: { $in: ids } } },
+      { $group: { _id: '$company_id', total: { $sum: 1 }, active: { $sum: { $cond: [{ $eq: ['$lifecycle_state', 'active'] }, 1, 0] } } } },
+    ]),
     OrganizationEntitlement.find({ company_id: { $in: ids } }),
   ]);
-  const m = new Map(members.map((x) => [String(x._id), x.n]));
-  const l = new Map(logins.map((x) => [String(x._id), x.at]));
-  return companies.map((c) => ({
-    id: c._id.toString(),
-    slug: c.slug,
-    name: c.name,
-    status: c.status ?? (c.is_active === false ? 'suspended' : 'active'),
-    members_count: m.get(String(c._id)) ?? 0,
-    plan_key: c.plan ?? null,
-    entitlements: ents.filter((e) => String(e.company_id) === String(c._id)).map((e) => ({ product_key: e.product_key, status: e.status, seats_limit: e.seats_limit ?? null })),
-    last_activity: l.get(String(c._id)) ?? null,
-    created_at: c.created_at,
-  }));
+  const m = new Map(members.map((x) => [String(x._id), x]));
+  return companies.map((c) => {
+    const mine = ents.filter((e) => String(e.company_id) === String(c._id));
+    return {
+      id: c._id.toString(),
+      slug: c.slug,
+      name: c.name,
+      status: c.status ?? (c.is_active === false ? 'suspended' : 'active'),
+      members_count: m.get(String(c._id))?.total ?? 0,
+      members_total: m.get(String(c._id))?.total ?? 0,
+      members_active: m.get(String(c._id))?.active ?? 0,
+      plan_key: c.plan ?? null,
+      entitlements: mine.map((e) => ({ product_key: e.product_key, status: e.status, seats_limit: e.seats_limit ?? null })),
+      products: mine.filter((e) => e.status === 'active').map((e) => e.product_key),
+      last_activity: c.last_activity_at ?? null, // legacy name, same value
+      last_activity_at: c.last_activity_at ?? null,
+      tags: c.tags ?? [],
+      trial_ends_at: c.trial_ends_at ?? null,
+      created_at: c.created_at,
+    };
+  });
 }
+
+const ORG_SORTS = ['created', 'name', 'members', 'last_activity'] as const;
 
 router.get('/orgs', requirePermission('tenants.read'), asyncHandler(async (req: Request, res: Response) => {
   const { limit } = paging(req);
   const filter: Record<string, unknown> = {};
   if (typeof req.query.status === 'string' && req.query.status) filter.status = req.query.status;
+  if (typeof req.query.plan === 'string' && req.query.plan) filter.plan = req.query.plan;
+  if (typeof req.query.tag === 'string' && req.query.tag) filter.tags = req.query.tag;
+  if (req.query.trial === 'true') filter.trial_ends_at = { $ne: null };
   if (typeof req.query.search === 'string' && req.query.search.trim()) {
     const re = new RegExp(escapeRe(req.query.search.trim()), 'i');
     filter.$or = [{ name: re }, { slug: re }];
   }
-  // Cursor = last seen _id (ObjectId order == creation order); newest first.
-  if (typeof req.query.cursor === 'string' && req.query.cursor) filter._id = { $lt: oid(req.query.cursor, 'cursor') };
-  const total = await Company.countDocuments(Object.fromEntries(Object.entries(filter).filter(([k]) => k !== '_id')));
-  const rows = await Company.find(filter).sort({ _id: -1 }).limit(limit + 1);
-  const page = rows.slice(0, limit);
-  const next_cursor = rows.length > limit ? page[page.length - 1]._id.toString() : null;
-  ok(res, await orgSummaries(page), 200, { total, limit, next_cursor });
+  const sort = typeof req.query.sort === 'string' && req.query.sort ? req.query.sort : 'created';
+  if (!(ORG_SORTS as readonly string[]).includes(sort)) throw new AppError('Invalid sort', 400, 'VALIDATION_ERROR');
+  const total = await Company.countDocuments(filter);
+  const cursorRaw = typeof req.query.cursor === 'string' ? req.query.cursor : '';
+
+  if (sort === 'created') {
+    // Cursor = last seen _id (ObjectId order == creation order); newest first.
+    const paged = cursorRaw ? { ...filter, _id: { $lt: oid(cursorRaw, 'cursor') } } : filter;
+    const rows = await Company.find(paged).sort({ _id: -1 }).limit(limit + 1);
+    const page = rows.slice(0, limit);
+    const next_cursor = rows.length > limit ? page[page.length - 1]._id.toString() : null;
+    return ok(res, await orgSummaries(page), 200, { total, limit, next_cursor });
+  }
+
+  // Other sorts page by offset (cursor = the offset, as a number).
+  const offset = cursorRaw ? parseInt(cursorRaw, 10) : 0;
+  if (!Number.isInteger(offset) || offset < 0) throw new AppError('Invalid cursor', 400, 'VALIDATION_ERROR');
+  let page: any[];
+  if (sort === 'members') {
+    // Counts come from one grouped aggregation over the matching tenants; the tenants themselves are then ordered in memory.
+    const all = await Company.find(filter).select('_id').lean();
+    const counts = new Map((await User.aggregate([
+      { $match: { company_id: { $in: all.map((c) => c._id) } } }, { $group: { _id: '$company_id', n: { $sum: 1 } } },
+    ])).map((x) => [String(x._id), x.n as number]));
+    const ordered = all.map((c) => ({ id: c._id, n: counts.get(String(c._id)) ?? 0 }))
+      .sort((x, y) => y.n - x.n || String(y.id).localeCompare(String(x.id)));
+    const ids = ordered.slice(offset, offset + limit).map((x) => x.id);
+    const byId = new Map((await Company.find({ _id: { $in: ids } })).map((c) => [String(c._id), c]));
+    page = ids.map((id) => byId.get(String(id))).filter(Boolean);
+  } else {
+    const order = sort === 'name' ? { name: 1, _id: 1 } : { last_activity_at: -1, _id: -1 }; // descending puts never-active tenants last
+    page = await Company.find(filter).sort(order as any).collation({ locale: 'en' }).skip(offset).limit(limit);
+  }
+  ok(res, await orgSummaries(page), 200, { total, limit, next_cursor: offset + limit < total ? String(offset + limit) : null });
 }));
 
 async function orgDetail(id: string) {

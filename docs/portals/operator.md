@@ -57,7 +57,7 @@ The global per-IP rate limiter in `app.ts` also applies. Envelope: `{ success: t
 | Method | Path | Body / query | What it does |
 |---|---|---|---|
 | GET | `/me` | | The signed-in operator plus `permissions[]` (any operator; the SPA reads it for navigation and buttons) |
-| GET | `/orgs` | `limit` (1–100, default 25), `cursor` (last `_id`), `status`, `search` (name/slug regex) | Org summaries newest first; `meta: { total, limit, next_cursor }` |
+| GET | `/orgs` | `limit` (1–100, default 25), `cursor`, `status`, `plan`, `tag`, `trial=true`, `search` (name/slug regex), `sort` (`created` default, `name`, `members`, `last_activity`) | Org summaries; `meta: { total, limit, next_cursor }`. `created` pages by last `_id`; the other sorts page by offset (the cursor is a number). Summary adds `members_total`, `members_active`, `products[]` (active entitlements), `last_activity_at` (also as `last_activity`), `tags`, `trial_ends_at`. 400 on an unknown sort. `attention` filter and `attention_count` arrive with 4.10 |
 | GET | `/orgs/:id` | | Summary + `first_admin` (earliest holder of the Super Admin role, through `UserRole`) |
 | GET | `/orgs/:id/onboarding` | | Plan 2.6: `{ organization, stage, first_admin, invitation { state, sent_at, sent_count, expires_at, ... }, delivery { status, attempts, last_error, ... } }`. `stage`: `complete`, `no_first_admin`, `no_invitation`, `sending`, `delivery_failed`, `awaiting_acceptance`, `expired`, `revoked`. Never a token |
 | POST | `/orgs/:id/onboarding/resend-invite` | | New first-admin invitation (supersedes the current one) and a queued e-mail, one transaction; 409 `ALREADY_ONBOARDED` once the first admin accepted; audited `onboarding.invite_resent` |
@@ -106,7 +106,7 @@ The global per-IP rate limiter in `app.ts` also applies. Envelope: `{ success: t
 | `OperatorAuditEvent` (`OperatorAuditEvent.model.ts`) | `operator_id`, `operator_email`, `action`, `target_type`, `target_id`, `company_id`, `details`, `category`, `before`, `after`, `reason`, `result`, `correlation_id`, `created_at` | Every operator write. When a company is involved, a tenant `AuditEvent` is also written with `source: 'operator'`, `module: 'operator'`, `actor_email: 'operator:<email>'` |
 | `Plan` (`Plan.model.ts`) | `key`, `name`, `products[]`, `status` (`active`/`archived`) | Default plans seeded by `seedProductRegistry` |
 | `OrganizationEntitlement` | `company_id`, `product_key`, `status`, `seats_limit`, `source`, `plan_key`, `updated_by_operator_id` | Unique per (company, product) |
-| `Company` | `status`, `is_active`, `plan`, `slug` | |
+| `Company` | `status`, `is_active`, `plan`, `slug`, `tags`, `trial_ends_at`, `last_activity_at` | `last_activity_at` is touched at tenant sign-in, at most hourly |
 | `IdentityProviderConnection` | `tenant_approval.{tenant_id, approved_at, operator_id}` | Written by approve-tenant |
 | `oidc_operator_*` | oidc-provider storage | See identity.md |
 

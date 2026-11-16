@@ -54,6 +54,7 @@ export interface OrgEntitlement { product_key: string; status: string; seats_lim
 export interface OperatorOrg {
   id: string; slug: string; name: string; status: string; members_count?: number;
   entitlements?: OrgEntitlement[]; last_activity?: string | null; created_at?: string; plan_key?: string;
+  members_total?: number; members_active?: number; products?: string[]; last_activity_at?: string | null; tags?: string[]; trial_ends_at?: string | null;
 }
 export interface Plan { id?: string; _id?: string; key: string; name: string; products: string[] }
 export interface OperatorUser { id?: string; _id?: string; email: string; full_name?: string; roles?: string[]; status: string; mfa_enabled?: boolean; last_login_at?: string | null; created_at?: string }
@@ -70,7 +71,7 @@ export interface AuditFilters { action?: string; category?: string; operator_id?
 const idOf = <T extends { id?: string; _id?: string }>(x: T) => (x.id ?? x._id) as string;
 export { idOf };
 
-export const useOrgs = (params: { search?: string; status?: string; cursor?: string; limit?: number }) =>
+export const useOrgs = (params: { search?: string; status?: string; plan?: string; tag?: string; trial?: boolean; sort?: string; cursor?: string; limit?: number }) =>
   useQuery({
     queryKey: ['operator', 'orgs', params],
     queryFn: async () => {
