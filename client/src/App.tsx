@@ -3,12 +3,11 @@ import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
 import { QueryClientProvider } from '@tanstack/react-query';
 import { Toaster } from 'sonner';
 import { queryClient } from './lib/queryClient';
-import { AdminShell } from './components/layout/AdminShell';
+import { TenantShell, OperatorShell } from './components/layout/shells';
 import { AuthGuard, GuestGuard } from './components/layout/AuthGuard';
 import { ROUTES } from './constants/routes';
 import SubscriptionPage from './pages/subscription/SubscriptionPage';
 import { OperatorGuard } from './features/operator/OperatorGuard';
-import { OperatorLayout } from './features/operator/OperatorLayout';
 import OperatorCallbackPage from './pages/operator/OperatorCallbackPage';
 import OperatorOrgsPage from './pages/operator/OperatorOrgsPage';
 import OperatorPlansPage from './pages/operator/OperatorPlansPage';
@@ -51,7 +50,7 @@ function App() {
           <Route path={ROUTES.AUTH_CALLBACK} element={<CallbackPage />} />
           <Route path={ROUTES.OPERATOR_CALLBACK} element={<OperatorCallbackPage />} />
           <Route element={<OperatorGuard />}>
-            <Route path={ROUTES.OPERATOR} element={<OperatorLayout />}>
+            <Route path={ROUTES.OPERATOR} element={<OperatorShell />}>
               <Route index element={<Navigate to={ROUTES.OPERATOR_ORGS} replace />} />
               <Route path="organizations" element={<OperatorOrgsPage />} />
               <Route path="plans" element={<OperatorPlansPage />} />
@@ -67,7 +66,7 @@ function App() {
           </Route>
 
           <Route element={<AuthGuard />}>
-            <Route path="/" element={<AdminShell />}>
+            <Route path="/" element={<TenantShell />}>
               <Route index element={<Navigate to={ROUTES.OVERVIEW} replace />} />
               <Route path={ROUTES.OVERVIEW} element={<OverviewPage />} />
               <Route path={ROUTES.INSIGHT_HISTORY} element={<InsightHistoryPage />} />
