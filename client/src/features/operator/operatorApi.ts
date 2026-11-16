@@ -56,7 +56,14 @@ export interface OperatorOrg {
   entitlements?: OrgEntitlement[]; last_activity?: string | null; created_at?: string; plan_key?: string;
   members_total?: number; members_active?: number; products?: string[]; last_activity_at?: string | null; tags?: string[]; trial_ends_at?: string | null;
 }
-export interface Plan { id?: string; _id?: string; key: string; name: string; products: string[] }
+export interface Plan {
+  id?: string; _id?: string; key: string; name: string; products: string[];
+  description?: string | null; seat_defaults?: Record<string, number | null>; trial_days?: number | null; version?: number; tenant_count?: number; status?: string;
+}
+export interface PlanPreview {
+  added: { product_key: string; tenants: number }[]; restricted: { product_key: string; tenants: number }[];
+  unchanged: { product_key: string; tenants: number }[]; tenants_affected: number;
+}
 export interface OperatorUser { id?: string; _id?: string; email: string; full_name?: string; roles?: string[]; status: string; mfa_enabled?: boolean; last_login_at?: string | null; created_at?: string }
 export interface AuditEntry {
   id?: string; _id?: string; action: string; operator_id?: string; operator_email?: string;
@@ -131,6 +138,24 @@ export const useSavePlan = () => {
       id ? (await operatorApi.patch(`/plans/${id}`, body)).data : (await operatorApi.post('/plans', body)).data,
     onSuccess: () => { qc.invalidateQueries({ queryKey: ['operator', 'plans'] }); toast.success('Plan saved'); },
     onError: (e) => toast.error(errMsg(e, 'Failed to save plan')),
+  });
+};
+
+/** Dry run of applying a plan to every tenant on it (nothing is written). */
+export const usePlanPreview = (key: string, enabled: boolean) =>
+  useQuery({
+    enabled,
+    queryKey: ['operator', 'plan-preview', key],
+    gcTime: 0,
+    queryFn: async () => (await operatorApi.post(`/plans/${key}/apply`, null, { params: { dry_run: true } })).data.data as PlanPreview,
+  });
+
+export const useApplyPlan = () => {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: async (key: string) => (await operatorApi.post(`/plans/${key}/apply`)).data.data as { queued: number },
+    onSuccess: (r) => { qc.invalidateQueries({ queryKey: ['operator'] }); toast.success(`Plan applying to ${r.queued} organization(s)`); },
+    onError: (e) => toast.error(errMsg(e, 'Failed to apply plan')),
   });
 };
 

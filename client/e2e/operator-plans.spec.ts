@@ -53,3 +53,26 @@ test('keyboard: a row opens the edit dialog with Enter', async ({ page }) => {
   await page.keyboard.press('Escape');
   await expect(page.getByRole('dialog')).toHaveCount(0);
 });
+
+test('plan 4.5: apply to organizations shows a preview, then queues the run', async ({ page }) => {
+  let applied = false;
+  await page.route(PLANS, (route) =>
+    fulfillJson(route, { success: true, data: [{ key: 'suite', name: 'Suite', products: ['people', 'sign'], version: 3, tenant_count: 2, trial_days: 14 }] })
+  );
+  await page.route('**/operator/v1/plans/suite/apply**', (route) => {
+    if (new URL(route.request().url()).searchParams.get('dry_run') === 'true') {
+      return fulfillJson(route, { success: true, data: { added: [{ product_key: 'sign', tenants: 2 }], restricted: [{ product_key: 'desk', tenants: 1 }], unchanged: [{ product_key: 'people', tenants: 2 }], tenants_affected: 2 } });
+    }
+    applied = true;
+    return fulfillJson(route, { success: true, data: { queued: 2, tenants_affected: 2 } }, 202);
+  });
+  await page.goto('/operator/plans');
+  await expect(page.getByRole('row', { name: /suite/i })).toContainText('14 days');
+  await page.getByRole('row', { name: /suite/i }).click();
+  await page.getByRole('button', { name: 'Apply to organizations' }).click();
+  const dialog = page.getByRole('dialog', { name: 'Apply plan: Suite' });
+  await expect(dialog).toContainText('sign: 2 organization(s)');
+  await expect(dialog).toContainText('desk: 1 organization(s)');
+  await dialog.getByRole('button', { name: 'Apply to 2 organization(s)' }).click();
+  await expect.poll(() => applied).toBe(true);
+});

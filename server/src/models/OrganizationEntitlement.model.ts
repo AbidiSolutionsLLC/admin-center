@@ -5,21 +5,25 @@ import { ProductKey } from './ProductRole.model';
 export interface IOrganizationEntitlement extends Document {
   company_id: Types.ObjectId;
   product_key: ProductKey;
-  status: 'active' | 'suspended';
-  /** recorded and shown; not enforced at launch */
+  /** `restricted` = removed by a plan change: access off, data kept (DRD 3.1). Any value other than `active` means no access. */
+  status: 'active' | 'suspended' | 'restricted';
+  /** Enforced when product assignments are created (Plan 4.7) */
   seats_limit?: number;
   source: 'plan' | 'operator' | 'seed';
   plan_key?: string;
+  /** Plan version when the plan was applied (Plan 4.5) */
+  plan_version?: number;
   updated_by_operator_id?: Types.ObjectId;
 }
 
 const OrganizationEntitlementSchema = new Schema<IOrganizationEntitlement>({
   company_id: { type: Schema.Types.ObjectId, ref: 'Company', required: true },
   product_key: { type: String, required: true },
-  status: { type: String, enum: ['active', 'suspended'], default: 'active' },
+  status: { type: String, enum: ['active', 'suspended', 'restricted'], default: 'active' },
   seats_limit: Number,
   source: { type: String, enum: ['plan', 'operator', 'seed'], default: 'operator' },
   plan_key: String,
+  plan_version: Number,
   updated_by_operator_id: { type: Schema.Types.ObjectId, ref: 'OperatorAccount' },
 }, { timestamps: { createdAt: 'created_at', updatedAt: 'updated_at' } });
 

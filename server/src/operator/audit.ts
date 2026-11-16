@@ -1,8 +1,9 @@
 // server/src/operator/audit.ts
 // Pure helpers for the operator audit trail (Plan 4.2, DRD 4.1/4.2): category from the action name, secret redaction,
 // the list filter shared by GET /audit and GET /audit/export, and CSV encoding.
-import { Types } from 'mongoose';
-import { AUDIT_CATEGORIES, type AuditCategory } from '../models/OperatorAuditEvent.model';
+import { Types, ClientSession } from 'mongoose';
+import { AUDIT_CATEGORIES, OperatorAuditEvent, type AuditCategory } from '../models/OperatorAuditEvent.model';
+import { AuditEvent } from '../models/AuditEvent.model';
 import { AppError } from '../utils/AppError';
 
 export const EXPORT_ROW_CAP = 50_000;
@@ -67,3 +68,33 @@ export function csvField(v: unknown): string {
 }
 
 export const csvRow = (cells: unknown[]) => cells.map(csvField).join(',') + '\r\n';
+
+export interface AuditActor { operator: { _id: Types.ObjectId; email: string }; correlation_id?: string; ip?: string }
+export interface AuditInput {
+  action: string; target_type: string; target_id: string; company?: { _id: Types.ObjectId; name: string };
+  details?: Record<string, unknown>; before?: unknown; after?: unknown;
+  category?: AuditCategory; reason?: string; result?: 'success' | 'failure';
+  /** false = keep out of the tenant's own audit log (internal notes). Default: mirrored when a company is given. */
+  mirror?: boolean;
+}
+
+/**
+ * Operator audit entry, plus the mirrored tenant AuditEvent (source 'operator') when a company is involved.
+ * Direct model writes, not request-bound, so a background job can write as the operator that started it.
+ */
+export async function writeAudit(a: AuditActor, p: AuditInput, session?: ClientSession): Promise<void> {
+  const opts = { session: session ?? undefined };
+  await OperatorAuditEvent.create([{
+    operator_id: a.operator._id, operator_email: a.operator.email, action: p.action, target_type: p.target_type, target_id: p.target_id,
+    company_id: p.company?._id, details: redact(p.details), correlation_id: a.correlation_id,
+    category: p.category ?? categoryOf(p.action), before: redact(p.before), after: redact(p.after), reason: p.reason, result: p.result ?? 'success',
+  }], opts);
+  if (p.company && p.mirror !== false) {
+    await AuditEvent.create([{
+      company_id: p.company._id, actor_id: null, actor_email: `operator:${a.operator.email}`, action: p.action, module: 'operator',
+      category: 'Operator', object_type: p.target_type, object_id: p.target_id, object_label: p.company.name,
+      before_state: (p.before as any) ?? null, after_state: (p.after as any) ?? p.details ?? null, ip_address: a.ip, source: 'operator',
+      correlation_id: a.correlation_id,
+    }], opts);
+  }
+}

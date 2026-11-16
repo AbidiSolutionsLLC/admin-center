@@ -14,13 +14,9 @@ import { AuditEvent } from '../models/AuditEvent.model';
 import { Plan } from '../models/Plan.model';
 import { OrganizationEntitlement } from '../models/OrganizationEntitlement.model';
 import { OperatorAccount } from '../models/OperatorAccount.model';
-import { OperatorAuditEvent, type AuditCategory } from '../models/OperatorAuditEvent.model';
-import { App } from '../models/App.model';
-import { AppAssignment } from '../models/AppAssignment.model';
-import { Group } from '../models/Group.model';
+import { OperatorAuditEvent } from '../models/OperatorAuditEvent.model';
 import { IdentityProviderConnection } from '../models/IdentityProviderConnection.model';
-import { seedProductRegistry } from '../lib/productCatalog';
-import { assertProductKey, assertProductKeys, listProducts } from '../lib/productRegistry';
+import { assertProductKey } from '../lib/productRegistry';
 import { runInTransaction, emitPlatformEvent, emitAppAccessChanged, fanOutAppAccessChanged } from '../lib/platformEvents';
 import { RefreshToken } from '../models/RefreshToken.model';
 import { seedPermissions, seedSystemRoles, seedSecurityPolicy } from '../lib/seed';
@@ -32,10 +28,11 @@ import { generateEmployeeId } from '../services/employeeId';
 import { AppError } from '../utils/AppError';
 import { asyncHandler } from '../utils/asyncHandler';
 import { requireOperator } from './middleware';
-import { buildAuditFilter, categoryOf, csvRow, CSV_COLUMNS, EXPORT_ROW_CAP, redact } from './audit';
+import { buildAuditFilter, categoryOf, csvRow, CSV_COLUMNS, EXPORT_ROW_CAP, writeAudit, type AuditInput } from './audit';
 import { requirePermission, anyOperator, permissionsFor, operatorRolesSchema } from './permissions';
 import { findFirstAdmin, onboardingRoutes } from './onboarding';
 import { tenantRoutes } from './tenants';
+import { planRoutes, applyPlanToOrg, ensureDefaultAccess, bumpOrgAuthz, dryRunSummary } from './plans';
 
 const router = Router();
 /** Shape only; membership in the registry is checked with assertProductKey(s) (lib/productRegistry). */
@@ -62,30 +59,9 @@ router.get('/me', anyOperator, asyncHandler(async (req: Request, res: Response) 
   ok(res, { ...opOut(req.operator!), permissions: permissionsFor(req.operator!.roles) });
 }));
 
-/** Operator audit + mirrored tenant AuditEvent (source='operator'); direct model writes, not req-bound. */
-async function audit(req: Request, p: {
-  action: string; target_type: string; target_id: string; company?: { _id: Types.ObjectId; name: string };
-  details?: Record<string, unknown>; before?: unknown; after?: unknown;
-  category?: AuditCategory; reason?: string; result?: 'success' | 'failure';
-  /** false = keep out of the tenant's own audit log (internal notes). Default: mirrored when a company is given. */
-  mirror?: boolean;
-}, session?: ClientSession) {
-  const op = req.operator!;
-  const opts = { session: session ?? undefined };
-  await OperatorAuditEvent.create([{
-    operator_id: op._id, operator_email: op.email, action: p.action, target_type: p.target_type, target_id: p.target_id,
-    company_id: p.company?._id, details: redact(p.details), correlation_id: (req as any).correlationId,
-    category: p.category ?? categoryOf(p.action), before: redact(p.before), after: redact(p.after), reason: p.reason, result: p.result ?? 'success',
-  }], opts);
-  if (p.company && p.mirror !== false) {
-    await AuditEvent.create([{
-      company_id: p.company._id, actor_id: null, actor_email: `operator:${op.email}`, action: p.action, module: 'operator',
-      category: 'Operator', object_type: p.target_type, object_id: p.target_id, object_label: p.company.name,
-      before_state: (p.before as any) ?? null, after_state: (p.after as any) ?? p.details ?? null, ip_address: req.ip, source: 'operator',
-      correlation_id: (req as any).correlationId,
-    }], opts);
-  }
-}
+/** Operator audit + mirrored tenant AuditEvent (source='operator'); see writeAudit in ./audit. */
+const audit = (req: Request, p: AuditInput, session?: ClientSession) =>
+  writeAudit({ operator: req.operator!, correlation_id: (req as any).correlationId, ip: req.ip }, p, session);
 const actorOf = (req: Request) => ({ type: 'operator' as const, id: req.operator!._id.toString() });
 const corrOf = (req: Request): string => (req as any).correlationId;
 
@@ -195,43 +171,6 @@ const ProvisionSchema = z.object({
   first_admin: z.object({ email: z.string().trim().email().toLowerCase(), full_name: z.string().trim().min(1).max(120) }),
 });
 
-/**
- * Default access on the "All Members" dynamic group, from each product manifest's default_assignments, each only with
- * an active entitlement for that product. Idempotent. Built-in defaults: people -> employee (04 §7); desk -> requester
- * (C-3 "desk for everyone", decided 2026-11-12: an admin excludes members by editing or removing the rule; migrated
- * orgs get per-member requester grants from the E11 seed instead, legacy hasDeskPortalAccess === false = excluded).
- */
-async function ensureDefaultAccess(companyId: Types.ObjectId, grantedBy: Types.ObjectId, session?: ClientSession) {
-  const sess = session ?? null;
-  const opts = { session: session ?? undefined };
-  // Global catalog, outside the txn: seed when empty or when a built-in predates the manifest fields (re-seed is idempotent).
-  if (!(await listProducts()).length || await App.exists({ app_type: 'karbexa_product', company_id: { $exists: false }, manifest_version: { $exists: false } })) await seedProductRegistry();
-  for (const product of await listProducts()) {
-    const app = await App.findOne({ product_key: product.product_key, app_type: 'karbexa_product', company_id: { $exists: false } }).session(sess);
-    if (!app) continue;
-    const rules = (app.default_assignments ?? []).filter(a => a.target === 'all_members');
-    if (!rules.length) continue;
-    if (!(await OrganizationEntitlement.exists({ company_id: companyId, product_key: product.product_key, status: 'active' }).session(sess))) continue;
-    let group = await Group.findOne({ company_id: companyId, name: 'All Members', type: 'dynamic' }).session(sess);
-    if (!group) [group] = await Group.create([{ company_id: companyId, name: 'All Members', type: 'dynamic', dynamic_rules: {}, is_active: true } as never], opts);
-    for (const rule of rules) {
-      const exists = await AppAssignment.exists({ company_id: companyId, app_id: app._id, target_type: 'group', target_id: group._id, product_role_key: rule.role }).session(sess);
-      if (!exists) {
-        await AppAssignment.create([{
-          company_id: companyId, app_id: app._id, target_type: 'group', target_id: group._id, product_role_key: rule.role, granted_by: grantedBy, is_active: true,
-        } as never], opts);
-      }
-    }
-  }
-}
-
-/**
- * Entitlement/plan/status changes alter every member's effective access (04 §8.2). O(1) inside the txn:
- * one updateMany bumps every member's authz_ver. Per-member app_access.changed fans out after commit (fanOutOrgAccess).
- */
-async function bumpOrgAuthz(companyId: Types.ObjectId, session?: ClientSession) {
-  await User.updateMany({ company_id: companyId }, { $inc: { authz_ver: 1 } }, { session });
-}
 const fanOutOrgAccess = (req: Request, companyId: Types.ObjectId) =>
   fanOutAppAccessChanged(companyId, { actor: actorOf(req), correlation_id: corrOf(req), batchSize: 200 });
 
@@ -260,13 +199,18 @@ router.post('/orgs', requirePermission('tenants.write'), asyncHandler(async (req
       const actor = actorOf(req);
       const correlation_id = corrOf(req);
 
-      const [company] = await Company.create([{ name: input.name, slug, status: 'active', is_active: true, plan: plan.key }], opts);
+      const [company] = await Company.create([{
+        name: input.name, slug, status: 'active', is_active: true, plan: plan.key,
+        ...(plan.trial_days ? { trial_ends_at: new Date(Date.now() + plan.trial_days * 86400e3) } : {}),
+      }], opts);
       await seedSystemRoles(company._id, session);
       await seedSecurityPolicy(company._id, session);
 
       if (plan.products.length) {
         await OrganizationEntitlement.insertMany(plan.products.map((pk) => ({
-          company_id: company._id, product_key: pk, status: 'active', source: 'plan', plan_key: plan.key, updated_by_operator_id: req.operator!._id,
+          company_id: company._id, product_key: pk, status: 'active', source: 'plan', plan_key: plan.key, plan_version: plan.version ?? 1,
+          ...(typeof plan.seat_defaults?.get(pk) === 'number' ? { seats_limit: plan.seat_defaults.get(pk) } : {}),
+          updated_by_operator_id: req.operator!._id,
         })), opts);
       }
 
@@ -403,28 +347,13 @@ router.patch('/orgs/:id', requirePermission('tenants.write'), asyncHandler(async
     await audit(req, { action: 'org.updated', target_type: 'Company', target_id: String(company._id), company, before, after });
   }
   if (!plan) return ok(res, { id: String(company._id), tags: company.tags ?? [], trial_ends_at: company.trial_ends_at ?? null });
-  await runInTransaction(async (session) => {
-    const orgId = company._id.toString();
-    await Company.updateOne({ _id: company._id }, { $set: { plan: plan.key } }, { session: session ?? undefined });
-    for (const key of plan.products) {
-      await OrganizationEntitlement.updateOne(
-        { company_id: company._id, product_key: key },
-        { $setOnInsert: { status: 'active' }, $set: { source: 'plan', plan_key: plan.key, updated_by_operator_id: req.operator!._id } },
-        { upsert: true, session: session ?? undefined },
-      );
-      const ent = await OrganizationEntitlement.findOne({ company_id: company._id, product_key: key }).session(session ?? null);
-      await emitPlatformEvent(session, {
-        org_id: orgId, type: 'entitlement.changed', subject: { type: 'org', id: orgId }, actor: actorOf(req), correlation_id: corrOf(req),
-        data: { product_key: key, status: ent?.status ?? 'active' },
-      });
-    }
-    const firstAdmin = await findFirstAdmin(company._id as Types.ObjectId, session);
-    if (firstAdmin) await ensureDefaultAccess(company._id, firstAdmin._id, session);
-    await bumpOrgAuthz(company._id, session);
-    await audit(req, { action: 'org.plan_assigned', target_type: 'Company', target_id: String(company._id), company, before: null, after: { plan_key: plan.key, products: plan.products } }, session);
-  });
-  await fanOutOrgAccess(req, company._id);
-  ok(res, { id: String(company._id), plan_key: plan.key, products: plan.products, tags: company.tags ?? [], trial_ends_at: company.trial_ends_at ?? null });
+  const ctx = { actor: actorOf(req), correlation_id: corrOf(req), operator_id: req.operator!._id as Types.ObjectId };
+  if (req.query.dry_run === 'true') {
+    return ok(res, dryRunSummary([await applyPlanToOrg(undefined, company, plan, { ...ctx, audit: async () => undefined, dry_run: true })]));
+  }
+  const diff = await runInTransaction((session) => applyPlanToOrg(session, company, plan, { ...ctx, audit: (p) => audit(req, p, session) }));
+  if (diff.added.length || diff.restricted.length) await fanOutOrgAccess(req, company._id);
+  ok(res, { id: String(company._id), plan_key: plan.key, products: plan.products, tags: company.tags ?? [], trial_ends_at: company.trial_ends_at ?? null, ...diff });
 }));
 
 router.put('/orgs/:id/entitlements/:productKey', requirePermission('entitlements.write'), asyncHandler(async (req: Request, res: Response) => {
@@ -493,33 +422,6 @@ router.post('/orgs/:id/identity-providers/:connId/approve-tenant', requirePermis
     before, after: { tenant_id: tenantId }, details: { tenant_id: tenantId, connection: conn.display_name },
   });
   ok(res, idpOut(conn));
-}));
-
-// ── Plans ────────────────────────────────────────────────────────────────────────────────────
-const planOut = (p: any) => ({ id: p._id.toString(), key: p.key, name: p.name, products: p.products, status: p.status });
-
-router.get('/plans', requirePermission('tenants.read'), asyncHandler(async (_req: Request, res: Response) => ok(res, (await Plan.find().sort({ key: 1 })).map(planOut))));
-router.post('/plans', requirePermission('plans.write'), asyncHandler(async (req: Request, res: Response) => {
-  const b = z.object({
-    key: z.string().trim().regex(/^[a-z0-9_-]{2,40}$/), name: z.string().trim().min(1).max(80),
-    products: z.array(productKey).default([]), status: z.enum(['active', 'archived']).optional(),
-  }).parse(req.body);
-  await assertProductKeys(b.products);
-  if (await Plan.exists({ key: b.key })) throw new AppError('A plan with this key already exists', 409, 'DUPLICATE');
-  const plan = await Plan.create(b);
-  await audit(req, { action: 'plan.created', target_type: 'Plan', target_id: plan.key, details: planOut(plan) });
-  ok(res, planOut(plan), 201);
-}));
-router.patch('/plans/:key', requirePermission('plans.write'), asyncHandler(async (req: Request, res: Response) => {
-  const b = z.object({ name: z.string().trim().min(1).max(80), products: z.array(productKey), status: z.enum(['active', 'archived']) }).partial().parse(req.body);
-  if (b.products) await assertProductKeys(b.products);
-  const plan = await Plan.findOne({ key: String(req.params.key) });
-  if (!plan) throw new AppError('Plan not found', 404, 'NOT_FOUND');
-  const before = planOut(plan);
-  Object.assign(plan, b);
-  await plan.save();
-  await audit(req, { action: 'plan.updated', target_type: 'Plan', target_id: plan.key, details: { before, after: planOut(plan) } });
-  ok(res, planOut(plan));
 }));
 
 // ── Audit ────────────────────────────────────────────────────────────────────────────────────
@@ -597,5 +499,6 @@ router.patch('/operators/:id', requirePermission('operators.write'), asyncHandle
 
 router.use(onboardingRoutes({ ok, oid, audit, actorOf, corrOf })); // Plan 2.6
 router.use(tenantRoutes({ ok, oid, audit })); // Plan 4.4
+router.use(planRoutes({ ok, audit, corrOf })); // Plan 4.5
 
 export default router;

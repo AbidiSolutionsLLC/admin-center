@@ -9,6 +9,7 @@ import { runIntelligenceRulesForAllCompanies } from './lib/intelligence';
 import { startPlatformDispatcher, stopPlatformDispatcher } from './lib/platformDispatcher';
 import { startEmailSender, stopEmailSender } from './lib/emailSender';
 import { startInvitationJobs, stopInvitationJobs } from './lib/invitationJobs';
+import { startJobRunner, stopJobRunner } from './lib/jobs';
 
 export { createServer };
 
@@ -42,6 +43,9 @@ connectDB().then(async () => {
     startPlatformDispatcher();
     startEmailSender();
     startInvitationJobs();
+    startJobRunner();
+    process.once('SIGTERM', stopJobRunner);
+    process.once('SIGINT', stopJobRunner);
     process.once('SIGTERM', stopInvitationJobs);
     process.once('SIGINT', stopInvitationJobs);
     process.once('SIGTERM', stopPlatformDispatcher);

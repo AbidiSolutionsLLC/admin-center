@@ -1570,6 +1570,51 @@ async function main() {
       }
     }
 
+    // ── Plan 4.5: plans (editor fields, version, apply with preview, one job per tenant, overrides kept) ──
+    {
+      const { OrganizationEntitlement: Ent, Job } = await import('../models');
+      const { processDueJobs } = await import('../lib/jobs');
+      const json = async (r: any) => (await r.json()) as any;
+      const mk = await op('/plans', 'POST', { key: 'p45', name: 'P45', products: ['people', 'desk'], description: 'Smoke plan', seat_defaults: { people: 25 }, trial_days: 14 });
+      const mkj = await json(mk);
+      check('4.5 plan created with description, seat defaults, trial days and version 1', mk.status === 201 && mkj.data.version === 1 && mkj.data.seat_defaults.people === 25 && mkj.data.trial_days === 14 && mkj.data.description === 'Smoke plan', JSON.stringify(mkj));
+      check('4.5 seat default for an unknown product = 400', (await op('/plans', 'POST', { key: 'p45b', name: 'X', products: [], seat_defaults: { nope: 3 } })).status === 400);
+
+      const prov = await json(await op('/orgs', 'POST', { name: 'Plan45 Co', slug: 'plan45-co', plan_key: 'p45', first_admin: { email: 'admin@plan45.test', full_name: 'Pat Plan' } }));
+      const cid = prov.data.id as string;
+      const days = ((await Company.findById(cid))!.trial_ends_at!.getTime() - Date.now()) / 86400e3;
+      check('4.5 a tenant created on a plan with trial days gets trial_ends_at', days > 13.9 && days < 14.1, days);
+      const people = await Ent.findOne({ company_id: cid, product_key: 'people' });
+      check('4.5 provisioning stores plan_version and the seat default on the entitlement', people?.plan_version === 1 && people?.seats_limit === 25, JSON.stringify(people));
+
+      await op(`/orgs/${cid}/entitlements/people`, 'PUT', { status: 'suspended' }); // an override
+      const edit = await json(await op('/plans/p45', 'PATCH', { products: ['people', 'sign'] }));
+      check('4.5 every plan edit raises the version', edit.data.version === 2, edit.data.version);
+
+      const dry = await json(await op('/plans/p45/apply?dry_run=true', 'POST'));
+      check('4.5 plan dry run reports added, restricted, unchanged and tenants_affected', dry.data.added[0]?.product_key === 'sign' && dry.data.restricted[0]?.product_key === 'desk' && dry.data.unchanged[0]?.product_key === 'people' && dry.data.tenants_affected === 1, JSON.stringify(dry.data));
+      check('4.5 dry run writes nothing', (await Ent.findOne({ company_id: cid, product_key: 'desk' }))?.status === 'active' && (await Job.countDocuments({ type: 'plan.apply' })) === 0);
+      const dry2 = await json(await op(`/orgs/${cid}?dry_run=true`, 'PATCH', { plan_key: 'p45' }));
+      check('4.5 tenant dry run has the same shape and writes nothing', dry2.data.added[0]?.product_key === 'sign' && dry2.data.tenants_affected === 1 && !(await Ent.findOne({ company_id: cid, product_key: 'sign' })), JSON.stringify(dry2.data));
+
+      await OperatorAccount.updateOne({ email: 'op@karbexa.test' }, { $set: { roles: ['operations'] } });
+      check('4.5 operations cannot apply a plan = 403', (await op('/plans/p45/apply', 'POST')).status === 403);
+      await OperatorAccount.updateOne({ email: 'op@karbexa.test' }, { $set: { roles: ['platform_admin'] } });
+      const applied = await op('/plans/p45/apply', 'POST');
+      check('4.5 apply queues one job per tenant = 202', applied.status === 202 && (await json(applied)).data.queued === 1 && (await Job.countDocuments({ type: 'plan.apply', status: 'queued' })) === 1, applied.status);
+      await processDueJobs();
+      const after = new Map((await Ent.find({ company_id: cid })).map((e) => [e.product_key, e]));
+      check('4.5 job: the new plan product is active with the plan version', after.get('sign')?.status === 'active' && after.get('sign')?.source === 'plan' && after.get('sign')?.plan_version === 2);
+      check('4.5 job: the product that left the plan is restricted (data kept)', after.get('desk')?.status === 'restricted');
+      check('4.5 job: the override is untouched', after.get('people')?.status === 'suspended' && after.get('people')?.source === 'operator');
+      check('4.5 job finished and the apply is audited with added and restricted', (await Job.countDocuments({ type: 'plan.apply', status: 'done' })) === 1 && !!(await OperatorAuditEvent.findOne({ action: 'org.plan_assigned', target_id: cid, 'after.restricted': 'desk' })));
+      const listed = (await json(await op('/plans'))).data.find((x: any) => x.key === 'p45');
+      check('4.5 plan list shows the tenant count', listed?.tenant_count === 1, listed?.tenant_count);
+      await op('/plans/p45', 'PATCH', { products: ['people', 'desk'] });
+      await op(`/orgs/${cid}`, 'PATCH', { plan_key: 'p45' });
+      check('4.5 a restricted product that returns to the plan is active again', (await Ent.findOne({ company_id: cid, product_key: 'desk' }))?.status === 'active');
+    }
+
     // ── Plan 4.4: tenant profile (products, admins, notes, tags and trial) ───────────────────
     {
       const { TenantNote } = await import('../models');
