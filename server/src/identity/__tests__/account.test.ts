@@ -503,3 +503,20 @@ test('A3-3: POST /sessions/revoke-others revokes all other sessions leaving curr
   const checkCurrent = await fetch(`${baseUrl}/api/v1/auth/me`, { headers: { authorization: `Bearer ${currentToken}` } });
   assert.equal(checkCurrent.status, 200);
 });
+
+test('Plan 0.7g: the account page opens for onboarding, probation and on_leave members, not for terminated ones', async () => {
+  try {
+    for (const state of ['onboarding', 'probation', 'on_leave'] as const) {
+      await User.updateOne({ _id: testUser._id }, { lifecycle_state: state });
+      const { token } = await createTestSession(testUser, testIdentity);
+      const res = await fetch(`${baseUrl}/realms/tenant/account`, { headers: { authorization: `Bearer ${token}` }, redirect: 'manual' });
+      assert.equal(res.status, 200, `state ${state}`);
+    }
+    await User.updateOne({ _id: testUser._id }, { lifecycle_state: 'terminated' });
+    const { token } = await createTestSession(testUser, testIdentity);
+    const res = await fetch(`${baseUrl}/realms/tenant/account`, { headers: { authorization: `Bearer ${token}` }, redirect: 'manual' });
+    assert.notEqual(res.status, 200);
+  } finally {
+    await User.updateOne({ _id: testUser._id }, { lifecycle_state: 'active' });
+  }
+});

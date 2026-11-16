@@ -16,6 +16,7 @@ import { logSecurityEvent, setIdentityPassword } from '../controllers/auth.contr
 import { getIdentityConfig, ADMIN_AUDIENCE } from './config';
 import { getPublicJwks, loadCookieKeys } from './keys';
 import { findLiveSession, revokeSession } from './sessions';
+import { hasAccessState } from './accounts';
 import { escapeHtml, newNonce, pageCsp, pageShell } from './html';
 import { totpValid, normaliseCode } from './interactions';
 import { generateRecoveryCodes, consumeRecoveryCode } from './recoveryCodes';
@@ -110,7 +111,7 @@ async function resolveAccountSession(req: Request, res: Response, provider: Oidc
           User.findById(oidcSession.accountId),
           Identity.findById(live.identity_id),
         ]);
-        if (user && user.is_active && user.lifecycle_state === 'active' && identity && identity.status === 'active') {
+        if (user && user.is_active && hasAccessState(user.lifecycle_state) && identity && identity.status === 'active') {
           return { user, identity, sid: oidcSession.uid };
         }
       }
@@ -142,7 +143,7 @@ async function resolveAccountSession(req: Request, res: Response, provider: Oidc
             User.findById(sub),
             Identity.findById(live.identity_id),
           ]);
-          if (user && user.is_active && user.lifecycle_state === 'active' && identity && identity.status === 'active') {
+          if (user && user.is_active && hasAccessState(user.lifecycle_state) && identity && identity.status === 'active') {
             return { user, identity, sid };
           }
         }

@@ -227,7 +227,7 @@ Login and MFA activity is written to `SecurityEvent`, not to platform events.
 - No token introspection endpoint.
 
 ### Known issues
-- **Account page refuses members who are not exactly `active`.** `resolveAccountSession` requires `user.lifecycle_state === 'active'` (`server/src/identity/account.ts:113`, `:145`), while login allows `onboarding`, `probation` and `on_leave`. Those members can sign in but are redirected to `/login` from `/realms/tenant/account`.
+- **Account page access states (Plan 0.7g, built, tests not yet run).** `resolveAccountSession` uses `hasAccessState` (`onboarding`, `active`, `probation`, `on_leave`), the same rule as sign-in (`server/src/identity/account.ts`).
 - The CSRF secret falls back to `ENCRYPTION_KEY` and then to the literal `'karbexa-account-csrf-secret'` (`account.ts:66`); in practice `loadCookieKeys()` always returns at least one key, so the literal is not reached.
 - `applyProxy` in `providers.ts` reads `TRUST_PROXY` with default `'1'` and only sets `maxIpsCount` for a number; a CIDR list makes the provider trust proxies without a hop limit, unlike Express (`lib/trustProxy.ts`).
 - After `POST /api/v1/auth/logout` the session is already destroyed, so the following `end_session` call finds no provider session; the redirect still lands on `/login?signed_out=1`.
