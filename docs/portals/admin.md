@@ -43,7 +43,7 @@ Guards: `GuestGuard` redirects to `/overview` when a token is in memory. `AuthGu
 | `/login` | Guest | `pages/auth/LoginPage.tsx` (button that starts OIDC login; shows a signed-out note when `?signed_out` is present) |
 | `/forgot-password` | Guest | `pages/auth/ForgotPasswordPage.tsx` |
 | `/reset-password` | Guest | `pages/auth/ResetPasswordPage.tsx` |
-| `/onboarding` | Guest | `pages/auth/OnboardingPage.tsx` (invite acceptance) |
+| `/onboarding` | Guest | `pages/auth/OnboardingPage.tsx` (invite acceptance: verifies the link on load and shows the form or one of five notices, built with `components/ui/AuthNotice.tsx`; e-mail is read-only; hooks in `features/auth/hooks/useInvitation.ts`) |
 | `/` | Auth | redirect to `/overview` |
 | `/overview` | Auth | `pages/overview/OverviewPage.tsx` |
 | `/overview/insight-history` | Auth | `pages/overview/InsightHistoryPage.tsx` |

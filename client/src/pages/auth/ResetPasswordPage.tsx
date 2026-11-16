@@ -7,6 +7,8 @@ import { AuthLayout, AUTH_CARD_CLASS } from '@/components/layout/AuthLayout';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Link, useNavigate } from 'react-router-dom';
+import { AuthNotice } from '@/components/ui/AuthNotice';
+import { Link2Off } from 'lucide-react';
 import { ROUTES } from '@/constants/routes';
 
 const resetPasswordSchema = z.object({
@@ -52,21 +54,15 @@ export default function ResetPasswordPage() {
 
   if (!token || !email) {
     return (
-      <AuthLayout>
-        <Card className={AUTH_CARD_CLASS}>
-          <CardHeader className="space-y-2 text-center pb-6">
-            <CardTitle className="text-2xl font-semibold tracking-tight text-red-500">Invalid Link</CardTitle>
-            <CardDescription className="text-ink-muted">
-              The password reset link is invalid or missing required parameters.
-            </CardDescription>
-          </CardHeader>
-          <CardContent className="text-center">
-            <Link to={ROUTES.FORGOT_PASSWORD} className="text-sm text-primary hover:underline font-medium">
-              Request a new reset link
-            </Link>
-          </CardContent>
-        </Card>
-      </AuthLayout>
+      <AuthNotice
+        icon={Link2Off}
+        tone="error"
+        title="Invalid Link"
+        testId="reset-invalid"
+        action={<Link to={ROUTES.FORGOT_PASSWORD} className="text-sm text-primary hover:underline font-medium">Request a new reset link</Link>}
+      >
+        The password reset link is invalid or missing required parameters.
+      </AuthNotice>
     );
   }
 

@@ -1,3 +1,4 @@
+import { useState } from 'react';
 import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import * as z from 'zod';
@@ -7,6 +8,8 @@ import { AuthLayout, AUTH_CARD_CLASS } from '@/components/layout/AuthLayout';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Link } from 'react-router-dom';
+import { AuthNotice } from '@/components/ui/AuthNotice';
+import { MailCheck } from 'lucide-react';
 import { ROUTES } from '@/constants/routes';
 
 const forgotPasswordSchema = z.object({
@@ -17,6 +20,7 @@ type ForgotPasswordFormValues = z.infer<typeof forgotPasswordSchema>;
 
 export default function ForgotPasswordPage() {
   const { mutateAsync: requestReset, isPending } = useForgotPassword();
+  const [sent, setSent] = useState(false);
   const searchParams = new URLSearchParams(window.location.search);
   const defaultEmail = searchParams.get('email') || '';
 
@@ -32,10 +36,25 @@ export default function ForgotPasswordPage() {
   const onSubmit = async (data: ForgotPasswordFormValues) => {
     try {
       await requestReset(data);
+      setSent(true);
     } catch (e) {
       // Handled by hook onError
     }
   };
+
+  if (sent) {
+    return (
+      <AuthNotice
+        icon={MailCheck}
+        tone="success"
+        title="Check your e-mail"
+        testId="forgot-sent"
+        action={<Link to={ROUTES.LOGIN} className="text-sm font-medium text-primary hover:underline">Back to Login</Link>}
+      >
+        If an account exists with that email, a password reset link has been sent.
+      </AuthNotice>
+    );
+  }
 
   return (
     <AuthLayout>
