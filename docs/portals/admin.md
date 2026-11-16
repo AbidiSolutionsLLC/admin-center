@@ -396,7 +396,7 @@ All are written with `emitPlatformEvent` inside a `runInTransaction` together wi
 | Event type | Emitted from | `data` |
 |---|---|---|
 | `member.provisioned` | `people.controller.inviteUser` (`:1144`), `bulkInviteUsers` (`:1755`) | member admin fields, `lifecycle_state: 'invited'` |
-| `member.updated` | `people.controller.updateUser` (`:1457`, only when tracked fields changed), `bulkAssignLocation` (`:2192`) | `{ changed }` |
+| `member.updated` | `people.controller.updateUser` (`:1457`, only when tracked fields changed), `bulkAssignLocation` (`:2192`), `transitionLifecycleTx` for active ↔ probation ↔ on_leave (elevation 5.11, `changed.lifecycle_state`) | `{ changed }` |
 | `member.suspended` / `member.reactivated` / `member.terminated` | `people.controller.transitionLifecycleTx` (`:514-521`), used by `updateUserLifecycle`, `bulkUpdateLifecycle`, `deleteUser` | suspended: `lifecycle_state`, `reason`, `session_ids`; reactivated: `lifecycle_state`; terminated: `termination_date`. Mapping in `server/src/lib/lifecycle.ts` `lifecycleEventFor` |
 | `app_access.changed` | `emitAppAccessChanged` / `emitAppAccessChangedBounded` from people (invite, update, lifecycle, bulk role/location), apps (`assignApp`, `revokeApp`), `appAccess.updateAssignment`, roles (`assignRoleToUser`, `unassignRoleFromUser`), groups (`updateGroup`, `deleteGroup`, `addUsersToGroup`, `removeUsersFromGroup`) | `{ authz_ver, products: { <product_key>: <role_key> } }`; bumps `User.authz_ver` first |
 | `session.revoked` | `identity/sessions.revokeSessionsTx` via `security.controller.forceLogoutUser`, lifecycle transitions, MFA reset, password reset, logout | `{ sid, member_id }` |
@@ -420,7 +420,7 @@ No platform events are emitted by: policies, workflows, data fields, integration
 - Audit SSE stream with single-use tickets, 30 s session re-check (`STREAM_RECHECK_MS`): `auditLogs.controller.streamAuditEvents`, `platform/streamTickets.ts`.
 
 ### Not built or partial ✗
-- **No `member.updated` for active ↔ probation ↔ on_leave.** `lifecycleEventFor` returns `null` for those transitions (`server/src/lib/lifecycle.ts:66-70`); only `app_access.changed` is emitted. Listed as Wave B in the build tracker.
+- ~~**No `member.updated` for active ↔ probation ↔ on_leave.**~~ **Fixed in elevation 5.11** (built, not yet run). `transitionLifecycleTx` (`people.controller.ts`) now emits `member.updated` with `data.changed.lifecycle_state` for transitions between `active`, `probation` and `on_leave` (additive: the event type and `changed` shape already existed; `lifecycleEventFor` is unchanged and still returns `null` for them).
 - **Audit SSE has no client consumer.** No code in `client/src` calls `/stream-tickets` or `/audit-logs/stream`.
 - **Policies, workflows, data fields, integrations, IP restrictions, identity providers** do not use `runInTransaction` (0 call sites in those controllers) and emit no platform events.
 - **Seats:** `OrganizationEntitlement.seats_limit` is stored and shown but not enforced (comment in `OrganizationEntitlement.model.ts`).

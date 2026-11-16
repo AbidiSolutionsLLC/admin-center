@@ -68,6 +68,8 @@ const MEMBER_ADMIN_FIELDS = [
   'full_name', 'email', 'department_id', 'location_id', 'manager_id', 'employment_type',
   'employee_id', 'phone', 'avatar_url', 'hire_date', 'termination_date',
 ] as const;
+/** States between which a transition has no dedicated member.* event (see lifecycleEventFor). */
+const WORKING_STATES = new Set<string>(['active', 'probation', 'on_leave']);
 /** Snapshot of the admin-owned fields as comparable primitives: ObjectIds -> hex, Dates -> ISO string (so `!==` compares values). */
 const memberAdminFields = (u: any): Record<string, unknown> => {
   const out: Record<string, unknown> = {};
@@ -522,6 +524,10 @@ async function transitionLifecycleTx(
     } else if (eventType === 'member.terminated') {
       await emitPlatformEvent(session, { org_id: companyId, type: eventType, subject, actor, correlation_id: correlationId,
         data: { termination_date: terminationDate.toISOString() } });
+    } else if (WORKING_STATES.has(currentState) && WORKING_STATES.has(targetState)) {
+      // active <-> probation <-> on_leave carry no dedicated member.* event; consumers refetch the projection (elevation 5.11)
+      await emitPlatformEvent(session, { org_id: companyId, type: 'member.updated', subject, actor, correlation_id: correlationId,
+        data: { changed: { lifecycle_state: targetState } } });
     }
     await emitAppAccessChanged(session, companyId, [user._id.toString()], { actor, correlation_id: correlationId });
     return revokedSids;

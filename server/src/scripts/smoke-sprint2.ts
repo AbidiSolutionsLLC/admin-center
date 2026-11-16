@@ -1078,6 +1078,16 @@ async function main() {
       check('E4b reactivate = 200 -> member.reactivated + app_access.changed', r.status === 200 && ofType(evs, 'member.reactivated').length === 1 && (ofType(evs, 'member.reactivated')[0].data as any).lifecycle_state === 'active' && ofType(evs, 'app_access.changed').some((e) => e.subject.id === memId), `${r.status} ${evs.map((e) => e.type)}`);
       await auditHasCid('reactivate', 'user.lifecycle_changed', 'e4b-reactivate', evs);
 
+      // Plan 5.11: active <-> probation <-> on_leave emit member.updated {changed:{lifecycle_state}} and no suspend/terminate/reactivate event
+      for (const [step, to] of [['a', 'probation'], ['b', 'on_leave'], ['c', 'active']] as const) {
+        const cid = `p511-${step}`;
+        r = await t(`/people/${memId}/lifecycle`, 'PUT', { lifecycle_state: to }, cid);
+        evs = await evsOf(cid);
+        const mu = ofType(evs, 'member.updated');
+        check(`5.11 -> ${to} = 200 and emits one member.updated {changed:{lifecycle_state:'${to}'}}`, r.status === 200 && mu.length === 1 && JSON.stringify((mu[0].data as any).changed) === JSON.stringify({ lifecycle_state: to }) && mu[0].subject.id === memId, `${r.status} ${JSON.stringify(mu.map((e) => e.data))}`);
+        check(`5.11 -> ${to} emits no member.suspended/reactivated/terminated`, !evs.some((e: any) => ['member.suspended', 'member.reactivated', 'member.terminated'].includes(e.type)), evs.map((e: any) => e.type));
+      }
+
       const fsid = await mkSession(memId);
       r = await t(`/security/force-logout/${memId}`, 'POST', undefined, 'e4b-force-logout');
       evs = await evsOf('e4b-force-logout');
