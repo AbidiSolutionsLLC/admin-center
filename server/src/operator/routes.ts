@@ -175,7 +175,7 @@ async function ensureDefaultPeopleAccess(companyId: Types.ObjectId, grantedBy: T
 }
 
 /**
- * Entitlement/plan/status changes alter every member's effective access (04 ง8.2). O(1) inside the txn:
+ * Entitlement/plan/status changes alter every member's effective access (04 ยง8.2). O(1) inside the txn:
  * one updateMany bumps every member's authz_ver. Per-member app_access.changed fans out after commit (fanOutOrgAccess).
  */
 async function bumpOrgAuthz(companyId: Types.ObjectId, session?: ClientSession) {
