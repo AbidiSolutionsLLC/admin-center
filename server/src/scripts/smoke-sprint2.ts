@@ -177,6 +177,48 @@ async function main() {
       check('2.5 the first admin has one pending first_admin invitation', !!inv && inv.state === 'pending' && (await InvM.countDocuments({ company_id: retryJson.data?.id })) === 1, inv?.state);
     }
 
+    // ── Plan 2.6: operator onboarding API ───────────────────────────────────────────────────
+    {
+      const { Invitation: InvM, OperatorAuditEvent: OaM, PlatformEvent: PeM } = await import('../models');
+      const forced = await Company.findOne({ slug: 'forced-fail' });
+      const fid = String(forced?._id);
+      const g = await op(`/orgs/${fid}/onboarding`);
+      const gj = await g.json() as { data?: { stage: string; first_admin: { email: string; lifecycle_state: string } | null; invitation: { state: string } | null; delivery: { status: string } | null } };
+      check('2.6 GET onboarding: first admin found through UserRole, pending invitation, a delivery row', g.status === 200 && gj.data?.first_admin?.email === 'admin@forced.test' && gj.data?.invitation?.state === 'pending' && !!gj.data?.delivery, gj);
+      check('2.6 GET onboarding stage is sending or awaiting_acceptance and no token is exposed', ['sending', 'awaiting_acceptance'].includes(gj.data?.stage ?? '') && !/token/i.test(JSON.stringify(gj)), gj.data?.stage);
+
+      const list = await op('/onboarding');
+      const lj = await list.json() as { data?: { organization: { id: string }; stage: string }[] };
+      check('2.6 GET /onboarding lists the organisation with its stage', list.status === 200 && !!lj.data?.some((r) => r.organization.id === fid && r.stage !== 'complete'), lj.data?.length);
+
+      const rs = await op(`/orgs/${fid}/onboarding/resend-invite`, 'POST');
+      const rsj = await rs.json() as { data?: { invite_delivery_id: string | null } };
+      check('2.6 resend-invite = 200, new delivery id, old invitation superseded, one pending',
+        rs.status === 200 && !!rsj.data?.invite_delivery_id && (await InvM.countDocuments({ company_id: fid, kind: 'first_admin', state: 'pending' })) === 1 && (await InvM.countDocuments({ company_id: fid, state: 'superseded' })) === 1, rs.status);
+      check('2.6 resend-invite is operator-audited', !!(await OaM.findOne({ action: 'onboarding.invite_resent', target_id: fid })));
+
+      const pa = await op(`/orgs/${fid}/onboarding/first-admin`, 'PATCH', { email: 'new.admin@forced.test', full_name: 'Fay Fixed' });
+      const paj = await pa.json() as { data?: { changed: boolean } };
+      const movedInv = await InvM.findOne({ company_id: fid, kind: 'first_admin', state: 'pending' });
+      check('2.6 PATCH first-admin = 200: user updated, invitation re-issued to the new address',
+        pa.status === 200 && paj.data?.changed === true && !!(await User.exists({ company_id: fid, email: 'new.admin@forced.test', full_name: 'Fay Fixed' })) && movedInv?.email === 'new.admin@forced.test', pa.status);
+      check('2.6 PATCH first-admin emits member.updated with the changed fields', !!(await PeM.findOne({ org_id: fid, type: 'member.updated', 'data.changed.email': 'new.admin@forced.test' })));
+      const same = await op(`/orgs/${fid}/onboarding/first-admin`, 'PATCH', { email: 'new.admin@forced.test', full_name: 'Fay Fixed' });
+      check('2.6 PATCH first-admin with no change = 200 changed:false', same.status === 200 && ((await same.json()) as any).data?.changed === false, same.status);
+      const dup = await op(`/orgs/${fid}/onboarding/first-admin`, 'PATCH', { email: 'not-an-email', full_name: 'X' });
+      check('2.6 PATCH first-admin rejects a bad e-mail = 400', dup.status === 400, dup.status);
+
+      // once the first admin has accepted, neither action is allowed
+      await User.updateOne({ company_id: fid, email: 'new.admin@forced.test' }, { $set: { lifecycle_state: 'active', is_active: true } });
+      const late1 = await op(`/orgs/${fid}/onboarding/resend-invite`, 'POST');
+      const late2 = await op(`/orgs/${fid}/onboarding/first-admin`, 'PATCH', { email: 'later@forced.test', full_name: 'Late' });
+      check('2.6 after acceptance: resend-invite and first-admin change = 409 ALREADY_ONBOARDED', late1.status === 409 && late2.status === 409, [late1.status, late2.status]);
+      const done = await (await op(`/orgs/${fid}/onboarding`)).json() as { data?: { stage: string } };
+      check('2.6 stage is complete once the first admin is active', done.data?.stage === 'complete', done.data?.stage);
+      const nf = await op(`/orgs/${new (await import('mongoose')).Types.ObjectId()}/onboarding`);
+      check('2.6 unknown organisation = 404', nf.status === 404, nf.status);
+    }
+
     const admin = await User.findOne({ company_id: orgId, email: 'admin@acme.test' });
     check('E10 first admin membership created', !!admin, admin?.lifecycle_state);
 

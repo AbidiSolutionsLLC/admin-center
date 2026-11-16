@@ -57,6 +57,10 @@ The global per-IP rate limiter in `app.ts` also applies. Envelope: `{ success: t
 |---|---|---|---|
 | GET | `/orgs` | `limit` (1–100, default 25), `cursor` (last `_id`), `status`, `search` (name/slug regex) | Org summaries newest first; `meta: { total, limit, next_cursor }` |
 | GET | `/orgs/:id` | | Summary + `first_admin` (oldest user with legacy `role: 'Super Admin'`) |
+| GET | `/orgs/:id/onboarding` | | Plan 2.6: `{ organization, stage, first_admin, invitation { state, sent_at, sent_count, expires_at, ... }, delivery { status, attempts, last_error, ... } }`. `stage`: `complete`, `no_first_admin`, `no_invitation`, `sending`, `delivery_failed`, `awaiting_acceptance`, `expired`, `revoked`. Never a token |
+| POST | `/orgs/:id/onboarding/resend-invite` | | New first-admin invitation (supersedes the current one) and a queued e-mail, one transaction; 409 `ALREADY_ONBOARDED` once the first admin accepted; audited `onboarding.invite_resent` |
+| PATCH | `/orgs/:id/onboarding/first-admin` | `{ email, full_name }` | Only while the first admin is `invited`; updates the member, emits `member.updated`, re-issues the invitation to the new address; 409 `EMAIL_IN_USE`, `ALREADY_ONBOARDED`; audited `onboarding.first_admin_changed` |
+| GET | `/onboarding` | `?limit&cursor` | Organisations whose first admin has not finished onboarding, each with the same picture and `stage` |
 | POST | `/orgs` | `{ name, slug?, plan_key, first_admin: { email, full_name } }` | Provision (see below). Idempotent by slug: an existing slug returns 200 with `already_existed: true`. New org returns 201 with `invite_email_sent` (now "accepted for delivery") and `invite_delivery_id` (the `EmailDelivery` id), and `invite_token` only when `NODE_ENV !== 'production'` and `EXPOSE_INVITE_TOKEN === 'true'` |
 | POST | `/orgs/:id/suspend` | `{ reason? }` | Status `suspended`, revoke all org sessions |
 | POST | `/orgs/:id/reactivate` | `{ reason? }` | Status `active` (refused with 409 `ORG_CLOSED` if closed) |

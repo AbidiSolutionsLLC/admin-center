@@ -32,6 +32,7 @@ import { generateEmployeeId } from '../services/employeeId';
 import { AppError } from '../utils/AppError';
 import { asyncHandler } from '../utils/asyncHandler';
 import { requireOperator } from './middleware';
+import { findFirstAdmin, onboardingRoutes } from './onboarding';
 
 const router = Router();
 /** Shape only; membership in the registry is checked with assertProductKey(s) (lib/productRegistry). */
@@ -126,7 +127,7 @@ async function orgDetail(id: string) {
   const company = await Company.findById(oid(id));
   if (!company) throw new AppError('Organization not found', 404, 'NOT_FOUND');
   const [summary] = await orgSummaries([company]);
-  const admin = await User.findOne({ company_id: company._id, role: ROLES.SUPER_ADMIN }).sort({ created_at: 1 }).select('email full_name lifecycle_state');
+  const admin = await findFirstAdmin(company._id as Types.ObjectId); // through UserRole + the Super Admin role (Plan 2.6)
   return { ...summary, first_admin: admin ? { email: admin.email, full_name: admin.full_name, lifecycle_state: admin.lifecycle_state } : null };
 }
 
@@ -336,7 +337,7 @@ router.patch('/orgs/:id', asyncHandler(async (req: Request, res: Response) => {
         data: { product_key: key, status: ent?.status ?? 'active' },
       });
     }
-    const firstAdmin = await User.findOne({ company_id: company._id, role: ROLES.SUPER_ADMIN }).sort({ created_at: 1 }).select('_id').session(session ?? null);
+    const firstAdmin = await findFirstAdmin(company._id as Types.ObjectId, session);
     if (firstAdmin) await ensureDefaultAccess(company._id, firstAdmin._id, session);
     await bumpOrgAuthz(company._id, session);
     await audit(req, { action: 'org.plan_assigned', target_type: 'Company', target_id: String(company._id), company, before: null, after: { plan_key: plan.key, products: plan.products } }, session);
@@ -493,5 +494,7 @@ router.patch('/operators/:id', asyncHandler(async (req: Request, res: Response) 
   await audit(req, { action: 'operator.updated', target_type: 'Operator', target_id: acct._id.toString(), details: { fields: Object.keys(b).filter((k) => k !== 'password') , password_changed: b.password !== undefined } });
   ok(res, opOut(acct));
 }));
+
+router.use(onboardingRoutes({ ok, oid, audit, actorOf, corrOf })); // Plan 2.6
 
 export default router;
