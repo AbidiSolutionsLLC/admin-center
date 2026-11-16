@@ -5,16 +5,19 @@ import { Request, Response } from 'express';
 import bcrypt from 'bcryptjs';
 import crypto from 'crypto';
 import { asyncHandler } from '../utils/asyncHandler';
-import { User, IUser, UserRole, SecurityEvent, Invitation, PasswordResetToken, Company, GroupMember, IpRestriction, Identity, IIdentity } from '../models';
+import { User, IUser, UserRole, SecurityEvent, PasswordResetToken, Company, GroupMember, IpRestriction, Identity, IIdentity } from '../models';
 import { sendPasswordResetEmail } from '../lib/emailService';
 import { validatePasswordAgainstPolicy } from '../utils/passwordPolicy';
 import { AppError } from '../utils/AppError';
 import { z } from 'zod';
+import type { ClientSession } from 'mongoose';
 import { auditLogger } from '../lib/auditLogger';
 import { resolveUserPermissions } from '../lib/rbac';
 import { sendSecurityAlert } from '../lib/notificationEngine';
 import { isIpInRange } from '../utils/ipUtils';
 import { getAggregatedSecurityPolicy } from '../utils/securityPolicyUtils';
+import { runInTransaction } from '../lib/platformEvents';
+import { consumeInvitation, findInvitationByToken, invitationProblem } from '../lib/invitations';
 import { revokeSession, revokeIdentitySessions } from '../identity/sessions';
 import { getIdentityConfig, ADMIN_SPA_CLIENT_ID } from '../identity/config';
 
@@ -312,12 +315,12 @@ export const getMyPermissions = asyncHandler(async (req: Request, res: Response)
 });
 
 /** The member's Identity: linked one, else find-by-email and link, else create (03 §1.1/§1.2). */
-async function identityForMember(user: IUser): Promise<IIdentity> {
-  let identity = user.identity_id ? await Identity.findById(user.identity_id) : null;
+async function identityForMember(user: IUser, session?: ClientSession): Promise<IIdentity> {
+  let identity = user.identity_id ? await Identity.findById(user.identity_id).session(session ?? null) : null;
   if (!identity) {
     const email = user.email.toLowerCase();
-    identity = await Identity.findOne({ email })
-      ?? await Identity.create({ email, full_name: user.full_name, status: 'active' });
+    identity = await Identity.findOne({ email }).session(session ?? null)
+      ?? (await Identity.create([{ email, full_name: user.full_name, status: 'active' }], { session }))[0];
     user.identity_id = identity._id;
   }
   return identity;
@@ -345,7 +348,7 @@ export async function setIdentityPassword(user: IUser, identity: IIdentity, newP
 }
 
 const SetupPasswordSchema = z.object({
-  email: z.string().email().transform(v => v.toLowerCase()),
+  email: z.string().email().transform(v => v.toLowerCase()).optional(), // the token identifies the user; if sent it must match
   token: z.string().min(1),
   newPassword: z.string().min(8),
 });
@@ -357,14 +360,31 @@ export const setupPassword = asyncHandler(async (req: Request, res: Response) =>
   }
   const { email, token, newPassword } = result.data;
 
-  const tokenHash = crypto.createHash('sha256').update(token).digest('hex');
-  const inviteRecord = await Invitation.findOne({
-    token_hash: tokenHash,
-    state: 'pending',
-    expires_at: { $gt: new Date() },
+  // One transaction: the atomic consume, the password and the lifecycle state commit together or not at all.
+  // Two concurrent accepts: the loser's consume matches nothing (or its transaction retries and then matches nothing).
+  const accepted = await runInTransaction(async (session) => {
+    const invitation = await consumeInvitation(session, token);
+    if (!invitation) return null;
+
+    const user = await User.findOne({ _id: invitation.user_id, company_id: invitation.company_id }).session(session ?? null);
+    if (!user || (email && user.email.toLowerCase() !== email)) {
+      throw new AppError('This link is not valid. Check that you copied the whole link.', 404, 'INVITE_NOT_FOUND'); // rolls back the consume
+    }
+
+    const identity = await identityForMember(user, session);
+    await setIdentityPassword(user, identity, newPassword);
+    await identity.save({ session });
+
+    const oldState = user.lifecycle_state;
+    user.lifecycle_state = 'active';
+    user.is_active = true;
+    user.password_changed_at = identity.password_changed_at;
+    await user.save({ session });
+    return { user, identity, oldState };
   });
 
-  if (!inviteRecord) {
+  if (!accepted) {
+    const problem = invitationProblem(await findInvitationByToken(token)) ?? invitationProblem(null)!;
     await logSecurityEvent({
       company_id: null,
       event_type: 'password_setup_failure',
@@ -372,49 +392,17 @@ export const setupPassword = asyncHandler(async (req: Request, res: Response) =>
       user_agent: req.headers['user-agent'],
       req,
       is_suspicious: true,
-      metadata: { reason: 'invalid_or_expired_token' },
+      metadata: { reason: problem.code },
     });
-    throw new AppError('Invalid or expired token', 400, 'INVALID_TOKEN');
+    throw new AppError(problem.message, problem.status, problem.code);
   }
-
-  const user = await User.findOne({
-    _id: inviteRecord.user_id,
-    email: email.toLowerCase(),
-  });
-
-  if (!user) {
-    await logSecurityEvent({
-      company_id: null,
-      event_type: 'password_setup_failure',
-      ip_address: req.ip,
-      user_agent: req.headers['user-agent'],
-      req,
-      is_suspicious: true,
-      metadata: { reason: 'invalid_email_or_token' },
-    });
-    throw new AppError('Invalid or expired token', 400, 'INVALID_TOKEN');
-  }
-
-  const identity = await identityForMember(user);
-  await setIdentityPassword(user, identity, newPassword);
-  await identity.save();
-
-  // Update membership
-  const oldState = user.lifecycle_state;
-  user.lifecycle_state = 'active'; // Transition to active
-  user.is_active = true;
-  user.password_changed_at = identity.password_changed_at;
-  await user.save();
-
-  inviteRecord.state = 'accepted';
-  inviteRecord.accepted_at = new Date();
-  await inviteRecord.save();
+  const { user, identity, oldState } = accepted;
 
   // Log Security Event
   await logSecurityEvent({
     company_id: user.company_id,
     user_id: user._id,
-    email: email.toLowerCase(),
+    email: user.email.toLowerCase(),
     event_type: 'password_setup_success',
     ip_address: req.ip,
     user_agent: req.headers['user-agent'],

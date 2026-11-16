@@ -77,3 +77,47 @@ test('the model has no TTL index (a TTL would erase the evidence)', async () => 
 test('inviteLink builds the one onboarding URL format', () => {
   assert.equal(inviteLink('tok', 'a+b@x.com', 'https://app.test/'), 'https://app.test/onboarding?token=tok&email=a%2Bb%40x.com');
 });
+
+// ── Plan 2.2 ────────────────────────────────────────────────────────────────
+
+import { consumeInvitation, invitationProblem, maskEmail } from '../invitations';
+
+test('two concurrent accepts of one invitation: exactly one succeeds', async () => {
+  const { rawToken } = await createInvitation(null, base(new Types.ObjectId()));
+  const results = await Promise.all([consumeInvitation(null, rawToken), consumeInvitation(null, rawToken)]);
+  assert.equal(results.filter(Boolean).length, 1);
+  assert.equal(await Invitation.countDocuments({ state: 'accepted' }), 1);
+});
+
+test('an expired, superseded, accepted or revoked invitation cannot be consumed', async () => {
+  const user = new Types.ObjectId();
+  const expired = await createInvitation(null, { ...base(user), ttl_hours: -1 });
+  assert.equal(await consumeInvitation(null, expired.rawToken), null);
+  const old = await createInvitation(null, base(user));
+  await createInvitation(null, base(user));
+  assert.equal(await consumeInvitation(null, old.rawToken), null);
+  const other = await createInvitation(null, base(new Types.ObjectId(), 'r@example.com'));
+  await Invitation.updateOne({ _id: other.invitation._id }, { $set: { state: 'revoked' } });
+  assert.equal(await consumeInvitation(null, other.rawToken), null);
+});
+
+test('operator invitations are not served by the member accept step', async () => {
+  const { rawToken } = await createInvitation(null, { ...base(new Types.ObjectId()), kind: 'operator', company_id: null });
+  assert.equal(await consumeInvitation(null, rawToken), null);
+});
+
+test('invitationProblem returns the code and HTTP status for each of the six outcomes', async () => {
+  const now = new Date();
+  const row = (state: string, expires: number) => ({ state, expires_at: new Date(now.getTime() + expires), updatedAt: now }) as any;
+  assert.equal(invitationProblem(row('pending', 1000), now), null);
+  assert.deepEqual(['INVITE_EXPIRED', 410], [invitationProblem(row('pending', -1000), now)!.code, invitationProblem(row('pending', -1000), now)!.status]);
+  assert.deepEqual(['INVITE_SUPERSEDED', 410], [invitationProblem(row('superseded', 1000), now)!.code, invitationProblem(row('superseded', 1000), now)!.status]);
+  assert.deepEqual(['INVITE_ALREADY_USED', 409], [invitationProblem(row('accepted', 1000), now)!.code, invitationProblem(row('accepted', 1000), now)!.status]);
+  assert.deepEqual(['INVITE_REVOKED', 410], [invitationProblem(row('revoked', 1000), now)!.code, invitationProblem(row('revoked', 1000), now)!.status]);
+  assert.deepEqual(['INVITE_NOT_FOUND', 404], [invitationProblem(null, now)!.code, invitationProblem(null, now)!.status]);
+});
+
+test('maskEmail keeps the first letter and the domain', () => {
+  assert.equal(maskEmail('jane.doe@x.com'), 'j•••@x.com');
+  assert.equal(maskEmail('nonsense'), '•••');
+});

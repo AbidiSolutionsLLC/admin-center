@@ -319,8 +319,8 @@ test('Generated claim token works once with /api/v1/auth/setup-password and requ
     }),
   });
   const reuseJson = await reuseRes.json() as any;
-  assert.equal(reuseRes.status, 400);
-  assert.equal(reuseJson.code, 'INVALID_TOKEN');
+  assert.equal(reuseRes.status, 409);
+  assert.equal(reuseJson.code, 'INVITE_ALREADY_USED');
 });
 
 test('Password login attempt for placeholder-hash identity returns 401 and never throws', async () => {

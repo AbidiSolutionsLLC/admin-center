@@ -1,11 +1,12 @@
 import { Router } from 'express';
 import healthRoutes from './health.routes';
 import { requireAuth } from '../middleware/auth';
+import { authLimiter, inviteRenewLimiter } from '../middleware/rateLimiter';
 import authRoutes from './auth.routes';
 import organizationRoutes from './organization.routes';
 import intelligenceRoutes from './intelligence.routes';
 import peopleRoutes from './people.routes';
-import { verifyInviteToken } from '../controllers/people.controller';
+import { verifyInviteToken, renewInvite } from '../controllers/people.controller';
 import rolesRoutes from './roles.routes';
 import appsRoutes from './apps.routes';
 import overviewRoutes from './overview.routes';
@@ -42,6 +43,7 @@ router.use('/auth', authRoutes);
 router.use('/organization', organizationRoutes);
 router.use('/intelligence', intelligenceRoutes);
 router.post('/people/verify-invite', verifyInviteToken); // Public endpoint for onboarding
+router.post('/people/renew-invite', authLimiter, inviteRenewLimiter, renewInvite); // Public: "Send me a new link" (2.2)
 router.use('/people', peopleRoutes);
 router.use('/apps', appsRoutes);
 router.use('/me', meRoutes);

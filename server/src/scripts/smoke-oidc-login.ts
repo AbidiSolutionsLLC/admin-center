@@ -381,6 +381,78 @@ async function main() {
       const afterRevoke = await callOp();
       check('0.4 a revoked OperatorSession makes the next operator API call 401 INVALID_TOKEN', afterRevoke.status === 401 && (await afterRevoke.json() as { code?: string }).code === 'INVALID_TOKEN', afterRevoke.status);
     }
+
+    // ── Plan 2.2: invitation outcomes, renew, concurrent accept ───────────────────────────────
+    {
+      const { Invitation } = await import('../models');
+      const { createInvitation } = await import('../lib/invitations');
+      const API = `${ORIGIN}/api/v1`;
+      const post = (path: string, body: unknown) => fetch(`${API}${path}`, { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify(body) });
+      const mkUser = async (tag: string) => User.create({ company_id: company._id, full_name: `Inv ${tag}`, email: `inv.${tag}@smoke.test`, password_hash: 'legacy-unused', lifecycle_state: 'invited', is_active: false });
+      const mkInv = async (u: { _id: unknown; email: string }, ttl_hours?: number) => createInvitation(null, { kind: 'member', company_id: company._id, user_id: u._id as never, email: u.email, created_by: { type: 'system' }, ttl_hours });
+      const verify = async (token: string) => { const r = await post('/people/verify-invite', { token }); return { status: r.status, body: await r.json() as { code?: string; data?: { email?: string; company_name?: string; at?: string } } }; };
+
+      const uOk = await mkUser('ok');
+      const ok = await mkInv(uOk);
+      let v = await verify(ok.rawToken);
+      check('2.2 verify pending = 200 with e-mail and organisation name', v.status === 200 && v.body.data?.email === uOk.email && v.body.data?.company_name === 'Smoke Co', v);
+
+      const exp = await mkInv(await mkUser('exp'), -1);
+      v = await verify(exp.rawToken);
+      check('2.2 verify expired = 410 INVITE_EXPIRED with the expiry date', v.status === 410 && v.body.code === 'INVITE_EXPIRED' && !!v.body.data?.at, v);
+
+      const uSup = await mkUser('sup');
+      const sup = await mkInv(uSup);
+      await mkInv(uSup);
+      v = await verify(sup.rawToken);
+      check('2.2 verify superseded = 410 INVITE_SUPERSEDED', v.status === 410 && v.body.code === 'INVITE_SUPERSEDED', v);
+
+      const used = await mkInv(await mkUser('used'));
+      await Invitation.updateOne({ _id: used.invitation._id }, { $set: { state: 'accepted', accepted_at: new Date() } });
+      v = await verify(used.rawToken);
+      check('2.2 verify accepted = 409 INVITE_ALREADY_USED', v.status === 409 && v.body.code === 'INVITE_ALREADY_USED', v);
+
+      const rev = await mkInv(await mkUser('rev'));
+      await Invitation.updateOne({ _id: rev.invitation._id }, { $set: { state: 'revoked', revoked_at: new Date() } });
+      v = await verify(rev.rawToken);
+      check('2.2 verify revoked = 410 INVITE_REVOKED', v.status === 410 && v.body.code === 'INVITE_REVOKED', v);
+
+      v = await verify('f'.repeat(64));
+      check('2.2 verify unknown token = 404 INVITE_NOT_FOUND', v.status === 404 && v.body.code === 'INVITE_NOT_FOUND', v);
+
+      // renew: expired -> 202 and a fresh pending row; valid or unknown tokens also 202 and change nothing
+      const uRen = await mkUser('ren');
+      const ren = await mkInv(uRen, -1);
+      let r = await post('/people/renew-invite', { token: ren.rawToken });
+      const pendingAfter = await Invitation.find({ user_id: uRen._id, state: 'pending' });
+      check('2.2 renew expired = 202, old row superseded, one new pending row', r.status === 202 && pendingAfter.length === 1 && String(pendingAfter[0]._id) !== String(ren.invitation._id) && (await Invitation.findById(ren.invitation._id))?.state === 'superseded', r.status);
+      r = await post('/people/renew-invite', { token: 'e'.repeat(64) });
+      check('2.2 renew unknown token = 202 (no disclosure)', r.status === 202, r.status);
+      const before = await Invitation.countDocuments({ user_id: uOk._id });
+      r = await post('/people/renew-invite', { token: ok.rawToken });
+      check('2.2 renew a still-valid link = 202 and creates nothing', r.status === 202 && (await Invitation.countDocuments({ user_id: uOk._id })) === before, r.status);
+
+      // renew limit: the 4th request for one invitation is still 202 and sends nothing
+      const uLim = await mkUser('lim');
+      const lim = await mkInv(uLim, -1);
+      for (let i = 0; i < 4; i++) r = await post('/people/renew-invite', { token: lim.rawToken });
+      check('2.2 renew over the per-invitation limit still answers 202', r.status === 202, r.status);
+
+      // accept: email optional; mismatch rejected without consuming; concurrent accepts -> exactly one 200
+      const uAcc = await mkUser('acc');
+      const acc = await mkInv(uAcc);
+      r = await post('/auth/setup-password', { token: acc.rawToken, email: 'someone.else@smoke.test', newPassword: 'Smoke-Passw0rd!x1' });
+      check('2.2 accept with a different e-mail = 404 and the invitation stays pending', r.status === 404 && (await Invitation.findById(acc.invitation._id))?.state === 'pending', r.status);
+      const [r1, r2] = await Promise.all([
+        post('/auth/setup-password', { token: acc.rawToken, newPassword: 'Smoke-Passw0rd!x1' }),
+        post('/auth/setup-password', { token: acc.rawToken, newPassword: 'Smoke-Passw0rd!x1' }),
+      ]);
+      const codes = [r1.status, r2.status].sort();
+      check('2.2 two concurrent accepts: exactly one 200, the other 409', codes[0] === 200 && codes[1] === 409, codes);
+      check('2.2 accepted user is active, invitation accepted', (await User.findById(uAcc._id))?.lifecycle_state === 'active' && (await Invitation.findById(acc.invitation._id))?.state === 'accepted', '');
+      r = await post('/auth/setup-password', { token: acc.rawToken, newPassword: 'Smoke-Passw0rd!x2' });
+      check('2.2 accept again = 409 INVITE_ALREADY_USED', r.status === 409 && ((await r.json()) as { code?: string }).code === 'INVITE_ALREADY_USED', r.status);
+    }
   } finally {
     server.close();
     await mongoose.disconnect();

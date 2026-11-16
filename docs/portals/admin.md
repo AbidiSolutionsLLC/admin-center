@@ -99,7 +99,9 @@ The controller is in the file named after the mount unless the row says otherwis
 | POST | `/auth/reset-password` | public + `authLimiter` | `auth.controller.resetPassword` (revokes all sessions of the identity) |
 | GET | `/auth/me` | auth | `auth.controller.getMe` |
 | GET | `/auth/my-permissions` | auth | `auth.controller.getMyPermissions` |
-| POST | `/people/verify-invite` | public | `people.controller.verifyInviteToken` (mounted directly in `routes/index.ts:44`) |
+| POST | `/people/verify-invite` | public | `people.controller.verifyInviteToken` (mounted directly in `routes/index.ts`). 200 with e-mail (masked for `external`), name, organisation name; otherwise `410 INVITE_EXPIRED` / `INVITE_SUPERSEDED` / `INVITE_REVOKED`, `409 INVITE_ALREADY_USED`, `404 INVITE_NOT_FOUND` (expired and superseded carry `data.at`) |
+| POST | `/people/renew-invite` | public | `people.controller.renewInvite`; `authLimiter` + 3 per invitation per day; always 202; re-sends only for an expired or superseded link whose user is still `invited` |
+| POST | `/auth/setup-password` | public | Accept: one atomic consume of the invitation, password and lifecycle state in one transaction; `email` optional (must match when sent); same six outcome codes as verify |
 | GET | `/me/apps` | auth | `appAccess.controller.getMyApps` (products the caller can launch) |
 | POST | `/stream-tickets` | auth | `platform/streamTickets.issueStreamTicket` (single-use 60 s ticket for SSE) |
 | GET | `/protected-test` | auth | inline in `routes/index.ts:70` (returns `req.user`; test route) |

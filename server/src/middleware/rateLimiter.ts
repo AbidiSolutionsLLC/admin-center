@@ -1,3 +1,4 @@
+import crypto from 'crypto';
 import rateLimit from 'express-rate-limit';
 import { MongoRateLimitStore } from './mongoRateLimitStore';
 
@@ -27,5 +28,24 @@ export const authLimiter = rateLimit({
   message: {
     success: false,
     message: 'Too many authentication attempts from this IP, please try again after 15 minutes',
+  },
+});
+
+// Self-service invitation renewal (Plan 2.2): 3 requests per invitation per day. The key is the hash of the submitted
+// token, so the count follows the link, not the caller. Over the limit the answer is still 202, so the response never
+// reveals whether a token exists or how often it was used (DRD §5.2).
+export const inviteRenewLimiter = rateLimit({
+  store: new MongoRateLimitStore('invite-renew'),
+  windowMs: 24 * 60 * 60 * 1000,
+  limit: 3,
+  standardHeaders: false,
+  legacyHeaders: false,
+  validate: { keyGeneratorIpFallback: false },
+  keyGenerator: (req) => {
+    const token = typeof req.body?.token === 'string' ? req.body.token : '';
+    return token ? `inv:${crypto.createHash('sha256').update(token).digest('hex')}` : 'inv:none';
+  },
+  handler: (_req, res) => {
+    res.status(202).json({ success: true });
   },
 });

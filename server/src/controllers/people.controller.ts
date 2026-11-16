@@ -59,7 +59,7 @@ const getRouteId = (param: string | string[]): string =>
 
 import crypto from 'crypto';
 import { Invitation } from '../models/Invitation.model';
-import { createInvitation, createInvitations, inviteLink } from '../lib/invitations';
+import { createInvitation, createInvitations, inviteLink, findInvitationByToken, invitationProblem, maskEmail } from '../lib/invitations';
 import { fetchMemberOpenItems } from '../platform/openItems';
 
 /** Admin-owned member fields carried on member.provisioned / member.updated (07 §1.2). */
@@ -2355,28 +2355,81 @@ export const exportUsers = asyncHandler(async (req: Request, res: Response) => {
 
 /**
  * POST /api/v1/people/verify-invite
- * Verifies an invite token and returns user info.
- * This endpoint is public (no authentication required).
+ * Looks the token up by hash and answers with one of six outcomes (DRD §5.2). Public (no authentication).
+ * Knowing the reason requires holding a token that once existed, so a guesser learns nothing.
+ * The invitation is not consumed here; that happens when the password is set.
  */
 export const verifyInviteToken = asyncHandler(async (req: Request, res: Response) => {
-  const { token } = req.body;
-  if (!token) throw new AppError('Token is required', 400, 'BAD_REQUEST');
+  const { token } = req.body ?? {};
+  if (!token || typeof token !== 'string') throw new AppError('Token is required', 400, 'BAD_REQUEST');
 
-  const tokenHash = crypto.createHash('sha256').update(token).digest('hex');
-  const record = await Invitation.findOne({
-    token_hash: tokenHash,
-    state: 'pending',
-    expires_at: { $gt: new Date() },
+  const invitation = await findInvitationByToken(token);
+  const problem = invitationProblem(invitation);
+  if (problem) {
+    res.status(problem.status).json({
+      success: false,
+      error: problem.message,
+      code: problem.code,
+      ...(problem.at ? { data: { at: problem.at.toISOString() } } : {}),
+    });
+    return;
+  }
+
+  const inv = invitation!;
+  const user = await User.findOne({ _id: inv.user_id, company_id: inv.company_id }).select('email full_name company_id');
+  if (!user) {
+    res.status(404).json({ success: false, error: 'This link is not valid. Check that you copied the whole link.', code: 'INVITE_NOT_FOUND' });
+    return;
+  }
+  const company = await Company.findById(inv.company_id).select('name');
+
+  res.json({
+    success: true,
+    data: {
+      email: inv.kind === 'external' ? maskEmail(user.email) : user.email,
+      full_name: user.full_name,
+      company_id: user.company_id,
+      company_name: company?.name ?? null,
+      kind: inv.kind,
+    },
   });
+});
 
-  if (!record) throw new AppError('Invalid or expired invite link', 400, 'INVALID_INVITE_TOKEN');
-
-  const user = await User.findById(record.user_id).select('email full_name company_id');
-  if (!user) throw new AppError('User not found', 404, 'NOT_FOUND');
-
-  // Do not consume the invite token here. The token is validated on page load,
-  // and it should be consumed only when the user successfully sets their password.
-  res.json({ success: true, data: { email: user.email, full_name: user.full_name, company_id: user.company_id } });
+/**
+ * POST /api/v1/people/renew-invite { token }
+ * Self-service "Send me a new link". Public; limited per IP (authLimiter) and per invitation (3 a day).
+ * Allowed only for an expired or superseded invitation whose user is still `invited`; supersedes and re-sends to the
+ * stored address. Always answers 202 with the same body, whatever happened.
+ */
+export const renewInvite = asyncHandler(async (req: Request, res: Response) => {
+  const { token } = req.body ?? {};
+  if (token && typeof token === 'string') {
+    try {
+      const invitation = await findInvitationByToken(token);
+      const problem = invitationProblem(invitation);
+      if (invitation && (problem?.code === 'INVITE_EXPIRED' || problem?.code === 'INVITE_SUPERSEDED')) {
+        const user = await User.findOne({ _id: invitation.user_id, company_id: invitation.company_id, lifecycle_state: 'invited' });
+        const company = user ? await Company.findById(invitation.company_id).select('name') : null;
+        if (user && company) {
+          const { rawToken } = await runInTransaction((session) => createInvitation(session, {
+            kind: invitation.kind, company_id: invitation.company_id, user_id: user._id, email: invitation.email,
+            created_by: { type: 'system' },
+          }));
+          await sendWelcomeEmail({
+            email: invitation.email,
+            full_name: user.full_name,
+            employee_id: user.employee_id,
+            company_name: company.name,
+            invite_link: inviteLink(rawToken, invitation.email),
+            meta: { company_id: company._id, related: { type: 'user', id: String(user._id) } },
+          });
+        }
+      }
+    } catch (err) {
+      console.error('[renewInvite] failed:', err); // never shown to the caller
+    }
+  }
+  res.status(202).json({ success: true });
 });
 
 /**
