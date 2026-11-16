@@ -10,7 +10,7 @@ export interface IProfileLayoutField {
 
 export interface IProfileLayout extends Document {
   company_id: Types.ObjectId;
-  target_object: 'user' | 'department' | 'policy';
+  target_object: 'user' | 'department' | 'policy' | 'location';
   role_id?: Types.ObjectId;
   name: string;
   fields: IProfileLayoutField[];
@@ -31,7 +31,7 @@ const ProfileLayoutSchema = new Schema<IProfileLayout>({
   company_id: { type: Schema.Types.ObjectId, ref: 'Company', required: true, index: true },
   target_object: {
     type: String,
-    enum: ['user', 'department', 'policy'],
+    enum: ['user', 'department', 'policy', 'location'],
     required: true,
   },
   role_id: { type: Schema.Types.ObjectId, ref: 'Role' },
