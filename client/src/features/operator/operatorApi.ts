@@ -300,3 +300,18 @@ export interface CatalogueProduct {
 }
 export const useCatalogue = () =>
   useQuery({ queryKey: ['operator', 'catalogue'], queryFn: async () => ((await operatorApi.get('/products')).data.data ?? []) as CatalogueProduct[] });
+
+// ── Platform health (Plan 4.9) ───────────────────────────────────────────────────────────────
+export type HealthStateName = 'healthy' | 'degraded' | 'critical' | 'unknown';
+export interface HealthComponent { component: string; state: HealthStateName; detail: string; metrics: Record<string, unknown> | null; checked_at: string | null }
+export interface HealthSnapshot {
+  state: HealthStateName; stale: boolean; components: HealthComponent[];
+  history: { id: string; component: string; from: string; to: string; detail: string; at: string }[];
+}
+export interface HealthSyncRow { org_id: string; name: string | null; slug: string | null; lag: number; parked: number; last_error_code: string | null; last_applied_seq: number; pending_seq: number; updated_at: string | null }
+export interface HealthSync { configured: boolean; answered: boolean; error?: string | null; rows: HealthSyncRow[]; summary: Record<string, unknown> | null; fetched_at: string | null }
+
+export const useHealth = () =>
+  useQuery({ queryKey: ['operator', 'health'], refetchInterval: 30_000, queryFn: async () => (await operatorApi.get('/health')).data.data as HealthSnapshot });
+export const useHealthSync = () =>
+  useQuery({ queryKey: ['operator', 'health-sync'], refetchInterval: 30_000, queryFn: async () => (await operatorApi.get('/health/sync')).data.data as HealthSync });

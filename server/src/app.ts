@@ -11,6 +11,7 @@ import operatorRoutes from './operator/routes';
 import { platformRouter } from './platform';
 import { resolveTrustProxy } from './lib/trustProxy';
 import { requireOperatorIp } from './operator/middleware';
+import { routeMetrics } from './lib/health/routeMetrics';
 
 /**
  * Build the Express app. Requires an open Mongoose connection (identity adapter indexes + keys).
@@ -23,6 +24,7 @@ export async function createServer(): Promise<Express> {
 
   const app = express();
   app.set('trust proxy', trustProxy);
+  app.use(routeMetrics); // Plan 4.9: counts, never paths or users (lib/health/routeMetrics.ts)
 
   // M2: the operator OIDC realm (login, MFA, discovery, tokens) is behind the same IP allow-list as /operator/v1.
   app.use('/realms/operator', requireOperatorIp);

@@ -1570,6 +1570,43 @@ async function main() {
       }
     }
 
+    // ── Plan 4.9: platform health (checks, stored state, events, sync proxy, route counters) ──
+    {
+      const { runHealthChecks } = await import('../lib/health');
+      const { flushRouteMetrics } = await import('../lib/health/routeMetrics');
+      const { RouteMetric, HealthEvent, HealthCheck, Job } = await import('../models');
+      const json = async (r: any) => (await r.json()) as any;
+      const before = await json(await op('/health'));
+      check('4.9 before any run every component reads unknown and the page is stale', before.data.components.length === 8 && before.data.components.every((c: any) => c.state === 'unknown') && before.data.stale === true, JSON.stringify(before.data).slice(0, 160));
+
+      await flushRouteMetrics();
+      check('4.9 route counters wrote a RouteMetric document with counts and no paths', (await RouteMetric.countDocuments()) >= 1 && !JSON.stringify(await RouteMetric.find().lean()).includes('/operator/v1/orgs'));
+
+      const run = await runHealthChecks();
+      check('4.9 all eight components were evaluated', Object.keys(run).sort().join() === ['admin_api', 'database', 'email', 'event_dispatcher', 'identity', 'jobs', 'products_api', 'products_worker'].sort().join(), Object.keys(run).join());
+      check('4.9 database and identity are healthy in the smoke environment', run.database.state === 'healthy' && run.identity.state === 'healthy', JSON.stringify([run.database, run.identity]));
+      const after = await json(await op('/health'));
+      check('4.9 GET /health returns the stored state, overall state and is no longer stale', after.data.components.every((c: any) => !!c.checked_at) && ['healthy', 'degraded', 'critical'].includes(after.data.state) && after.data.stale === false, JSON.stringify(after.data.state));
+
+      // A failed job turns the jobs component degraded and adds exactly one HealthEvent.
+      await Job.create({ type: 'smoke.failed', payload: {}, status: 'failed', attempts: 5, finished_at: new Date(), last_error: 'boom' });
+      await runHealthChecks();
+      await runHealthChecks();
+      const ev = await HealthEvent.find({ component: 'jobs' }).lean();
+      check('4.9 a failed job degrades jobs and records one state change', (await HealthCheck.findOne({ component: 'jobs' }))?.state === 'degraded' && ev.length === 1 && ev[0].from === 'healthy' && ev[0].to === 'degraded', JSON.stringify(ev));
+      const hist = (await json(await op('/health'))).data.history;
+      check('4.9 /health history lists the change', hist.some((h: any) => h.component === 'jobs' && h.to === 'degraded'));
+      await Job.deleteMany({ type: 'smoke.failed' });
+
+      const sync = await op('/health/sync');
+      const syncj = await json(sync);
+      check('4.9 GET /health/sync answers with configured and rows[]', sync.status === 200 && typeof syncj.data.configured === 'boolean' && Array.isArray(syncj.data.rows), JSON.stringify(syncj).slice(0, 160));
+
+      await OperatorAccount.updateOne({ email: 'op@karbexa.test' }, { $set: { roles: ['support'] } });
+      check('4.9 every role with health.read can read health (support = 200)', (await op('/health')).status === 200 && (await op('/health/sync')).status === 200);
+      await OperatorAccount.updateOne({ email: 'op@karbexa.test' }, { $set: { roles: ['platform_admin'] } });
+    }
+
     // ── Plan 4.13: products catalogue (read-only) ─────────────────────────────────────────
     {
       const { OrganizationEntitlement: Ent } = await import('../models');

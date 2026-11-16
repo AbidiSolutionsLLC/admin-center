@@ -13,6 +13,7 @@ import OperatorOrgsPage from './pages/operator/OperatorOrgsPage';
 import OperatorTenantPage from './pages/operator/OperatorTenantPage';
 import OperatorOnboardingPage from './pages/operator/OperatorOnboardingPage';
 import OperatorProductsPage from './pages/operator/OperatorProductsPage';
+import OperatorHealthPage from './pages/operator/OperatorHealthPage';
 import OperatorPlansPage from './pages/operator/OperatorPlansPage';
 import OperatorOperatorsPage from './pages/operator/OperatorOperatorsPage';
 import OperatorAuditPage from './pages/operator/OperatorAuditPage';
@@ -59,6 +60,7 @@ function App() {
               <Route path="organizations/:id" element={<OperatorTenantPage />} />
               <Route path="onboarding" element={<OperatorOnboardingPage />} />
               <Route path="products" element={<OperatorProductsPage />} />
+              <Route path="health" element={<OperatorHealthPage />} />
               <Route path="plans" element={<OperatorPlansPage />} />
               <Route path="operators" element={<OperatorOperatorsPage />} />
               <Route path="audit" element={<OperatorAuditPage />} />

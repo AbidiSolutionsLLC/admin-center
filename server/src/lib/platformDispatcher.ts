@@ -14,6 +14,9 @@ const MAX_BACKOFF_MS = 60 * 60 * 1000;
 const CONCURRENCY = 4;               // (subscription, org) nudges in flight
 const LEASE_NAME = 'platform-dispatcher';
 const LEASE_TTL_MS = 30_000;
+/** Read by the platform health check (lib/health): the lease row's `until` minus the TTL is the last renewal. */
+export const DISPATCHER_LEASE_NAME = LEASE_NAME;
+export const DISPATCHER_LEASE_TTL_MS = LEASE_TTL_MS;
 const HOLDER_ID = `${os.hostname()}:${process.pid}:${crypto.randomBytes(4).toString('hex')}`;
 
 function sign(secret: string, t: number, body: string): string {

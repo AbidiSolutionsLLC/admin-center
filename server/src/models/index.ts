@@ -79,6 +79,7 @@ export * from './OperatorAuditEvent.model';
 export * from './TenantNote.model';
 export * from './Job.model';
 export * from './SeatUsage.model';
+export * from './Health.model';
 export * from './PlatformEvent.model';
 export * from './OrgEventCounter.model';
 export * from './PlatformEventSubscription.model';

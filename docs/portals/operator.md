@@ -20,7 +20,7 @@ Related: [identity.md](identity.md) (realm internals, tokens), [admin.md](admin.
 | Guard and shell | `client/src/features/operator/OperatorGuard.tsx`, `client/src/components/layout/shells.tsx` (`OperatorShell`) |
 | OIDC + token store (memory only) | `client/src/features/operator/operatorAuth.ts` |
 | API client, hooks, response types | `client/src/features/operator/operatorApi.ts` |
-| Pages | `client/src/pages/operator/OperatorOrgsPage.tsx`, `OperatorTenantPage.tsx`, `OperatorOnboardingPage.tsx`, `OperatorProductsPage.tsx`, `OperatorPlansPage.tsx`, `OperatorOperatorsPage.tsx`, `OperatorAuditPage.tsx`, `OperatorCallbackPage.tsx` |
+| Pages | `client/src/pages/operator/OperatorOrgsPage.tsx`, `OperatorTenantPage.tsx`, `OperatorOnboardingPage.tsx`, `OperatorProductsPage.tsx`, `OperatorHealthPage.tsx`, `OperatorPlansPage.tsx`, `OperatorOperatorsPage.tsx`, `OperatorAuditPage.tsx`, `OperatorCallbackPage.tsx` |
 | Operator API | `server/src/operator/routes.ts` (mounted at `/operator/v1` in `server/src/app.ts`) |
 | Auth middleware | `server/src/operator/middleware.ts` (`requireOperator`, `requireOperatorIp`) |
 | Account lookup | `server/src/operator/accounts.ts` (`findOperatorAccount`, `hasOperatorRole`) |
@@ -33,7 +33,7 @@ Related: [identity.md](identity.md) (realm internals, tokens), [admin.md](admin.
 
 ### 3.1 Client routes
 
-All pages except the callback are inside `OperatorGuard` (no token in memory → refresh if a refresh token exists, else redirect to the operator realm) and the shared `AppShell` with the `operator` config (nav: Organizations, Onboarding, Plans, Products, Operators, Audit; each item shown only with its permission from `GET /me`).
+All pages except the callback are inside `OperatorGuard` (no token in memory → refresh if a refresh token exists, else redirect to the operator realm) and the shared `AppShell` with the `operator` config (nav: Organizations, Onboarding, Plans, Products, Platform health, Operators, Audit; each item shown only with its permission from `GET /me`).
 
 | Route | Component | Uses |
 |---|---|---|
@@ -43,6 +43,7 @@ All pages except the callback are inside `OperatorGuard` (no token in memory →
 | `/operator/organizations/:id` | `pages/operator/OperatorTenantPage.tsx` | `ObjectPage`: Summary (tags, trial, identity providers with the Entra tenant approval), Products (override, remove override, change plan with preview, seat meter), Onboarding, Admins, Activity, Notes. `?tab=` holds the tab |
 | `/operator/onboarding` | `pages/operator/OperatorOnboardingPage.tsx` | `ListPage` over `GET /onboarding`: stage, first admin, invitation sent/expiry, last delivery error, Resend invitation; stage filter in the URL; a row opens the tenant's Onboarding tab |
 | `/operator/products` | `pages/operator/OperatorProductsPage.tsx` | read-only catalogue on `ListPage`: status, category, manifest version, roles, organizations active / suspended / restricted |
+| `/operator/health` | `pages/operator/OperatorHealthPage.tsx` | `DashboardPage`: overall pill, counts, a card per component, recent state changes, products sync by organization; polls every 30 s; each section fails on its own |
 | `/operator/plans` | `pages/operator/OperatorPlansPage.tsx` | list (organizations on each, trial, version), create, edit (description, products, default seats, trial days), apply to organizations with a dry-run preview |
 | `/operator/operators` | `pages/operator/OperatorOperatorsPage.tsx` | list, create, edit operators |
 | `/operator/audit` | `pages/operator/OperatorAuditPage.tsx` | audit log with category, operator, date and action filters, detail drawer (before/after/reason), cursor paging, Export CSV |
@@ -81,6 +82,8 @@ The global per-IP rate limiter in `app.ts` also applies. Envelope: `{ success: t
 | GET | `/orgs/:id/identity-providers` | | The org's IdP connections incl. `tenant_approval` |
 | POST | `/orgs/:id/identity-providers/:connId/approve-tenant` | | Approve the Entra `config.tenant_id` of the connection. 400 unless `type: 'entra'` with a tenant id; 409 `TENANT_TAKEN` if another connection already has that tenant approved |
 | GET | `/products` | | `products.read`. Read-only catalogue from the registry: `product_key`, `name`, `status` (manifest `product_status`), `category`, `manifest_version`, `icon`, `launch_url`, `roles` (role count), `default_assignments`, `tenants_active`, `tenants_suspended`, `tenants_restricted` (entitlements of non-closed organizations). There is no write route: products register by manifest publish (Platform API) |
+| GET | `/health` | | `health.read`. `{ state (worst component; unknown counts as degraded), stale (no result in 3 minutes), components[8] { component, state, detail, metrics, checked_at }, history[50] { component, from, to, detail, at } }`. Reads what `lib/health` stored; never runs a check |
+| GET | `/health/sync` | | `health.read`. Per-tenant products sync rows (`lag`, `parked`, `last_error_code`, names resolved from `Company`) and the products `summary`, proxied from the products internal health route with the Admin service token and cached 30 s. `configured: false` when this deployment has no products URL or no `ADMIN_BACKEND_CLIENT_KEY`; `answered: false` when it did not answer |
 | GET | `/plans` | | All plans sorted by key, each with `description`, `seat_defaults`, `trial_days`, `version`, `tenant_count` (non-closed organizations on it) |
 | POST | `/plans` | `{ key (^[a-z0-9_-]{2,40}$), name, products[], status?, description?, seat_defaults? ({ productKey: int\|null }), trial_days? (1–365\|null) }` | Create; 409 on duplicate key; 400 `UNKNOWN_PRODUCT` for a product or seat-default key not in the registry |
 | PATCH | `/plans/:key` | partial of the same fields | Updates the plan document and raises `version` by one on every edit; existing organizations are not changed until the plan is applied |
@@ -119,6 +122,7 @@ The global per-IP rate limiter in `app.ts` also applies. Envelope: `{ success: t
 | `OrganizationEntitlement` | `company_id`, `product_key`, `status`, `seats_limit`, `source`, `plan_key`, `updated_by_operator_id` | Unique per (company, product) |
 | `Company` | `status`, `is_active`, `plan`, `slug`, `tags`, `trial_ends_at`, `last_activity_at` | `last_activity_at` is touched at tenant sign-in, at most hourly |
 | `Job` (`Job.model.ts`, runner `lib/jobs.ts`) | `type`, `payload`, `status` (`queued`/`running`/`done`/`failed`), `attempts`, `run_at`, `locked_until`, `last_error`, `finished_at` | Generic background work: atomic claim, handlers by type (`registerJobHandler`), retry after 1, 5, 30, 120 minutes (5 attempts), stale `running` rows reclaimed, finished rows removed after 30 days. First user: `plan.apply` |
+| `HealthCheck`, `HealthEvent`, `RouteMetric` (`Health.model.ts`, `lib/health/*`) | check: `component` (unique), `state`, `detail`, `metrics`, `checked_at`; event: `component`, `from`, `to`, `detail`, `at` (TTL 7 days); metric: `instance`, `minute`, `count`, `errors_5xx`, `buckets`, `groups[{ group, count, errors_5xx }]` (TTL 24 h, counts only, never paths) | Platform health. A job every 60 s under the `health-checks` lease measures `admin_api` (route counters, 5 minutes), `database` (ping, primary), `identity` (signing keys per realm; optional `IDENTITY_KEY_ROTATE_BY`), `event_dispatcher` (lease age, orgs not acknowledged), `products_api` and `products_worker` (one probe of the products health route), `email`, `jobs`; each check has 5 s, a check that fails or times out is `unknown`. Thresholds: `lib/health/evaluate.ts` (DRD 7.1). `standalone_portals` is Phase 6 |
 | `SeatUsage` (`SeatUsage.model.ts`, `lib/seats.ts`) | `company_id`, `product_key`, `used`, `computed_at` | Seats in use per tenant and product: members in an access state (onboarding, active, probation, on_leave), active, reached by an active assignment of the product's app, while the tenant is active and the entitlement is active. Recomputed (coalesced to once a second per tenant) after every `app_access.changed` emit commits; never on page load |
 | `TenantNote` (`TenantNote.model.ts`) | `company_id`, `operator_id`, `operator_email`, `body` (≤ 2000), `created_at` | Internal operator notes; append-only |
 | `IdentityProviderConnection` | `tenant_approval.{tenant_id, approved_at, operator_id}` | Written by approve-tenant |
