@@ -29,6 +29,7 @@ import dataGovernancePoliciesRoutes from './dataGovernancePolicies.routes';
 import policyTemplatesRoutes from './policyTemplates.routes';
 import workflowTemplatesRoutes from './workflowTemplates.routes';
 import meRoutes from './me.routes';
+import announcementRoutes from './announcement.routes';
 import streamTicketsRoutes from './streamTickets.routes';
 
 const router = Router();
@@ -47,6 +48,7 @@ router.post('/people/renew-invite', authLimiter, inviteRenewLimiter, renewInvite
 router.use('/people', peopleRoutes);
 router.use('/apps', appsRoutes);
 router.use('/me', meRoutes);
+router.use('/announcement', announcementRoutes);
 router.use('/overview', overviewRoutes);
 router.use('/security', securityRoutes);
 router.use('/audit-logs', auditLogsRoutes);

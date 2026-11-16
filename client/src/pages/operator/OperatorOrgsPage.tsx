@@ -9,72 +9,15 @@ import { ListPage } from '@/components/templates/ListPage';
 import { useUrlParam } from '@/hooks/useUrlParam';
 import { useNavigate } from 'react-router-dom';
 import { ROUTES } from '@/constants/routes';
-import { Modal } from '@/components/ui/Modal';
+import { CreateOrgDialog } from './CreateOrgDialog';
 import { ConfirmDialog } from '@/components/ui/ConfirmDialog';
 import {
-  idOf, useCreateOrg, useOperatorCan, useOrgAction, useOrgs, usePlans,
+  idOf, useOperatorCan, useOrgAction, useOrgs, usePlans,
   type OperatorOrg,
 } from '@/features/operator/operatorApi';
 
-const inputCls = 'w-full h-9 px-3 text-sm bg-surface border border-line rounded-md focus:outline-none focus:ring-2 focus:ring-primary-600';
 const LIMIT = 20;
 const cap = (s: string) => s[0].toUpperCase() + s.slice(1);
-
-function CreateOrgDialog({ onClose }: { onClose: () => void }) {
-  const { data: plans } = usePlans();
-  const create = useCreateOrg();
-  const [form, setForm] = useState({ name: '', slug: '', plan_key: '', email: '', full_name: '' });
-  const [result, setResult] = useState<any>(null);
-  const set = (k: keyof typeof form) => (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement>) => setForm({ ...form, [k]: e.target.value });
-  const valid = form.name && form.plan_key && form.email && form.full_name;
-
-  const submit = async () => {
-    const res = await create.mutateAsync({
-      name: form.name,
-      slug: form.slug || undefined,
-      plan_key: form.plan_key,
-      first_admin: { email: form.email, full_name: form.full_name },
-    });
-    setResult({ ...(res?.data ?? {}), ...(res?.meta ?? {}) });
-  };
-  const invite = result && (result.invite_token || result.invite_link);
-
-  return (
-    <Modal isOpen onClose={onClose} title="Create Organization" size="sm">
-      {result ? (
-        <div className="space-y-3 text-sm">
-          <p className="text-success font-medium">
-            {result.already_existed ? 'Organization already existed (no changes made).' : result.invite_email_sent ? 'Organization created. Invite email sent to the first admin.' : 'Organization created. Invite email was not sent.'}
-          </p>
-          {!import.meta.env.PROD && invite && (
-            <div>
-              <p className="text-xs text-ink-muted mb-1">Invite (non-production only)</p>
-              <code className="block break-all p-2 bg-surface-alt border border-line rounded text-xs">{String(invite)}</code>
-            </div>
-          )}
-          <button onClick={onClose} className="h-9 px-4 bg-primary text-white rounded-md text-sm">Done</button>
-        </div>
-      ) : (
-        <div className="space-y-3">
-          <input className={inputCls} placeholder="Organization name" value={form.name} onChange={set('name')} />
-          <input className={inputCls} placeholder="Slug (optional)" value={form.slug} onChange={set('slug')} />
-          <select className={inputCls} value={form.plan_key} onChange={set('plan_key')}>
-            <option value="">Select plan...</option>
-            {(plans ?? []).map((p) => <option key={p.key} value={p.key}>{p.name}</option>)}
-          </select>
-          <input className={inputCls} placeholder="First admin full name" value={form.full_name} onChange={set('full_name')} />
-          <input className={inputCls} type="email" placeholder="First admin email" value={form.email} onChange={set('email')} />
-          <div className="flex justify-end gap-2 pt-2">
-            <button onClick={onClose} className="h-9 px-4 text-sm border border-line rounded-md">Cancel</button>
-            <button onClick={submit} disabled={!valid || create.isPending} className="h-9 px-4 text-sm bg-primary text-white rounded-md disabled:opacity-50">
-              {create.isPending ? 'Creating...' : 'Create'}
-            </button>
-          </div>
-        </div>
-      )}
-    </Modal>
-  );
-}
 
 const fieldCls =
   'h-9 rounded-control border border-line bg-surface px-2 text-body text-ink focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary';
@@ -234,11 +177,16 @@ export default function OperatorOrgsPage() {
         isOpen={!!confirm}
         onClose={() => setConfirm(null)}
         title={confirm ? `${cap(confirm.action)} ${confirm.org.name}?` : ''}
-        description={confirm?.action === 'close' ? 'Closing an organization is permanent and revokes all member access.' : 'This changes access for every member of the organization.'}
+        description={confirm?.action === 'close' ? 'Closing an organization is permanent and revokes all member access.' : confirm?.action === 'suspend' ? 'Every member loses access until the organization is reactivated.' : 'Members get their access back.'}
+        reasonField={{ label: 'Reason (recorded in the audit log)', required: true }}
+        requireText={confirm && confirm.action !== 'reactivate' ? confirm.org.slug : undefined}
         confirmLabel={confirm ? cap(confirm.action) : 'Confirm'}
         variant={confirm?.action === 'reactivate' ? 'warning' : 'danger'}
         isLoading={action.isPending}
-        onConfirm={() => confirm && action.mutate({ id: idOf(confirm.org), action: confirm.action }, { onSettled: () => setConfirm(null) })}
+        onConfirm={(reason) => confirm && reason && action.mutate(
+          { id: idOf(confirm.org), action: confirm.action, reason, confirm_slug: confirm.action === 'reactivate' ? undefined : confirm.org.slug },
+          { onSettled: () => setConfirm(null) },
+        )}
       />
     </>
   );

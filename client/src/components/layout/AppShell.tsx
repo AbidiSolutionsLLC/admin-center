@@ -17,6 +17,8 @@ interface AppShellProps {
   user: { name?: string | null; onSignOut: () => void };
   /** Right side of the top bar (search, notifications, launcher...). */
   topBarEnd?: React.ReactNode;
+  /** Full-width strip between the top bar and the page (the platform announcement). */
+  banner?: React.ReactNode;
   children?: React.ReactNode;
 }
 
@@ -54,6 +56,7 @@ export const AppShell: React.FC<AppShellProps> = ({
   brandLabel,
   user,
   topBarEnd,
+  banner,
   children,
 }) => {
   const { isSidebarOpen, toggleSidebar, closeSidebar, isRailCollapsed, toggleRail } = useUIStore();
@@ -193,6 +196,7 @@ export const AppShell: React.FC<AppShellProps> = ({
           <div className="ml-auto flex items-center gap-3">{topBarEnd}</div>
         </header>
 
+        {banner}
         <main className="flex-1 overflow-y-auto scrollbar-hide px-4 py-6 lg:px-gutter min-[1440px]:px-gutter-lg">
           <div className="mx-auto h-full max-w-content">{children ?? <Outlet />}</div>
         </main>

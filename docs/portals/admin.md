@@ -149,6 +149,7 @@ The controller is in the file named after the mount unless the row says otherwis
 | GET | `/organization/business-units` | auth | `getBusinessUnits` |
 | GET | `/organization/health` | auth | `getOrgHealth` |
 | GET | `/organization/history` | auth | `getOrgHistory` |
+| GET | `/announcement` | auth | `routes/announcement.routes.ts`: the platform announcement `{ message, severity, ends_at }` or `null`, cached 60 s in the process; shown by `AnnouncementBanner` in `AppShell` (Plan 4.12) |
 | GET | `/organization/subscription` | auth | `appAccess.controller.getSubscription` (org entitlements) |
 | DELETE | `/organization/business-units/:id` | ROLE_ADMINS | `deleteBusinessUnit` |
 | GET | `/organization/:id` | auth | `getDepartmentById` |

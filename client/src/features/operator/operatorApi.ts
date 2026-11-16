@@ -90,8 +90,9 @@ export const useOrgs = (params: { search?: string; status?: string; plan?: strin
 export const useOrgAction = () => {
   const qc = useQueryClient();
   return useMutation({
-    mutationFn: async ({ id, action }: { id: string; action: 'suspend' | 'reactivate' | 'close' }) =>
-      (await operatorApi.post(`/orgs/${id}/${action}`)).data,
+    // Plan 4.12: a reason always; suspend and close also send the slug the operator typed back.
+    mutationFn: async ({ id, action, reason, confirm_slug }: { id: string; action: 'suspend' | 'reactivate' | 'close'; reason: string; confirm_slug?: string }) =>
+      (await operatorApi.post(`/orgs/${id}/${action}`, { reason, ...(confirm_slug ? { confirm_slug } : {}) })).data,
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ['operator', 'orgs'] });
       qc.invalidateQueries({ queryKey: ['operator', 'org'] });
@@ -360,5 +361,26 @@ export const useInviteOperator = () => {
     mutationFn: async (body: { email: string; full_name: string; roles: string[] }) => (await operatorApi.post('/operators/invite', body)).data,
     onSuccess: () => { qc.invalidateQueries({ queryKey: ['operator', 'operators'] }); toast.success('Invitation sent'); },
     onError: (e) => toast.error(errMsg(e, 'Failed to send the invitation')),
+  });
+};
+
+// ── Announcement (Plan 4.12) ─────────────────────────────────────────────────────────────────
+export interface OperatorAnnouncement { id: string; message: string; severity: 'info' | 'warning' | 'critical'; starts_at: string; ends_at: string }
+export const useOperatorAnnouncement = () =>
+  useQuery({ queryKey: ['operator', 'announcement'], queryFn: async () => ((await operatorApi.get('/announcement')).data.data ?? null) as OperatorAnnouncement | null });
+export const useSetAnnouncement = () => {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: async (body: { message: string; severity: string; ends_at: string }) => (await operatorApi.put('/announcement', body)).data,
+    onSuccess: () => { qc.invalidateQueries({ queryKey: ['operator', 'announcement'] }); toast.success('Announcement published'); },
+    onError: (e) => toast.error(errMsg(e, 'Failed to publish the announcement')),
+  });
+};
+export const useEndAnnouncement = () => {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: async () => (await operatorApi.delete('/announcement')).data,
+    onSuccess: () => { qc.invalidateQueries({ queryKey: ['operator', 'announcement'] }); toast.success('Announcement ended'); },
+    onError: (e) => toast.error(errMsg(e, 'Failed to end the announcement')),
   });
 };

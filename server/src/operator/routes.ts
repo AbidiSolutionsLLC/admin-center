@@ -37,6 +37,7 @@ import { overrideRoutes } from './overrides';
 import { healthRoutes } from './health';
 import { overviewRoutes } from './overview';
 import { securityRoutes } from './security';
+import { announcementRoutes } from './announcement';
 import { planRoutes, applyPlanToOrg, ensureDefaultAccess, bumpOrgAuthz, dryRunSummary } from './plans';
 
 const router = Router();
@@ -291,7 +292,9 @@ async function setOrgStatus(req: Request, res: Response, status: 'active' | 'sus
   if (!company) throw new AppError('Organization not found', 404, 'NOT_FOUND');
   if (company.status === 'closed' && status !== 'closed') throw new AppError('Closed organizations cannot be changed', 409, 'ORG_CLOSED');
   const before = company.status;
-  const reason = typeof req.body?.reason === 'string' && req.body.reason.trim() ? req.body.reason.trim() : status;
+  // Plan 4.12: every status change needs a reason; suspending or closing also needs the slug typed back.
+  const { reason, confirm_slug } = z.object({ reason: z.string().trim().min(1, 'A reason is required').max(500), confirm_slug: z.string().optional() }).parse(req.body ?? {});
+  if (status !== 'active' && confirm_slug !== company.slug) throw new AppError('confirm_slug must equal the organization slug', 400, 'CONFIRM_SLUG_MISMATCH');
   const eventType = action as 'org.suspended' | 'org.reactivated' | 'org.closed';
   const revokedSids = await runInTransaction(async (session) => {
     company.status = status;
@@ -311,7 +314,7 @@ async function setOrgStatus(req: Request, res: Response, status: 'active' | 'sus
       org_id: company._id.toString(), type: eventType, subject: { type: 'org', id: company._id.toString() },
       actor: actorOf(req), correlation_id: corrOf(req), data: { reason },
     });
-    await audit(req, { action, target_type: 'Organization', target_id: company._id.toString(), company, before: { status: before }, after: { status }, details: { from: before, to: status, sessions_revoked: sids.length } }, session);
+    await audit(req, { action, target_type: 'Organization', target_id: company._id.toString(), company, before: { status: before }, after: { status }, reason, details: { from: before, to: status, sessions_revoked: sids.length } }, session);
     return sids;
   });
   for (const sid of revokedSids) await destroyProviderSession(sid).catch((e) => console.error('[operator] provider session teardown failed', sid, e));
@@ -522,5 +525,6 @@ router.use(overrideRoutes({ ok, oid, audit, actorOf, corrOf })); // Plan 4.6
 router.use(healthRoutes({ ok })); // Plan 4.9
 router.use(overviewRoutes({ ok })); // Plan 4.10
 router.use(securityRoutes({ ok, oid, audit })); // Plan 4.11
+router.use(announcementRoutes({ ok, audit })); // Plan 4.12
 
 export default router;

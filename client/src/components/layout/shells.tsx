@@ -1,6 +1,7 @@
 import { useMemo } from 'react';
 import { AppShell } from './AppShell';
 import { TenantTopActions } from './TenantTopActions';
+import { AnnouncementBanner } from './AnnouncementBanner';
 import { ADMIN_SHELL, OPERATOR_SHELL } from './navigation';
 import { useAuthStore } from '@/store/useAuthStore';
 import { useMyPermissions } from '@/hooks/useMyPermissions';
@@ -42,6 +43,7 @@ export const TenantShell = () => {
       role={userRole}
       user={{ name: userName, onSignOut: handleSignOut }}
       topBarEnd={<TenantTopActions />}
+      banner={<AnnouncementBanner />}
     />
   );
 };

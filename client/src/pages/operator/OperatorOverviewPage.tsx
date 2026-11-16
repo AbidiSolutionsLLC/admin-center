@@ -1,16 +1,20 @@
+import { useState } from 'react';
 import { Link } from 'react-router-dom';
 import { DashboardPage } from '@/components/templates/DashboardPage';
 import { SectionBoundary } from '@/components/ui/SectionBoundary';
 import { HealthPill } from '@/components/ui/HealthPill';
 import { Timeline } from '@/components/ui/Timeline';
 import { ROUTES } from '@/constants/routes';
-import { useOverview, type OverviewBlock } from '@/features/operator/operatorApi';
+import { AnnouncementDialog } from './AnnouncementDialog';
+import { useOperatorCan, useOverview, type OverviewBlock } from '@/features/operator/operatorApi';
 
 const failed = <T,>(b: OverviewBlock<T> | undefined): b is { error: true } => !!b && typeof b === 'object' && 'error' in b;
 const SEVERITY_TEXT = { critical: 'text-error', warning: 'text-warning', info: 'text-ink-secondary' } as const;
 
 export default function OperatorOverviewPage() {
   const q = useOverview();
+  const canAnnounce = useOperatorCan('announcements.write');
+  const [announcing, setAnnouncing] = useState(false);
   const d = q.data;
   const tenants = d && !failed(d.tenants) ? d.tenants : null;
   const attention = d && !failed(d.attention) ? d.attention : null;
@@ -23,10 +27,12 @@ export default function OperatorOverviewPage() {
   const blocked = (b: unknown) => !!d && failed(b as OverviewBlock<unknown>);
 
   return (
+    <>
     <DashboardPage
       title="Overview"
       subtitle="What needs attention across the platform."
       status={health && <HealthPill health={health.state} />}
+      primaryAction={canAnnounce ? <button type="button" onClick={() => setAnnouncing(true)} className="h-9 rounded-md border border-line px-4 text-sm">Announcement</button> : undefined}
       tiles={[
         { id: 'tenants', label: 'Organizations', value: tenants?.total ?? '-', sub: tenants ? `${tenants.active} active` : undefined, href: ROUTES.OPERATOR_ORGS },
         { id: 'trial', label: 'On trial', value: tenants?.trial ?? '-', sub: tenants ? `${tenants.suspended} suspended` : undefined, href: ROUTES.OPERATOR_ORGS },
@@ -68,5 +74,7 @@ export default function OperatorOverviewPage() {
         },
       ]}
     />
+    {announcing && <AnnouncementDialog onClose={() => setAnnouncing(false)} />}
+    </>
   );
 }

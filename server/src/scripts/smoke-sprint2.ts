@@ -307,22 +307,23 @@ async function main() {
     void pm;
 
     // ── suspend org ───────────────────────────────────────────────────────────────────────
-    res = await op(`/orgs/${orgId}/suspend`, 'POST');
+    const orgSlug = (await Company.findById(orgId))!.slug;
+    res = await op(`/orgs/${orgId}/suspend`, 'POST', { reason: 'smoke hold', confirm_slug: orgSlug });
     check('E10 suspend org = 200', res.status === 200, res.status);
     const ea3 = await computeEffectiveAccess(orgId, me._id.toString());
     check('E3 suspended org → all products denied ORG_SUSPENDED', Object.keys(ea3.products).length === 0 && Object.values(ea3.denials).every((d) => d === 'ORG_SUSPENDED') && Object.keys(ea3.denials).length > 0, ea3);
     check('E10 Company.status suspended and is_active false', (await Company.findById(orgId))?.status === 'suspended' && (await Company.findById(orgId))?.is_active === false);
-    res = await op(`/orgs/${orgId}/reactivate`, 'POST');
+    res = await op(`/orgs/${orgId}/reactivate`, 'POST', { reason: 'smoke release' });
     check('E10 reactivate org = 200', res.status === 200 && (await Company.findById(orgId))?.status === 'active', res.status);
 
     // ── E4a: suspend/reactivate events carry data.reason ─────────────────────────────────
-    res = await op(`/orgs/${orgId}/suspend`, 'POST', { reason: 'billing-hold' });
+    res = await op(`/orgs/${orgId}/suspend`, 'POST', { reason: 'billing-hold', confirm_slug: orgSlug });
     res = await op(`/orgs/${orgId}/reactivate`, 'POST', { reason: 'paid' });
     {
       const sus = await PlatformEvent.find({ org_id: orgId, type: 'org.suspended' }).sort({ seq: 1 }).lean();
       const rea = await PlatformEvent.find({ org_id: orgId, type: 'org.reactivated' }).sort({ seq: 1 }).lean();
-      check('E4a org.suspended event has data.reason (default + explicit)', sus.length === 2 && (sus[0].data as any).reason === 'suspended' && (sus[1].data as any).reason === 'billing-hold', sus.map((e) => e.data));
-      check('E4a org.reactivated event has data.reason (default + explicit)', rea.length === 2 && (rea[0].data as any).reason === 'active' && (rea[1].data as any).reason === 'paid', rea.map((e) => e.data));
+      check('E4a org.suspended event has data.reason (both calls)', sus.length === 2 && (sus[0].data as any).reason === 'smoke hold' && (sus[1].data as any).reason === 'billing-hold', sus.map((e) => e.data));
+      check('E4a org.reactivated event has data.reason (both calls)', rea.length === 2 && (rea[0].data as any).reason === 'smoke release' && (rea[1].data as any).reason === 'paid', rea.map((e) => e.data));
       check('E4a suspend/reactivate events are operator-actor with correlation_id', [...sus, ...rea].every((e) => e.actor.type === 'operator' && !!e.correlation_id));
     }
 
@@ -1351,7 +1352,7 @@ async function main() {
         lifecycle_state: 'active', is_active: true, employment_type: 'full_time', employee_id: `GAM-${i}`,
       })));
       const before4 = new Map((await User.find({ company_id: gammaId }).lean()).map((u) => [String(u._id), u.authz_ver ?? 0]));
-      res = await op(`/orgs/${gammaId}/suspend`, 'POST', { reason: 'e4d' });
+      res = await op(`/orgs/${gammaId}/suspend`, 'POST', { reason: 'e4d', confirm_slug: (await Company.findById(gammaId))!.slug });
       check('E4d org suspend (66 members) = 200', res.status === 200 && before4.size >= 66, { status: res.status, members: before4.size });
       const after4 = await User.find({ company_id: gammaId }).lean();
       check('E4d suspend bumped every member authz_ver exactly once (no double bump)', after4.every((u) => (u.authz_ver ?? 0) === (before4.get(String(u._id)) ?? 0) + 1), after4.slice(0, 3).map((u) => u.authz_ver));
@@ -1661,6 +1662,34 @@ async function main() {
       check('4.11 auditor reads /security (200) and sessions (200) but cannot revoke (403)', (await op('/security')).status === 200 && (await op(`/operators/${created!._id}/sessions`)).status === 200 && (await op(`/operators/${created!._id}/sessions/x`, 'DELETE')).status === 403);
       await OperatorAccount.updateOne({ email: 'op@karbexa.test' }, { $set: { roles: ['platform_admin'] } });
       await OperatorAccount.deleteOne({ _id: created!._id });
+    }
+
+    // ── Plan 4.12: typed confirmation, reasons, announcement ──
+    {
+      const { Announcement, OperatorAuditEvent } = await import('../models');
+      const json = async (r: any) => (await r.json()) as any;
+      const t = await Company.findOne({ status: 'active' });
+      const id = String(t!._id);
+      check('4.12 suspend without a reason = 400', (await op(`/orgs/${id}/suspend`, 'POST', { confirm_slug: t!.slug })).status === 400);
+      check('4.12 suspend with a wrong slug = 400 CONFIRM_SLUG_MISMATCH', (await json(await op(`/orgs/${id}/suspend`, 'POST', { reason: 'x', confirm_slug: 'nope' }))).code === 'CONFIRM_SLUG_MISMATCH');
+      check('4.12 close without the slug = 400 and the tenant is untouched', (await op(`/orgs/${id}/close`, 'POST', { reason: 'x' })).status === 400 && (await Company.findById(id))?.status === 'active');
+      check('4.12 reactivate also needs a reason (400)', (await op(`/orgs/${id}/reactivate`, 'POST', {})).status === 400);
+      const sus = await op(`/orgs/${id}/suspend`, 'POST', { reason: 'smoke 4.12', confirm_slug: t!.slug });
+      check('4.12 suspend with reason and slug = 200 and the reason is audited', sus.status === 200 && !!(await OperatorAuditEvent.findOne({ action: 'org.suspended', target_id: id, reason: 'smoke 4.12' })));
+      check('4.12 reactivate with a reason (no slug) = 200', (await op(`/orgs/${id}/reactivate`, 'POST', { reason: 'smoke 4.12 done' })).status === 200 && (await Company.findById(id))?.status === 'active');
+
+      const now = Date.now();
+      check('4.12 announcement starts empty', (await json(await op('/announcement'))).data === null);
+      const put = await op('/announcement', 'PUT', { message: 'Maintenance tonight', severity: 'warning', ends_at: new Date(now + 3600_000).toISOString() });
+      check('4.12 PUT /announcement = 200', put.status === 200);
+      check('4.12 GET /announcement returns it', (await json(await op('/announcement'))).data?.message === 'Maintenance tonight');
+      check('4.12 a message over 280 characters = 400', (await op('/announcement', 'PUT', { message: 'x'.repeat(281), ends_at: new Date(now + 3600_000).toISOString() })).status === 400);
+      await op('/announcement', 'PUT', { message: 'Second', ends_at: new Date(now + 3600_000).toISOString() });
+      check('4.12 a second PUT replaces the first (one current)', (await json(await op('/announcement'))).data?.message === 'Second' && (await Announcement.countDocuments({ ends_at: { $gt: new Date() } })) === 1);
+      await OperatorAccount.updateOne({ email: 'op@karbexa.test' }, { $set: { roles: ['support'] } });
+      check('4.12 support can read the announcement (200) but not set it (403)', (await op('/announcement')).status === 200 && (await op('/announcement', 'PUT', { message: 'x', ends_at: new Date(now + 3600_000).toISOString() })).status === 403);
+      await OperatorAccount.updateOne({ email: 'op@karbexa.test' }, { $set: { roles: ['platform_admin'] } });
+      check('4.12 DELETE /announcement ends it', (await op('/announcement', 'DELETE')).status === 200 && (await json(await op('/announcement'))).data === null);
     }
 
     // ── Plan 4.13: products catalogue (read-only) ─────────────────────────────────────────
