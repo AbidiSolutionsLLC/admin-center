@@ -71,7 +71,7 @@ Guards: `GuestGuard` redirects to `/overview` when a token is in memory. `AuthGu
 
 `ROUTES.TEAM_DETAIL` and `ROUTES.HOLIDAY_CALENDAR_DETAIL` are defined in `constants/routes.ts` but have no `<Route>`.
 
-Sidebar visibility (`components/layout/Sidebar.tsx`) is cosmetic: it filters by the `userRole` string from `GET /auth/me` (the legacy `User.role` field) and by `/auth/my-permissions`. The server enforces access independently.
+Navigation (`components/layout/navigation.ts`, `AppShell.tsx`) is cosmetic and permission-driven (elevation 5.1): each item names a seeded permission key (`module:action:scope`, or `module:action` for any scope) and shows when `/auth/my-permissions` grants it; the legacy `userRole` is no longer used. Groups follow PRD AC-10: Home, People, Organisation, Apps & Access, Security & Governance, Settings (no External page exists yet). The server enforces access independently with `requireRole`.
 
 ### 3.2 API endpoints (`/api/v1`)
 

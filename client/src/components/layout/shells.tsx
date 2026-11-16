@@ -15,7 +15,6 @@ import { useOperatorMe } from '@/features/operator/operatorApi';
 /** Tenant (Admin Center) shell: AppShell with the `admin` config and the tenant top-bar actions. */
 export const TenantShell = () => {
   const userName = useAuthStore((s) => s.userName);
-  const userRole = useAuthStore((s) => s.userRole);
   const { data } = useMyPermissions();
   const permissions = useMemo(
     () => Object.entries(data?.permissions ?? {}).filter(([, granted]) => granted).map(([key]) => key),
@@ -40,7 +39,6 @@ export const TenantShell = () => {
     <AppShell
       config={ADMIN_SHELL}
       permissions={permissions}
-      role={userRole}
       user={{ name: userName, onSignOut: handleSignOut }}
       topBarEnd={<TenantTopActions />}
       banner={<AnnouncementBanner />}

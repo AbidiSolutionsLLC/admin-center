@@ -20,22 +20,21 @@ import {
 } from 'lucide-react';
 import type { LucideIcon } from 'lucide-react';
 import { ROUTES } from '@/constants/routes';
-import { PERMISSION_GROUPS } from '@/constants/roles';
 
 /**
  * Navigation config for AppShell (DRD 9.2: one shell, two configs).
  *
- * An item is visible when ANY of these holds:
- *   - it names a `permission` and that permission is in the permission list passed to the shell
- *   - it names `roles` and the user's role is one of them
- *   - it names neither and its group is open to everyone (no `roles`) or to the user's role
+ * An item is visible when the permission list passed to the shell holds its `permission`.
+ * A permission of the form `module:action:scope` must match exactly; `module:action`
+ * matches that action in any scope. An item that names no permission is open to everyone,
+ * unless its group names `roles` (legacy role names; no tenant group uses it any more).
+ * Navigation is a convenience: the server route guards remain the enforcement.
  */
 export interface NavItem {
   label: string;
   href: string;
   icon: LucideIcon;
   permission?: string;
-  roles?: readonly string[];
 }
 
 export interface NavGroup {
@@ -55,77 +54,65 @@ export interface NavContext {
   role?: string | null;
 }
 
-export function isNavItemVisible(item: NavItem, group: NavGroup, ctx: NavContext): boolean {
-  if (item.permission && ctx.permissions.includes(item.permission)) return true;
-  if (item.roles && ctx.role && item.roles.includes(ctx.role)) return true;
-  if (!item.permission && !item.roles) {
-    if (!group.roles) return true;
-    return !!ctx.role && group.roles.includes(ctx.role);
-  }
-  return false;
+function holdsPermission(permissions: readonly string[], key: string): boolean {
+  if (key.split(':').length >= 3) return permissions.includes(key);
+  return permissions.some((p) => p.startsWith(`${key}:`));
 }
 
-const EVERYONE = [...PERMISSION_GROUPS.ALL, 'super_admin', 'hr_admin', 'manager', 'employee'] as const;
+export function isNavItemVisible(item: NavItem, group: NavGroup, ctx: NavContext): boolean {
+  if (item.permission) return holdsPermission(ctx.permissions, item.permission);
+  if (!group.roles) return true;
+  return !!ctx.role && group.roles.includes(ctx.role);
+}
 
+/** Groups follow PRD AC-10. Permission keys are the seeded `module:action:scope` keys (lib/seed.ts). */
 export const ADMIN_SHELL: ShellConfig = {
   variant: 'admin',
   brand: { label: 'Karbexa Admin', mark: 'KA', href: ROUTES.OVERVIEW },
   groups: [
     {
       label: 'Home',
-      roles: EVERYONE,
       items: [{ label: 'Overview', href: ROUTES.OVERVIEW, icon: LayoutDashboard }],
     },
     {
-      label: 'Directory',
-      roles: EVERYONE,
+      label: 'People',
       items: [
-        { label: 'Users', href: ROUTES.PEOPLE, icon: Users },
-        { label: 'Groups', href: ROUTES.GROUPS, icon: Users },
+        { label: 'Users', href: ROUTES.PEOPLE, icon: Users, permission: 'people:read' },
+        { label: 'Groups', href: ROUTES.GROUPS, icon: Users, permission: 'people:read' },
       ],
     },
     {
       label: 'Organisation',
-      roles: [...PERMISSION_GROUPS.ROLE_ADMINS, 'super_admin', 'hr_admin', 'ops_admin'],
       items: [
-        { label: 'Organisation', href: ROUTES.ORGANIZATION, icon: Building2 },
-        { label: 'Teams', href: ROUTES.TEAMS, icon: Users },
-        { label: 'Locations', href: ROUTES.LOCATIONS, icon: MapPin },
+        { label: 'Structure', href: ROUTES.ORGANIZATION, icon: Building2, permission: 'organization:read' },
+        { label: 'Teams', href: ROUTES.TEAMS, icon: Users, permission: 'organization:read' },
+        { label: 'Locations', href: ROUTES.LOCATIONS, icon: MapPin, permission: 'locations:read' },
+        { label: 'Calendars & schedules', href: '/locations?tab=holidays', icon: CalendarDays, permission: 'locations:read' },
       ],
     },
     {
       label: 'Apps & Access',
-      roles: [...PERMISSION_GROUPS.ROLE_ADMINS, 'super_admin', 'hr_admin', 'ops_admin', 'it_admin'],
       items: [
-        { label: 'Apps & Access', href: ROUTES.APPS, icon: Package },
-        { label: 'Subscription', href: ROUTES.SUBSCRIPTION, icon: Package },
+        { label: 'Apps & Access', href: ROUTES.APPS, icon: Package, permission: 'apps:read:all' },
+        { label: 'Subscription', href: ROUTES.SUBSCRIPTION, icon: Package, permission: 'apps:read:all' },
       ],
     },
     {
       label: 'Security & Governance',
-      roles: [...PERMISSION_GROUPS.ROLE_ADMINS, 'super_admin', 'it_admin', 'hr_admin'],
       items: [
-        { label: 'Admin roles', href: ROUTES.ROLES, icon: Shield },
-        { label: 'Security', href: ROUTES.SECURITY, icon: Shield },
-        { label: 'Calendars & schedules', href: '/locations?tab=holidays', icon: CalendarDays },
+        { label: 'Admin roles', href: ROUTES.ROLES, icon: Shield, permission: 'roles:read:all' },
+        { label: 'Security', href: ROUTES.SECURITY, icon: Shield, permission: 'security:read:all' },
+        { label: 'Policies', href: ROUTES.POLICIES, icon: FileText, permission: 'policies:read:all' },
+        { label: 'Audit log', href: ROUTES.AUDIT_LOGS, icon: ClipboardList, permission: 'audit_logs:read:all' },
       ],
     },
     {
-      label: 'Settings & Audit',
-      roles: [...PERMISSION_GROUPS.IT_ADMINS, 'super_admin', 'ops_admin'],
+      label: 'Settings',
       items: [
-        { label: 'Settings', href: ROUTES.COMPANY_SETTINGS, icon: Settings },
-        {
-          label: 'Audit log',
-          href: ROUTES.AUDIT_LOGS,
-          icon: ClipboardList,
-          permission: 'audit:read:all',
-          roles: [...PERMISSION_GROUPS.IT_ADMINS, 'super_admin'],
-        },
-        { label: 'Policies', href: ROUTES.POLICIES, icon: FileText },
-        { label: 'Workflows', href: ROUTES.WORKFLOWS, icon: GitBranch },
-        { label: 'Approvals', href: ROUTES.APPROVALS, icon: CheckSquare },
-        { label: 'Data Fields', href: ROUTES.DATA_FIELDS, icon: Database },
+        { label: 'Company', href: ROUTES.COMPANY_SETTINGS, icon: Settings, permission: 'organization:update:all' },
+        { label: 'Data fields', href: ROUTES.DATA_FIELDS, icon: Database, permission: 'data_fields:read:all' },
+        { label: 'Workflows', href: ROUTES.WORKFLOWS, icon: GitBranch, permission: 'workflows:read:all' },
+        { label: 'Approvals', href: ROUTES.APPROVALS, icon: CheckSquare, permission: 'workflows:read:all' },
       ],
     },
   ],
