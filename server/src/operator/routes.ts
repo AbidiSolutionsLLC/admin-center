@@ -35,6 +35,7 @@ import { requireOperator } from './middleware';
 import { buildAuditFilter, categoryOf, csvRow, CSV_COLUMNS, EXPORT_ROW_CAP, redact } from './audit';
 import { requirePermission, anyOperator, permissionsFor, operatorRolesSchema } from './permissions';
 import { findFirstAdmin, onboardingRoutes } from './onboarding';
+import { tenantRoutes } from './tenants';
 
 const router = Router();
 /** Shape only; membership in the registry is checked with assertProductKey(s) (lib/productRegistry). */
@@ -66,6 +67,8 @@ async function audit(req: Request, p: {
   action: string; target_type: string; target_id: string; company?: { _id: Types.ObjectId; name: string };
   details?: Record<string, unknown>; before?: unknown; after?: unknown;
   category?: AuditCategory; reason?: string; result?: 'success' | 'failure';
+  /** false = keep out of the tenant's own audit log (internal notes). Default: mirrored when a company is given. */
+  mirror?: boolean;
 }, session?: ClientSession) {
   const op = req.operator!;
   const opts = { session: session ?? undefined };
@@ -74,7 +77,7 @@ async function audit(req: Request, p: {
     company_id: p.company?._id, details: redact(p.details), correlation_id: (req as any).correlationId,
     category: p.category ?? categoryOf(p.action), before: redact(p.before), after: redact(p.after), reason: p.reason, result: p.result ?? 'success',
   }], opts);
-  if (p.company) {
+  if (p.company && p.mirror !== false) {
     await AuditEvent.create([{
       company_id: p.company._id, actor_id: null, actor_email: `operator:${op.email}`, action: p.action, module: 'operator',
       category: 'Operator', object_type: p.target_type, object_id: p.target_id, object_label: p.company.name,
@@ -367,13 +370,39 @@ router.post('/orgs/:id/suspend', requirePermission('tenants.write'), asyncHandle
 router.post('/orgs/:id/reactivate', requirePermission('tenants.write'), asyncHandler((req: Request, res: Response) => setOrgStatus(req, res, 'active', 'org.reactivated')));
 router.post('/orgs/:id/close', requirePermission('tenants.close'), asyncHandler((req: Request, res: Response) => setOrgStatus(req, res, 'closed', 'org.closed')));
 
-// Assign a plan to an existing org: activates the plan's products (never removes or re-activates suspended ones).
+// Change an existing org: assign a plan (activates the plan's products; never removes or re-activates suspended ones),
+// set tags and the trial end (Plan 4.4). Any subset of the three; at least one is required.
+const dateOrNull = z.string().refine((v) => !Number.isNaN(new Date(v).getTime()), 'Invalid date').nullable();
+const PatchOrgSchema = z.object({
+  plan_key: z.string().trim().min(1).optional(),
+  trial_ends_at: dateOrNull.optional(),
+  tags: z.array(z.string().trim().min(1).max(30)).max(10).optional(),
+}).refine((b) => b.plan_key !== undefined || b.trial_ends_at !== undefined || b.tags !== undefined, { message: 'Nothing to change' });
+
 router.patch('/orgs/:id', requirePermission('tenants.write'), asyncHandler(async (req: Request, res: Response) => {
-  const body = z.object({ plan_key: z.string().trim().min(1) }).parse(req.body);
+  const body = PatchOrgSchema.parse(req.body);
   const company = await Company.findById(oid(String(req.params.id)));
   if (!company) throw new AppError('Organization not found', 404, 'NOT_FOUND');
-  const plan = await Plan.findOne({ key: body.plan_key, status: 'active' });
-  if (!plan) throw new AppError('Plan not found', 404, 'PLAN_NOT_FOUND');
+  const plan = body.plan_key !== undefined ? await Plan.findOne({ key: body.plan_key, status: 'active' }) : null;
+  if (body.plan_key !== undefined && !plan) throw new AppError('Plan not found', 404, 'PLAN_NOT_FOUND');
+
+  if (body.tags !== undefined || body.trial_ends_at !== undefined) {
+    const set: Record<string, unknown> = {};
+    const before: Record<string, unknown> = {};
+    const after: Record<string, unknown> = {};
+    if (body.tags !== undefined) {
+      const tags = [...new Set(body.tags)];
+      before.tags = company.tags ?? []; after.tags = tags; set.tags = tags;
+    }
+    if (body.trial_ends_at !== undefined) {
+      const at = body.trial_ends_at === null ? null : new Date(body.trial_ends_at);
+      before.trial_ends_at = company.trial_ends_at ?? null; after.trial_ends_at = at; set.trial_ends_at = at;
+    }
+    await Company.updateOne({ _id: company._id }, { $set: set });
+    company.set(set);
+    await audit(req, { action: 'org.updated', target_type: 'Company', target_id: String(company._id), company, before, after });
+  }
+  if (!plan) return ok(res, { id: String(company._id), tags: company.tags ?? [], trial_ends_at: company.trial_ends_at ?? null });
   await runInTransaction(async (session) => {
     const orgId = company._id.toString();
     await Company.updateOne({ _id: company._id }, { $set: { plan: plan.key } }, { session: session ?? undefined });
@@ -395,7 +424,7 @@ router.patch('/orgs/:id', requirePermission('tenants.write'), asyncHandler(async
     await audit(req, { action: 'org.plan_assigned', target_type: 'Company', target_id: String(company._id), company, before: null, after: { plan_key: plan.key, products: plan.products } }, session);
   });
   await fanOutOrgAccess(req, company._id);
-  ok(res, { id: String(company._id), plan_key: plan.key, products: plan.products });
+  ok(res, { id: String(company._id), plan_key: plan.key, products: plan.products, tags: company.tags ?? [], trial_ends_at: company.trial_ends_at ?? null });
 }));
 
 router.put('/orgs/:id/entitlements/:productKey', requirePermission('entitlements.write'), asyncHandler(async (req: Request, res: Response) => {
@@ -567,5 +596,6 @@ router.patch('/operators/:id', requirePermission('operators.write'), asyncHandle
 }));
 
 router.use(onboardingRoutes({ ok, oid, audit, actorOf, corrOf })); // Plan 2.6
+router.use(tenantRoutes({ ok, oid, audit })); // Plan 4.4
 
 export default router;

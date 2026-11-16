@@ -59,6 +59,11 @@ The global per-IP rate limiter in `app.ts` also applies. Envelope: `{ success: t
 | GET | `/me` | | The signed-in operator plus `permissions[]` (any operator; the SPA reads it for navigation and buttons) |
 | GET | `/orgs` | `limit` (1–100, default 25), `cursor`, `status`, `plan`, `tag`, `trial=true`, `search` (name/slug regex), `sort` (`created` default, `name`, `members`, `last_activity`) | Org summaries; `meta: { total, limit, next_cursor }`. `created` pages by last `_id`; the other sorts page by offset (the cursor is a number). Summary adds `members_total`, `members_active`, `products[]` (active entitlements), `last_activity_at` (also as `last_activity`), `tags`, `trial_ends_at`. 400 on an unknown sort. `attention` filter and `attention_count` arrive with 4.10 |
 | GET | `/orgs/:id` | | Summary + `first_admin` (earliest holder of the Super Admin role, through `UserRole`) |
+| GET | `/orgs/:id/products` | | Every registered product with the org's entitlement: `status` (`not_entitled` when none), `source`, `plan_key`, `seats_limit`. Seats used, plan version and expiry arrive with 4.5 to 4.7 |
+| GET | `/orgs/:id/admins` | | Members holding Super Admin, Admin, HR Admin, IT Admin or Ops Admin: name, e-mail, roles, `mfa_enabled` (TOTP or e-mail OTP on the identity), `last_login_at`, `status` |
+| GET | `/orgs/:id/notes` | `limit`, `cursor` | Internal notes, newest first (`tenants.read`) |
+| POST | `/orgs/:id/notes` | `{ body (1–2000) }` | Add a note (`notes.write`); audited `org.note_added`, not mirrored into the tenant audit log |
+| DELETE | `/orgs/:id/notes/:noteId` | | The author, or an operator with `tenants.write`; 403 otherwise; audited `org.note_deleted`, not mirrored |
 | GET | `/orgs/:id/onboarding` | | Plan 2.6: `{ organization, stage, first_admin, invitation { state, sent_at, sent_count, expires_at, ... }, delivery { status, attempts, last_error, ... } }`. `stage`: `complete`, `no_first_admin`, `no_invitation`, `sending`, `delivery_failed`, `awaiting_acceptance`, `expired`, `revoked`. Never a token |
 | POST | `/orgs/:id/onboarding/resend-invite` | | New first-admin invitation (supersedes the current one) and a queued e-mail, one transaction; 409 `ALREADY_ONBOARDED` once the first admin accepted; audited `onboarding.invite_resent` |
 | PATCH | `/orgs/:id/onboarding/first-admin` | `{ email, full_name }` | Only while the first admin is `invited`; updates the member, emits `member.updated`, re-issues the invitation to the new address; 409 `EMAIL_IN_USE`, `ALREADY_ONBOARDED`; audited `onboarding.first_admin_changed` |
@@ -67,7 +72,7 @@ The global per-IP rate limiter in `app.ts` also applies. Envelope: `{ success: t
 | POST | `/orgs/:id/suspend` | `{ reason? }` | Status `suspended`, revoke all org sessions |
 | POST | `/orgs/:id/reactivate` | `{ reason? }` | Status `active` (refused with 409 `ORG_CLOSED` if closed) |
 | POST | `/orgs/:id/close` | `{ reason? }` | Status `closed`, revoke all org sessions |
-| PATCH | `/orgs/:id` | `{ plan_key }` | Set `Company.plan`; upsert an entitlement per plan product (`$setOnInsert: status active`, so suspended ones stay suspended; products not in the plan are left untouched); ensure default access rules |
+| PATCH | `/orgs/:id` | any of `{ plan_key, trial_ends_at (ISO date or null), tags (≤ 10, each ≤ 30) }` | Tags and trial are written and audited `org.updated` (before/after). With `plan_key`: set `Company.plan`; upsert an entitlement per plan product (`$setOnInsert: status active`, so suspended ones stay suspended; products not in the plan are left untouched); ensure default access rules |
 | PUT | `/orgs/:id/entitlements/:productKey` | `{ status: 'active'\|'suspended', seats_limit?: int\|null }` | Upsert one entitlement (`source: 'operator'`); `null` seats clears the limit |
 | GET | `/orgs/:id/identity-providers` | | The org's IdP connections incl. `tenant_approval` |
 | POST | `/orgs/:id/identity-providers/:connId/approve-tenant` | | Approve the Entra `config.tenant_id` of the connection. 400 unless `type: 'entra'` with a tenant id; 409 `TENANT_TAKEN` if another connection already has that tenant approved |
@@ -107,6 +112,7 @@ The global per-IP rate limiter in `app.ts` also applies. Envelope: `{ success: t
 | `Plan` (`Plan.model.ts`) | `key`, `name`, `products[]`, `status` (`active`/`archived`) | Default plans seeded by `seedProductRegistry` |
 | `OrganizationEntitlement` | `company_id`, `product_key`, `status`, `seats_limit`, `source`, `plan_key`, `updated_by_operator_id` | Unique per (company, product) |
 | `Company` | `status`, `is_active`, `plan`, `slug`, `tags`, `trial_ends_at`, `last_activity_at` | `last_activity_at` is touched at tenant sign-in, at most hourly |
+| `TenantNote` (`TenantNote.model.ts`) | `company_id`, `operator_id`, `operator_email`, `body` (≤ 2000), `created_at` | Internal operator notes; append-only |
 | `IdentityProviderConnection` | `tenant_approval.{tenant_id, approved_at, operator_id}` | Written by approve-tenant |
 | `oidc_operator_*` | oidc-provider storage | See identity.md |
 

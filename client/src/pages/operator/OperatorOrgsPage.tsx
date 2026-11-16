@@ -7,6 +7,8 @@ import { Tag } from '@/components/ui/Tag';
 import { FilterChip } from '@/components/ui/Toolbar';
 import { ListPage } from '@/components/templates/ListPage';
 import { useUrlParam } from '@/hooks/useUrlParam';
+import { useNavigate } from 'react-router-dom';
+import { ROUTES } from '@/constants/routes';
 import { Modal } from '@/components/ui/Modal';
 import { ConfirmDialog } from '@/components/ui/ConfirmDialog';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
@@ -149,6 +151,7 @@ const SORTS = [['created', 'Newest'], ['name', 'Name'], ['members', 'Most member
 const day = (v?: string | null) => (v ? new Date(v).toLocaleDateString() : '-');
 
 export default function OperatorOrgsPage() {
+  const navigate = useNavigate();
   const [search] = useUrlParam('search');
   const [status, setStatus] = useUrlParam('status');
   const [plan, setPlan] = useUrlParam('plan');
@@ -283,6 +286,7 @@ export default function OperatorOrgsPage() {
         <DataTable
           columns={columns}
           data={orgs}
+          onRowClick={(o) => navigate(`${ROUTES.OPERATOR_ORGS}/${idOf(o)}`)}
           stickyHeader
           paging={{
             hasNext: !!data?.next_cursor,

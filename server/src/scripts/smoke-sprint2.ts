@@ -1570,6 +1570,51 @@ async function main() {
       }
     }
 
+    // ── Plan 4.4: tenant profile (products, admins, notes, tags and trial) ───────────────────
+    {
+      const { TenantNote } = await import('../models');
+      const acme = (await Company.findOne({ slug: 'acme' }))!;
+      const id = String(acme._id);
+      const json = async (r: any) => (await r.json()) as any;
+      const prods = await json(await op(`/orgs/${id}/products`));
+      check('4.4 /products lists every registered product with an entitlement state', prods.data.length >= 4 && prods.data.every((p: any) => typeof p.status === 'string') && prods.data.some((p: any) => p.status === 'active' && p.source === 'plan'), JSON.stringify(prods.data)?.slice(0, 160));
+      const admins = await json(await op(`/orgs/${id}/admins`));
+      check('4.4 /admins lists the first admin with roles, mfa flag and status', admins.data.some((a: any) => a.email === 'admin@acme.test' && a.roles.includes('Super Admin') && a.mfa_enabled === false && typeof a.status === 'string'), JSON.stringify(admins.data)?.slice(0, 160));
+      check('4.4 /admins of an unknown org = 404', (await op('/orgs/000000000000000000000000/admins')).status === 404);
+
+      const patch = await op(`/orgs/${id}`, 'PATCH', { tags: ['pilot', 'pilot', ' emea '], trial_ends_at: '2027-01-31T00:00:00Z' });
+      const pj = await json(patch);
+      check('4.4 PATCH tags and trial (tags de-duplicated and trimmed)', patch.status === 200 && pj.data.tags.join() === 'pilot,emea' && !!pj.data.trial_ends_at, JSON.stringify(pj));
+      const upd = await OperatorAuditEvent.findOne({ action: 'org.updated', target_id: id });
+      check('4.4 PATCH is audited with before and after', !!upd && (upd.before as any)?.tags?.length === 0 && (upd.after as any)?.tags?.length === 2, JSON.stringify(upd?.after));
+      check('4.4 PATCH with nothing to change = 400', (await op(`/orgs/${id}`, 'PATCH', {})).status === 400);
+      check('4.4 PATCH with 11 tags = 400', (await op(`/orgs/${id}`, 'PATCH', { tags: Array.from({ length: 11 }, (_, i) => `t${i}`) })).status === 400);
+      check('4.4 PATCH with a 31-character tag = 400', (await op(`/orgs/${id}`, 'PATCH', { tags: ['x'.repeat(31)] })).status === 400);
+      check('4.4 PATCH trial_ends_at null clears it', (await json(await op(`/orgs/${id}`, 'PATCH', { trial_ends_at: null }))).data.trial_ends_at === null);
+      await Company.updateOne({ _id: acme._id }, { $set: { tags: [] } });
+
+      const mk = await op(`/orgs/${id}/notes`, 'POST', { body: 'Called the admin; waiting on SSO.' });
+      const mkj = await json(mk);
+      check('4.4 note created = 201 with author', mk.status === 201 && mkj.data.operator_email === 'op@karbexa.test', mk.status);
+      check('4.4 empty note = 400', (await op(`/orgs/${id}/notes`, 'POST', { body: '   ' })).status === 400);
+      check('4.4 note over 2000 characters = 400', (await op(`/orgs/${id}/notes`, 'POST', { body: 'x'.repeat(2001) })).status === 400);
+      check('4.4 notes list shows it', (await json(await op(`/orgs/${id}/notes`))).data.some((n: any) => n.id === mkj.data.id));
+      check('4.4 notes are not mirrored into the tenant audit log', (await AuditEvent.countDocuments({ company_id: acme._id, action: { $in: ['org.note_added', 'org.note_deleted'] } })) === 0);
+      check('4.4 note creation is operator-audited', !!(await OperatorAuditEvent.findOne({ action: 'org.note_added', target_id: mkj.data.id })));
+
+      const other = await TenantNote.create({ company_id: acme._id, operator_id: new mongoose.Types.ObjectId(), operator_email: 'other@karbexa.test', body: 'someone else' });
+      const roleSave = (roles: string[]) => OperatorAccount.updateOne({ email: 'op@karbexa.test' }, { $set: { roles } });
+      await roleSave(['support']);
+      check('4.4 support cannot delete another operator\'s note = 403', (await op(`/orgs/${id}/notes/${other._id}`, 'DELETE')).status === 403);
+      check('4.4 support can delete their own note = 200', (await op(`/orgs/${id}/notes/${mkj.data.id}`, 'DELETE')).status === 200);
+      check('4.4 support cannot PATCH tags = 403', (await op(`/orgs/${id}`, 'PATCH', { tags: ['x'] })).status === 403);
+      await roleSave(['auditor']);
+      check('4.4 auditor can read notes but not write them', (await op(`/orgs/${id}/notes`)).status === 200 && (await op(`/orgs/${id}/notes`, 'POST', { body: 'x' })).status === 403);
+      await roleSave(['platform_admin']);
+      check('4.4 platform admin can delete another operator\'s note = 200', (await op(`/orgs/${id}/notes/${other._id}`, 'DELETE')).status === 200);
+      check('4.4 a deleted note is gone (404)', (await op(`/orgs/${id}/notes/${other._id}`, 'DELETE')).status === 404);
+    }
+
     // ── Plan 4.3: tenant directory (filters, sorts, summary fields, last activity) ───────────
     {
       const { touchCompanyActivity } = await import('../controllers/auth.controller');

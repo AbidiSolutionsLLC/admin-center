@@ -10,6 +10,7 @@ import SubscriptionPage from './pages/subscription/SubscriptionPage';
 import { OperatorGuard } from './features/operator/OperatorGuard';
 import OperatorCallbackPage from './pages/operator/OperatorCallbackPage';
 import OperatorOrgsPage from './pages/operator/OperatorOrgsPage';
+import OperatorTenantPage from './pages/operator/OperatorTenantPage';
 import OperatorPlansPage from './pages/operator/OperatorPlansPage';
 import OperatorOperatorsPage from './pages/operator/OperatorOperatorsPage';
 import OperatorAuditPage from './pages/operator/OperatorAuditPage';
@@ -53,6 +54,7 @@ function App() {
             <Route path={ROUTES.OPERATOR} element={<OperatorShell />}>
               <Route index element={<Navigate to={ROUTES.OPERATOR_ORGS} replace />} />
               <Route path="organizations" element={<OperatorOrgsPage />} />
+              <Route path="organizations/:id" element={<OperatorTenantPage />} />
               <Route path="plans" element={<OperatorPlansPage />} />
               <Route path="operators" element={<OperatorOperatorsPage />} />
               <Route path="audit" element={<OperatorAuditPage />} />

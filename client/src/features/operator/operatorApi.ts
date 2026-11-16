@@ -170,3 +170,57 @@ export const useOperatorAudit = (params: AuditFilters & { cursor?: string; limit
       return { data: (r.data ?? []) as AuditEntry[], next_cursor: (r.meta?.next_cursor ?? null) as string | null };
     },
   });
+
+// ── Tenant profile (Plan 4.4) ────────────────────────────────────────────────────────────────
+export interface OperatorOrgDetail extends OperatorOrg { first_admin: { email: string; full_name: string; lifecycle_state: string } | null }
+export interface OrgProduct { product_key: string; name?: string; status: string; source: string | null; plan_key: string | null; seats_limit: number | null }
+export interface OrgAdmin { id: string; full_name: string; email: string; roles: string[]; mfa_enabled: boolean; last_login_at: string | null; status: string }
+export interface OrgNote { id: string; operator_id: string; operator_email: string; body: string; created_at: string }
+export interface OrgOnboarding {
+  stage: string;
+  first_admin: { user_id: string; email: string; full_name: string; lifecycle_state: string } | null;
+  invitation: { state: string; sent_at: string | null; sent_count: number; expires_at: string; accepted_at: string | null; revoked_at: string | null } | null;
+  delivery: { status: string; attempts: number; last_error: string | null; sent_at: string | null; queued_at: string } | null;
+}
+export interface OrgIdp {
+  id: string; type: string; display_name: string; status: string; tenant_id: string | null;
+  tenant_approval: { tenant_id: string; approved_at: string; operator_id: string } | null;
+}
+
+const orgKey = (id: string, part: string) => ['operator', 'org', id, part] as const;
+
+export const useOrg = (id: string) =>
+  useQuery({ queryKey: orgKey(id, 'detail'), queryFn: async () => (await operatorApi.get(`/orgs/${id}`)).data.data as OperatorOrgDetail });
+export const useOrgProducts = (id: string) =>
+  useQuery({ queryKey: orgKey(id, 'products'), queryFn: async () => ((await operatorApi.get(`/orgs/${id}/products`)).data.data ?? []) as OrgProduct[] });
+export const useOrgAdmins = (id: string) =>
+  useQuery({ queryKey: orgKey(id, 'admins'), queryFn: async () => ((await operatorApi.get(`/orgs/${id}/admins`)).data.data ?? []) as OrgAdmin[] });
+export const useOrgNotes = (id: string) =>
+  useQuery({ queryKey: orgKey(id, 'notes'), queryFn: async () => ((await operatorApi.get(`/orgs/${id}/notes`)).data.data ?? []) as OrgNote[] });
+export const useOrgOnboarding = (id: string) =>
+  useQuery({ queryKey: orgKey(id, 'onboarding'), queryFn: async () => (await operatorApi.get(`/orgs/${id}/onboarding`)).data.data as OrgOnboarding });
+export const useOrgIdps = (id: string) =>
+  useQuery({ queryKey: orgKey(id, 'idps'), queryFn: async () => ((await operatorApi.get(`/orgs/${id}/identity-providers`)).data.data ?? []) as OrgIdp[] });
+
+/** A mutation on one organization that refreshes everything cached for it (and the list). */
+function useOrgMutation<V>(id: string, fn: (v: V) => Promise<unknown>, done: string, failed: string) {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: fn,
+    onSuccess: () => { qc.invalidateQueries({ queryKey: ['operator', 'org', id] }); qc.invalidateQueries({ queryKey: ['operator', 'orgs'] }); toast.success(done); },
+    onError: (e) => toast.error(errMsg(e, failed)),
+  });
+}
+
+export const usePatchOrg = (id: string) =>
+  useOrgMutation(id, (body: { tags?: string[]; trial_ends_at?: string | null }) => operatorApi.patch(`/orgs/${id}`, body), 'Organization updated', 'Failed to update organization');
+export const useAddNote = (id: string) =>
+  useOrgMutation(id, (body: string) => operatorApi.post(`/orgs/${id}/notes`, { body }), 'Note added', 'Failed to add note');
+export const useDeleteNote = (id: string) =>
+  useOrgMutation(id, (noteId: string) => operatorApi.delete(`/orgs/${id}/notes/${noteId}`), 'Note deleted', 'Failed to delete note');
+export const useResendInvite = (id: string) =>
+  useOrgMutation(id, (_: void) => operatorApi.post(`/orgs/${id}/onboarding/resend-invite`), 'Invitation sent', 'Failed to send invitation');
+export const useChangeFirstAdmin = (id: string) =>
+  useOrgMutation(id, (body: { email: string; full_name: string }) => operatorApi.patch(`/orgs/${id}/onboarding/first-admin`, body), 'First admin updated', 'Failed to update first admin');
+export const useApproveTenant = (id: string) =>
+  useOrgMutation(id, (connId: string) => operatorApi.post(`/orgs/${id}/identity-providers/${connId}/approve-tenant`), 'Tenant approved', 'Failed to approve');
