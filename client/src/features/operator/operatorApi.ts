@@ -36,6 +36,18 @@ operatorApi.interceptors.response.use(
   },
 );
 
+export interface OperatorMe extends OperatorUser { permissions: string[] }
+
+/** The signed-in operator and their permission list (GET /me). The SPA only hides what the API would refuse. */
+export const useOperatorMe = () =>
+  useQuery({
+    queryKey: ['operator', 'me'],
+    queryFn: async () => (await operatorApi.get('/me')).data.data as OperatorMe,
+    staleTime: 5 * 60_000,
+  });
+
+export const useOperatorCan = (permission: string) => !!useOperatorMe().data?.permissions.includes(permission);
+
 export const errMsg = (e: any, fallback: string) => e?.response?.data?.error || e?.response?.data?.message || fallback;
 
 export interface OrgEntitlement { product_key: string; status: string; seats_limit?: number | null }

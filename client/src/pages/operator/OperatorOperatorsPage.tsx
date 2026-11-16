@@ -1,12 +1,13 @@
 import { useState } from 'react';
 import { Modal } from '@/components/ui/Modal';
-import { idOf, useOperators, useSaveOperator } from '@/features/operator/operatorApi';
+import { idOf, useOperatorCan, useOperators, useSaveOperator } from '@/features/operator/operatorApi';
 
 const inputCls = 'w-full h-9 px-3 text-sm bg-surface border border-line rounded-md focus:outline-none focus:ring-2 focus:ring-primary-600';
 
 export default function OperatorOperatorsPage() {
   const { data: operators, isLoading } = useOperators();
   const save = useSaveOperator();
+  const canWrite = useOperatorCan('operators.write');
   const [creating, setCreating] = useState(false);
   const [email, setEmail] = useState('');
   const [fullName, setFullName] = useState('');
@@ -21,7 +22,7 @@ export default function OperatorOperatorsPage() {
     <div className="space-y-4">
       <div className="flex items-center justify-between">
         <h1 className="text-xl font-semibold">Operators</h1>
-        <button onClick={() => setCreating(true)} className="h-9 px-4 bg-primary text-white text-sm rounded-md">Add operator</button>
+        {canWrite && <button onClick={() => setCreating(true)} className="h-9 px-4 bg-primary text-white text-sm rounded-md">Add operator</button>}
       </div>
       <div className="bg-surface border border-line rounded-lg overflow-x-auto">
         <table className="w-full text-sm">
@@ -36,11 +37,11 @@ export default function OperatorOperatorsPage() {
                 <td className="p-3">{o.email}</td>
                 <td className="p-3">{o.status}</td>
                 <td className="p-3 text-right">
-                  <button
+                  {canWrite && <button
                     disabled={save.isPending}
                     onClick={() => save.mutate({ id: idOf(o), body: { status: o.status === 'suspended' ? 'active' : 'suspended' } })}
                     className="text-xs px-2 h-7 border border-line rounded-md hover:bg-surface-alt"
-                  >{o.status === 'suspended' ? 'Reactivate' : 'Suspend'}</button>
+                  >{o.status === 'suspended' ? 'Reactivate' : 'Suspend'}</button>}
                 </td>
               </tr>
             ))}

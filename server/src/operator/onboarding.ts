@@ -21,6 +21,7 @@ import { asyncHandler } from '../utils/asyncHandler';
 import { createInvitation, inviteLink } from '../lib/invitations';
 import { sendWelcomeEmail } from '../lib/emailService';
 import { runInTransaction, emitPlatformEvent } from '../lib/platformEvents';
+import { requirePermission } from './permissions';
 
 /**
  * The organisation's first admin: the earliest holder of the Super Admin role (through `UserRole`), replacing the
@@ -121,11 +122,11 @@ export function onboardingRoutes(h: Helpers): Router {
     return company;
   };
 
-  router.get('/orgs/:id/onboarding', asyncHandler(async (req: Request, res: Response) => {
+  router.get('/orgs/:id/onboarding', requirePermission('tenants.read'), asyncHandler(async (req: Request, res: Response) => {
     h.ok(res, await describeOnboarding(await loadCompany(req)));
   }));
 
-  router.post('/orgs/:id/onboarding/resend-invite', asyncHandler(async (req: Request, res: Response) => {
+  router.post('/orgs/:id/onboarding/resend-invite', requirePermission('onboarding.write'), asyncHandler(async (req: Request, res: Response) => {
     const company = await loadCompany(req);
     if (company.status === 'closed') throw new AppError('Closed organizations cannot be changed', 409, 'ORG_CLOSED');
     const admin = await findFirstAdmin(company._id as Types.ObjectId);
@@ -152,7 +153,7 @@ export function onboardingRoutes(h: Helpers): Router {
     h.ok(res, { invite_delivery_id: deliveryId ?? null });
   }));
 
-  router.patch('/orgs/:id/onboarding/first-admin', asyncHandler(async (req: Request, res: Response) => {
+  router.patch('/orgs/:id/onboarding/first-admin', requirePermission('tenants.write'), asyncHandler(async (req: Request, res: Response) => {
     const input = FirstAdminSchema.parse(req.body);
     const company = await loadCompany(req);
     if (company.status === 'closed') throw new AppError('Closed organizations cannot be changed', 409, 'ORG_CLOSED');
@@ -204,7 +205,7 @@ export function onboardingRoutes(h: Helpers): Router {
   }));
 
   // Organisations whose first admin has not finished onboarding, each with its stage (CC-ON-1).
-  router.get('/onboarding', asyncHandler(async (req: Request, res: Response) => {
+  router.get('/onboarding', requirePermission('tenants.read'), asyncHandler(async (req: Request, res: Response) => {
     const limit = Math.min(Math.max(parseInt(String(req.query.limit ?? '25'), 10) || 25, 1), 100);
     const cursor = typeof req.query.cursor === 'string' && req.query.cursor ? new Types.ObjectId(h.oid(req.query.cursor, 'cursor')) : null;
 

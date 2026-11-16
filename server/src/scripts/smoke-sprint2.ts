@@ -1570,6 +1570,31 @@ async function main() {
       }
     }
 
+    // ── Plan 4.1: operator roles (the same token, the account's roles changed in the database) ──
+    {
+      const setRoles = (roles: string[]) => OperatorAccount.updateOne({ email: 'op@karbexa.test' }, { $set: { roles } });
+      const meOf = async () => ((await (await op('/me')).json()) as any).data;
+      const me = await meOf();
+      check('4.1 /me returns the operator with permissions', me?.email === 'op@karbexa.test' && me.permissions.includes('tenants.close') && me.permissions.includes('operators.write'), JSON.stringify(me)?.slice(0, 120));
+      await setRoles(['support']);
+      check('4.1 support: /me lists notes.write, not tenants.write', (await meOf()).permissions.includes('notes.write') && !(await meOf()).permissions.includes('tenants.write'));
+      check('4.1 support can read tenants = 200', (await op('/orgs')).status === 200);
+      check('4.1 support cannot create a plan = 403', (await op('/plans', 'POST', { key: 'sup-plan', name: 'X', products: [] })).status === 403);
+      check('4.1 support cannot read the audit log = 403', (await op('/audit')).status === 403);
+      check('4.1 support cannot create an operator = 403', (await op('/operators', 'POST', { email: 'x@karbexa.test', full_name: 'X', password: 'x'.repeat(14) })).status === 403);
+      await setRoles(['auditor']);
+      check('4.1 auditor can read the audit log = 200', (await op('/audit')).status === 200);
+      check('4.1 auditor can list operators = 200', (await op('/operators')).status === 200);
+      check('4.1 auditor cannot suspend a tenant = 403', (await op('/orgs/000000000000000000000000/suspend', 'POST', {})).status === 403);
+      await setRoles(['operations']);
+      check('4.1 operations cannot close a tenant = 403', (await op('/orgs/000000000000000000000000/close', 'POST', {})).status === 403);
+      check('4.1 operations cannot read the audit log = 403', (await op('/audit')).status === 403);
+      await setRoles(['nonsense']);
+      check('4.1 an account with no operator role is rejected = 401', (await op('/me')).status === 401);
+      await setRoles(['platform_admin']);
+      check('4.1 platform_admin restored = 200', (await op('/audit')).status === 200);
+    }
+
     // ── audit ─────────────────────────────────────────────────────────────────────────────
     const actions = (await OperatorAuditEvent.find()).map((e) => e.action);
     check('E10 operator audit recorded', ['org.provisioned', 'entitlement.updated', 'org.suspended', 'org.reactivated'].every((a) => actions.includes(a)), actions);

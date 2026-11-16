@@ -12,7 +12,7 @@ import { getIdentityConfig } from '../identity/config';
 import { escapeHtml, OPERATOR_SHELL } from '../identity/html';
 import { send, errBox, normaliseCode, totpValid, totpEnrolSection } from '../identity/interactions';
 import type { OidcProvider } from '../identity/providers';
-import { OPERATOR_ROLE } from './accounts';
+import { hasOperatorRole } from './accounts';
 import { isOperatorLocked, recordOperatorFailure, recordOperatorSuccess } from './signInGuard';
 
 const BASE = '/realms/operator';
@@ -89,7 +89,7 @@ export function registerOperatorInteractions(app: Express, provider: OidcProvide
     }
   };
 
-  const eligible = (a: IOperatorAccount | null): a is IOperatorAccount => !!a && a.status === 'active' && a.roles.includes(OPERATOR_ROLE);
+  const eligible = (a: IOperatorAccount | null): a is IOperatorAccount => !!a && a.status === 'active' && hasOperatorRole(a);
 
   app.get(`${BASE}/interaction/:uid`, handle(async (req, res) => {
     const d = await details(req, res);

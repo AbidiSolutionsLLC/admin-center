@@ -8,7 +8,7 @@ Related: [identity.md](identity.md) (realm internals, tokens), [admin.md](admin.
 
 ## 1. Purpose and users
 
-- **Users:** Karbexa staff with an `OperatorAccount` that is `status: 'active'` and holds the role `platform_admin`. They are not tenant members; operator accounts live in their own collection and their own OIDC realm.
+- **Users:** Karbexa staff with an `OperatorAccount` that is `status: 'active'` and holds at least one operator role (`platform_admin`, `operations`, `support`, `auditor`). They are not tenant members; operator accounts live in their own collection and their own OIDC realm.
 - **What it does:** provision organisations from a plan (with a first Super Admin invite), suspend / reactivate / close organisations, assign a plan to an existing org, set per-product entitlements (status, seats), manage plans, manage operator accounts (create, suspend, reset password, reset MFA), approve an org's Entra tenant id, read the operator audit log.
 - **Access path:** same SPA build as the tenant admin app, under `/operator`. Separate token store, separate API client, separate realm, separate audience. A tenant token is rejected by `/operator/v1` (different issuer, key set and audience).
 
@@ -23,7 +23,8 @@ Related: [identity.md](identity.md) (realm internals, tokens), [admin.md](admin.
 | Pages | `client/src/pages/operator/OperatorOrgsPage.tsx`, `OperatorPlansPage.tsx`, `OperatorOperatorsPage.tsx`, `OperatorAuditPage.tsx`, `OperatorCallbackPage.tsx` |
 | Operator API | `server/src/operator/routes.ts` (mounted at `/operator/v1` in `server/src/app.ts`) |
 | Auth middleware | `server/src/operator/middleware.ts` (`requireOperator`, `requireOperatorIp`) |
-| Account lookup | `server/src/operator/accounts.ts` (`findOperatorAccount`, `OPERATOR_ROLE = 'platform_admin'`) |
+| Account lookup | `server/src/operator/accounts.ts` (`findOperatorAccount`, `hasOperatorRole`) |
+| Roles and permissions | `server/src/operator/permissions.ts` (`ROLE_PERMISSIONS`, `permissionsFor`, `requirePermission`) |
 | Hosted login pages | `server/src/operator/interactions.ts` |
 | Realm config | `server/src/identity/providers.ts` (`buildOperator`), `server/src/identity/config.ts` |
 | Seed script | `server/src/scripts/seed-operator.ts` (`npm run seed:operator`) |
@@ -49,12 +50,13 @@ Client config: `VITE_ID_ISSUER_ORIGIN` (authority = `${VITE_ID_ISSUER_ORIGIN}/re
 
 Every route goes through, in order (`server/src/operator/routes.ts:48-55`):
 1. Correlation id: echoes `X-Correlation-Id` if it matches `^[\w.-]{1,100}$`, else generates a UUID; set on the response.
-2. `requireOperator`: IP allow-list (`OPERATOR_IP_ALLOWLIST`), Bearer token verified locally against the operator realm keys (issuer `${ID_ISSUER_ORIGIN}/realms/operator`, audience `urn:karbexa:operator`, RS256, `typ: at+jwt`, `token_use: 'access'`), then the account must still be active with `platform_admin`. Failures: 403 `FORBIDDEN` (IP), 401 `NO_TOKEN` / `INVALID_TOKEN`.
+2. `requireOperator`: IP allow-list (`OPERATOR_IP_ALLOWLIST`), Bearer token verified locally against the operator realm keys (issuer `${ID_ISSUER_ORIGIN}/realms/operator`, audience `urn:karbexa:operator`, RS256, `typ: at+jwt`, `token_use: 'access'`), then the account must still be active with an operator role. Each route then passes `requirePermission('<perm>')` (403 `FORBIDDEN` without it). Failures: 403 `FORBIDDEN` (IP), 401 `NO_TOKEN` / `INVALID_TOKEN`.
 
 The global per-IP rate limiter in `app.ts` also applies. Envelope: `{ success: true, data, meta? }`.
 
 | Method | Path | Body / query | What it does |
 |---|---|---|---|
+| GET | `/me` | | The signed-in operator plus `permissions[]` (any operator; the SPA reads it for navigation and buttons) |
 | GET | `/orgs` | `limit` (1–100, default 25), `cursor` (last `_id`), `status`, `search` (name/slug regex) | Org summaries newest first; `meta: { total, limit, next_cursor }` |
 | GET | `/orgs/:id` | | Summary + `first_admin` (earliest holder of the Super Admin role, through `UserRole`) |
 | GET | `/orgs/:id/onboarding` | | Plan 2.6: `{ organization, stage, first_admin, invitation { state, sent_at, sent_count, expires_at, ... }, delivery { status, attempts, last_error, ... } }`. `stage`: `complete`, `no_first_admin`, `no_invitation`, `sending`, `delivery_failed`, `awaiting_acceptance`, `expired`, `revoked`. Never a token |
@@ -74,7 +76,7 @@ The global per-IP rate limiter in `app.ts` also applies. Envelope: `{ success: t
 | PATCH | `/plans/:key` | partial `{ name, products, status }` | Update the plan document only (existing org entitlements are not changed) |
 | GET | `/audit` | `limit`, `cursor`, `company_id`, `action` | `OperatorAuditEvent` newest first; `meta: { limit, next_cursor }` |
 | GET | `/operators` | | All operator accounts (never the hash or secret) |
-| POST | `/operators` | `{ email, full_name, password (≥12), roles? }` | Create (bcrypt cost 12, default roles `['platform_admin']`) |
+| POST | `/operators` | `{ email, full_name, password (≥12), roles? }` | Create (bcrypt cost 12, default roles `['platform_admin']`; roles from the four operator roles) |
 | PATCH | `/operators/:id` | partial `{ full_name, status ('active'\|'suspended'), roles, password, reset_mfa }` | Update; 409 `SELF_SUSPEND` when suspending yourself. `reset_mfa: true` sets `mfa = { enabled: false }` so the next login re-enrols |
 
 **Provisioning (`POST /orgs`) in order** (`routes.ts`, Plan 2.5, built, tests not yet run):
@@ -88,7 +90,8 @@ The global per-IP rate limiter in `app.ts` also applies. Envelope: `{ success: t
 
 ## 4. Roles and permissions
 
-- One operator role exists: `platform_admin` (`server/src/operator/accounts.ts`; the API accepts only `z.enum(['platform_admin'])` for `roles`). There is no finer-grained operator permission model: every active `platform_admin` can call every operator endpoint.
+- Four operator roles (`server/src/operator/permissions.ts`, a static map; DRD 4.5): `platform_admin` (everything), `operations` (tenants, entitlements, onboarding, notes, announcements; no close, plans, audit, operators), `support` (read, notes, resend invitation), `auditor` (read, audit and export, security, operators list). An operator holding several roles gets the union. `products.write` is not defined yet (Phase 6).
+- Permission per route: `GET /orgs*`, `/plans`, `/onboarding` `tenants.read`; create, suspend, reactivate, plan assignment, first-admin change, Entra approval `tenants.write`; close `tenants.close`; entitlements `entitlements.write`; resend invitation `onboarding.write`; plan create/update `plans.write`; `GET /audit` `audit.read`; `GET /operators` `operators.read`; create/update operator `operators.write`. `GET /me` needs no permission. `__tests__/permissions.test.ts` walks the router and fails when a route has none.
 - TOTP is mandatory for every operator login (section 3 of identity.md); first login enrols.
 - IP allow-list `OPERATOR_IP_ALLOWLIST` applies to `/operator/v1` (in `requireOperator`) and to the whole `/realms/operator` realm (`app.use('/realms/operator', requireOperatorIp)` in `server/src/app.ts`). Empty list: allowed outside production, **every request refused with 403 in production**.
 - Org default access rules applied at provisioning and on plan assignment (`ensureDefaultAccess` in `routes.ts`, driven by each product's manifest `default_assignments`), each only if the product entitlement is active: dynamic group "All Members" (`dynamic_rules: {}`) gets `people → employee` and `desk → requester`. Product keys in entitlement and plan routes are checked against the registry (`UNKNOWN_PRODUCT`).

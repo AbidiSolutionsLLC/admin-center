@@ -9,6 +9,7 @@ import { clearSession } from '@/lib/session';
 import { logoutRedirect } from '@/lib/oidc';
 import { ROUTES } from '@/constants/routes';
 import { operatorLogout } from '@/features/operator/operatorAuth';
+import { useOperatorMe } from '@/features/operator/operatorApi';
 
 /** Tenant (Admin Center) shell: AppShell with the `admin` config and the tenant top-bar actions. */
 export const TenantShell = () => {
@@ -47,8 +48,9 @@ export const TenantShell = () => {
 
 /**
  * Operator console shell: AppShell with the `operator` config, the red Operator
- * marker and no launcher. Navigation permissions arrive with the operator roles (Phase 4).
+ * marker and no launcher. Navigation follows the permission list from GET /operator/v1/me.
  */
-export const OperatorShell = () => (
-  <AppShell config={OPERATOR_SHELL} user={{ name: 'Operator', onSignOut: operatorLogout }} />
-);
+export const OperatorShell = () => {
+  const { data: me } = useOperatorMe();
+  return <AppShell config={OPERATOR_SHELL} permissions={me?.permissions ?? []} user={{ name: me?.full_name || 'Operator', onSignOut: operatorLogout }} />;
+};

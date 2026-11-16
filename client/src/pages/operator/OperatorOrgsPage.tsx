@@ -4,7 +4,7 @@ import { ConfirmDialog } from '@/components/ui/ConfirmDialog';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { toast } from 'sonner';
 import {
-  errMsg, idOf, operatorApi, useCreateOrg, useOrgAction, useOrgs, usePlans, useSetEntitlement,
+  errMsg, idOf, operatorApi, useCreateOrg, useOperatorCan, useOrgAction, useOrgs, usePlans, useSetEntitlement,
   type OperatorOrg,
 } from '@/features/operator/operatorApi';
 
@@ -143,13 +143,16 @@ export default function OperatorOrgsPage() {
   const [confirm, setConfirm] = useState<{ org: OperatorOrg; action: 'suspend' | 'reactivate' | 'close' } | null>(null);
   const { data, isLoading, isError } = useOrgs({ search: search || undefined, status: status || undefined, cursor: cursors[cursors.length - 1], limit: LIMIT });
   const action = useOrgAction();
+  const canWrite = useOperatorCan('tenants.write');
+  const canClose = useOperatorCan('tenants.close');
+  const canEntitle = useOperatorCan('entitlements.write');
   const orgs = data?.data ?? [];
 
   return (
     <div className="space-y-4">
       <div className="flex items-center justify-between">
         <h1 className="text-xl font-semibold">Organizations</h1>
-        <button onClick={() => setCreating(true)} className="h-9 px-4 bg-primary text-white text-sm rounded-md">Create organization</button>
+        {canWrite && <button onClick={() => setCreating(true)} className="h-9 px-4 bg-primary text-white text-sm rounded-md">Create organization</button>}
       </div>
       <div className="flex gap-2">
         <input className={inputCls + ' max-w-xs'} placeholder="Search..." value={search} onChange={(e) => { setSearch(e.target.value); setCursors([]); }} />
@@ -179,10 +182,10 @@ export default function OperatorOrgsPage() {
                 <td className="p-3 text-xs">{(o.entitlements ?? []).map((e) => `${e.product_key}:${e.status}`).join(', ') || '-'}</td>
                 <td className="p-3 text-xs">{o.last_activity ? new Date(o.last_activity).toLocaleString() : '-'}</td>
                 <td className="p-3 text-right space-x-2 whitespace-nowrap">
-                  <button onClick={() => setEditing(o)} className="text-xs px-2 h-7 border border-line rounded-md hover:bg-surface-alt">Entitlements</button>
-                  {o.status === 'active' && <button onClick={() => setConfirm({ org: o, action: 'suspend' })} className="text-xs px-2 h-7 border border-line rounded-md hover:bg-surface-alt">Suspend</button>}
-                  {o.status === 'suspended' && <button onClick={() => setConfirm({ org: o, action: 'reactivate' })} className="text-xs px-2 h-7 border border-line rounded-md hover:bg-surface-alt">Reactivate</button>}
-                  {o.status !== 'closed' && <button onClick={() => setConfirm({ org: o, action: 'close' })} className="text-xs px-2 h-7 border border-error/30 text-error rounded-md hover:bg-error/5">Close</button>}
+                  {canEntitle && <button onClick={() => setEditing(o)} className="text-xs px-2 h-7 border border-line rounded-md hover:bg-surface-alt">Entitlements</button>}
+                  {canWrite && o.status === 'active' && <button onClick={() => setConfirm({ org: o, action: 'suspend' })} className="text-xs px-2 h-7 border border-line rounded-md hover:bg-surface-alt">Suspend</button>}
+                  {canWrite && o.status === 'suspended' && <button onClick={() => setConfirm({ org: o, action: 'reactivate' })} className="text-xs px-2 h-7 border border-line rounded-md hover:bg-surface-alt">Reactivate</button>}
+                  {canClose && o.status !== 'closed' && <button onClick={() => setConfirm({ org: o, action: 'close' })} className="text-xs px-2 h-7 border border-error/30 text-error rounded-md hover:bg-error/5">Close</button>}
                 </td>
               </tr>
             ))}

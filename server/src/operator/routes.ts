@@ -32,6 +32,7 @@ import { generateEmployeeId } from '../services/employeeId';
 import { AppError } from '../utils/AppError';
 import { asyncHandler } from '../utils/asyncHandler';
 import { requireOperator } from './middleware';
+import { requirePermission, anyOperator, permissionsFor, operatorRolesSchema } from './permissions';
 import { findFirstAdmin, onboardingRoutes } from './onboarding';
 
 const router = Router();
@@ -53,6 +54,11 @@ router.use((req: Request, res: Response, next: NextFunction) => {
   next();
 });
 router.use(requireOperator);
+
+// The signed-in operator and their permission list; the SPA reads it for navigation and buttons (the API never trusts the SPA).
+router.get('/me', anyOperator, asyncHandler(async (req: Request, res: Response) => {
+  ok(res, { ...opOut(req.operator!), permissions: permissionsFor(req.operator!.roles) });
+}));
 
 /** Operator audit + mirrored tenant AuditEvent (source='operator'); direct model writes, not req-bound. */
 async function audit(req: Request, p: {
@@ -106,7 +112,7 @@ async function orgSummaries(companies: any[]) {
   }));
 }
 
-router.get('/orgs', asyncHandler(async (req: Request, res: Response) => {
+router.get('/orgs', requirePermission('tenants.read'), asyncHandler(async (req: Request, res: Response) => {
   const { limit } = paging(req);
   const filter: Record<string, unknown> = {};
   if (typeof req.query.status === 'string' && req.query.status) filter.status = req.query.status;
@@ -131,7 +137,7 @@ async function orgDetail(id: string) {
   return { ...summary, first_admin: admin ? { email: admin.email, full_name: admin.full_name, lifecycle_state: admin.lifecycle_state } : null };
 }
 
-router.get('/orgs/:id', asyncHandler(async (req: Request, res: Response) => ok(res, await orgDetail(String(req.params.id)))));
+router.get('/orgs/:id', requirePermission('tenants.read'), asyncHandler(async (req: Request, res: Response) => ok(res, await orgDetail(String(req.params.id)))));
 
 const ProvisionSchema = z.object({
   name: z.string().trim().min(2).max(120),
@@ -180,7 +186,7 @@ async function bumpOrgAuthz(companyId: Types.ObjectId, session?: ClientSession) 
 const fanOutOrgAccess = (req: Request, companyId: Types.ObjectId) =>
   fanOutAppAccessChanged(companyId, { actor: actorOf(req), correlation_id: corrOf(req), batchSize: 200 });
 
-router.post('/orgs', asyncHandler(async (req: Request, res: Response) => {
+router.post('/orgs', requirePermission('tenants.write'), asyncHandler(async (req: Request, res: Response) => {
   const input = ProvisionSchema.parse(req.body);
   const slug = input.slug || slugify(input.name);
   if (!slug) throw new AppError('Could not derive a slug from the name', 400, 'VALIDATION_ERROR');
@@ -311,12 +317,12 @@ async function setOrgStatus(req: Request, res: Response, status: 'active' | 'sus
   await fanOutOrgAccess(req, company._id);
   ok(res, { ...(await orgDetail(company._id.toString())), sessions_revoked: revokedSids.length });
 }
-router.post('/orgs/:id/suspend', asyncHandler((req: Request, res: Response) => setOrgStatus(req, res, 'suspended', 'org.suspended')));
-router.post('/orgs/:id/reactivate', asyncHandler((req: Request, res: Response) => setOrgStatus(req, res, 'active', 'org.reactivated')));
-router.post('/orgs/:id/close', asyncHandler((req: Request, res: Response) => setOrgStatus(req, res, 'closed', 'org.closed')));
+router.post('/orgs/:id/suspend', requirePermission('tenants.write'), asyncHandler((req: Request, res: Response) => setOrgStatus(req, res, 'suspended', 'org.suspended')));
+router.post('/orgs/:id/reactivate', requirePermission('tenants.write'), asyncHandler((req: Request, res: Response) => setOrgStatus(req, res, 'active', 'org.reactivated')));
+router.post('/orgs/:id/close', requirePermission('tenants.close'), asyncHandler((req: Request, res: Response) => setOrgStatus(req, res, 'closed', 'org.closed')));
 
 // Assign a plan to an existing org: activates the plan's products (never removes or re-activates suspended ones).
-router.patch('/orgs/:id', asyncHandler(async (req: Request, res: Response) => {
+router.patch('/orgs/:id', requirePermission('tenants.write'), asyncHandler(async (req: Request, res: Response) => {
   const body = z.object({ plan_key: z.string().trim().min(1) }).parse(req.body);
   const company = await Company.findById(oid(String(req.params.id)));
   if (!company) throw new AppError('Organization not found', 404, 'NOT_FOUND');
@@ -346,7 +352,7 @@ router.patch('/orgs/:id', asyncHandler(async (req: Request, res: Response) => {
   ok(res, { id: String(company._id), plan_key: plan.key, products: plan.products });
 }));
 
-router.put('/orgs/:id/entitlements/:productKey',asyncHandler(async (req: Request, res: Response) => {
+router.put('/orgs/:id/entitlements/:productKey', requirePermission('entitlements.write'), asyncHandler(async (req: Request, res: Response) => {
   const key = await assertProductKey(productKey.parse(req.params.productKey));
   const body = z.object({ status: z.enum(['active', 'suspended']), seats_limit: z.number().int().min(0).nullable().optional() }).parse(req.body);
   const company = await Company.findById(oid(String(req.params.id)));
@@ -390,12 +396,12 @@ const idpOut = (c: any) => ({
     : null,
 });
 
-router.get('/orgs/:id/identity-providers', asyncHandler(async (req: Request, res: Response) => {
+router.get('/orgs/:id/identity-providers', requirePermission('tenants.read'), asyncHandler(async (req: Request, res: Response) => {
   const companyId = oid(String(req.params.id));
   ok(res, (await IdentityProviderConnection.find({ company_id: companyId }).sort({ created_at: 1 })).map(idpOut));
 }));
 
-router.post('/orgs/:id/identity-providers/:connId/approve-tenant', asyncHandler(async (req: Request, res: Response) => {
+router.post('/orgs/:id/identity-providers/:connId/approve-tenant', requirePermission('tenants.write'), asyncHandler(async (req: Request, res: Response) => {
   const company = await Company.findById(oid(String(req.params.id)));
   if (!company) throw new AppError('Organization not found', 404, 'NOT_FOUND');
   const conn = await IdentityProviderConnection.findOne({ _id: oid(String(req.params.connId), 'connection id'), company_id: company._id });
@@ -417,8 +423,8 @@ router.post('/orgs/:id/identity-providers/:connId/approve-tenant', asyncHandler(
 // ── Plans ────────────────────────────────────────────────────────────────────────────────────
 const planOut = (p: any) => ({ id: p._id.toString(), key: p.key, name: p.name, products: p.products, status: p.status });
 
-router.get('/plans', asyncHandler(async (_req: Request, res: Response) => ok(res, (await Plan.find().sort({ key: 1 })).map(planOut))));
-router.post('/plans', asyncHandler(async (req: Request, res: Response) => {
+router.get('/plans', requirePermission('tenants.read'), asyncHandler(async (_req: Request, res: Response) => ok(res, (await Plan.find().sort({ key: 1 })).map(planOut))));
+router.post('/plans', requirePermission('plans.write'), asyncHandler(async (req: Request, res: Response) => {
   const b = z.object({
     key: z.string().trim().regex(/^[a-z0-9_-]{2,40}$/), name: z.string().trim().min(1).max(80),
     products: z.array(productKey).default([]), status: z.enum(['active', 'archived']).optional(),
@@ -429,7 +435,7 @@ router.post('/plans', asyncHandler(async (req: Request, res: Response) => {
   await audit(req, { action: 'plan.created', target_type: 'Plan', target_id: plan.key, details: planOut(plan) });
   ok(res, planOut(plan), 201);
 }));
-router.patch('/plans/:key', asyncHandler(async (req: Request, res: Response) => {
+router.patch('/plans/:key', requirePermission('plans.write'), asyncHandler(async (req: Request, res: Response) => {
   const b = z.object({ name: z.string().trim().min(1).max(80), products: z.array(productKey), status: z.enum(['active', 'archived']) }).partial().parse(req.body);
   if (b.products) await assertProductKeys(b.products);
   const plan = await Plan.findOne({ key: String(req.params.key) });
@@ -442,7 +448,7 @@ router.patch('/plans/:key', asyncHandler(async (req: Request, res: Response) => 
 }));
 
 // ── Audit ────────────────────────────────────────────────────────────────────────────────────
-router.get('/audit', asyncHandler(async (req: Request, res: Response) => {
+router.get('/audit', requirePermission('audit.read'), asyncHandler(async (req: Request, res: Response) => {
   const { limit } = paging(req);
   const filter: Record<string, unknown> = {};
   if (typeof req.query.company_id === 'string' && req.query.company_id) filter.company_id = oid(req.query.company_id, 'company_id');
@@ -462,10 +468,10 @@ const opOut = (o: any) => ({
   id: o._id.toString(), email: o.email, full_name: o.full_name, roles: o.roles, status: o.status,
   mfa_enabled: !!o.mfa?.enabled, last_login_at: o.last_login_at ?? null, created_at: o.created_at,
 });
-const operatorRoles = z.array(z.enum(['platform_admin'])).min(1);
+const operatorRoles = operatorRolesSchema;
 
-router.get('/operators', asyncHandler(async (_req: Request, res: Response) => ok(res, (await OperatorAccount.find().sort({ created_at: 1 })).map(opOut))));
-router.post('/operators', asyncHandler(async (req: Request, res: Response) => {
+router.get('/operators', requirePermission('operators.read'), asyncHandler(async (_req: Request, res: Response) => ok(res, (await OperatorAccount.find().sort({ created_at: 1 })).map(opOut))));
+router.post('/operators', requirePermission('operators.write'), asyncHandler(async (req: Request, res: Response) => {
   const b = z.object({
     email: z.string().trim().email().toLowerCase(), full_name: z.string().trim().min(1).max(120),
     password: z.string().min(12).max(200), roles: operatorRoles.optional(),
@@ -477,7 +483,7 @@ router.post('/operators', asyncHandler(async (req: Request, res: Response) => {
   await audit(req, { action: 'operator.created', target_type: 'Operator', target_id: acct._id.toString(), details: { email: acct.email } });
   ok(res, opOut(acct), 201);
 }));
-router.patch('/operators/:id', asyncHandler(async (req: Request, res: Response) => {
+router.patch('/operators/:id', requirePermission('operators.write'), asyncHandler(async (req: Request, res: Response) => {
   const b = z.object({
     full_name: z.string().trim().min(1).max(120), status: z.enum(['active', 'suspended']),
     roles: operatorRoles, password: z.string().min(12).max(200), reset_mfa: z.boolean(),

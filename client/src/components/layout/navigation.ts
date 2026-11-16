@@ -135,10 +135,10 @@ export const OPERATOR_SHELL: ShellConfig = {
     {
       label: 'Platform',
       items: [
-        { label: 'Organizations', href: ROUTES.OPERATOR_ORGS, icon: Building2 },
-        { label: 'Plans', href: ROUTES.OPERATOR_PLANS, icon: Layers },
-        { label: 'Operators', href: ROUTES.OPERATOR_OPERATORS, icon: ShieldCheck },
-        { label: 'Audit', href: ROUTES.OPERATOR_AUDIT, icon: ClipboardList },
+        { label: 'Organizations', href: ROUTES.OPERATOR_ORGS, icon: Building2, permission: 'tenants.read' },
+        { label: 'Plans', href: ROUTES.OPERATOR_PLANS, icon: Layers, permission: 'tenants.read' },
+        { label: 'Operators', href: ROUTES.OPERATOR_OPERATORS, icon: ShieldCheck, permission: 'operators.read' },
+        { label: 'Audit', href: ROUTES.OPERATOR_AUDIT, icon: ClipboardList, permission: 'audit.read' },
       ],
     },
   ],

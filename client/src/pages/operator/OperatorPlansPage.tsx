@@ -7,7 +7,7 @@ import { FormField } from '@/components/ui/FormField';
 import { Tag } from '@/components/ui/Tag';
 import { DataTable } from '@/components/ui/DataTable';
 import { ListPage } from '@/components/templates/ListPage';
-import { usePlans, useSavePlan, type Plan } from '@/features/operator/operatorApi';
+import { useOperatorCan, usePlans, useSavePlan, type Plan } from '@/features/operator/operatorApi';
 
 function PlanDialog({ plan, onClose }: { plan: Plan | null; onClose: () => void }) {
   const save = useSavePlan();
@@ -55,6 +55,7 @@ function PlanDialog({ plan, onClose }: { plan: Plan | null; onClose: () => void 
 
 export default function OperatorPlansPage() {
   const { data: plans, isLoading, isError, refetch } = usePlans();
+  const canWrite = useOperatorCan('plans.write');
   const [editing, setEditing] = useState<Plan | null | undefined>(undefined); // undefined = closed, null = create
 
   const columns = useMemo<ColumnDef<Plan>[]>(
@@ -84,16 +85,16 @@ export default function OperatorPlansPage() {
       <ListPage
         title="Plans"
         subtitle="Which products each plan includes."
-        primaryAction={<Button onClick={() => setEditing(null)}>Create plan</Button>}
+        primaryAction={canWrite ? <Button onClick={() => setEditing(null)}>Create plan</Button> : undefined}
         isLoading={isLoading}
         isError={isError}
         onRetry={() => refetch()}
         isEmpty={!isLoading && !isError && (plans ?? []).length === 0}
         emptyTitle="No plans yet"
         emptyDescription="Create the first plan to offer products to organizations."
-        emptyAction={{ label: 'Create plan', onClick: () => setEditing(null) }}
+        emptyAction={canWrite ? { label: 'Create plan', onClick: () => setEditing(null) } : undefined}
       >
-        <DataTable columns={columns} data={plans ?? []} onRowClick={(p) => setEditing(p)} />
+        <DataTable columns={columns} data={plans ?? []} onRowClick={canWrite ? (p) => setEditing(p) : undefined} />
       </ListPage>
       {editing !== undefined && <PlanDialog plan={editing} onClose={() => setEditing(undefined)} />}
     </>
