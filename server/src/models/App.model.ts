@@ -19,7 +19,7 @@ export interface IApp extends Document {
   mutually_exclusive?: string[];
   /** 04 §4 product registry */
   app_type?: 'karbexa_product' | 'third_party';
-  product_key?: 'admin' | 'people' | 'projects' | 'sign' | 'desk';
+  product_key?: string;
   launch_url?: string;
   role_catalog_version?: number;
   default_role_key?: string;
@@ -46,7 +46,7 @@ const AppSchema = new Schema<IApp>({
   dependencies: [{ type: String }],
   mutually_exclusive: [{ type: String }],
   app_type: { type: String, enum: ['karbexa_product', 'third_party'], default: 'third_party' },
-  product_key: { type: String, enum: ['admin', 'people', 'projects', 'sign', 'desk'] },
+  product_key: { type: String },
   launch_url: String,
   role_catalog_version: { type: Number, default: 1 },
   default_role_key: String,

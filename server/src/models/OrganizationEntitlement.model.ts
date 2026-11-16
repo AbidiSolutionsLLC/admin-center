@@ -1,6 +1,6 @@
 // server/src/models/OrganizationEntitlement.model.ts — 04 §6
 import { Schema, model, Document, Types } from 'mongoose';
-import { PRODUCT_KEYS, ProductKey } from './ProductRole.model';
+import { ProductKey } from './ProductRole.model';
 
 export interface IOrganizationEntitlement extends Document {
   company_id: Types.ObjectId;
@@ -15,7 +15,7 @@ export interface IOrganizationEntitlement extends Document {
 
 const OrganizationEntitlementSchema = new Schema<IOrganizationEntitlement>({
   company_id: { type: Schema.Types.ObjectId, ref: 'Company', required: true },
-  product_key: { type: String, enum: PRODUCT_KEYS, required: true },
+  product_key: { type: String, required: true },
   status: { type: String, enum: ['active', 'suspended'], default: 'active' },
   seats_limit: Number,
   source: { type: String, enum: ['plan', 'operator', 'seed'], default: 'operator' },

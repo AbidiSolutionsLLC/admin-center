@@ -1,8 +1,8 @@
 // server/src/models/ProductRole.model.ts — 04 §5
 import { Schema, model, Document, Types } from 'mongoose';
 
-export type ProductKey = 'admin' | 'people' | 'projects' | 'sign' | 'desk';
-export const PRODUCT_KEYS: ProductKey[] = ['admin', 'people', 'projects', 'sign', 'desk'];
+/** Product keys are data (App where app_type = 'karbexa_product'), validated by lib/productRegistry. 'admin' is reserved. */
+export type ProductKey = string;
 
 export interface IProductRole extends Document {
   app_id: Types.ObjectId;
@@ -18,7 +18,7 @@ export interface IProductRole extends Document {
 
 const ProductRoleSchema = new Schema<IProductRole>({
   app_id: { type: Schema.Types.ObjectId, ref: 'App', required: true, index: true },
-  product_key: { type: String, enum: PRODUCT_KEYS, required: true },
+  product_key: { type: String, required: true },
   key: { type: String, required: true },
   name: { type: String, required: true },
   description: String,

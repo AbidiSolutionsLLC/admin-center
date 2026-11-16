@@ -3,7 +3,8 @@ import { Router } from 'express';
 import { z } from 'zod';
 import { App } from '../models/App.model';
 import { AppAssignment } from '../models/AppAssignment.model';
-import { ProductRole, PRODUCT_KEYS, ProductKey } from '../models/ProductRole.model';
+import { ProductRole, ProductKey } from '../models/ProductRole.model';
+import { getProduct, RESERVED_PRODUCT_KEY } from '../lib/productRegistry';
 import { runInTransaction, fanOutAppAccessChanged, correlationIdFor } from '../lib/platformEvents';
 import { requireServiceToken, serviceMayAccessProduct } from './requireServiceToken';
 
@@ -35,8 +36,8 @@ const view = (version: number, rows: any[]) => ({
 
 roleCatalogRouter.put('/apps/:productKey/role-catalog', requireServiceToken('platform.role_catalog.write'), async (req, res, next) => {
   try {
-    const productKey = req.params.productKey as ProductKey; // validated against PRODUCT_KEYS right below
-    if (!(PRODUCT_KEYS as string[]).includes(productKey) || productKey === 'admin') {
+    const productKey = req.params.productKey as ProductKey; // validated against the registry right below
+    if (productKey === RESERVED_PRODUCT_KEY || !(await getProduct(productKey))) {
       return res.status(404).json({ error: 'Not found', code: 'NOT_FOUND' });
     }
     if (!serviceMayAccessProduct(req, productKey)) {

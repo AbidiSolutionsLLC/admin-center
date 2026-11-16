@@ -1,6 +1,6 @@
 // server/src/models/Plan.model.ts — 04 §6 (operator-owned)
 import { Schema, model, Document } from 'mongoose';
-import { PRODUCT_KEYS, ProductKey } from './ProductRole.model';
+import { ProductKey } from './ProductRole.model';
 
 export interface IPlan extends Document {
   key: string;
@@ -12,7 +12,7 @@ export interface IPlan extends Document {
 const PlanSchema = new Schema<IPlan>({
   key: { type: String, required: true, unique: true },
   name: { type: String, required: true },
-  products: [{ type: String, enum: PRODUCT_KEYS }],
+  products: [{ type: String }],
   status: { type: String, enum: ['active', 'archived'], default: 'active' },
 }, { timestamps: { createdAt: 'created_at', updatedAt: 'updated_at' } });
 

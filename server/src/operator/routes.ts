@@ -12,7 +12,7 @@ import { UserRole } from '../models/UserRole.model';
 import { InviteToken } from '../models/InviteToken.model';
 import { AuditEvent } from '../models/AuditEvent.model';
 import { Plan } from '../models/Plan.model';
-import { PRODUCT_KEYS, ProductKey } from '../models/ProductRole.model';
+import { ProductKey } from '../models/ProductRole.model';
 import { OrganizationEntitlement } from '../models/OrganizationEntitlement.model';
 import { OperatorAccount } from '../models/OperatorAccount.model';
 import { OperatorAuditEvent } from '../models/OperatorAuditEvent.model';
@@ -21,6 +21,7 @@ import { AppAssignment } from '../models/AppAssignment.model';
 import { Group } from '../models/Group.model';
 import { IdentityProviderConnection } from '../models/IdentityProviderConnection.model';
 import { seedProductRegistry } from '../lib/productCatalog';
+import { assertProductKey, assertProductKeys } from '../lib/productRegistry';
 import { runInTransaction, emitPlatformEvent, emitAppAccessChanged, fanOutAppAccessChanged } from '../lib/platformEvents';
 import { RefreshToken } from '../models/RefreshToken.model';
 import { RolePermission } from '../models/RolePermission.model';
@@ -36,7 +37,8 @@ import { asyncHandler } from '../utils/asyncHandler';
 import { requireOperator } from './middleware';
 
 const router = Router();
-const productKey = z.enum(PRODUCT_KEYS as [ProductKey, ...ProductKey[]]);
+/** Shape only; membership in the registry is checked with assertProductKey(s) (lib/productRegistry). */
+const productKey = z.string().trim().min(1).max(64);
 const ok = (res: Response, data: unknown, status = 200, meta?: unknown) => res.status(status).json({ success: true, data, ...(meta ? { meta } : {}) });
 const oid = (id: string, what = 'id') => {
   if (!Types.ObjectId.isValid(id)) throw new AppError(`Invalid ${what}`, 400, 'VALIDATION_ERROR');
@@ -359,7 +361,7 @@ router.patch('/orgs/:id', asyncHandler(async (req: Request, res: Response) => {
 }));
 
 router.put('/orgs/:id/entitlements/:productKey',asyncHandler(async (req: Request, res: Response) => {
-  const key = productKey.parse(req.params.productKey);
+  const key = await assertProductKey(productKey.parse(req.params.productKey));
   const body = z.object({ status: z.enum(['active', 'suspended']), seats_limit: z.number().int().min(0).nullable().optional() }).parse(req.body);
   const company = await Company.findById(oid(String(req.params.id)));
   if (!company) throw new AppError('Organization not found', 404, 'NOT_FOUND');
@@ -435,6 +437,7 @@ router.post('/plans', asyncHandler(async (req: Request, res: Response) => {
     key: z.string().trim().regex(/^[a-z0-9_-]{2,40}$/), name: z.string().trim().min(1).max(80),
     products: z.array(productKey).default([]), status: z.enum(['active', 'archived']).optional(),
   }).parse(req.body);
+  await assertProductKeys(b.products);
   if (await Plan.exists({ key: b.key })) throw new AppError('A plan with this key already exists', 409, 'DUPLICATE');
   const plan = await Plan.create(b);
   await audit(req, { action: 'plan.created', target_type: 'Plan', target_id: plan.key, details: planOut(plan) });
@@ -442,6 +445,7 @@ router.post('/plans', asyncHandler(async (req: Request, res: Response) => {
 }));
 router.patch('/plans/:key', asyncHandler(async (req: Request, res: Response) => {
   const b = z.object({ name: z.string().trim().min(1).max(80), products: z.array(productKey), status: z.enum(['active', 'archived']) }).partial().parse(req.body);
+  if (b.products) await assertProductKeys(b.products);
   const plan = await Plan.findOne({ key: String(req.params.key) });
   if (!plan) throw new AppError('Plan not found', 404, 'NOT_FOUND');
   const before = planOut(plan);

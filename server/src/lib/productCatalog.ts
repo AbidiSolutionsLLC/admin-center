@@ -2,6 +2,7 @@
 import { App } from '../models/App.model';
 import { ProductRole, ProductKey } from '../models/ProductRole.model';
 import { Plan } from '../models/Plan.model';
+import { invalidateProductRegistry } from './productRegistry';
 
 interface RoleDef { key: string; name: string; rank: number; is_default?: boolean }
 interface ProductDef { product_key: ProductKey; name: string; slug: string; description: string; env: string; port: number; /** Entry page in the products web app (matches its AppLauncher INTERNAL_PATHS). */ path: string; roles: RoleDef[] }
@@ -95,4 +96,5 @@ export async function seedProductRegistry(): Promise<void> {
   for (const p of DEFAULT_PLANS) {
     await Plan.updateOne({ key: p.key }, { $set: { name: p.name, products: p.products, status: 'active' } }, { upsert: true });
   }
+  invalidateProductRegistry();
 }
