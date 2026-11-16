@@ -515,7 +515,7 @@ export async function resumeWorkflow(runId: string, approved: boolean, decidedBy
     await Insight.create({
       company_id: run.company_id,
       category: 'health',
-      severity: 'warning' as unknown as IInsight['severity'], // not in the Insight enum (pre-existing)
+      severity: 'medium',
       title: `Workflow "${workflow.name}" rejected`,
       description: `Workflow execution was rejected for user ${run.triggered_by_label}.`,
       reasoning: run.error_message,

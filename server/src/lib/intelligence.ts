@@ -20,6 +20,13 @@ import { PERMISSION_GROUPS } from '../constants/roles';
 // Type alias for external imports
 export type IInsight = import('../models/Insight.model').IInsight;
 
+/** Insight severities (critical/high/medium/low) mapped onto the notification enum (info/warning/critical). */
+export function notificationSeverityFor(severity: IInsight['severity'] | undefined): IInAppNotification['severity'] {
+  if (severity === 'critical') return 'critical';
+  if (severity === 'high' || severity === 'medium') return 'warning';
+  return 'info';
+}
+
 const pendingRuns = new Set<string>();
 
 /**
@@ -1051,7 +1058,7 @@ export const runIntelligenceRules = async (companyId: string | Types.ObjectId): 
               user_id: admin._id,
               title: `Misconfiguration Detected: ${insight.title}`,
               message: `${insight.description}\n\n${insight.reasoning || ''}`,
-              severity: insight.severity as unknown as IInAppNotification['severity'], // Insight and notification severity enums differ (pre-existing)
+              severity: notificationSeverityFor(insight.severity),
               status: 'unread',
               link_url: insight.remediation_url || '/overview',
             });
