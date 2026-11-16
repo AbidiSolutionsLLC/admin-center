@@ -200,7 +200,7 @@ Role grants are additionally limited by `server/src/lib/roleHierarchy.ts` (`asse
 |---|---|---|---|
 | GET | `/apps` | auth | `apps.controller.getApps` |
 | GET | `/apps/target/:target_type/:target_id` | auth | `getAppAssignmentsByTarget` |
-| PATCH | `/apps/assignments/:id` | IT_ADMINS | `appAccess.controller.updateAssignment` (product role, `include_descendants`, reason) |
+| PATCH | `/apps/assignments/:id` | IT_ADMINS | `appAccess.controller.updateAssignment` (product role, `include_descendants`, reason; widening to descendants is checked against the seat limit, 409 `SEAT_LIMIT_REACHED`) |
 | GET | `/apps/:id` | auth | `getAppById` |
 | GET | `/apps/:id/roles` | auth | `appAccess.controller.getAppRoles` (product role catalog) |
 | GET | `/apps/:id/timeline` | auth | `getAppAssignmentTimeline` |
@@ -209,7 +209,7 @@ Role grants are additionally limited by `server/src/lib/roleHierarchy.ts` (`asse
 | POST | `/apps` | IT_ADMINS | `createApp` |
 | PUT | `/apps/:id` | IT_ADMINS | `updateApp` |
 | DELETE | `/apps/:id` | IT_ADMINS | `deleteApp` |
-| POST | `/apps/:id/assign` | IT_ADMINS | `assignApp` (for product apps: needs an active entitlement and an assignable product role) |
+| POST | `/apps/:id/assign` | IT_ADMINS | `assignApp` (for product apps: needs an active entitlement and an assignable product role; 409 `SEAT_LIMIT_REACHED` with `details { product_key, limit, used, requested }` when it would exceed the entitlement's seat limit) |
 | POST | `/apps/:id/revoke` | IT_ADMINS | `revokeApp` |
 
 #### Security (`security.routes.ts`, `ipRestrictions.routes.ts`, `identityProviders.routes.ts`)

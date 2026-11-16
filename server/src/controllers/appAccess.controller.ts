@@ -12,6 +12,7 @@ import { OrganizationEntitlement } from '../models/OrganizationEntitlement.model
 import { User } from '../models/User.model';
 import { computeEffectiveAccess, resolveAssignmentMemberIds } from '../lib/effectiveAccess';
 import { runInTransaction, emitAppAccessChanged, correlationIdFor } from '../lib/platformEvents';
+import { assertSeatsAvailable } from '../lib/seats';
 
 const oid = (v: string, what = 'id') => {
   if (!Types.ObjectId.isValid(v)) throw new AppError(`Invalid ${what}`, 400, 'INVALID_ID');
@@ -55,7 +56,14 @@ export const updateAssignment = asyncHandler(async (req: Request, res: Response)
       if (!role || !role.assignable) throw new AppError('Invalid or non-assignable product role', 400, 'INVALID_ROLE');
       assignment.product_role_key = body.product_role_key;
     }
-    if (body.include_descendants !== undefined) assignment.include_descendants = body.include_descendants;
+    if (body.include_descendants !== undefined) {
+      // Widening to descendants can add members: Plan 4.7 seat limit check against the assignment as it would be.
+      if (body.include_descendants && assignment.include_descendants === false && app.app_type === 'karbexa_product' && app.product_key) {
+        const ent = await OrganizationEntitlement.findOne({ company_id: companyId, product_key: app.product_key, status: 'active' }).session(session ?? null).lean();
+        await assertSeatsAvailable(companyId, app.product_key, ent?.seats_limit, { ...assignment.toObject(), include_descendants: true }, session);
+      }
+      assignment.include_descendants = body.include_descendants;
+    }
     if (body.reason !== undefined) assignment.reason = body.reason;
     const before = await AppAssignment.findById(assignment._id).session(session ?? null).lean();
     await assignment.save({ session: session ?? undefined });

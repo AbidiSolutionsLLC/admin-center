@@ -20,7 +20,7 @@ async function mockApi(page: import('@playwright/test').Page, permissions = ALL)
     fulfillJson(route, { success: true, data: [{ id: 'i1', type: 'entra', display_name: 'Acme Entra', status: 'draft', tenant_id: 'tid-1', tenant_approval: null }] })
   );
   await page.route('**/operator/v1/orgs/c1/products', (route) =>
-    fulfillJson(route, { success: true, data: [{ product_key: 'people', name: 'People', status: 'active', source: 'plan', plan_key: 'professional', seats_limit: 50 }, { product_key: 'sign', name: 'Sign', status: 'not_entitled', source: null, plan_key: null, seats_limit: null }] })
+    fulfillJson(route, { success: true, data: [{ product_key: 'people', name: 'People', status: 'active', source: 'plan', plan_key: 'professional', seats_limit: 50, seats_used: 45 }, { product_key: 'sign', name: 'Sign', status: 'not_entitled', source: null, plan_key: null, seats_limit: null }] })
   );
   await page.route('**/operator/v1/orgs/c1/admins', (route) =>
     fulfillJson(route, { success: true, data: [{ id: 'u1', full_name: 'Ada Admin', email: 'ada@acme.test', roles: ['Super Admin'], mfa_enabled: false, last_login_at: null, status: 'active' }] })
@@ -38,6 +38,7 @@ test('header, facts and tabs; Products and Admins tables', async ({ page }) => {
   await expect(page.getByText('8 active / 10')).toBeVisible();
   await page.getByRole('tab', { name: 'Products' }).click();
   await expect(page.getByRole('row', { name: /People/ })).toContainText('active');
+  await expect(page.getByRole('row', { name: /People/ })).toContainText('45 of 50'); // plan 4.7 SeatMeter
   await expect(page.getByRole('row', { name: /Sign/ })).toContainText('not entitled');
   await page.getByRole('tab', { name: 'Admins' }).click();
   await expect(page.getByRole('row', { name: /Ada Admin/ })).toContainText('Off');

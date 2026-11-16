@@ -14,6 +14,7 @@ import { UserRole } from '../models/UserRole.model';
 import { Identity } from '../models/Identity.model';
 import { OrganizationEntitlement } from '../models/OrganizationEntitlement.model';
 import { TenantNote } from '../models/TenantNote.model';
+import { SeatUsage } from '../models/SeatUsage.model';
 import { ROLES } from '../constants/roles';
 import { AppError } from '../utils/AppError';
 import { asyncHandler } from '../utils/asyncHandler';
@@ -46,11 +47,13 @@ export function tenantRoutes(h: Helpers): Router {
   // Every registered product with the organisation's entitlement for it (a product with none reads `not_entitled`).
   router.get('/orgs/:id/products', requirePermission('tenants.read'), asyncHandler(async (req: Request, res: Response) => {
     const company = await loadCompany(req);
-    const [products, ents] = await Promise.all([
+    const [products, ents, usage] = await Promise.all([
       listProducts(),
       OrganizationEntitlement.find({ company_id: company._id }),
+      SeatUsage.find({ company_id: company._id }).lean(),
     ]);
     const byKey = new Map(ents.map((e) => [e.product_key, e]));
+    const usedBy = new Map(usage.map((u) => [u.product_key, u]));
     h.ok(res, products.map((p) => {
       const e = byKey.get(p.product_key);
       return {
@@ -61,6 +64,8 @@ export function tenantRoutes(h: Helpers): Router {
         plan_key: e?.plan_key ?? null,
         seats_limit: e?.seats_limit ?? null,
         plan_version: e?.plan_version ?? null,
+        seats_used: usedBy.get(p.product_key)?.used ?? null, // last stored count (lib/seats.ts); null before the first one
+        seats_computed_at: usedBy.get(p.product_key)?.computed_at ?? null,
         reason: e?.source === 'operator' ? e.reason ?? null : null,
         expires_at: e?.source === 'operator' ? e.expires_at ?? null : null,
       };

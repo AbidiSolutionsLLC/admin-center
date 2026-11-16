@@ -5,6 +5,7 @@ import { ObjectPage } from '@/components/templates/ObjectPage';
 import { DataTable } from '@/components/ui/DataTable';
 import { StatusBadge } from '@/components/ui/StatusBadge';
 import { Tag } from '@/components/ui/Tag';
+import { SeatMeter } from '@/components/ui/SeatMeter';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Textarea } from '@/components/ui/Textarea';
@@ -224,7 +225,16 @@ function ProductsTab({ id }: { id: string }) {
       ),
     },
     { header: 'Plan', id: 'plan', cell: ({ row }) => (row.original.plan_key ? `${row.original.plan_key}${row.original.plan_version ? ` v${row.original.plan_version}` : ''}` : '-') },
-    { header: 'Seat limit', id: 'seats', cell: ({ row }) => <span className="tabular">{row.original.seats_limit ?? 'No limit'}</span> },
+    {
+      header: 'Seats',
+      id: 'seats',
+      cell: ({ row }) =>
+        row.original.seats_used === null || row.original.seats_used === undefined ? (
+          <span className="tabular">{row.original.seats_limit ?? 'No limit'}</span>
+        ) : (
+          <SeatMeter label="" used={row.original.seats_used} total={row.original.seats_limit} className="min-w-40" />
+        ),
+    },
     { header: 'Expires', id: 'expires', cell: ({ row }) => day(row.original.expires_at) },
     {
       header: '',

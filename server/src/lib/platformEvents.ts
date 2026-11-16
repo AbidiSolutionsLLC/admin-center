@@ -6,6 +6,7 @@ import { PlatformEvent, IPlatformEvent } from '../models/PlatformEvent.model';
 import { User } from '../models/User.model';
 import { OrgEventCounter } from '../models/OrgEventCounter.model';
 import { bumpAuthzVer, computeEffectiveAccess } from './effectiveAccess';
+import { scheduleSeatRecompute } from './seats';
 
 type TxMode = 'transactional' | 'standalone';
 let txMode: TxMode | undefined;
@@ -111,6 +112,7 @@ export async function emitAppAccessChanged(
       data: { authz_ver: acc.authz_ver, products },
     });
   }
+  onCommit(session, () => scheduleSeatRecompute(companyId)); // Plan 4.7: seat counts follow access changes
 }
 
 /** Above this many affected members an app_access.changed fan-out leaves the originating transaction. */

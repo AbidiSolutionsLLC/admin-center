@@ -6,6 +6,7 @@ import bcrypt from 'bcryptjs';
 import crypto from 'crypto';
 import { z } from 'zod';
 import { Company } from '../models/Company.model';
+import { SeatUsage } from '../models/SeatUsage.model';
 import { User } from '../models/User.model';
 import { Role } from '../models/Role.model';
 import { UserRole } from '../models/UserRole.model';
@@ -160,7 +161,10 @@ async function orgDetail(id: string) {
   if (!company) throw new AppError('Organization not found', 404, 'NOT_FOUND');
   const [summary] = await orgSummaries([company]);
   const admin = await findFirstAdmin(company._id as Types.ObjectId); // through UserRole + the Super Admin role (Plan 2.6)
-  return { ...summary, first_admin: admin ? { email: admin.email, full_name: admin.full_name, lifecycle_state: admin.lifecycle_state } : null };
+  const [ents, usage] = await Promise.all([OrganizationEntitlement.find({ company_id: company._id }).lean(), SeatUsage.find({ company_id: company._id }).lean()]);
+  const limitOf = new Map(ents.map((e) => [e.product_key, e.seats_limit ?? null]));
+  const seat_usage = usage.map((u) => ({ product_key: u.product_key, used: u.used, limit: limitOf.get(u.product_key) ?? null, computed_at: u.computed_at }));
+  return { ...summary, first_admin: admin ? { email: admin.email, full_name: admin.full_name, lifecycle_state: admin.lifecycle_state } : null, seat_usage };
 }
 
 router.get('/orgs/:id', requirePermission('tenants.read'), asyncHandler(async (req: Request, res: Response) => ok(res, await orgDetail(String(req.params.id)))));

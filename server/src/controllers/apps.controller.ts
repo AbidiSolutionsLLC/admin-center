@@ -20,6 +20,7 @@ import { ProductRole } from '../models/ProductRole.model';
 import { OrganizationEntitlement } from '../models/OrganizationEntitlement.model';
 import { resolveAssignmentMemberIds } from '../lib/effectiveAccess';
 import { runInTransaction, emitAppAccessChanged, correlationIdFor } from '../lib/platformEvents';
+import { assertSeatsAvailable } from '../lib/seats';
 
 /**
  * Whitelist of allowed attribute names for attribute-based app assignments.
@@ -593,11 +594,13 @@ export const assignApp = asyncHandler(async (req: Request, res: Response) => {
 
   // 04 §7: product apps need an active entitlement and a valid, assignable catalog role
   let productRoleKey: string | undefined;
+  let seatsLimit: number | null | undefined;
   if (app.app_type === 'karbexa_product') {
     const entitlement = await OrganizationEntitlement.findOne({ company_id: companyId, product_key: app.product_key, status: 'active' }).lean();
     if (!entitlement) {
       throw new AppError('Organization has no active entitlement for this product', 400, 'NO_ENTITLEMENT');
     }
+    seatsLimit = entitlement.seats_limit;
     productRoleKey = validated.product_role_key || app.default_role_key;
     const role = await ProductRole.findOne({ product_key: app.product_key, key: productRoleKey }).lean();
     if (!role || !role.assignable) {
@@ -739,6 +742,14 @@ export const assignApp = asyncHandler(async (req: Request, res: Response) => {
 
   if (conflictingApps.size > 0) {
     throw new AppError(`Conflicting app assignments: ${Array.from(conflictingApps).join(', ')}`, 409, 'CONFLICTING_APP');
+  }
+
+  // Plan 4.7: refuse an assignment that would take the organization past its seat limit for the product
+  if (app.app_type === 'karbexa_product' && app.product_key) {
+    await assertSeatsAvailable(companyId, app.product_key, seatsLimit, {
+      company_id: companyId, target_type: validated.target_type, target_id: validated.target_id ? new Types.ObjectId(validated.target_id) : undefined,
+      attribute_name: validated.attribute_name, attribute_value: validated.attribute_value, include_descendants: validated.include_descendants ?? true,
+    } as any);
   }
 
   // Create assignment

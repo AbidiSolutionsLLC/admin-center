@@ -8,7 +8,8 @@ export const errorHandler = (err: any, req: Request, res: Response, next: NextFu
     return res.status(err.statusCode).json({
       success: false,
       error: err.message,
-      code: err.code
+      code: err.code,
+      ...(err.details !== undefined ? { details: err.details } : {}),
     });
   }
 

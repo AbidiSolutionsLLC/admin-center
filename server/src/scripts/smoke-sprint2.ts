@@ -1570,6 +1570,86 @@ async function main() {
       }
     }
 
+    // ── Plan 4.7: seats (SeatUsage, SEAT_LIMIT_REACHED on assignment, widening, not blocked elsewhere) ──
+    {
+      const { SeatUsage, Department, GroupMember, OrganizationEntitlement: Ent } = await import('../models');
+      const { recomputeSeatUsage } = await import('../lib/seats');
+      const json = async (r: any) => (await r.json()) as any;
+      const prov = await json(await op('/orgs', 'POST', { name: 'Seat Co', slug: 'seat-co', plan_key: 'professional', first_admin: { email: 'admin@seat.test', full_name: 'Sam Seat' } }));
+      const cid = prov.data.id as string;
+      const admin = (await User.findOne({ company_id: cid, email: 'admin@seat.test' }))!;
+      await User.updateOne({ _id: admin._id }, { $set: { lifecycle_state: 'active', is_active: true } });
+      const mkUser = async (n: number) => User.create({
+        company_id: cid, full_name: `Seat Member ${n}`, email: `m${n}@seat.test`, password_hash: 'x', role: 'Employee', lifecycle_state: 'active', is_active: true,
+        employment_type: 'full_time', employee_id: `SEAT-${n}`,
+      });
+      const [u1, u2, u3] = [await mkUser(1), await mkUser(2), await mkUser(3)];
+
+      // `sign` has no default rule, so nothing holds a seat until an assignment is made. Entitle it with a limit of 2.
+      const put = await op(`/orgs/${cid}/entitlements/sign`, 'PUT', { status: 'active', seats_limit: 2, reason: 'Smoke seats' });
+      check('4.7 entitle sign with a seat limit of 2', put.status === 200, put.status);
+      await recomputeSeatUsage(cid);
+      check('4.7 SeatUsage starts at 0', (await SeatUsage.findOne({ company_id: cid, product_key: 'sign' }))?.used === 0);
+
+      const sid = crypto.randomUUID();
+      await Session.create({ _id: sid, identity_id: new mongoose.Types.ObjectId(), member_id: admin._id, company_id: cid, realm: 'tenant', idle_expires_at: new Date(Date.now() + 3600e3), absolute_expires_at: new Date(Date.now() + 3600e3), amr: ['pwd'] });
+      const tKey = await jose.importJWK(tenantPrivateJwk, 'RS256');
+      const tAt = await new jose.SignJWT({ token_use: 'access', org: cid, sid, email: admin.email })
+        .setProtectedHeader({ alg: 'RS256', kid: 'tenant-smoke', typ: 'at+jwt' })
+        .setIssuer(`${ORIGIN}/realms/tenant`).setAudience('urn:karbexa:admin').setSubject(String(admin._id)).setIssuedAt().setExpirationTime('10m').sign(tKey);
+      const tenant = (path: string, method: string, body?: unknown) => fetch(`${ORIGIN}/api/v1${path}`, {
+        method, headers: { authorization: `Bearer ${tAt}`, 'content-type': 'application/json' }, body: body ? JSON.stringify(body) : undefined,
+      });
+      const signApp = (await App.findOne({ product_key: 'sign', app_type: 'karbexa_product' }))!;
+      const role = (await ProductRole.findOne({ product_key: 'sign', assignable: true }).sort({ key: 1 }))!.key;
+      const assign = (target_type: string, target_id: string) => tenant(`/apps/${signApp._id}/assign`, 'POST', { target_type, target_id, product_role_key: role });
+
+      check('4.7 first seat: assign to member 1 = 200/201', [200, 201].includes((await assign('user', String(u1._id))).status));
+      check('4.7 second seat: assign to member 2 = 200/201', [200, 201].includes((await assign('user', String(u2._id))).status));
+      await recomputeSeatUsage(cid);
+      check('4.7 SeatUsage counts the two seats', (await SeatUsage.findOne({ company_id: cid, product_key: 'sign' }))?.used === 2);
+
+      const over = await assign('user', String(u3._id));
+      const overj = await json(over);
+      check('4.7 third seat is refused = 409 SEAT_LIMIT_REACHED with product, limit, used, requested', over.status === 409 && overj.code === 'SEAT_LIMIT_REACHED' && overj.details?.product_key === 'sign' && overj.details?.limit === 2 && overj.details?.used === 2 && overj.details?.requested === 1, JSON.stringify(overj));
+      check('4.7 the refused assignment was not created', (await AppAssignment.countDocuments({ company_id: cid, app_id: signApp._id, target_id: u3._id })) === 0);
+
+      const gOk = await Group.create({ company_id: cid, name: 'Existing seats', type: 'static', is_active: true } as never);
+      await GroupMember.create([{ group_id: gOk._id, user_id: u1._id, assigned_by: admin._id }, { group_id: gOk._id, user_id: u2._id, assigned_by: admin._id }] as never);
+      check('4.7 a group whose members already hold seats adds none = allowed', [200, 201].includes((await assign('group', String(gOk._id))).status));
+      const gNew = await Group.create({ company_id: cid, name: 'Needs a seat', type: 'static', is_active: true } as never);
+      await GroupMember.create([{ group_id: gNew._id, user_id: u1._id, assigned_by: admin._id }, { group_id: gNew._id, user_id: u3._id, assigned_by: admin._id }] as never);
+      const gOver = await assign('group', String(gNew._id));
+      check('4.7 a group that would add a new member past the limit = 409 (requested 1)', gOver.status === 409 && (await json(gOver)).details?.requested === 1, gOver.status);
+
+      // Widening an assignment to descendants adds members: checked as well.
+      const parent = await Department.create({ company_id: cid, name: 'Parent', slug: 'parent', type: 'department' } as never);
+      const child = await Department.create({ company_id: cid, name: 'Child', slug: 'child', type: 'department', parent_id: parent._id } as never);
+      await User.updateOne({ _id: u3._id }, { $set: { department_id: child._id } });
+      const deptRes = await tenant(`/apps/${signApp._id}/assign`, 'POST', { target_type: 'department', target_id: String(parent._id), product_role_key: role, include_descendants: false });
+      check('4.7 a department assignment without descendants adds nobody = allowed', [200, 201].includes(deptRes.status), deptRes.status);
+      const deptAsg = await AppAssignment.findOne({ company_id: cid, app_id: signApp._id, target_type: 'department', is_active: true });
+      const widen = await tenant(`/apps/assignments/${deptAsg!._id}`, 'PATCH', { include_descendants: true });
+      check('4.7 widening to descendants that would exceed the limit = 409', widen.status === 409 && (await json(widen)).code === 'SEAT_LIMIT_REACHED', widen.status);
+
+      // No limit: nothing is checked.
+      await Ent.updateOne({ company_id: cid, product_key: 'sign' }, { $unset: { seats_limit: 1 } });
+      check('4.7 with no seat limit the same assignment is allowed', [200, 201].includes((await assign('user', String(u3._id))).status));
+
+      // Operator views
+      await recomputeSeatUsage(cid);
+      const prodRow = (await json(await op(`/orgs/${cid}/products`))).data.find((p: any) => p.product_key === 'sign');
+      check('4.7 /products shows seats_used', prodRow.seats_used === 3 && prodRow.seats_limit === null, JSON.stringify(prodRow));
+      const detail = (await json(await op(`/orgs/${cid}`))).data;
+      check('4.7 org detail has seat_usage[] with used and limit', detail.seat_usage.some((s: any) => s.product_key === 'sign' && s.used === 3 && s.limit === null), JSON.stringify(detail.seat_usage));
+
+      // A suspended tenant holds no seats.
+      await Company.updateOne({ _id: cid }, { $set: { status: 'suspended' } });
+      await recomputeSeatUsage(cid, ['sign']);
+      check('4.7 a suspended tenant counts 0 seats', (await SeatUsage.findOne({ company_id: cid, product_key: 'sign' }))?.used === 0);
+      await Company.updateOne({ _id: cid }, { $set: { status: 'active' } });
+    }
+
     // ── Plan 4.6: overrides (reason required, expiry, back to plan state, expiry job) ───────
     {
       const { OrganizationEntitlement: Ent, PlatformEvent } = await import('../models');

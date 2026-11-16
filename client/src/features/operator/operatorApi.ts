@@ -204,6 +204,7 @@ export interface OperatorOrgDetail extends OperatorOrg { first_admin: { email: s
 export interface OrgProduct {
   product_key: string; name?: string; status: string; source: string | null; plan_key: string | null; seats_limit: number | null;
   plan_version?: number | null; reason?: string | null; expires_at?: string | null;
+  seats_used?: number | null; seats_computed_at?: string | null;
 }
 export interface OrgAdmin { id: string; full_name: string; email: string; roles: string[]; mfa_enabled: boolean; last_login_at: string | null; status: string }
 export interface OrgNote { id: string; operator_id: string; operator_email: string; body: string; created_at: string }
