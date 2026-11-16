@@ -349,7 +349,7 @@ async function main() {
       check('0.4 the fifth failure locks the operator account for about 30 min', !!acctNow?.locked_until && acctNow.locked_until.getTime() - Date.now() > 25 * 60 * 1000, acctNow?.locked_until);
       r = await jarFetch(`${IX}/login`, form({ email: OP_EMAIL, password: OP_PASSWORD }));
       const lockedHtml = await r.text();
-      check('0.4 sixth attempt with the correct password still fails, with the generic error and no lock hint', r.status === 401 && /Incorrect email or password/.test(lockedHtml) && !/lock/i.test(lockedHtml), r.status);
+      check('0.4 sixth attempt with the correct password still fails, with the generic error and no lock hint', r.status === 401 && /Incorrect email or password/.test(lockedHtml) && !/locked|too many|try again later|temporarily/i.test(lockedHtml), r.status);
       check('0.4 SecurityEvent written for failures and the lock (realm operator, no company)',
         (await SecurityEvent.countDocuments({ email: OP_EMAIL, event_type: 'login_failure' })) >= 5 && (await SecurityEvent.countDocuments({ email: OP_EMAIL, event_type: 'account_locked' })) === 1, 'events');
 
