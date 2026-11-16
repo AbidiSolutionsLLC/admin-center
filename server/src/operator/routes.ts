@@ -12,7 +12,6 @@ import { UserRole } from '../models/UserRole.model';
 import { InviteToken } from '../models/InviteToken.model';
 import { AuditEvent } from '../models/AuditEvent.model';
 import { Plan } from '../models/Plan.model';
-import { ProductKey } from '../models/ProductRole.model';
 import { OrganizationEntitlement } from '../models/OrganizationEntitlement.model';
 import { OperatorAccount } from '../models/OperatorAccount.model';
 import { OperatorAuditEvent } from '../models/OperatorAuditEvent.model';
@@ -21,7 +20,7 @@ import { AppAssignment } from '../models/AppAssignment.model';
 import { Group } from '../models/Group.model';
 import { IdentityProviderConnection } from '../models/IdentityProviderConnection.model';
 import { seedProductRegistry } from '../lib/productCatalog';
-import { assertProductKey, assertProductKeys } from '../lib/productRegistry';
+import { assertProductKey, assertProductKeys, listProducts } from '../lib/productRegistry';
 import { runInTransaction, emitPlatformEvent, emitAppAccessChanged, fanOutAppAccessChanged } from '../lib/platformEvents';
 import { RefreshToken } from '../models/RefreshToken.model';
 import { RolePermission } from '../models/RolePermission.model';
@@ -143,35 +142,31 @@ const ProvisionSchema = z.object({
 });
 
 /**
- * Org default rules on the "All Members" dynamic group, each only with an active entitlement for that product. Idempotent.
- * - people -> employee (04 §7).
- * - desk -> requester: C-3 "desk for everyone", decided 2026-11-12. An admin excludes members by editing or
- *   removing this rule; migrated orgs get per-member requester grants from the E11 seed instead (legacy
- *   hasDeskPortalAccess === false = excluded).
+ * Default access on the "All Members" dynamic group, from each product manifest's default_assignments, each only with
+ * an active entitlement for that product. Idempotent. Built-in defaults: people -> employee (04 §7); desk -> requester
+ * (C-3 "desk for everyone", decided 2026-11-12: an admin excludes members by editing or removing the rule; migrated
+ * orgs get per-member requester grants from the E11 seed instead, legacy hasDeskPortalAccess === false = excluded).
  */
-const ORG_DEFAULT_RULES: ReadonlyArray<{ product: ProductKey; role: string }> = [
-  { product: 'people', role: 'employee' },
-  { product: 'desk', role: 'requester' },
-];
-
-async function ensureDefaultPeopleAccess(companyId: Types.ObjectId, grantedBy: Types.ObjectId, session?: ClientSession) {
+async function ensureDefaultAccess(companyId: Types.ObjectId, grantedBy: Types.ObjectId, session?: ClientSession) {
   const sess = session ?? null;
   const opts = { session: session ?? undefined };
-  for (const rule of ORG_DEFAULT_RULES) {
-    if (!(await OrganizationEntitlement.exists({ company_id: companyId, product_key: rule.product, status: 'active' }).session(sess))) continue;
-    let app = await App.findOne({ product_key: rule.product, app_type: 'karbexa_product' }).session(sess);
-    if (!app) {
-      await seedProductRegistry(); // global catalog, outside the txn
-      app = await App.findOne({ product_key: rule.product, app_type: 'karbexa_product' }).session(sess);
-    }
+  // Global catalog, outside the txn: seed when empty or when a built-in predates the manifest fields (re-seed is idempotent).
+  if (!(await listProducts()).length || await App.exists({ app_type: 'karbexa_product', company_id: { $exists: false }, manifest_version: { $exists: false } })) await seedProductRegistry();
+  for (const product of await listProducts()) {
+    const app = await App.findOne({ product_key: product.product_key, app_type: 'karbexa_product', company_id: { $exists: false } }).session(sess);
     if (!app) continue;
+    const rules = (app.default_assignments ?? []).filter(a => a.target === 'all_members');
+    if (!rules.length) continue;
+    if (!(await OrganizationEntitlement.exists({ company_id: companyId, product_key: product.product_key, status: 'active' }).session(sess))) continue;
     let group = await Group.findOne({ company_id: companyId, name: 'All Members', type: 'dynamic' }).session(sess);
     if (!group) [group] = await Group.create([{ company_id: companyId, name: 'All Members', type: 'dynamic', dynamic_rules: {}, is_active: true } as never], opts);
-    const exists = await AppAssignment.exists({ company_id: companyId, app_id: app._id, target_type: 'group', target_id: group._id, product_role_key: rule.role }).session(sess);
-    if (!exists) {
-      await AppAssignment.create([{
-        company_id: companyId, app_id: app._id, target_type: 'group', target_id: group._id, product_role_key: rule.role, granted_by: grantedBy, is_active: true,
-      } as never], opts);
+    for (const rule of rules) {
+      const exists = await AppAssignment.exists({ company_id: companyId, app_id: app._id, target_type: 'group', target_id: group._id, product_role_key: rule.role }).session(sess);
+      if (!exists) {
+        await AppAssignment.create([{
+          company_id: companyId, app_id: app._id, target_type: 'group', target_id: group._id, product_role_key: rule.role, granted_by: grantedBy, is_active: true,
+        } as never], opts);
+      }
     }
   }
 }
@@ -233,7 +228,7 @@ router.post('/orgs', asyncHandler(async (req: Request, res: Response) => {
       if (superRole) await UserRole.create([{ user_id: user._id, role_id: superRole._id, company_id: company._id, assigned_by: user._id, assigned_at: new Date() }], opts);
       await InviteToken.create([{ user_id: user._id, token_hash: crypto.createHash('sha256').update(rawToken).digest('hex'), expires_at: new Date(Date.now() + 72 * 3600 * 1000) }], opts);
 
-      await ensureDefaultPeopleAccess(company._id, user._id, session);
+      await ensureDefaultAccess(company._id, user._id, session);
 
       company.status = 'active';
       company.is_active = true;
@@ -352,7 +347,7 @@ router.patch('/orgs/:id', asyncHandler(async (req: Request, res: Response) => {
       });
     }
     const firstAdmin = await User.findOne({ company_id: company._id, role: ROLES.SUPER_ADMIN }).sort({ created_at: 1 }).select('_id').session(session ?? null);
-    if (firstAdmin) await ensureDefaultPeopleAccess(company._id, firstAdmin._id, session);
+    if (firstAdmin) await ensureDefaultAccess(company._id, firstAdmin._id, session);
     await bumpOrgAuthz(company._id, session);
     await audit(req, { action: 'org.plan_assigned', target_type: 'Company', target_id: String(company._id), company, before: null, after: { plan_key: plan.key, products: plan.products } }, session);
   });

@@ -23,6 +23,13 @@ export interface IApp extends Document {
   launch_url?: string;
   role_catalog_version?: number;
   default_role_key?: string;
+  /** Product manifest (plan 1.2); version of the last published/seeded manifest. */
+  manifest_version?: number;
+  product_status?: 'active' | 'beta' | 'hidden' | 'retired';
+  icon?: string;
+  product_category?: string;
+  /** Roles granted to the org's "All Members" group when the product is entitled. */
+  default_assignments?: { target: 'all_members'; role: string }[];
   created_at: Date;
   updated_at: Date;
 }
@@ -50,6 +57,11 @@ const AppSchema = new Schema<IApp>({
   launch_url: String,
   role_catalog_version: { type: Number, default: 1 },
   default_role_key: String,
+  manifest_version: Number,
+  product_status: { type: String, enum: ['active', 'beta', 'hidden', 'retired'], default: 'active' },
+  icon: String,
+  product_category: String,
+  default_assignments: [{ _id: false, target: { type: String, enum: ['all_members'], required: true }, role: { type: String, required: true } }],
 }, { timestamps: { createdAt: 'created_at', updatedAt: 'updated_at' } });
 
 // Unique index for system apps (slug only) and company apps (company_id + slug)

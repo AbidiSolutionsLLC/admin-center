@@ -80,6 +80,12 @@ async function main() {
     await seedProductRegistry(); // idempotent
     const apps = await App.find({ app_type: 'karbexa_product' });
     check('E3 registry seeds people/projects/sign/desk', apps.map((a) => a.product_key).sort().join() === 'desk,people,projects,sign', apps.map((a) => a.product_key));
+    {
+      // 1.2: manifest fields are seeded; default rules come from default_assignments
+      const byKey = Object.fromEntries(apps.map((a) => [a.product_key, a]));
+      check('1.2 seeded manifest fields (version, status, icon, category)', apps.every((a) => a.manifest_version === 1 && a.product_status === 'active' && !!a.icon && !!a.product_category), apps.map((a) => [a.product_key, a.manifest_version, a.icon]));
+      check('1.2 default_assignments: people->employee, desk->requester, others none', byKey.people?.default_assignments?.[0]?.role === 'employee' && byKey.desk?.default_assignments?.[0]?.role === 'requester' && !byKey.projects?.default_assignments?.length && !byKey.sign?.default_assignments?.length);
+    }
     const deskRoles = await ProductRole.find({ product_key: 'desk' });
     check('E3 desk catalog (5 roles, default requester)', deskRoles.length === 5 && deskRoles.find((r) => r.is_default)?.key === 'requester', deskRoles.map((r) => r.key));
     {

@@ -88,7 +88,7 @@ The global per-IP rate limiter in `app.ts` also applies. Envelope: `{ success: t
 - One operator role exists: `platform_admin` (`server/src/operator/accounts.ts`; the API accepts only `z.enum(['platform_admin'])` for `roles`). There is no finer-grained operator permission model: every active `platform_admin` can call every operator endpoint.
 - TOTP is mandatory for every operator login (section 3 of identity.md); first login enrols.
 - IP allow-list `OPERATOR_IP_ALLOWLIST` applies to `/operator/v1` (in `requireOperator`) and to the whole `/realms/operator` realm (`app.use('/realms/operator', requireOperatorIp)` in `server/src/app.ts`). Empty list: allowed outside production, **every request refused with 403 in production**.
-- Org default access rules applied at provisioning and on plan assignment (`ORG_DEFAULT_RULES` in `routes.ts:150-153`), each only if the product entitlement is active: dynamic group "All Members" (`dynamic_rules: {}`) gets `people → employee` and `desk → requester`.
+- Org default access rules applied at provisioning and on plan assignment (`ensureDefaultAccess` in `routes.ts`, driven by each product's manifest `default_assignments`), each only if the product entitlement is active: dynamic group "All Members" (`dynamic_rules: {}`) gets `people → employee` and `desk → requester`. Product keys in entitlement and plan routes are checked against the registry (`UNKNOWN_PRODUCT`).
 - Product role catalogs: see admin.md section 4.3.
 
 ## 5. Data models
