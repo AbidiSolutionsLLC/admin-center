@@ -187,5 +187,5 @@ From `server/`:
 
 | Command | Coverage |
 |---|---|
-| `npm run smoke:sprint2` | E4 platform read API, ack hook, dispatcher (signed nudges, backoff); E4a outbox atomicity and correlation ids; E4c per-client product scoping and `onCommit` hooks; E4d role-catalog lock and post-commit fan-out; 1.3 manifest publish (new product, stale version, `ROLE_IN_USE`, client not allowed); L3-4 `karbexa-admin-backend` token; services token rate limit (`PLATFORM_RATE_LIMIT_PER_MIN=1`) |
+| `npm run smoke:sprint2` | E4 platform read API, ack hook, dispatcher (signed nudges, backoff); E4a outbox atomicity and correlation ids; E4c per-client product scoping and `onCommit` hooks; E4d role-catalog lock and post-commit fan-out; 1.3 manifest publish (new product, stale version, `ROLE_IN_USE`, client not allowed); `npm test` includes `productKeyGuard` (no literal product-key list in server code outside `lib/productCatalog.ts`, scripts, tests and the keep-list) and `productRegistry`; L3-4 `karbexa-admin-backend` token; services token rate limit (`PLATFORM_RATE_LIMIT_PER_MIN=1`) |
 | `npm test` | `lib/__tests__/platformDispatcher.test.ts`, `lib/__tests__/ssrfGuard.test.ts`, `platform/__tests__/rateLimit.test.ts`, `controllers/__tests__/openItemsProxy.test.ts`, `controllers/__tests__/streamTickets.test.ts`, `lib/__tests__/standaloneMongo.test.ts` |
