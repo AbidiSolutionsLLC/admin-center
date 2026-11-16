@@ -9,6 +9,7 @@ import { ROUTES } from './constants/routes';
 import SubscriptionPage from './pages/subscription/SubscriptionPage';
 import { OperatorGuard } from './features/operator/OperatorGuard';
 import OperatorCallbackPage from './pages/operator/OperatorCallbackPage';
+import OperatorOverviewPage from './pages/operator/OperatorOverviewPage';
 import OperatorOrgsPage from './pages/operator/OperatorOrgsPage';
 import OperatorTenantPage from './pages/operator/OperatorTenantPage';
 import OperatorOnboardingPage from './pages/operator/OperatorOnboardingPage';
@@ -55,7 +56,8 @@ function App() {
           <Route path={ROUTES.OPERATOR_CALLBACK} element={<OperatorCallbackPage />} />
           <Route element={<OperatorGuard />}>
             <Route path={ROUTES.OPERATOR} element={<OperatorShell />}>
-              <Route index element={<Navigate to={ROUTES.OPERATOR_ORGS} replace />} />
+              <Route index element={<Navigate to={ROUTES.OPERATOR_OVERVIEW} replace />} />
+              <Route path="overview" element={<OperatorOverviewPage />} />
               <Route path="organizations" element={<OperatorOrgsPage />} />
               <Route path="organizations/:id" element={<OperatorTenantPage />} />
               <Route path="onboarding" element={<OperatorOnboardingPage />} />

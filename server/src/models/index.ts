@@ -85,3 +85,4 @@ export * from './OrgEventCounter.model';
 export * from './PlatformEventSubscription.model';
 export * from './PlatformLease.model';
 export * from './SubscriptionCursor.model';
+export * from './Signals.model';

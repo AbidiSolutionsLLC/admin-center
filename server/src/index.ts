@@ -12,6 +12,7 @@ import { startInvitationJobs, stopInvitationJobs } from './lib/invitationJobs';
 import { startJobRunner, stopJobRunner } from './lib/jobs';
 import { startOverrideJobs, stopOverrideJobs } from './lib/overrideJobs';
 import { startHealthJob, stopHealthJob } from './lib/health';
+import { startSignalJobs, stopSignalJobs } from './lib/signals';
 import { startRouteMetricsFlush, stopRouteMetricsFlush } from './lib/health/routeMetrics';
 
 export { createServer };
@@ -49,6 +50,9 @@ connectDB().then(async () => {
     startJobRunner();
     startOverrideJobs();
     startHealthJob();
+    startSignalJobs();
+    process.once('SIGTERM', stopSignalJobs);
+    process.once('SIGINT', stopSignalJobs);
     startRouteMetricsFlush();
     process.once('SIGTERM', stopHealthJob);
     process.once('SIGINT', stopHealthJob);

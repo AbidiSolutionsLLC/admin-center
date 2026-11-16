@@ -35,6 +35,7 @@ export const ROUTES = {
   WORK_SCHEDULES: '/work-schedules',
   OPERATOR: '/operator',
   OPERATOR_CALLBACK: '/operator/callback',
+  OPERATOR_OVERVIEW: '/operator/overview',
   OPERATOR_ORGS: '/operator/organizations',
   OPERATOR_PLANS: '/operator/plans',
   OPERATOR_HEALTH: '/operator/health',

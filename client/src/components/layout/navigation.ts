@@ -132,11 +132,12 @@ export const ADMIN_SHELL: ShellConfig = {
 
 export const OPERATOR_SHELL: ShellConfig = {
   variant: 'operator',
-  brand: { label: 'Karbexa', mark: 'KX', href: ROUTES.OPERATOR_ORGS },
+  brand: { label: 'Karbexa', mark: 'KX', href: ROUTES.OPERATOR_OVERVIEW },
   groups: [
     {
       label: 'Platform',
       items: [
+        { label: 'Overview', href: ROUTES.OPERATOR_OVERVIEW, icon: LayoutDashboard, permission: 'overview.read' },
         { label: 'Organizations', href: ROUTES.OPERATOR_ORGS, icon: Building2, permission: 'tenants.read' },
         { label: 'Onboarding', href: ROUTES.OPERATOR_ONBOARDING, icon: UserPlus, permission: 'tenants.read' },
         { label: 'Plans', href: ROUTES.OPERATOR_PLANS, icon: Layers, permission: 'tenants.read' },

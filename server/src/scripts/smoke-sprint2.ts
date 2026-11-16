@@ -1607,6 +1607,29 @@ async function main() {
       await OperatorAccount.updateOne({ email: 'op@karbexa.test' }, { $set: { roles: ['platform_admin'] } });
     }
 
+    // ── Plan 4.10: signals and overview ──
+    {
+      const { runSignals, computeDailyStats } = await import('../lib/signals');
+      const { AttentionItem, TenantDailyStat, Company } = await import('../models');
+      const json = async (r: any) => (await r.json()) as any;
+      const t = await Company.findOne({ status: 'active' });
+      await Company.updateOne({ _id: t!._id }, { $set: { trial_ends_at: new Date(Date.now() - 2 * 86_400_000) } });
+      await computeDailyStats();
+      const run = await runSignals();
+      check('4.10 signals ran and the daily stats wrote a row per tenant', (await TenantDailyStat.countDocuments()) >= 1 && Array.isArray(run.failed));
+      check('4.10 an ended trial raises a critical trial_ended item', !!(await AttentionItem.findOne({ kind: 'trial_ended', company_id: t!._id, open: true, severity: 'critical' })));
+      const ov = await op('/overview');
+      const ovj = await json(ov);
+      check('4.10 GET /overview returns the five blocks', ov.status === 200 && ['tenants', 'members_active', 'health', 'attention', 'activity'].every((k) => k in ovj.data), Object.keys(ovj.data ?? {}).join());
+      check('4.10 overview tenants and attention are filled', ovj.data.tenants.total >= 1 && ovj.data.attention.counts.critical >= 1 && ovj.data.attention.top[0].severity === 'critical', JSON.stringify(ovj.data.attention).slice(0, 160));
+      await Company.updateOne({ _id: t!._id }, { $unset: { trial_ends_at: 1 } });
+      await runSignals();
+      check('4.10 the item resolves when the trial date is cleared', !(await AttentionItem.findOne({ kind: 'trial_ended', company_id: t!._id, open: true })));
+      await OperatorAccount.updateOne({ email: 'op@karbexa.test' }, { $set: { roles: ['support'] } });
+      check('4.10 support can read the overview (overview.read)', (await op('/overview')).status === 200);
+      await OperatorAccount.updateOne({ email: 'op@karbexa.test' }, { $set: { roles: ['platform_admin'] } });
+    }
+
     // ── Plan 4.13: products catalogue (read-only) ─────────────────────────────────────────
     {
       const { OrganizationEntitlement: Ent } = await import('../models');

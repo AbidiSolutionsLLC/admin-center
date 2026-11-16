@@ -315,3 +315,16 @@ export const useHealth = () =>
   useQuery({ queryKey: ['operator', 'health'], refetchInterval: 30_000, queryFn: async () => (await operatorApi.get('/health')).data.data as HealthSnapshot });
 export const useHealthSync = () =>
   useQuery({ queryKey: ['operator', 'health-sync'], refetchInterval: 30_000, queryFn: async () => (await operatorApi.get('/health/sync')).data.data as HealthSync });
+
+// ── Overview (Plan 4.10) ─────────────────────────────────────────────────────────────────────
+export type OverviewBlock<T> = T | { error: true };
+export interface AttentionRow { id: string; kind: string; severity: 'critical' | 'warning' | 'info'; company_id: string | null; summary: string; link: string; first_seen_at: string }
+export interface Overview {
+  tenants: OverviewBlock<{ total: number; active: number; trial: number; suspended: number; onboarding: number }>;
+  members_active: OverviewBlock<number>;
+  health: OverviewBlock<{ state: HealthStateName; components: { component: string; state: HealthStateName; detail: string }[] }>;
+  attention: OverviewBlock<{ counts: { critical: number; warning: number; info: number }; top: AttentionRow[] }>;
+  activity: OverviewBlock<{ id: string; operator_email: string; action: string; target_type: string; target_id: string | null; category: string; result: string; at: string }[]>;
+}
+export const useOverview = () =>
+  useQuery({ queryKey: ['operator', 'overview'], refetchInterval: 60_000, queryFn: async () => (await operatorApi.get('/overview')).data.data as Overview });
