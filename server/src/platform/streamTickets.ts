@@ -51,10 +51,7 @@ export async function streamAllowed(binding: StreamBinding): Promise<boolean> {
     (!user.locked_until || user.locked_until <= now)
   );
 
-  const orgOk = Boolean(
-    org &&
-    (org.status === 'active' || (org as any).is_active !== false)
-  );
+  const orgOk = Boolean(org && org.status === 'active');
 
   const sessionOk = Boolean(
     session &&
