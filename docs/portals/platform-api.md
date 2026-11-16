@@ -38,7 +38,7 @@ Related: [identity.md](identity.md) (services realm, keys), [admin.md](admin.md)
 1. Echo `X-Correlation-Id` when present.
 2. `platformAuthFailureLimiter`: per IP, 300 **401 responses** per 15 min, then 429 `RATE_LIMITED`.
 3. `authenticateService`: Bearer token verified locally against the services realm public keys (key set rebuilt every 5 min): issuer `${ID_ISSUER_ORIGIN}/realms/services`, audience `urn:karbexa:platform-api`, RS256, `typ: at+jwt`, `maxTokenAge: 15m`, `exp` and `iat` required, `token_use === 'service'`, and the `client_id` must be `karbexa-products-backend` or have products in `PLATFORM_CLIENT_PRODUCTS`. Sets `req.service = { client_id, scopes }`. Failures: 401 `NO_TOKEN` / `INVALID_TOKEN`.
-4. `platformRateLimiter`: per `client_id`, `PLATFORM_RATE_LIMIT_PER_MIN` (default 1200) per minute, in-memory store, then 429 `RATE_LIMITED`.
+4. `platformRateLimiter`: per `client_id`, `PLATFORM_RATE_LIMIT_PER_MIN` (default 1200) per minute, shared MongoDB store (`MongoRateLimitStore`), then 429 `RATE_LIMITED`.
 5. Per-route `requireServiceToken(scope)`: 403 `INSUFFICIENT_SCOPE` if the scope is missing.
 
 The global per-IP limiter in `app.ts` skips `/platform/v1`. Error shape: `{ error, code }` (no `success` field).

@@ -1,7 +1,9 @@
 import rateLimit from 'express-rate-limit';
+import { MongoRateLimitStore } from './mongoRateLimitStore';
 
 // Global rate limiter for all API routes
 export const globalLimiter = rateLimit({
+  store: new MongoRateLimitStore('global'),
   windowMs: 15 * 60 * 1000, // 15 minutes
   max: Number(process.env.GLOBAL_RATE_LIMIT) || (process.env.NODE_ENV === 'development' ? 10000 : 6000), // WI-07: prod default sized for dashboard polling (~0.8 req/s per open tab)
   standardHeaders: true, 
@@ -16,6 +18,7 @@ export const globalLimiter = rateLimit({
 
 // Stricter rate limiter for authentication routes
 export const authLimiter = rateLimit({
+  store: new MongoRateLimitStore('auth'),
   windowMs: 15 * 60 * 1000, // 15 minutes
   max: Number(process.env.AUTH_RATE_LIMIT) || (process.env.NODE_ENV === 'development' ? 100 : 20), // increased for dev
   standardHeaders: true,

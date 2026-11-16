@@ -1,8 +1,9 @@
 // server/src/platform/rateLimit.ts — M4: Platform API rate limits keyed on the authenticated service client, not the source IP.
 // The products backend is a single IP (and may be several instances behind one NAT), so the global per-IP limiter does not fit.
-// In-memory store: one admin instance at launch (12 §2); move to a shared store before scaling out.
+// Counters live in MongoDB (middleware/mongoRateLimitStore.ts) so several Admin instances share one budget.
 import rateLimit from 'express-rate-limit';
 import type { Request, Response } from 'express';
+import { MongoRateLimitStore } from '../middleware/mongoRateLimitStore';
 
 const DEFAULT_PER_MIN = 1200;
 
@@ -14,6 +15,7 @@ export const platformRateLimitPerMin = (): number => {
 
 /** Per-client budget. Must run after service-token authentication (needs req.service). */
 export const platformRateLimiter = rateLimit({
+  store: new MongoRateLimitStore('platform'),
   windowMs: 60_000,
   limit: () => platformRateLimitPerMin(),
   standardHeaders: true,
@@ -29,6 +31,7 @@ export const platformRateLimiter = rateLimit({
  * (failed token verification) count, per IP, so a legitimate client's successful calls never consume this budget.
  */
 export const platformAuthFailureLimiter = rateLimit({
+  store: new MongoRateLimitStore('platform-auth-failure'),
   windowMs: 15 * 60_000,
   limit: 300,
   standardHeaders: false,
