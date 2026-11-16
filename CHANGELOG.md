@@ -5,6 +5,7 @@ Format: [Keep a Changelog](https://keepachangelog.com/en/1.1.0/). Each entry lis
 ## [Unreleased]: elevation, branch `feat/elevation`
 
 ### Changed
+- 3.8: browser-test setup for the Admin client: `client/playwright.config.ts`, `npm run test:e2e`, sign-in helpers for the tenant and operator realms (`client/e2e/helpers/auth.ts`, mocks the identity provider and runs the app's real PKCE flow) and specs for the two reference pages (`operator-plans.spec.ts`, `operator-audit.spec.ts`). `@playwright/test` was already a devDependency, so no dependency was added. Specs are typechecked (`tsconfig.node.json` now includes `e2e`) but not run until Phase 7.
 - 3.7: `DESIGN.md` records the Phase 3 tokens, components, shell and templates, and the migrated-page checklist. The products design documents are untouched (decision S-11).
 - 3.6: reference pages for the owner's review: `OperatorPlansPage` on `ListPage` (table, tags, create/edit dialog with `FormField`) and `OperatorAuditPage` on `ListPage` + `Drawer` (action filter and open entry live in the URL: `?action=`, `?entry=`; cursor paging; sticky header). Same API calls and hooks as before; the audit action filter was already supported by `GET /operator/v1/audit?action=` (exact match).
 - 3.5: three page templates in `client/src/components/templates/`: `ListPage` (PageHeader, Toolbar, table, Drawer), `ObjectPage` (PageHeader, KeyFacts, URL-synced Tabs), `DashboardPage` (PageHeader, StatTile row, 12-column grid); `PageStates` gives all of them the loading, error, empty and no-access states.
