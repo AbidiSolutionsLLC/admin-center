@@ -13,9 +13,7 @@ import { TargetAppAccessPanel } from '@/features/apps/TargetAppAccessPanel';
 import { Modal } from '@/components/ui/Modal';
 import { DataTable } from '@/components/ui/DataTable';
 import { ConfirmDialog } from '@/components/ui/ConfirmDialog';
-import { TableSkeleton } from '@/components/ui/TableSkeleton';
-import { ErrorState } from '@/components/ui/ErrorState';
-import { EmptyState } from '@/components/ui/EmptyState';
+import { ListPage } from '@/components/templates/ListPage';
 import { useAuthStore } from '@/store/useAuthStore';
 import { cn } from '@/utils/cn';
 import { PERMISSION_GROUPS } from '@/constants/roles';
@@ -236,7 +234,7 @@ export default function RolesPage() {
       cell: ({ row }) => (
         <span className={cn(
           "inline-flex items-center px-2 py-0.5 rounded text-[11px] font-semibold uppercase tracking-wider",
-          row.original.type === 'system' ? "bg-amber-500/20 text-amber-400 border border-amber-500/30" : "bg-blue-500/20 text-blue-400 border border-blue-500/30"
+          row.original.type === 'system' ? "bg-warning/20 text-warning border border-warning/30" : "bg-info/20 text-info border border-info/30"
         )}>
           {row.original.type}
         </span>
@@ -336,7 +334,7 @@ export default function RolesPage() {
                   e.stopPropagation();
                   setRoleToDelete(role);
                 }}
-                className="p-2 text-ink-muted hover:text-error hover:bg-red-50 rounded-lg transition-all"
+                className="p-2 text-ink-muted hover:text-error hover:bg-error/10 rounded-lg transition-all"
                 title="Delete Role"
               >
                 <Trash2 className="h-4 w-4" />
@@ -348,113 +346,68 @@ export default function RolesPage() {
     },
   ], [canMutate, canDelete]);
 
-  // ── Render Helpers ───────────────────────────────────────────────────
-  if (isError) {
-    return (
-      <ErrorState
-        title="Failed to load roles"
-        description="Something went wrong fetching roles. Please try again."
-        onRetry={refetch}
-      />
-    );
-  }
+  // ── Render ───────────────────────────────────────────────────────────
+  const isListMode = viewMode === 'list';
+  const rolesEmpty = isListMode && !isLoading && (!roles || roles.length === 0);
 
   return (
-    <div className="space-y-6">
-      {/* Page Header */}
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
-        <div>
-          <h1 className="text-[22px] font-semibold tracking-tight text-ink">Roles & Access</h1>
-          <p className="text-sm text-ink-secondary mt-0.5">
-            Manage roles and their permissions across your organization
-          </p>
-        </div>
-        {canMutate && (
-          <div className="flex gap-2">
-            <button
-              onClick={() => setIsSimulatorOpen(true)}
-              className="h-9 px-4 bg-surface-alt text-ink text-sm font-medium rounded-md hover:bg-line transition-colors flex items-center gap-2 justify-center"
-            >
-              <Shield className="h-4 w-4" />
-              Simulate Access
-            </button>
+    <>
+      <ListPage
+        title="Admin roles"
+        subtitle="Manage roles and their permissions across your organization"
+        primaryAction={
+          canMutate ? (
             <button
               onClick={handleOpenCreateModal}
-              className="h-9 px-4 bg-primary text-white text-sm font-medium rounded-md hover:bg-primary-hover transition-colors flex items-center gap-2 justify-center"
+              className="h-9 px-4 bg-primary text-primary-foreground text-sm font-medium rounded-md hover:bg-primary-hover transition-colors flex items-center gap-2 justify-center"
             >
               <Plus className="h-4 w-4" />
-              Create Role
+              Create role
             </button>
-          </div>
+          ) : undefined
+        }
+        overflow={canMutate ? [{ label: 'Simulate access', onSelect: () => setIsSimulatorOpen(true) }] : undefined}
+        toolbar={{
+          search: { placeholder: 'Search roles by name', value: search, onChange: setSearch },
+          actions: (
+            <div className="flex items-center bg-surface-alt p-1 rounded-lg border border-line">
+              <button
+                onClick={() => setViewMode('list')}
+                aria-pressed={viewMode === 'list'}
+                className={cn(
+                  'px-3 py-1.5 text-xs font-semibold rounded-md transition-colors',
+                  viewMode === 'list' ? 'bg-surface-hover text-ink' : 'text-ink-secondary hover:text-ink'
+                )}
+              >
+                List view
+              </button>
+              <button
+                onClick={() => setViewMode('map')}
+                aria-pressed={viewMode === 'map'}
+                className={cn(
+                  'px-3 py-1.5 text-xs font-semibold rounded-md transition-colors',
+                  viewMode === 'map' ? 'bg-surface-hover text-ink' : 'text-ink-secondary hover:text-ink'
+                )}
+              >
+                Map view
+              </button>
+            </div>
+          ),
+        }}
+        isLoading={isListMode && isLoading}
+        isError={isError}
+        onRetry={() => refetch()}
+        isEmpty={rolesEmpty}
+        emptyTitle={search ? 'No roles found' : 'No roles yet'}
+        emptyDescription={search ? `No roles matching "${search}"` : 'Create your first role to start managing access control.'}
+        emptyAction={!search && canMutate ? { label: 'Create role', onClick: handleOpenCreateModal } : undefined}
+      >
+        {viewMode === 'map' ? (
+          <AccessMapView />
+        ) : (
+          <DataTable columns={columns} data={roles ?? []} onRowClick={handleOpenMatrixModal} />
         )}
-      </div>
-
-      {/* Filter Bar */}
-      <div className="flex items-center gap-3">
-        <div className="relative flex-1 max-w-sm">
-          <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-ink-muted pointer-events-none" />
-          <input
-            type="text"
-            value={search}
-            onChange={(e) => setSearch(e.target.value)}
-            placeholder="Search roles by name..."
-            className="w-full h-10 pl-10 pr-10 text-sm rounded-lg border border-line bg-white focus:outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary transition-all"
-          />
-          {search && (
-            <button
-              onClick={() => setSearch('')}
-              className="absolute right-3 top-1/2 -translate-y-1/2 text-ink-muted hover:text-ink"
-            >
-              <X className="w-4 h-4" />
-            </button>
-          )}
-        </div>
-
-        <div className="flex items-center bg-surface-alt p-1 rounded-lg border border-line ml-auto">
-          <button
-            onClick={() => setViewMode('list')}
-            className={cn(
-              "px-3 py-1.5 text-xs font-semibold rounded-md transition-colors",
-              viewMode === 'list' ? "bg-white text-ink shadow-sm" : "text-ink-secondary hover:text-ink"
-            )}
-          >
-            List View
-          </button>
-          <button
-            onClick={() => setViewMode('map')}
-            className={cn(
-              "px-3 py-1.5 text-xs font-semibold rounded-md transition-colors",
-              viewMode === 'map' ? "bg-white text-ink shadow-sm" : "text-ink-secondary hover:text-ink"
-            )}
-          >
-            Map View
-          </button>
-        </div>
-      </div>
-
-      {/* Main Content */}
-      {viewMode === 'map' ? (
-        <AccessMapView />
-      ) : (
-        <>
-          {isLoading ? (
-            <TableSkeleton rows={6} columns={5} />
-          ) : !roles || roles.length === 0 ? (
-            <EmptyState
-              icon={Shield}
-              title={search ? 'No roles found' : 'No roles yet'}
-              description={search ? `No roles matching "${search}"` : 'Create your first role to start managing access control.'}
-              action={!search && canMutate ? { label: 'Create Role', onClick: handleOpenCreateModal } : undefined}
-            />
-          ) : (
-            <DataTable
-              columns={columns}
-              data={roles}
-              onRowClick={handleOpenMatrixModal}
-            />
-          )}
-        </>
-      )}
+      </ListPage>
 
       {/* Create/Edit Modal */}
       <Modal
@@ -465,11 +418,11 @@ export default function RolesPage() {
       >
         <div className="space-y-5">
           {templateRoleId && (
-            <div className="p-3 bg-amber-50 border border-amber-100 rounded-lg flex items-start gap-3">
-              <Copy className="w-4 h-4 text-amber-600 mt-0.5" />
+            <div className="p-3 bg-warning/10 border border-warning/30 rounded-lg flex items-start gap-3">
+              <Copy className="w-4 h-4 text-warning mt-0.5" />
               <div className="space-y-1">
-                <p className="text-xs font-semibold text-amber-800">Creating from template</p>
-                <p className="text-[11px] text-amber-700 leading-relaxed">
+                <p className="text-xs font-semibold text-warning">Creating from template</p>
+                <p className="text-[11px] text-warning leading-relaxed">
                   This will copy all permissions from the original role. You can modify them independently after creation.
                 </p>
               </div>
@@ -492,7 +445,7 @@ export default function RolesPage() {
               value={formData.name}
               onChange={(e) => setFormData({ ...formData, name: e.target.value })}
               className={cn(
-                "w-full h-10 px-3 text-sm rounded-lg border bg-white focus:outline-none focus:ring-2 transition-all",
+                "w-full h-10 px-3 text-sm rounded-lg border bg-surface focus:outline-none focus:ring-2 transition-all",
                 formError && !formData.name.trim() ? "border-error focus:ring-error/20" : "border-line focus:ring-primary/20 focus:border-primary"
               )}
               placeholder="e.g. Finance Manager"
@@ -507,13 +460,13 @@ export default function RolesPage() {
             <textarea
               value={formData.description ?? ''}
               onChange={(e) => setFormData({ ...formData, description: e.target.value })}
-              className="w-full h-24 p-3 text-sm rounded-lg border border-line bg-white focus:outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary transition-all resize-none"
+              className="w-full h-24 p-3 text-sm rounded-lg border border-line bg-surface focus:outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary transition-all resize-none"
               placeholder="Provide a brief description of this role's purpose..."
             />
           </div>
 
           {formError && formData.name.trim() && (
-            <div className="p-3 bg-red-50 border border-red-100 rounded-lg">
+            <div className="p-3 bg-error/10 border border-error/30 rounded-lg">
               <p className="text-xs text-error font-medium">{formError}</p>
             </div>
           )}
@@ -581,7 +534,7 @@ export default function RolesPage() {
                   value={userSearchQuery}
                   onChange={(e) => setUserSearchQuery(e.target.value)}
                   placeholder="Search by name or email..."
-                  className="w-full h-10 pl-10 pr-10 text-sm rounded-lg border border-line bg-white focus:outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary transition-all"
+                  className="w-full h-10 pl-10 pr-10 text-sm rounded-lg border border-line bg-surface focus:outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary transition-all"
                 />
                 {userSearchQuery && (
                   <button
@@ -594,7 +547,7 @@ export default function RolesPage() {
                 
                 {/* Search Results Dropdown */}
                 {userSearchQuery.length >= 2 && people && people.length > 0 && (
-                  <div className="absolute top-full left-0 right-0 mt-1 bg-white border border-line rounded-lg shadow-dropdown z-50 max-h-60 overflow-y-auto">
+                  <div className="absolute top-full left-0 right-0 mt-1 bg-surface border border-line rounded-lg shadow-dropdown z-50 max-h-60 overflow-y-auto">
                     {people.map((person: any) => {
                       const isAlreadyAssigned = roleUsers?.some(u => u._id === person._id);
                       return (
@@ -632,7 +585,7 @@ export default function RolesPage() {
               <span className="text-xs font-medium text-ink-secondary">{roleUsers?.length || 0} users</span>
             </div>
             
-            <div className="border border-line rounded-xl overflow-hidden divide-y divide-line bg-white">
+            <div className="border border-line rounded-xl overflow-hidden divide-y divide-line bg-surface">
               {isLoadingRoleUsers ? (
                 <div className="p-10 flex flex-col items-center justify-center gap-3">
                   <Loader2 className="w-6 h-6 text-primary animate-spin" />
@@ -659,7 +612,7 @@ export default function RolesPage() {
                       <button
                         onClick={() => handleUnassignUser(user._id)}
                         disabled={unassignRoleMutation.isPending}
-                        className="p-2 text-ink-muted hover:text-error hover:bg-red-50 rounded-lg transition-all opacity-0 group-hover:opacity-100"
+                        className="p-2 text-ink-muted hover:text-error hover:bg-error/10 rounded-lg transition-all opacity-0 group-hover:opacity-100"
                         title="Remove User"
                       >
                         <UserMinus className="h-4 w-4" />
@@ -723,7 +676,7 @@ export default function RolesPage() {
           onClose={() => setIsSimulatorOpen(false)}
         />
       )}
-    </div>
+    </>
   );
 }
 

@@ -13,7 +13,8 @@ import {
   useNotificationEvents,
 } from '@/features/notifications/hooks/useNotifications';
 import { TableSkeleton } from '@/components/ui/TableSkeleton';
-import { ErrorState } from '@/components/ui/ErrorState';
+import { PageHeader as SharedPageHeader } from '@/components/ui/PageHeader';
+import { PageStates } from '@/components/templates/PageStates';
 import { EmptyState } from '@/components/ui/EmptyState';
 import { Modal } from '@/components/ui/Modal';
 import { cn } from '@/utils/cn';
@@ -36,8 +37,8 @@ const CHANNEL_LABELS: Record<NotificationChannel, string> = {
 
 const CHANNEL_COLORS: Record<NotificationChannel, string> = {
   email: 'bg-accent-light text-accent border-accent/20',
-  in_app: 'bg-sky-50 text-sky-700 border-sky-200',
-  both: 'bg-violet-50 text-violet-700 border-violet-200',
+  in_app: 'bg-info/10 text-info border-info/30',
+  both: 'bg-accent/10 text-accent border-accent/30',
 };
 
 const SEVERITY_LABELS: Record<NotificationSeverity, string> = {
@@ -59,7 +60,7 @@ const DIGEST_LABELS: Record<NotificationDigestMode, string> = {
 };
 
 const EVENT_STATUS_ICONS: Record<string, { color: string; label: string }> = {
-  sent: { color: 'text-emerald-600', label: 'Sent' },
+  sent: { color: 'text-success', label: 'Sent' },
   failed: { color: 'text-error', label: 'Failed' },
   pending: { color: 'text-ink-secondary', label: 'Pending' },
   queued_digest: { color: 'text-warning', label: 'Queued' },
@@ -103,28 +104,20 @@ export default function NotificationsPage() {
     });
   }, [templates, search, channelFilter]);
 
-  // ── Render: Loading ────────────────────────────────────────────────
-  if (isLoading) {
+  // ── Render: Loading / Error ────────────────────────────────────────
+  if (isLoading || isError) {
     return (
-      <div className="space-y-5">
+      <div>
         <PageHeader onCreateClick={() => setIsCreateModalOpen(true)} />
-        <TabBar activeTab={activeTab} onTabChange={setActiveTab} />
-        <TableSkeleton rows={6} columns={6} />
-      </div>
-    );
-  }
-
-  // ── Render: Error ──────────────────────────────────────────────────
-  if (isError) {
-    return (
-      <div className="space-y-5">
-        <PageHeader onCreateClick={() => setIsCreateModalOpen(true)} />
-        <TabBar activeTab={activeTab} onTabChange={setActiveTab} />
-        <ErrorState
-          title="Failed to load notifications"
-          description="Something went wrong fetching notification data."
-          onRetry={refetch}
-        />
+        <div className="mb-4"><TabBar activeTab={activeTab} onTabChange={setActiveTab} /></div>
+        <PageStates
+          isLoading={isLoading}
+          isError={isError}
+          onRetry={() => refetch()}
+          skeleton={<TableSkeleton rows={6} columns={6} />}
+        >
+          {null}
+        </PageStates>
       </div>
     );
   }
@@ -169,15 +162,15 @@ export default function NotificationsPage() {
 
               {/* Templates Table */}
               {filteredTemplates?.length === 0 ? (
-                <div className="bg-white rounded-lg border border-line shadow-card p-16 text-center">
+                <div className="bg-surface rounded-lg border border-line shadow-card p-16 text-center">
                   <Search className="w-10 h-10 text-ink-muted mx-auto mb-3" />
                   <h3 className="text-sm font-semibold text-ink mb-1">No results found</h3>
                   <p className="text-sm text-ink-secondary">Try adjusting your search or filter.</p>
                 </div>
               ) : (
-                <div className="bg-white rounded-lg border border-line shadow-card overflow-hidden">
+                <div className="bg-surface rounded-lg border border-line shadow-card overflow-hidden">
                   <table className="w-full">
-                    <thead className="bg-white/5 border-b border-line">
+                    <thead className="bg-surface-alt border-b border-line">
                       <tr>
                         <th className="text-[11px] font-semibold text-ink-secondary uppercase tracking-wider h-10 px-4 text-left">
                           Template
@@ -245,30 +238,19 @@ interface PageHeaderProps {
 
 function PageHeader({ onCreateClick, templateCount }: PageHeaderProps) {
   return (
-    <div className="flex items-start justify-between gap-4">
-      <div>
-        <h1 className="text-[22px] font-semibold tracking-tight text-ink">
-          Notifications
-        </h1>
-        <div className="flex items-center gap-3 mt-0.5">
-          <p className="text-sm text-ink-secondary">
-            Manage notification templates and delivery settings.
-          </p>
-          {templateCount !== undefined && (
-            <span className="text-xs text-ink-muted">
-              {templateCount} {templateCount === 1 ? 'template' : 'templates'}
-            </span>
-          )}
-        </div>
-      </div>
-      <button
-        onClick={onCreateClick}
-        className="h-9 px-4 text-sm font-medium rounded-md bg-primary hover:bg-primary-hover text-white transition-colors flex items-center gap-2 flex-shrink-0"
-      >
-        <Plus className="w-4 h-4" />
-        Create Template
-      </button>
-    </div>
+    <SharedPageHeader
+      title="Notifications"
+      subtitle={`Manage notification templates and delivery settings.${templateCount !== undefined ? ` ${templateCount} ${templateCount === 1 ? 'template' : 'templates'}.` : ''}`}
+      primaryAction={
+        <button
+          onClick={onCreateClick}
+          className="h-9 px-4 text-sm font-medium rounded-md bg-primary hover:bg-primary-hover text-primary-foreground transition-colors flex items-center gap-2 flex-shrink-0"
+        >
+          <Plus className="w-4 h-4" />
+          Create template
+        </button>
+      }
+    />
   );
 }
 
@@ -328,7 +310,7 @@ function FilterBar({
           value={search}
           onChange={(e) => onSearchChange(e.target.value)}
           placeholder="Search templates..."
-          className="w-full h-9 pl-9 pr-8 text-sm rounded-md border border-line bg-white text-ink placeholder:text-ink-muted focus:outline-none focus:ring-2 focus:ring-primary/30 focus:border-primary transition-all duration-150"
+          className="w-full h-9 pl-9 pr-8 text-sm rounded-md border border-line bg-surface text-ink placeholder:text-ink-muted focus:outline-none focus:ring-2 focus:ring-primary/30 focus:border-primary transition-all duration-150"
         />
         {search && (
           <button onClick={() => onSearchChange('')} className="absolute right-2 top-1/2 -translate-y-1/2 text-ink-muted hover:text-ink" aria-label="Clear search">
@@ -341,7 +323,7 @@ function FilterBar({
         <select
           value={channelFilter}
           onChange={(e) => onChannelChange(e.target.value as NotificationChannel | '')}
-          className="h-9 pl-3 pr-8 text-sm rounded-md border border-line bg-white text-ink focus:outline-none focus:ring-2 focus:ring-primary/30 focus:border-primary transition-all duration-150 appearance-none cursor-pointer"
+          className="h-9 pl-3 pr-8 text-sm rounded-md border border-line bg-surface text-ink focus:outline-none focus:ring-2 focus:ring-primary/30 focus:border-primary transition-all duration-150 appearance-none cursor-pointer"
         >
           <option value="">All Channels</option>
           {Object.entries(CHANNEL_LABELS).map(([key, label]) => (
@@ -371,7 +353,7 @@ function TemplateRow({ template, onEdit, onDelete }: TemplateRowProps) {
 
   return (
     <>
-      <tr className="border-b border-line last:border-0 hover:bg-white/5 transition-colors duration-100">
+      <tr className="border-b border-line last:border-0 hover:bg-surface-hover transition-colors duration-100">
         <td className="h-14 px-4">
           <div>
             <p className="text-sm font-medium text-ink">{template.name}</p>
@@ -401,14 +383,14 @@ function TemplateRow({ template, onEdit, onDelete }: TemplateRowProps) {
           <div className="flex items-center justify-end gap-1.5">
             <button
               onClick={() => setIsTestModalOpen(true)}
-              className="h-7 px-3 text-xs font-medium rounded-md border border-line bg-white text-ink hover:bg-surface-alt transition-colors inline-flex items-center gap-1.5"
+              className="h-7 px-3 text-xs font-medium rounded-md border border-line bg-surface text-ink hover:bg-surface-alt transition-colors inline-flex items-center gap-1.5"
             >
               <FlaskConical className="w-3.5 h-3.5" />
               Test
             </button>
             <button
               onClick={onEdit}
-              className="h-7 px-3 text-xs font-medium rounded-md border border-line bg-white text-ink hover:bg-surface-alt transition-colors inline-flex items-center gap-1.5"
+              className="h-7 px-3 text-xs font-medium rounded-md border border-line bg-surface text-ink hover:bg-surface-alt transition-colors inline-flex items-center gap-1.5"
             >
               <Eye className="w-3.5 h-3.5" />
               Edit
@@ -421,7 +403,7 @@ function TemplateRow({ template, onEdit, onDelete }: TemplateRowProps) {
             {template.is_active && (
               <button
                 onClick={onDelete}
-                className="h-7 px-2 text-xs font-medium rounded-md border border-line bg-white text-ink-secondary hover:text-error hover:border-error/30 hover:bg-error-light transition-colors inline-flex items-center gap-1"
+                className="h-7 px-2 text-xs font-medium rounded-md border border-line bg-surface text-ink-secondary hover:text-error hover:border-error/30 hover:bg-error-light transition-colors inline-flex items-center gap-1"
                 title="Delete template"
               >
                 <Trash2 className="w-3.5 h-3.5" />
@@ -488,7 +470,7 @@ function TemplateFormModal({ isOpen, onClose, template, createMutation }: Templa
       size="xl"
       footer={
         <>
-          <button onClick={onClose} disabled={isPending} className="h-9 px-4 text-sm font-medium rounded-md border border-line bg-white text-ink hover:bg-surface-alt transition-colors disabled:opacity-50">
+          <button onClick={onClose} disabled={isPending} className="h-9 px-4 text-sm font-medium rounded-md border border-line bg-surface text-ink hover:bg-surface-alt transition-colors disabled:opacity-50">
             Cancel
           </button>
           <button
@@ -505,35 +487,35 @@ function TemplateFormModal({ isOpen, onClose, template, createMutation }: Templa
         <div className="grid grid-cols-2 gap-4">
           <div>
             <label className="text-sm font-medium text-ink block mb-1.5">Name <span className="text-error">*</span></label>
-            <input type="text" value={formData.name} onChange={(e) => setFormData({ ...formData, name: e.target.value })} placeholder="e.g., Workflow Failure Alert" className="w-full h-9 px-3 text-sm rounded-md border border-line bg-white text-ink placeholder:text-ink-muted focus:outline-none focus:ring-2 focus:ring-primary/30 focus:border-primary transition-all duration-150" />
+            <input type="text" value={formData.name} onChange={(e) => setFormData({ ...formData, name: e.target.value })} placeholder="e.g., Workflow Failure Alert" className="w-full h-9 px-3 text-sm rounded-md border border-line bg-surface text-ink placeholder:text-ink-muted focus:outline-none focus:ring-2 focus:ring-primary/30 focus:border-primary transition-all duration-150" />
           </div>
           <div>
             <label className="text-sm font-medium text-ink block mb-1.5">Key <span className="text-error">*</span></label>
-            <input type="text" value={formData.key} onChange={(e) => setFormData({ ...formData, key: e.target.value.toLowerCase().replace(/\s+/g, '-').replace(/[^a-z0-9_-]/g, '') })} placeholder="e.g., workflow_failure" className="w-full h-9 px-3 text-sm rounded-md border border-line bg-white text-ink placeholder:text-ink-muted focus:outline-none focus:ring-2 focus:ring-primary/30 focus:border-primary transition-all duration-150 font-mono" />
+            <input type="text" value={formData.key} onChange={(e) => setFormData({ ...formData, key: e.target.value.toLowerCase().replace(/\s+/g, '-').replace(/[^a-z0-9_-]/g, '') })} placeholder="e.g., workflow_failure" className="w-full h-9 px-3 text-sm rounded-md border border-line bg-surface text-ink placeholder:text-ink-muted focus:outline-none focus:ring-2 focus:ring-primary/30 focus:border-primary transition-all duration-150 font-mono" />
           </div>
         </div>
 
         <div>
           <label className="text-sm font-medium text-ink block mb-1.5">Description</label>
-          <input type="text" value={formData.description} onChange={(e) => setFormData({ ...formData, description: e.target.value })} placeholder="Brief description" className="w-full h-9 px-3 text-sm rounded-md border border-line bg-white text-ink placeholder:text-ink-muted focus:outline-none focus:ring-2 focus:ring-primary/30 focus:border-primary transition-all duration-150" />
+          <input type="text" value={formData.description} onChange={(e) => setFormData({ ...formData, description: e.target.value })} placeholder="Brief description" className="w-full h-9 px-3 text-sm rounded-md border border-line bg-surface text-ink placeholder:text-ink-muted focus:outline-none focus:ring-2 focus:ring-primary/30 focus:border-primary transition-all duration-150" />
         </div>
 
         <div className="grid grid-cols-3 gap-4">
           <div>
             <label className="text-sm font-medium text-ink block mb-1.5">Channel <span className="text-error">*</span></label>
-            <select value={formData.channel} onChange={(e) => setFormData({ ...formData, channel: e.target.value as NotificationChannel })} className="w-full h-9 px-3 text-sm rounded-md border border-line bg-white text-ink focus:outline-none focus:ring-2 focus:ring-primary/30 focus:border-primary transition-all duration-150">
+            <select value={formData.channel} onChange={(e) => setFormData({ ...formData, channel: e.target.value as NotificationChannel })} className="w-full h-9 px-3 text-sm rounded-md border border-line bg-surface text-ink focus:outline-none focus:ring-2 focus:ring-primary/30 focus:border-primary transition-all duration-150">
               {Object.entries(CHANNEL_LABELS).map(([k, v]) => <option key={k} value={k}>{v}</option>)}
             </select>
           </div>
           <div>
             <label className="text-sm font-medium text-ink block mb-1.5">Severity <span className="text-error">*</span></label>
-            <select value={formData.severity} onChange={(e) => setFormData({ ...formData, severity: e.target.value as NotificationSeverity })} className="w-full h-9 px-3 text-sm rounded-md border border-line bg-white text-ink focus:outline-none focus:ring-2 focus:ring-primary/30 focus:border-primary transition-all duration-150">
+            <select value={formData.severity} onChange={(e) => setFormData({ ...formData, severity: e.target.value as NotificationSeverity })} className="w-full h-9 px-3 text-sm rounded-md border border-line bg-surface text-ink focus:outline-none focus:ring-2 focus:ring-primary/30 focus:border-primary transition-all duration-150">
               {Object.entries(SEVERITY_LABELS).map(([k, v]) => <option key={k} value={k}>{v}</option>)}
             </select>
           </div>
           <div>
             <label className="text-sm font-medium text-ink block mb-1.5">Digest Mode <span className="text-error">*</span></label>
-            <select value={formData.digest_mode} onChange={(e) => setFormData({ ...formData, digest_mode: e.target.value as NotificationDigestMode })} className="w-full h-9 px-3 text-sm rounded-md border border-line bg-white text-ink focus:outline-none focus:ring-2 focus:ring-primary/30 focus:border-primary transition-all duration-150">
+            <select value={formData.digest_mode} onChange={(e) => setFormData({ ...formData, digest_mode: e.target.value as NotificationDigestMode })} className="w-full h-9 px-3 text-sm rounded-md border border-line bg-surface text-ink focus:outline-none focus:ring-2 focus:ring-primary/30 focus:border-primary transition-all duration-150">
               {Object.entries(DIGEST_LABELS).map(([k, v]) => <option key={k} value={k}>{v}</option>)}
             </select>
           </div>
@@ -542,7 +524,7 @@ function TemplateFormModal({ isOpen, onClose, template, createMutation }: Templa
         <div className="grid grid-cols-2 gap-4">
           <div>
             <label className="text-sm font-medium text-ink block mb-1.5">Target Type <span className="text-error">*</span></label>
-            <select value={formData.target_type} onChange={(e) => setFormData({ ...formData, target_type: e.target.value as import('@/types').NotificationTargetType, target_id: e.target.value === 'all' ? 'all' : '' })} className="w-full h-9 px-3 text-sm rounded-md border border-line bg-white text-ink focus:outline-none focus:ring-2 focus:ring-primary/30 focus:border-primary transition-all duration-150">
+            <select value={formData.target_type} onChange={(e) => setFormData({ ...formData, target_type: e.target.value as import('@/types').NotificationTargetType, target_id: e.target.value === 'all' ? 'all' : '' })} className="w-full h-9 px-3 text-sm rounded-md border border-line bg-surface text-ink focus:outline-none focus:ring-2 focus:ring-primary/30 focus:border-primary transition-all duration-150">
               <option value="all">All Users</option>
               <option value="role">Role</option>
               <option value="department">Department</option>
@@ -554,19 +536,19 @@ function TemplateFormModal({ isOpen, onClose, template, createMutation }: Templa
           {formData.target_type !== 'all' && (
             <div>
               <label className="text-sm font-medium text-ink block mb-1.5">Target ID <span className="text-error">*</span></label>
-              <input type="text" value={formData.target_id} onChange={(e) => setFormData({ ...formData, target_id: e.target.value })} placeholder="Target Object ID or Role code" className="w-full h-9 px-3 text-sm rounded-md border border-line bg-white text-ink placeholder:text-ink-muted focus:outline-none focus:ring-2 focus:ring-primary/30 focus:border-primary transition-all duration-150" />
+              <input type="text" value={formData.target_id} onChange={(e) => setFormData({ ...formData, target_id: e.target.value })} placeholder="Target Object ID or Role code" className="w-full h-9 px-3 text-sm rounded-md border border-line bg-surface text-ink placeholder:text-ink-muted focus:outline-none focus:ring-2 focus:ring-primary/30 focus:border-primary transition-all duration-150" />
             </div>
           )}
         </div>
 
         <div>
           <label className="text-sm font-medium text-ink block mb-1.5">Trigger Event <span className="text-error">*</span></label>
-          <input type="text" value={formData.trigger_event} onChange={(e) => setFormData({ ...formData, trigger_event: e.target.value })} placeholder="e.g., workflow.failure" className="w-full h-9 px-3 text-sm rounded-md border border-line bg-white text-ink placeholder:text-ink-muted focus:outline-none focus:ring-2 focus:ring-primary/30 focus:border-primary transition-all duration-150 font-mono" />
+          <input type="text" value={formData.trigger_event} onChange={(e) => setFormData({ ...formData, trigger_event: e.target.value })} placeholder="e.g., workflow.failure" className="w-full h-9 px-3 text-sm rounded-md border border-line bg-surface text-ink placeholder:text-ink-muted focus:outline-none focus:ring-2 focus:ring-primary/30 focus:border-primary transition-all duration-150 font-mono" />
         </div>
 
         <div>
           <label className="text-sm font-medium text-ink block mb-1.5">Subject <span className="text-error">*</span></label>
-          <input type="text" value={formData.subject} onChange={(e) => setFormData({ ...formData, subject: e.target.value })} placeholder="Supports: {{user_name}}, {{company_name}}" className="w-full h-9 px-3 text-sm rounded-md border border-line bg-white text-ink placeholder:text-ink-muted focus:outline-none focus:ring-2 focus:ring-primary/30 focus:border-primary transition-all duration-150" />
+          <input type="text" value={formData.subject} onChange={(e) => setFormData({ ...formData, subject: e.target.value })} placeholder="Supports: {{user_name}}, {{company_name}}" className="w-full h-9 px-3 text-sm rounded-md border border-line bg-surface text-ink placeholder:text-ink-muted focus:outline-none focus:ring-2 focus:ring-primary/30 focus:border-primary transition-all duration-150" />
         </div>
 
         <div>
@@ -576,7 +558,7 @@ function TemplateFormModal({ isOpen, onClose, template, createMutation }: Templa
             onChange={(e) => setFormData({ ...formData, body: e.target.value })}
             placeholder="Supports: {{user_name}}, {{user_email}}, {{company_name}}, {{detail}}"
             rows={6}
-            className="w-full px-3 py-2 text-sm rounded-md border border-line bg-white text-ink placeholder:text-ink-muted focus:outline-none focus:ring-2 focus:ring-primary/30 focus:border-primary transition-all duration-150 resize-y"
+            className="w-full px-3 py-2 text-sm rounded-md border border-line bg-surface text-ink placeholder:text-ink-muted focus:outline-none focus:ring-2 focus:ring-primary/30 focus:border-primary transition-all duration-150 resize-y"
           />
           <div className="flex flex-wrap gap-1.5 mt-2">
             {SUPPORTED_VARIABLES.map((v) => (
@@ -618,7 +600,7 @@ function TestModal({ isOpen, onClose, templateId }: TestModalProps) {
       size="lg"
       footer={
         <>
-          <button onClick={onClose} disabled={testMutation.isPending} className="h-9 px-4 text-sm font-medium rounded-md border border-line bg-white text-ink hover:bg-surface-alt transition-colors disabled:opacity-50">Cancel</button>
+          <button onClick={onClose} disabled={testMutation.isPending} className="h-9 px-4 text-sm font-medium rounded-md border border-line bg-surface text-ink hover:bg-surface-alt transition-colors disabled:opacity-50">Cancel</button>
           <button
             onClick={() => testMutation.mutate(formData, { onSuccess: onClose })}
             disabled={testMutation.isPending}
@@ -634,26 +616,26 @@ function TestModal({ isOpen, onClose, templateId }: TestModalProps) {
         <div className="grid grid-cols-2 gap-4">
           <div>
             <label className="text-sm font-medium text-ink block mb-1.5">User Name</label>
-            <input type="text" value={formData.user_name} onChange={(e) => setFormData({ ...formData, user_name: e.target.value })} className="w-full h-9 px-3 text-sm rounded-md border border-line bg-white text-ink focus:outline-none focus:ring-2 focus:ring-primary/30 focus:border-primary transition-all duration-150" />
+            <input type="text" value={formData.user_name} onChange={(e) => setFormData({ ...formData, user_name: e.target.value })} className="w-full h-9 px-3 text-sm rounded-md border border-line bg-surface text-ink focus:outline-none focus:ring-2 focus:ring-primary/30 focus:border-primary transition-all duration-150" />
           </div>
           <div>
             <label className="text-sm font-medium text-ink block mb-1.5">User Full Name</label>
-            <input type="text" value={formData.user_full_name} onChange={(e) => setFormData({ ...formData, user_full_name: e.target.value })} className="w-full h-9 px-3 text-sm rounded-md border border-line bg-white text-ink focus:outline-none focus:ring-2 focus:ring-primary/30 focus:border-primary transition-all duration-150" />
+            <input type="text" value={formData.user_full_name} onChange={(e) => setFormData({ ...formData, user_full_name: e.target.value })} className="w-full h-9 px-3 text-sm rounded-md border border-line bg-surface text-ink focus:outline-none focus:ring-2 focus:ring-primary/30 focus:border-primary transition-all duration-150" />
           </div>
         </div>
         <div className="grid grid-cols-2 gap-4">
           <div>
             <label className="text-sm font-medium text-ink block mb-1.5">User Email</label>
-            <input type="email" value={formData.user_email} onChange={(e) => setFormData({ ...formData, user_email: e.target.value })} className="w-full h-9 px-3 text-sm rounded-md border border-line bg-white text-ink focus:outline-none focus:ring-2 focus:ring-primary/30 focus:border-primary transition-all duration-150" />
+            <input type="email" value={formData.user_email} onChange={(e) => setFormData({ ...formData, user_email: e.target.value })} className="w-full h-9 px-3 text-sm rounded-md border border-line bg-surface text-ink focus:outline-none focus:ring-2 focus:ring-primary/30 focus:border-primary transition-all duration-150" />
           </div>
           <div>
             <label className="text-sm font-medium text-ink block mb-1.5">Company Name</label>
-            <input type="text" value={formData.company_name} onChange={(e) => setFormData({ ...formData, company_name: e.target.value })} className="w-full h-9 px-3 text-sm rounded-md border border-line bg-white text-ink focus:outline-none focus:ring-2 focus:ring-primary/30 focus:border-primary transition-all duration-150" />
+            <input type="text" value={formData.company_name} onChange={(e) => setFormData({ ...formData, company_name: e.target.value })} className="w-full h-9 px-3 text-sm rounded-md border border-line bg-surface text-ink focus:outline-none focus:ring-2 focus:ring-primary/30 focus:border-primary transition-all duration-150" />
           </div>
         </div>
         <div>
           <label className="text-sm font-medium text-ink block mb-1.5">Detail</label>
-          <input type="text" value={formData.detail} onChange={(e) => setFormData({ ...formData, detail: e.target.value })} className="w-full h-9 px-3 text-sm rounded-md border border-line bg-white text-ink focus:outline-none focus:ring-2 focus:ring-primary/30 focus:border-primary transition-all duration-150" />
+          <input type="text" value={formData.detail} onChange={(e) => setFormData({ ...formData, detail: e.target.value })} className="w-full h-9 px-3 text-sm rounded-md border border-line bg-surface text-ink focus:outline-none focus:ring-2 focus:ring-primary/30 focus:border-primary transition-all duration-150" />
         </div>
 
         {testMutation.data && (
@@ -681,10 +663,10 @@ function DeliveryLogView() {
   if (isLoading) return <TableSkeleton rows={6} columns={5} />;
 
   return (
-    <div className="bg-white rounded-lg border border-line shadow-card overflow-hidden">
+    <div className="bg-surface rounded-lg border border-line shadow-card overflow-hidden">
       {events && events.length > 0 ? (
         <table className="w-full">
-          <thead className="bg-white/5 border-b border-line">
+          <thead className="bg-surface-alt border-b border-line">
             <tr>
               <th className="text-[11px] font-semibold text-ink-secondary uppercase tracking-wider h-10 px-4 text-left">Status</th>
               <th className="text-[11px] font-semibold text-ink-secondary uppercase tracking-wider h-10 px-4 text-left">Template</th>

@@ -6,9 +6,7 @@ import { useUsers } from '@/features/people/hooks/useUsers';
 import { Modal } from '@/components/ui/Modal';
 import { DataTable } from '@/components/ui/DataTable';
 import { ConfirmDialog } from '@/components/ui/ConfirmDialog';
-import { TableSkeleton } from '@/components/ui/TableSkeleton';
-import { ErrorState } from '@/components/ui/ErrorState';
-import { EmptyState } from '@/components/ui/EmptyState';
+import { ListPage } from '@/components/templates/ListPage';
 import { useAuthStore } from '@/store/useAuthStore';
 import { cn } from '@/utils/cn';
 import { PERMISSION_GROUPS } from '@/constants/roles';
@@ -142,8 +140,8 @@ export default function GroupsPage() {
       header: 'Group Name',
       cell: ({ row }) => (
         <div className="flex items-center gap-3">
-          <div className="w-8 h-8 rounded-lg bg-indigo-500/20 flex items-center justify-center">
-            <Users className="h-4 w-4 text-indigo-400" />
+          <div className="w-8 h-8 rounded-lg bg-info/20 flex items-center justify-center">
+            <Users className="h-4 w-4 text-info" />
           </div>
           <span className="text-sm font-medium text-ink">{row.original.name}</span>
         </div>
@@ -155,7 +153,7 @@ export default function GroupsPage() {
       cell: ({ row }) => (
         <span className={cn(
           "inline-flex items-center px-2 py-0.5 rounded text-[11px] font-semibold uppercase tracking-wider",
-          row.original.type === 'dynamic' ? "bg-purple-500/20 text-purple-400" : "bg-slate-500/20 text-slate-400"
+          row.original.type === 'dynamic' ? "bg-accent/20 text-accent" : "bg-surface-hover text-ink-muted"
         )}>
           {row.original.type}
         </span>
@@ -214,7 +212,7 @@ export default function GroupsPage() {
                   e.stopPropagation();
                   setGroupToDelete(group);
                 }}
-                className="p-2 text-ink-muted hover:text-error hover:bg-red-50 rounded-lg transition-all"
+                className="p-2 text-ink-muted hover:text-error hover:bg-error/10 rounded-lg transition-all"
                 title="Delete Group"
               >
                 <Trash2 className="h-4 w-4" />
@@ -226,73 +224,35 @@ export default function GroupsPage() {
     },
   ], [canMutate, canDelete]);
 
-  if (isError) {
-    return (
-      <ErrorState
-        title="Failed to load groups"
-        description="Something went wrong fetching groups. Please try again."
-        onRetry={refetch}
-      />
-    );
-  }
+  const isEmptyList = !isLoading && (!filteredGroups || filteredGroups.length === 0);
 
   return (
-    <div className="space-y-6">
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
-        <div>
-          <h1 className="text-[22px] font-semibold tracking-tight text-ink">User Groups</h1>
-          <p className="text-sm text-ink-secondary mt-0.5">
-            Manage user groups to assign access efficiently at scale
-          </p>
-        </div>
-        {canMutate && (
-          <button
-            onClick={handleOpenCreateModal}
-            className="h-9 px-4 bg-primary text-white text-sm font-medium rounded-md hover:bg-primary-hover transition-colors flex items-center gap-2 justify-center"
-          >
-            <Plus className="h-4 w-4" />
-            Create Group
-          </button>
-        )}
-      </div>
-
-      <div className="flex items-center gap-3">
-        <div className="relative flex-1 max-w-sm">
-          <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-ink-muted pointer-events-none" />
-          <input
-            type="text"
-            value={search}
-            onChange={(e) => setSearch(e.target.value)}
-            placeholder="Search groups by name..."
-            className="w-full h-10 pl-10 pr-10 text-sm rounded-lg border border-line bg-white focus:outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary transition-all"
-          />
-          {search && (
+    <>
+      <ListPage
+        title="User groups"
+        subtitle="Manage user groups to assign access efficiently at scale"
+        primaryAction={
+          canMutate ? (
             <button
-              onClick={() => setSearch('')}
-              className="absolute right-3 top-1/2 -translate-y-1/2 text-ink-muted hover:text-ink"
+              onClick={handleOpenCreateModal}
+              className="h-9 px-4 bg-primary text-primary-foreground text-sm font-medium rounded-md hover:bg-primary-hover transition-colors flex items-center gap-2 justify-center"
             >
-              <X className="w-4 h-4" />
+              <Plus className="h-4 w-4" />
+              Create group
             </button>
-          )}
-        </div>
-      </div>
-
-      {isLoading ? (
-        <TableSkeleton rows={6} columns={5} />
-      ) : !filteredGroups || filteredGroups.length === 0 ? (
-        <EmptyState
-          icon={Users}
-          title={search ? 'No groups found' : 'No groups yet'}
-          description={search ? `No groups matching "${search}"` : 'Create your first group to start managing access efficiently.'}
-          action={!search && canMutate ? { label: 'Create Group', onClick: handleOpenCreateModal } : undefined}
-        />
-      ) : (
-        <DataTable
-          columns={columns}
-          data={filteredGroups}
-          onRowClick={handleOpenUsersModal}
-        />
-      )}
+          ) : undefined
+        }
+        toolbar={{ search: { placeholder: 'Search groups by name', value: search, onChange: setSearch } }}
+        isLoading={isLoading}
+        isError={isError}
+        onRetry={() => refetch()}
+        isEmpty={isEmptyList}
+        emptyTitle={search ? 'No groups found' : 'No groups yet'}
+        emptyDescription={search ? `No groups matching "${search}"` : 'Create your first group to start managing access efficiently.'}
+        emptyAction={!search && canMutate ? { label: 'Create group', onClick: handleOpenCreateModal } : undefined}
+      >
+        <DataTable columns={columns} data={filteredGroups ?? []} onRowClick={handleOpenUsersModal} />
+      </ListPage>
 
       <Modal
         isOpen={isFormModalOpen}
@@ -317,7 +277,7 @@ export default function GroupsPage() {
               value={formData.name}
               onChange={(e) => setFormData({ ...formData, name: e.target.value })}
               className={cn(
-                "w-full h-10 px-3 text-sm rounded-lg border bg-white focus:outline-none focus:ring-2 transition-all",
+                "w-full h-10 px-3 text-sm rounded-lg border bg-surface focus:outline-none focus:ring-2 transition-all",
                 formError && !formData.name.trim() ? "border-error focus:ring-error/20" : "border-line focus:ring-primary/20 focus:border-primary"
               )}
               placeholder="e.g. Finance Team"
@@ -329,7 +289,7 @@ export default function GroupsPage() {
             <textarea
               value={formData.description ?? ''}
               onChange={(e) => setFormData({ ...formData, description: e.target.value })}
-              className="w-full h-24 p-3 text-sm rounded-lg border border-line bg-white focus:outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary transition-all resize-none"
+              className="w-full h-24 p-3 text-sm rounded-lg border border-line bg-surface focus:outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary transition-all resize-none"
               placeholder="Provide a brief description of this group..."
             />
           </div>
@@ -340,7 +300,7 @@ export default function GroupsPage() {
                <select
                   value={formData.type}
                   onChange={(e) => setFormData({ ...formData, type: e.target.value as 'static' | 'dynamic' })}
-                  className="w-full h-10 px-3 text-sm rounded-lg border border-line bg-white focus:outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary transition-all"
+                  className="w-full h-10 px-3 text-sm rounded-lg border border-line bg-surface focus:outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary transition-all"
                >
                  <option value="static">Static (Manual Membership)</option>
                  <option value="dynamic">Dynamic (Rule-based, coming soon)</option>
@@ -349,7 +309,7 @@ export default function GroupsPage() {
           )}
 
           {formError && formData.name.trim() && (
-            <div className="p-3 bg-red-50 border border-red-100 rounded-lg">
+            <div className="p-3 bg-error/10 border border-error/30 rounded-lg">
               <p className="text-xs text-error font-medium">{formError}</p>
             </div>
           )}
@@ -390,7 +350,7 @@ export default function GroupsPage() {
                   value={userSearchQuery}
                   onChange={(e) => setUserSearchQuery(e.target.value)}
                   placeholder="Search by name or email..."
-                  className="w-full h-10 pl-10 pr-10 text-sm rounded-lg border border-line bg-white focus:outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary transition-all"
+                  className="w-full h-10 pl-10 pr-10 text-sm rounded-lg border border-line bg-surface focus:outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary transition-all"
                 />
                 {userSearchQuery && (
                   <button
@@ -402,7 +362,7 @@ export default function GroupsPage() {
                 )}
                 
                 {userSearchQuery.length >= 2 && people && people.length > 0 && (
-                  <div className="absolute top-full left-0 right-0 mt-1 bg-white border border-line rounded-lg shadow-dropdown z-50 max-h-60 overflow-y-auto">
+                  <div className="absolute top-full left-0 right-0 mt-1 bg-surface border border-line rounded-lg shadow-dropdown z-50 max-h-60 overflow-y-auto">
                     {people.map((person: any) => {
                       const isAlreadyAssigned = groupUsers?.some((u: any) => u.user_id._id === person._id);
                       return (
@@ -439,7 +399,7 @@ export default function GroupsPage() {
               <span className="text-xs font-medium text-ink-secondary">{groupUsers?.length || 0} users</span>
             </div>
             
-            <div className="border border-line rounded-xl overflow-hidden divide-y divide-line bg-white">
+            <div className="border border-line rounded-xl overflow-hidden divide-y divide-line bg-surface">
               {isLoadingGroupUsers ? (
                 <div className="p-10 flex flex-col items-center justify-center gap-3">
                   <Loader2 className="w-6 h-6 text-primary animate-spin" />
@@ -456,7 +416,7 @@ export default function GroupsPage() {
                   if (!user) return null;
                   return (
                     <div key={user._id} className="flex items-center gap-3 px-4 py-3 group">
-                      <div className="w-8 h-8 rounded-full bg-indigo-500/20 flex items-center justify-center text-xs font-semibold text-indigo-400">
+                      <div className="w-8 h-8 rounded-full bg-info/20 flex items-center justify-center text-xs font-semibold text-info">
                         {user.full_name?.charAt(0) || '?'}
                       </div>
                       <div className="flex-1 min-w-0">
@@ -469,7 +429,7 @@ export default function GroupsPage() {
                         <button
                           onClick={() => handleUnassignUser(user._id)}
                           disabled={removeUsersMutation.isPending}
-                          className="p-2 text-ink-muted hover:text-error hover:bg-red-50 rounded-lg transition-all opacity-0 group-hover:opacity-100"
+                          className="p-2 text-ink-muted hover:text-error hover:bg-error/10 rounded-lg transition-all opacity-0 group-hover:opacity-100"
                           title="Remove User"
                         >
                           <UserMinus className="h-4 w-4" />
@@ -503,6 +463,6 @@ export default function GroupsPage() {
         variant="danger"
         isLoading={deleteMutation.isPending}
       />
-    </div>
+    </>
   );
 }

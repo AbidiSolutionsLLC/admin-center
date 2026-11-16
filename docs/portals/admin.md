@@ -325,6 +325,7 @@ Response envelope for most tenant endpoints: `{ success: true, data }`; errors f
 Pages are wrapped in the Phase 3 templates (`PageHeader`, `ListPage`, `Tabs`, `PageStates`) and off-theme colour classes in the page files are replaced by theme tokens (`bg-surface`, `text-ink`, `border-line`, `error`/`warning`/`success`/`info`); soft accents come from the `--accent-*` CSS variables in `client/src/index.css`. Feature components under `client/src/features/*` were not restyled.
 
 - Batch 1 (5.8, built, not yet run): Security (URL-synced tabs `?tab=`), Audit log (`ListPage`; export buttons now check `audit_logs:export`, as the server does), Data fields, Approvals (`ListPage`, all five states), Integrations, Insight history (chart colours from CSS variables).
+- Batch 2 (5.9, built, not yet run): Teams, Organization structure and Notifications (shared `PageHeader`, loading and error through `PageStates`), Groups and Admin roles (`ListPage` with toolbar search, all five states; roles keep the list/map toggle in the toolbar and move Simulate access to the overflow menu), Location detail (`ObjectPage`: header, status badges, key facts, URL-synced tabs).
 
 ## 4. Roles and permissions
 

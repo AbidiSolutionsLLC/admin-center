@@ -10,7 +10,8 @@ import { TeamForm } from '@/features/teams/components/TeamForm';
 import type { TeamFormData } from '@/features/teams/components/TeamForm';
 import { TeamMembersPanel } from '@/features/teams/components/TeamMembersPanel';
 import { TableSkeleton } from '@/components/ui/TableSkeleton';
-import { ErrorState } from '@/components/ui/ErrorState';
+import { PageHeader as SharedPageHeader } from '@/components/ui/PageHeader';
+import { PageStates } from '@/components/templates/PageStates';
 import { EmptyState } from '@/components/ui/EmptyState';
 import { Modal } from '@/components/ui/Modal';
 import { ConfirmDialog } from '@/components/ui/ConfirmDialog';
@@ -175,26 +176,19 @@ export default function TeamsPage() {
     setTeamWithMembersOpen(null);
   };
 
-  // -- Render: Loading --
-  if (isLoading) {
+  // -- Render: Loading / Error --
+  if (isLoading || isError) {
     return (
-      <div className="space-y-5">
+      <div>
         <PageHeader onCreateClick={handleOpenCreate} onShowWithoutLead={() => {}} />
-        <TableSkeleton rows={8} columns={5} />
-      </div>
-    );
-  }
-
-  // -- Render: Error --
-  if (isError) {
-    return (
-      <div className="space-y-5">
-        <PageHeader onCreateClick={handleOpenCreate} onShowWithoutLead={() => {}} />
-        <ErrorState
-          title="Failed to load teams"
-          description="Something went wrong fetching your teams data. Please try again."
-          onRetry={refetch}
-        />
+        <PageStates
+          isLoading={isLoading}
+          isError={isError}
+          onRetry={() => refetch()}
+          skeleton={<TableSkeleton rows={8} columns={5} />}
+        >
+          {null}
+        </PageStates>
       </div>
     );
   }
@@ -231,7 +225,7 @@ export default function TeamsPage() {
                 value={filters.search}
                 onChange={(e) => setFilters((f) => ({ ...f, search: e.target.value }))}
                 placeholder="Search teams..."
-                className="w-full h-9 pl-9 pr-8 text-sm rounded-md border border-line bg-white text-ink placeholder:text-ink-muted focus:outline-none focus:ring-2 focus:ring-primary/30 focus:border-primary transition-all duration-150"
+                className="w-full h-9 pl-9 pr-8 text-sm rounded-md border border-line bg-surface text-ink placeholder:text-ink-muted focus:outline-none focus:ring-2 focus:ring-primary/30 focus:border-primary transition-all duration-150"
               />
               {filters.search && (
                 <button
@@ -254,7 +248,7 @@ export default function TeamsPage() {
                     department_id: e.target.value,
                   }))
                 }
-                className="h-9 pl-3 pr-8 text-sm rounded-md border border-line bg-white text-ink focus:outline-none focus:ring-2 focus:ring-primary/30 focus:border-primary transition-all duration-150 appearance-none cursor-pointer"
+                className="h-9 pl-3 pr-8 text-sm rounded-md border border-line bg-surface text-ink focus:outline-none focus:ring-2 focus:ring-primary/30 focus:border-primary transition-all duration-150 appearance-none cursor-pointer"
               >
                 {departmentOptions.map((opt) => (
                   <option key={opt.value} value={opt.value}>
@@ -275,7 +269,7 @@ export default function TeamsPage() {
                     status: e.target.value as TeamsFilters['status'],
                   }))
                 }
-                className="h-9 pl-3 pr-8 text-sm rounded-md border border-line bg-white text-ink focus:outline-none focus:ring-2 focus:ring-primary/30 focus:border-primary transition-all duration-150 appearance-none cursor-pointer"
+                className="h-9 pl-3 pr-8 text-sm rounded-md border border-line bg-surface text-ink focus:outline-none focus:ring-2 focus:ring-primary/30 focus:border-primary transition-all duration-150 appearance-none cursor-pointer"
               >
                 <option value="">All Status</option>
                 <option value="active">Active</option>
@@ -306,7 +300,7 @@ export default function TeamsPage() {
 
           {/* -- Table View -- */}
           {filteredTeams.length === 0 ? (
-            <div className="bg-white rounded-lg border border-line shadow-card p-16 text-center">
+            <div className="bg-surface rounded-lg border border-line shadow-card p-16 text-center">
               <div className="w-10 h-10 rounded-xl bg-primary-light flex items-center justify-center mx-auto mb-3">
                 <Search className="w-5 h-5 text-primary" />
               </div>
@@ -342,7 +336,7 @@ export default function TeamsPage() {
               type="button"
               onClick={handleCloseModal}
               disabled={createMutation.isPending || updateMutation.isPending}
-              className="h-9 px-4 text-sm font-medium rounded-md border border-line bg-white text-ink hover:bg-surface-alt transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+              className="h-9 px-4 text-sm font-medium rounded-md border border-line bg-surface text-ink hover:bg-surface-alt transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
             >
               Cancel
             </button>
@@ -409,42 +403,30 @@ interface PageHeaderProps {
 
 function PageHeader({ onCreateClick, teamCount, teamsWithoutLeadCount, onShowWithoutLead }: PageHeaderProps) {
   return (
-    <div className="flex items-start justify-between gap-4">
-      <div>
-        <h1 className="text-[22px] font-semibold tracking-tight text-ink">
-          Teams
-        </h1>
-        <div className="flex items-center gap-3 mt-0.5">
-          <p className="text-sm text-ink-secondary">
-            Manage teams and their members across your organization.
-          </p>
-          {teamCount !== undefined && (
-            <span className="text-xs text-ink-muted">
-              {teamCount} {teamCount === 1 ? 'team' : 'teams'}
-            </span>
-          )}
-          {teamsWithoutLeadCount !== undefined && teamsWithoutLeadCount > 0 && (
-            <button
-              onClick={onShowWithoutLead}
-              className={cn(
-                'inline-flex items-center gap-1 text-[11px] font-semibold text-amber-700 bg-amber-50 border border-amber-200 rounded-full px-2 py-0.5',
-                'hover:bg-amber-100 transition-colors cursor-pointer'
-              )}
-              title="Click to filter teams without a lead"
-            >
-              <AlertTriangle className="w-3 h-3" />
-              {teamsWithoutLeadCount} without lead
-            </button>
-          )}
-        </div>
-      </div>
-      <Button
-        onClick={onCreateClick}
-        className="h-9 px-4 text-sm font-medium rounded-md bg-primary hover:bg-primary-hover text-white transition-colors flex items-center gap-2 flex-shrink-0"
-      >
-        <Plus className="w-4 h-4" />
-        Create Team
-      </Button>
-    </div>
+    <SharedPageHeader
+      title="Teams"
+      subtitle={`Manage teams and their members across your organization.${teamCount !== undefined ? ` ${teamCount} ${teamCount === 1 ? 'team' : 'teams'}.` : ''}`}
+      status={
+        teamsWithoutLeadCount !== undefined && teamsWithoutLeadCount > 0 ? (
+          <button
+            onClick={onShowWithoutLead}
+            className="inline-flex items-center gap-1 text-label normal-case tracking-normal text-warning bg-warning/10 border border-warning/30 rounded-full px-2 py-0.5 hover:bg-warning/20 transition-colors cursor-pointer"
+            title="Click to filter teams without a lead"
+          >
+            <AlertTriangle className="w-3 h-3" />
+            {teamsWithoutLeadCount} without lead
+          </button>
+        ) : undefined
+      }
+      primaryAction={
+        <Button
+          onClick={onCreateClick}
+          className="h-9 px-4 text-sm font-medium rounded-md bg-primary hover:bg-primary-hover text-primary-foreground transition-colors flex items-center gap-2 flex-shrink-0"
+        >
+          <Plus className="w-4 h-4" />
+          Create Team
+        </Button>
+      }
+    />
   );
 }

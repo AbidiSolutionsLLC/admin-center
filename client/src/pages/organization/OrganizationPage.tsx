@@ -16,7 +16,8 @@ import { BusinessUnitsTab } from '@/features/organization/components/BusinessUni
 import { OrgHealthTab } from '@/features/organization/components/OrgHealthTab';
 import { OrgHistoryTab } from '@/features/organization/components/OrgHistoryTab';
 import { TableSkeleton } from '@/components/ui/TableSkeleton';
-import { ErrorState } from '@/components/ui/ErrorState';
+import { PageHeader as SharedPageHeader } from '@/components/ui/PageHeader';
+import { PageStates } from '@/components/templates/PageStates';
 import { EmptyState } from '@/components/ui/EmptyState';
 import { Modal } from '@/components/ui/Modal';
 import { ConfirmDialog } from '@/components/ui/ConfirmDialog';
@@ -170,26 +171,19 @@ export default function OrganizationPage() {
     });
   };
 
-  // ── Render: Loading ────────────────────────────────────────────────────
-  if (isLoading) {
+  // ── Render: Loading / Error ────────────────────────────────────────────
+  if (isLoading || isError) {
     return (
-      <div className="space-y-5">
-        <PageHeader onCreateClick={handleOpenCreate} isLoading={true} />
-        <TableSkeleton rows={8} columns={6} />
-      </div>
-    );
-  }
-
-  // ── Render: Error ──────────────────────────────────────────────────────
-  if (isError) {
-    return (
-      <div className="space-y-5">
-        <PageHeader onCreateClick={handleOpenCreate} isLoading={false} />
-        <ErrorState
-          title="Failed to load departments"
-          description="Something went wrong fetching your organization data. Please try again."
-          onRetry={refetch}
-        />
+      <div>
+        <PageHeader onCreateClick={handleOpenCreate} isLoading={isLoading} />
+        <PageStates
+          isLoading={isLoading}
+          isError={isError}
+          onRetry={() => refetch()}
+          skeleton={<TableSkeleton rows={8} columns={6} />}
+        >
+          {null}
+        </PageStates>
       </div>
     );
   }
@@ -214,28 +208,28 @@ export default function OrganizationPage() {
         <Tabs.List className="flex bg-surface-alt p-1 rounded-lg gap-1 w-fit">
           <Tabs.Trigger
             value="departments"
-            className="flex items-center gap-1.5 px-4 py-2 text-sm font-medium rounded-md text-ink-secondary data-[state=active]:bg-white data-[state=active]:text-ink data-[state=active]:shadow-sm transition-all"
+            className="flex items-center gap-1.5 px-4 py-2 text-sm font-medium rounded-md text-ink-secondary data-[state=active]:bg-surface data-[state=active]:text-ink data-[state=active]:shadow-sm transition-all"
           >
             <List className="w-4 h-4" />
             Departments
           </Tabs.Trigger>
           <Tabs.Trigger
             value="business-units"
-            className="flex items-center gap-1.5 px-4 py-2 text-sm font-medium rounded-md text-ink-secondary data-[state=active]:bg-white data-[state=active]:text-ink data-[state=active]:shadow-sm transition-all"
+            className="flex items-center gap-1.5 px-4 py-2 text-sm font-medium rounded-md text-ink-secondary data-[state=active]:bg-surface data-[state=active]:text-ink data-[state=active]:shadow-sm transition-all"
           >
             <FolderTree className="w-4 h-4" />
             Business Units
           </Tabs.Trigger>
           <Tabs.Trigger
             value="health"
-            className="flex items-center gap-1.5 px-4 py-2 text-sm font-medium rounded-md text-ink-secondary data-[state=active]:bg-white data-[state=active]:text-ink data-[state=active]:shadow-sm transition-all"
+            className="flex items-center gap-1.5 px-4 py-2 text-sm font-medium rounded-md text-ink-secondary data-[state=active]:bg-surface data-[state=active]:text-ink data-[state=active]:shadow-sm transition-all"
           >
             <Activity className="w-4 h-4" />
             Health
           </Tabs.Trigger>
           <Tabs.Trigger
             value="history"
-            className="flex items-center gap-1.5 px-4 py-2 text-sm font-medium rounded-md text-ink-secondary data-[state=active]:bg-white data-[state=active]:text-ink data-[state=active]:shadow-sm transition-all"
+            className="flex items-center gap-1.5 px-4 py-2 text-sm font-medium rounded-md text-ink-secondary data-[state=active]:bg-surface data-[state=active]:text-ink data-[state=active]:shadow-sm transition-all"
           >
             <History className="w-4 h-4" />
             History
@@ -265,7 +259,7 @@ export default function OrganizationPage() {
                       value={filters.search}
                       onChange={(e) => setFilters((f) => ({ ...f, search: e.target.value }))}
                       placeholder="Search departments..."
-                      className="w-full h-9 pl-9 pr-8 text-sm rounded-md border border-line bg-white text-ink placeholder:text-ink-muted focus:outline-none focus:ring-2 focus:ring-primary/30 focus:border-primary transition-all duration-150"
+                      className="w-full h-9 pl-9 pr-8 text-sm rounded-md border border-line bg-surface text-ink placeholder:text-ink-muted focus:outline-none focus:ring-2 focus:ring-primary/30 focus:border-primary transition-all duration-150"
                     />
                     {filters.search && (
                       <button
@@ -288,7 +282,7 @@ export default function OrganizationPage() {
                           type: e.target.value as DepartmentFilters['type'],
                         }))
                       }
-                      className="h-9 pl-3 pr-8 text-sm rounded-md border border-line bg-white text-ink focus:outline-none focus:ring-2 focus:ring-primary/30 focus:border-primary transition-all duration-150 appearance-none cursor-pointer"
+                      className="h-9 pl-3 pr-8 text-sm rounded-md border border-line bg-surface text-ink focus:outline-none focus:ring-2 focus:ring-primary/30 focus:border-primary transition-all duration-150 appearance-none cursor-pointer"
                     >
                       {DEPT_TYPE_OPTIONS.map((opt) => (
                         <option key={opt.value} value={opt.value}>
@@ -309,7 +303,7 @@ export default function OrganizationPage() {
                           status: e.target.value as DepartmentFilters['status'],
                         }))
                       }
-                      className="h-9 pl-3 pr-8 text-sm rounded-md border border-line bg-white text-ink focus:outline-none focus:ring-2 focus:ring-primary/30 focus:border-primary transition-all duration-150 appearance-none cursor-pointer"
+                      className="h-9 pl-3 pr-8 text-sm rounded-md border border-line bg-surface text-ink focus:outline-none focus:ring-2 focus:ring-primary/30 focus:border-primary transition-all duration-150 appearance-none cursor-pointer"
                     >
                       <option value="">All Status</option>
                       <option value="active">Active</option>
@@ -342,14 +336,14 @@ export default function OrganizationPage() {
                 <Tabs.List className="flex bg-surface-alt p-1 rounded-lg gap-1 flex-shrink-0">
                   <Tabs.Trigger
                     value="list"
-                    className="flex items-center gap-1.5 px-3 py-1.5 text-sm font-medium rounded-md text-ink-secondary data-[state=active]:bg-white data-[state=active]:text-ink data-[state=active]:shadow-sm transition-all"
+                    className="flex items-center gap-1.5 px-3 py-1.5 text-sm font-medium rounded-md text-ink-secondary data-[state=active]:bg-surface data-[state=active]:text-ink data-[state=active]:shadow-sm transition-all"
                   >
                     <List className="w-3.5 h-3.5" />
                     Table
                   </Tabs.Trigger>
                   <Tabs.Trigger
                     value="chart"
-                    className="flex items-center gap-1.5 px-3 py-1.5 text-sm font-medium rounded-md text-ink-secondary data-[state=active]:bg-white data-[state=active]:text-ink data-[state=active]:shadow-sm transition-all"
+                    className="flex items-center gap-1.5 px-3 py-1.5 text-sm font-medium rounded-md text-ink-secondary data-[state=active]:bg-surface data-[state=active]:text-ink data-[state=active]:shadow-sm transition-all"
                   >
                     <LayoutGrid className="w-3.5 h-3.5" />
                     Org Chart
@@ -360,7 +354,7 @@ export default function OrganizationPage() {
               {/* ── Table View ── */}
               <Tabs.Content value="list" className="focus:outline-none">
                 {filteredDepartments.length === 0 ? (
-                  <div className="bg-white rounded-lg border border-line shadow-card p-16 text-center">
+                  <div className="bg-surface rounded-lg border border-line shadow-card p-16 text-center">
                     <div className="w-10 h-10 rounded-xl bg-primary-light flex items-center justify-center mx-auto mb-3">
                       <Search className="w-5 h-5 text-primary" />
                     </div>
@@ -438,7 +432,7 @@ export default function OrganizationPage() {
               type="button"
               onClick={handleCloseModal}
               disabled={createMutation.isPending || updateMutation.isPending}
-              className="h-9 px-4 text-sm font-medium rounded-md border border-line bg-white text-ink hover:bg-surface-alt transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+              className="h-9 px-4 text-sm font-medium rounded-md border border-line bg-surface text-ink hover:bg-surface-alt transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
             >
               Cancel
             </button>
@@ -497,39 +491,30 @@ interface PageHeaderProps {
 
 function PageHeader({ onCreateClick, departmentCount, warningCount, isLoading }: PageHeaderProps) {
   return (
-    <div className="flex items-start justify-between gap-4">
-      <div>
-        <h1 className="text-[22px] font-semibold tracking-tight text-ink">
-          Organization Structure
-        </h1>
-        <div className="flex items-center gap-3 mt-0.5">
-          <p className="text-sm text-ink-secondary">
-            Manage your company hierarchy, departments, and teams.
-          </p>
-          {departmentCount !== undefined && (
-            <span className="text-xs text-ink-muted">
-              {departmentCount} {departmentCount === 1 ? 'department' : 'departments'}
-            </span>
+    <SharedPageHeader
+      title="Organization structure"
+      subtitle={`Manage your company hierarchy, departments, and teams.${departmentCount !== undefined ? ` ${departmentCount} ${departmentCount === 1 ? 'department' : 'departments'}.` : ''}`}
+      status={
+        warningCount !== undefined && warningCount > 0 ? (
+          <span className="inline-flex items-center gap-1 text-label normal-case tracking-normal text-warning bg-warning/10 border border-warning/30 rounded-full px-2 py-0.5">
+            <span className="w-1.5 h-1.5 rounded-full bg-warning" />
+            {warningCount} warning{warningCount > 1 ? 's' : ''}
+          </span>
+        ) : undefined
+      }
+      primaryAction={
+        <Button
+          onClick={onCreateClick}
+          disabled={isLoading}
+          className={cn(
+            'h-9 px-4 text-sm font-medium rounded-md bg-primary hover:bg-primary-hover text-primary-foreground transition-colors flex items-center gap-2 flex-shrink-0',
+            isLoading && 'opacity-50 cursor-not-allowed'
           )}
-          {warningCount !== undefined && warningCount > 0 && (
-            <span className="inline-flex items-center gap-1 text-[11px] font-semibold text-amber-700 bg-amber-50 border border-amber-200 rounded-full px-2 py-0.5">
-              <span className="w-1.5 h-1.5 rounded-full bg-amber-500" />
-              {warningCount} warning{warningCount > 1 ? 's' : ''}
-            </span>
-          )}
-        </div>
-      </div>
-      <Button
-        onClick={onCreateClick}
-        disabled={isLoading}
-        className={cn(
-          "h-9 px-4 text-sm font-medium rounded-md bg-primary hover:bg-primary-hover text-white transition-colors flex items-center gap-2 flex-shrink-0",
-          isLoading && "opacity-50 cursor-not-allowed"
-        )}
-      >
-        <Plus className="w-4 h-4" />
-        Create Department
-      </Button>
-    </div>
+        >
+          <Plus className="w-4 h-4" />
+          Create department
+        </Button>
+      }
+    />
   );
 }
