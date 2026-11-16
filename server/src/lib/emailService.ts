@@ -628,7 +628,44 @@ If you did not request this reset or speak with your administrator, please conta
   });
 };
 
+/**
+ * Reminder that an invitation expires within a day (Plan 2.7). It carries no link: the raw token is never stored, so
+ * the reminder points back to the original e-mail, and an expired link offers "Send me a new link" on its own page.
+ */
+export const sendInviteReminderEmail = async (params: {
+  email: string;
+  full_name: string;
+  company_name: string;
+  expires_at: Date;
+  meta?: Pick<EmailMeta, 'company_id' | 'related'>;
+}): Promise<string | undefined> => {
+  const { email, full_name, company_name, expires_at, meta } = params;
+  const when = expires_at.toUTCString();
+  const html = `
+    <!DOCTYPE html>
+    <html>
+      <body style="font-family: 'DM Sans', 'Inter', -apple-system, 'Segoe UI', sans-serif; line-height: 1.6; color: #f8fafc; background-color: #0b0f19; margin: 0; padding: 0;">
+        <div style="max-width: 600px; margin: 0 auto; padding: 40px 20px;">
+          <div style="background-color: #161c30; padding: 40px; border-radius: 16px; border: 1px solid rgba(255,255,255,0.05);">
+            <h2 style="color: #f8fafc; margin-top: 0;">Your invitation expires soon</h2>
+            <p style="color: #cbd5e1;">Hi ${escapeHtml(full_name)},</p>
+            <p style="color: #cbd5e1;">Your invitation to join <strong>${escapeHtml(company_name)}</strong> on Admin Center expires on <strong>${escapeHtml(when)}</strong>.</p>
+            <p style="color: #cbd5e1;">Open the invitation e-mail we sent you and use its link to set up your account. If you cannot find it, or the link has expired, open the link and choose "Send me a new link", or ask your administrator to resend it.</p>
+          </div>
+        </div>
+      </body>
+    </html>
+  `.trim();
+  const text = `Hi ${full_name},
+
+Your invitation to join ${company_name} on Admin Center expires on ${when}.
+
+Open the invitation e-mail we sent you and use its link to set up your account. If you cannot find it, or the link has expired, open the link and choose "Send me a new link", or ask your administrator to resend it.`;
+  return sendEmailInternal({ to: email, subject: `Your invitation to ${company_name} expires soon`, html, text, meta: { ...meta, template: 'invite_reminder' } });
+};
+
 export const emailService = {
+  sendInviteReminderEmail,
   sendWelcomeEmail,
   sendBulkWelcomeEmails,
   sendPasswordResetEmail,

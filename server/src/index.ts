@@ -8,6 +8,7 @@ import { processAuditRetention } from './lib/auditRetention';
 import { runIntelligenceRulesForAllCompanies } from './lib/intelligence';
 import { startPlatformDispatcher, stopPlatformDispatcher } from './lib/platformDispatcher';
 import { startEmailSender, stopEmailSender } from './lib/emailSender';
+import { startInvitationJobs, stopInvitationJobs } from './lib/invitationJobs';
 
 export { createServer };
 
@@ -40,6 +41,9 @@ connectDB().then(async () => {
 
     startPlatformDispatcher();
     startEmailSender();
+    startInvitationJobs();
+    process.once('SIGTERM', stopInvitationJobs);
+    process.once('SIGINT', stopInvitationJobs);
     process.once('SIGTERM', stopPlatformDispatcher);
     process.once('SIGINT', stopPlatformDispatcher);
     process.once('SIGTERM', stopEmailSender);

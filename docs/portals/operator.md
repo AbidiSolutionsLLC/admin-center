@@ -56,7 +56,7 @@ The global per-IP rate limiter in `app.ts` also applies. Envelope: `{ success: t
 | Method | Path | Body / query | What it does |
 |---|---|---|---|
 | GET | `/orgs` | `limit` (1–100, default 25), `cursor` (last `_id`), `status`, `search` (name/slug regex) | Org summaries newest first; `meta: { total, limit, next_cursor }` |
-| GET | `/orgs/:id` | | Summary + `first_admin` (oldest user with legacy `role: 'Super Admin'`) |
+| GET | `/orgs/:id` | | Summary + `first_admin` (earliest holder of the Super Admin role, through `UserRole`) |
 | GET | `/orgs/:id/onboarding` | | Plan 2.6: `{ organization, stage, first_admin, invitation { state, sent_at, sent_count, expires_at, ... }, delivery { status, attempts, last_error, ... } }`. `stage`: `complete`, `no_first_admin`, `no_invitation`, `sending`, `delivery_failed`, `awaiting_acceptance`, `expired`, `revoked`. Never a token |
 | POST | `/orgs/:id/onboarding/resend-invite` | | New first-admin invitation (supersedes the current one) and a queued e-mail, one transaction; 409 `ALREADY_ONBOARDED` once the first admin accepted; audited `onboarding.invite_resent` |
 | PATCH | `/orgs/:id/onboarding/first-admin` | `{ email, full_name }` | Only while the first admin is `invited`; updates the member, emits `member.updated`, re-issues the invitation to the new address; 409 `EMAIL_IN_USE`, `ALREADY_ONBOARDED`; audited `onboarding.first_admin_changed` |
