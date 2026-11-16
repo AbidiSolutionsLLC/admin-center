@@ -11,6 +11,7 @@ import { SecurityPolicy } from '../models/SecurityPolicy.model';
 import { SecurityEvent } from '../models/SecurityEvent.model';
 import { User } from '../models/User.model';
 import { RefreshToken } from '../models/RefreshToken.model';
+import { Session } from '../models/Session.model';
 import { auditLogger } from '../lib/auditLogger';
 import { AppError } from '../utils/AppError';
 import { runInTransaction, correlationIdFor } from '../lib/platformEvents';
@@ -361,36 +362,40 @@ export const forceLogoutUser = asyncHandler(async (req: Request, res: Response) 
 
 /**
  * GET /api/v1/security/sessions
- * Returns all active sessions (refresh tokens) for the current company.
+ * Returns the live tenant-realm sessions of the current company (elevation 5.2). A session is live when
+ * it is not revoked and neither its idle nor its absolute expiry has passed. The response keeps the shape
+ * the client already reads (`ip_address`, `user_agent`, `last_activity_at`, `expires_at`).
  */
 export const getActiveSessions = asyncHandler(async (req: Request, res: Response) => {
-  // First find all users for this company
   const users = await User.find({ company_id: req.user.company_id }).select('_id full_name email role');
-  let userIds = users.map(u => u._id);
+  let memberIds = users.map(u => u._id);
 
   if (req.query.roleFilter === 'admin') {
     const adminRoles = ['Super Admin', 'HR Admin', 'IT Admin', 'Ops Admin', 'Admin'];
-    userIds = users.filter(u => adminRoles.includes(u.role)).map(u => u._id);
+    memberIds = users.filter(u => adminRoles.includes(u.role)).map(u => u._id);
   }
 
-  // Then find active refresh tokens for these users
-  const activeTokens = await RefreshToken.find({
-    user_id: { $in: userIds },
-    is_revoked: false,
-    expires_at: { $gt: new Date() },
-  }).sort({ last_activity_at: -1 });
+  const now = new Date();
+  const live = await Session.find({
+    company_id: req.user.company_id,
+    realm: 'tenant',
+    member_id: { $in: memberIds },
+    revoked_at: { $exists: false },
+    idle_expires_at: { $gt: now },
+    absolute_expires_at: { $gt: now },
+  }).sort({ last_seen_at: -1 });
 
-  // Map users to tokens
-  const sessions = activeTokens.map(token => {
-    const user = users.find(u => u._id.toString() === token.user_id.toString());
+  const byId = new Map(users.map(u => [u._id.toString(), u]));
+  const sessions = live.map(sess => {
+    const user = byId.get(sess.member_id.toString());
     return {
-      _id: token._id,
+      _id: sess._id,
       user: user ? { _id: user._id, full_name: user.full_name, email: user.email, role: user.role } : null,
-      ip_address: token.ip_address,
-      user_agent: token.user_agent,
-      created_at: token.created_at,
-      last_activity_at: token.last_activity_at,
-      expires_at: token.expires_at,
+      ip_address: sess.ip,
+      user_agent: sess.user_agent,
+      created_at: sess.created_at,
+      last_activity_at: sess.last_seen_at,
+      expires_at: sess.idle_expires_at < sess.absolute_expires_at ? sess.idle_expires_at : sess.absolute_expires_at,
     };
   });
 
@@ -399,58 +404,74 @@ export const getActiveSessions = asyncHandler(async (req: Request, res: Response
 
 /**
  * DELETE /api/v1/security/sessions/:tokenId
- * Manually terminates a specific session by an admin.
+ * Terminates one live session of this company (`:tokenId` is the session id, the `sid`). Revocation, security event,
+ * audit and `session.revoked` commit together; provider-side teardown follows the commit (same pattern as force-logout).
  */
 export const terminateSession = asyncHandler(async (req: Request, res: Response) => {
   const { tokenId } = req.params;
 
-  const token = await RefreshToken.findOne({ _id: tokenId });
-  if (!token) {
+  const target = await Session.findOne({
+    _id: tokenId,
+    company_id: req.user.company_id,
+    realm: 'tenant',
+    revoked_at: { $exists: false },
+  });
+  if (!target) {
     throw new AppError('Session not found', 404, 'NOT_FOUND');
   }
-
-  // Ensure the user belongs to the current company
-  const user = await User.findOne({ _id: token.user_id, company_id: req.user.company_id });
+  const user = await User.findOne({ _id: target.member_id, company_id: req.user.company_id });
   if (!user) {
     throw new AppError('Session not found', 404, 'NOT_FOUND');
   }
 
-  // Revoke token
-  token.is_revoked = true;
-  await token.save();
+  const actor = { type: 'member' as const, id: req.user.userId };
+  const correlationId = correlationIdFor(req);
 
-  // If it's the current user's session, we might want to clear the hash. But to be safe, just revoke it.
-  // We check if this token matches the one on the user. If it does, we can clear it.
-  if (user.refresh_token_hash === token.token_hash) {
-    user.refresh_token_hash = undefined;
-    await user.save();
+  const revoked = await runInTransaction(async (session) => {
+    const sids = await revokeSessionsTx(
+      session,
+      { _id: target._id, company_id: req.user.company_id },
+      'admin_terminated',
+      { actor, correlation_id: correlationId },
+    );
+    if (sids.length === 0) return sids;
+
+    await SecurityEvent.create([{
+      company_id: req.user.company_id,
+      user_id: user._id,
+      email: user.email,
+      event_type: 'token_revoked',
+      ip_address: req.ip,
+      user_agent: req.headers['user-agent'],
+      is_suspicious: false,
+      metadata: {
+        reason: 'manual_termination_by_admin',
+        revoked_by: req.user.userId,
+        session_id: target._id,
+      },
+    }], { session });
+
+    await auditLogger.logTx(session, {
+      req,
+      action: 'security.session_terminated',
+      module: 'security',
+      object_type: 'User',
+      object_id: user._id.toString(),
+      object_label: user.full_name,
+      before_state: { session_status: 'active', session_id: target._id },
+      after_state: { session_status: 'terminated', session_id: target._id },
+    });
+    return sids;
+  });
+
+  // Already revoked by someone else between the lookup and the transaction
+  if (revoked.length === 0) {
+    throw new AppError('Session not found', 404, 'NOT_FOUND');
   }
 
-  await SecurityEvent.create({
-    company_id: req.user.company_id,
-    user_id: user._id,
-    email: user.email,
-    event_type: 'token_revoked',
-    ip_address: req.ip,
-    user_agent: req.headers['user-agent'],
-    is_suspicious: false,
-    metadata: {
-      reason: 'manual_termination_by_admin',
-      revoked_by: req.user.userId,
-      token_id: token._id,
-    },
-  });
-
-  await auditLogger.log({
-    req,
-    action: 'security.session_terminated',
-    module: 'security',
-    object_type: 'User',
-    object_id: user._id.toString(),
-    object_label: user.full_name,
-    before_state: { session_status: 'active', token_id: token._id.toString() },
-    after_state: { session_status: 'terminated', token_id: token._id.toString() },
-  });
+  for (const sid of revoked) {
+    await destroyProviderSession(sid).catch((e) => console.error('[Security] provider session teardown failed', sid, e));
+  }
 
   res.status(200).json({ success: true, message: 'Session terminated successfully' });
 });

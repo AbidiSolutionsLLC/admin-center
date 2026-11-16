@@ -5,7 +5,7 @@ import { QUERY_KEYS } from '@/constants/queryKeys';
 import type { ActiveSession } from '@/types';
 
 /**
- * Fetches all active sessions (refresh tokens) for the company.
+ * Fetches the live tenant sessions (Session rows) for the company.
  * Used on: SecurityPage (ActiveSessionsTable)
  */
 export const useActiveSessions = (roleFilter?: 'admin') => {

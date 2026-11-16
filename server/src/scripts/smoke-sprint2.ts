@@ -1426,7 +1426,7 @@ async function main() {
         const fu = await User.create({ company_id: foreign._id, full_name: 'Foreign', email: 'foreign@other.test', password_hash: 'x', lifecycle_state: 'invited', is_active: false });
         const gf = await apiL(`/people/${fu._id}/invitation`, 'GET', undefined, 'p24-foreign');
         const rf = await apiL(`/people/${fu._id}/invitation/revoke`, 'POST', undefined, 'p24-foreign-revoke');
-        check('2.4 another organisation's member: GET and revoke = 404', gf.status === 404 && rf.status === 404, [gf.status, rf.status]);
+        check('2.4 a member of another organisation: GET and revoke = 404', gf.status === 404 && rf.status === 404, [gf.status, rf.status]);
       }
 
       // stale role-catalog version is a no-op
@@ -2009,6 +2009,55 @@ async function main() {
       check('4.1 an account with no operator role is rejected = 401', (await op('/me')).status === 401);
       await setRoles(['platform_admin']);
       check('4.1 platform_admin restored = 200', (await op('/audit')).status === 200);
+    }
+
+    // ── Plan 5.2: active sessions read Session and revoke through the session service, scoped by company ──
+    {
+      const json = async (r: any) => (await r.json()) as any;
+      const mk = async (slug: string) => {
+        const prov = await json(await op('/orgs', 'POST', { name: `Sess ${slug}`, slug, plan_key: 'professional', first_admin: { email: `admin@${slug}.test`, full_name: `Admin ${slug}` } }));
+        const cid = prov.data.id as string;
+        const admin = (await User.findOne({ company_id: cid, email: `admin@${slug}.test` }))!;
+        await User.updateOne({ _id: admin._id }, { $set: { lifecycle_state: 'active', is_active: true } });
+        return { cid, admin };
+      };
+      const a = await mk('sess-a');
+      const b = await mk('sess-b');
+      const tKey = await jose.importJWK(tenantPrivateJwk, 'RS256');
+      const mkSess = async (cid: string, memberId: unknown, extra: Record<string, unknown> = {}) => {
+        const sid = crypto.randomUUID();
+        await Session.create({ _id: sid, identity_id: new mongoose.Types.ObjectId(), member_id: memberId, company_id: cid, realm: 'tenant', idle_expires_at: new Date(Date.now() + 3600e3), absolute_expires_at: new Date(Date.now() + 3600e3), amr: ['pwd'], ip: '10.0.0.7', user_agent: 'smoke-agent', ...extra });
+        return sid;
+      };
+      const adminSid = await mkSess(a.cid, a.admin._id);
+      const at = await new jose.SignJWT({ token_use: 'access', org: a.cid, sid: adminSid, email: a.admin.email })
+        .setProtectedHeader({ alg: 'RS256', kid: 'tenant-smoke', typ: 'at+jwt' })
+        .setIssuer(`${ORIGIN}/realms/tenant`).setAudience('urn:karbexa:admin').setSubject(String(a.admin._id)).setIssuedAt().setExpirationTime('10m').sign(tKey);
+      const tenant = (path: string, method = 'GET') => fetch(`${ORIGIN}/api/v1${path}`, { method, headers: { authorization: `Bearer ${at}` } });
+
+      const target = await mkSess(a.cid, a.admin._id);
+      const revokedSid = await mkSess(a.cid, a.admin._id, { revoked_at: new Date(), revoked_reason: 'x' });
+      const idleSid = await mkSess(a.cid, a.admin._id, { idle_expires_at: new Date(Date.now() - 1000) });
+      const absSid = await mkSess(a.cid, a.admin._id, { absolute_expires_at: new Date(Date.now() - 1000) });
+      const otherTenantSid = await mkSess(b.cid, b.admin._id);
+
+      const list = await json(await tenant('/security/sessions'));
+      const ids = (list.data as any[]).map((s) => s._id);
+      check('5.2 lists the live sessions of this company with ip, agent and the user', ids.includes(target) && ids.includes(adminSid) && (list.data as any[]).find((s) => s._id === target)?.ip_address === '10.0.0.7' && (list.data as any[]).find((s) => s._id === target)?.user?.email === a.admin.email, ids);
+      check('5.2 does not list revoked or expired (idle or absolute) sessions', ![revokedSid, idleSid, absSid].some((x) => ids.includes(x)), ids);
+      check('5.2 does not list a session of another company', !ids.includes(otherTenantSid), ids);
+
+      const cross = await tenant(`/security/sessions/${otherTenantSid}`, 'DELETE');
+      check('5.2 terminating a session of another company = 404 and it stays live', cross.status === 404 && !(await Session.findById(otherTenantSid))!.revoked_at, cross.status);
+      check('5.2 terminating an already revoked session = 404', (await tenant(`/security/sessions/${revokedSid}`, 'DELETE')).status === 404);
+
+      const eventsBefore = await PlatformEvent.countDocuments({ type: 'session.revoked', org_id: a.cid });
+      const del = await tenant(`/security/sessions/${target}`, 'DELETE');
+      const after = (await Session.findById(target))!;
+      check('5.2 terminate = 200, revoked_at set with the admin reason', del.status === 200 && !!after.revoked_at && after.revoked_reason === 'admin_terminated', del.status);
+      check('5.2 terminate emits session.revoked', (await PlatformEvent.countDocuments({ type: 'session.revoked', org_id: a.cid })) === eventsBefore + 1);
+      check('5.2 terminate is audited', (await AuditEvent.countDocuments({ company_id: a.cid, action: 'security.session_terminated' })) === 1);
+      check('5.2 the terminated session no longer lists', !((await json(await tenant('/security/sessions'))).data as any[]).some((s) => s._id === target));
     }
 
     // ── audit ─────────────────────────────────────────────────────────────────────────────
