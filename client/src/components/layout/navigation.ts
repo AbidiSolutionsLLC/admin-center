@@ -139,6 +139,7 @@ export const OPERATOR_SHELL: ShellConfig = {
         { label: 'Organizations', href: ROUTES.OPERATOR_ORGS, icon: Building2, permission: 'tenants.read' },
         { label: 'Onboarding', href: ROUTES.OPERATOR_ONBOARDING, icon: UserPlus, permission: 'tenants.read' },
         { label: 'Plans', href: ROUTES.OPERATOR_PLANS, icon: Layers, permission: 'tenants.read' },
+        { label: 'Products', href: ROUTES.OPERATOR_PRODUCTS, icon: Package, permission: 'products.read' },
         { label: 'Operators', href: ROUTES.OPERATOR_OPERATORS, icon: ShieldCheck, permission: 'operators.read' },
         { label: 'Audit', href: ROUTES.OPERATOR_AUDIT, icon: ClipboardList, permission: 'audit.read' },
       ],

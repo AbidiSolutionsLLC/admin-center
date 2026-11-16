@@ -20,7 +20,7 @@ Related: [identity.md](identity.md) (realm internals, tokens), [admin.md](admin.
 | Guard and shell | `client/src/features/operator/OperatorGuard.tsx`, `client/src/components/layout/shells.tsx` (`OperatorShell`) |
 | OIDC + token store (memory only) | `client/src/features/operator/operatorAuth.ts` |
 | API client, hooks, response types | `client/src/features/operator/operatorApi.ts` |
-| Pages | `client/src/pages/operator/OperatorOrgsPage.tsx`, `OperatorTenantPage.tsx`, `OperatorOnboardingPage.tsx`, `OperatorPlansPage.tsx`, `OperatorOperatorsPage.tsx`, `OperatorAuditPage.tsx`, `OperatorCallbackPage.tsx` |
+| Pages | `client/src/pages/operator/OperatorOrgsPage.tsx`, `OperatorTenantPage.tsx`, `OperatorOnboardingPage.tsx`, `OperatorProductsPage.tsx`, `OperatorPlansPage.tsx`, `OperatorOperatorsPage.tsx`, `OperatorAuditPage.tsx`, `OperatorCallbackPage.tsx` |
 | Operator API | `server/src/operator/routes.ts` (mounted at `/operator/v1` in `server/src/app.ts`) |
 | Auth middleware | `server/src/operator/middleware.ts` (`requireOperator`, `requireOperatorIp`) |
 | Account lookup | `server/src/operator/accounts.ts` (`findOperatorAccount`, `hasOperatorRole`) |
@@ -33,7 +33,7 @@ Related: [identity.md](identity.md) (realm internals, tokens), [admin.md](admin.
 
 ### 3.1 Client routes
 
-All pages except the callback are inside `OperatorGuard` (no token in memory → refresh if a refresh token exists, else redirect to the operator realm) and the shared `AppShell` with the `operator` config (nav: Organizations, Onboarding, Plans, Operators, Audit; each item shown only with its permission from `GET /me`).
+All pages except the callback are inside `OperatorGuard` (no token in memory → refresh if a refresh token exists, else redirect to the operator realm) and the shared `AppShell` with the `operator` config (nav: Organizations, Onboarding, Plans, Products, Operators, Audit; each item shown only with its permission from `GET /me`).
 
 | Route | Component | Uses |
 |---|---|---|
@@ -42,6 +42,7 @@ All pages except the callback are inside `OperatorGuard` (no token in memory →
 | `/operator/organizations` | `pages/operator/OperatorOrgsPage.tsx` | `ListPage`: search, status, plan, tag, in-trial filters and sort (all in the URL), create org, suspend/reactivate/close; a row opens the tenant page |
 | `/operator/organizations/:id` | `pages/operator/OperatorTenantPage.tsx` | `ObjectPage`: Summary (tags, trial, identity providers with the Entra tenant approval), Products (override, remove override, change plan with preview, seat meter), Onboarding, Admins, Activity, Notes. `?tab=` holds the tab |
 | `/operator/onboarding` | `pages/operator/OperatorOnboardingPage.tsx` | `ListPage` over `GET /onboarding`: stage, first admin, invitation sent/expiry, last delivery error, Resend invitation; stage filter in the URL; a row opens the tenant's Onboarding tab |
+| `/operator/products` | `pages/operator/OperatorProductsPage.tsx` | read-only catalogue on `ListPage`: status, category, manifest version, roles, organizations active / suspended / restricted |
 | `/operator/plans` | `pages/operator/OperatorPlansPage.tsx` | list (organizations on each, trial, version), create, edit (description, products, default seats, trial days), apply to organizations with a dry-run preview |
 | `/operator/operators` | `pages/operator/OperatorOperatorsPage.tsx` | list, create, edit operators |
 | `/operator/audit` | `pages/operator/OperatorAuditPage.tsx` | audit log with category, operator, date and action filters, detail drawer (before/after/reason), cursor paging, Export CSV |
@@ -79,6 +80,7 @@ The global per-IP rate limiter in `app.ts` also applies. Envelope: `{ success: t
 | DELETE | `/orgs/:id/entitlements/:productKey/override` | `reason` (query or body, required) | Back to plan state: when the tenant's plan includes the product it becomes plan-sourced and active (plan seat default); otherwise the entitlement is deleted (event status `restricted`). 404 when there is no override. Audited `entitlement.override_removed` |
 | GET | `/orgs/:id/identity-providers` | | The org's IdP connections incl. `tenant_approval` |
 | POST | `/orgs/:id/identity-providers/:connId/approve-tenant` | | Approve the Entra `config.tenant_id` of the connection. 400 unless `type: 'entra'` with a tenant id; 409 `TENANT_TAKEN` if another connection already has that tenant approved |
+| GET | `/products` | | `products.read`. Read-only catalogue from the registry: `product_key`, `name`, `status` (manifest `product_status`), `category`, `manifest_version`, `icon`, `launch_url`, `roles` (role count), `default_assignments`, `tenants_active`, `tenants_suspended`, `tenants_restricted` (entitlements of non-closed organizations). There is no write route: products register by manifest publish (Platform API) |
 | GET | `/plans` | | All plans sorted by key, each with `description`, `seat_defaults`, `trial_days`, `version`, `tenant_count` (non-closed organizations on it) |
 | POST | `/plans` | `{ key (^[a-z0-9_-]{2,40}$), name, products[], status?, description?, seat_defaults? ({ productKey: int\|null }), trial_days? (1–365\|null) }` | Create; 409 on duplicate key; 400 `UNKNOWN_PRODUCT` for a product or seat-default key not in the registry |
 | PATCH | `/plans/:key` | partial of the same fields | Updates the plan document and raises `version` by one on every edit; existing organizations are not changed until the plan is applied |

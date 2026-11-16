@@ -10,6 +10,7 @@ import { Company, ICompany } from '../models/Company.model';
 import { User } from '../models/User.model';
 import { Plan, IPlan } from '../models/Plan.model';
 import { App } from '../models/App.model';
+import { ProductRole } from '../models/ProductRole.model';
 import { AppAssignment } from '../models/AppAssignment.model';
 import { Group } from '../models/Group.model';
 import { OrganizationEntitlement } from '../models/OrganizationEntitlement.model';
@@ -273,6 +274,31 @@ export function planRoutes(h: Helpers): Router {
     })));
     await h.audit(req, { action: 'plan.applied', target_type: 'Plan', target_id: plan.key, after: { version: plan.version ?? 1 }, details: { tenants_queued: queued } });
     h.ok(res, { queued, tenants_affected: queued }, 202);
+  }));
+
+  // Read-only catalogue (Plan 4.13): every registered product with its manifest facts and how many organizations hold it.
+  router.get('/products', requirePermission('products.read'), asyncHandler(async (_req: Request, res: Response) => {
+    const registered = await listProducts();
+    const closed = await Company.find({ status: 'closed' }).distinct('_id');
+    const [apps, roleCounts, entCounts] = await Promise.all([
+      App.find({ app_type: 'karbexa_product', company_id: { $exists: false }, product_key: { $in: registered.map((p) => p.product_key) } }).lean(),
+      ProductRole.aggregate<{ _id: string; n: number }>([{ $group: { _id: '$product_key', n: { $sum: 1 } } }]),
+      OrganizationEntitlement.aggregate<{ _id: { product_key: string; status: string }; n: number }>([
+        { $match: { company_id: { $nin: closed } } },
+        { $group: { _id: { product_key: '$product_key', status: '$status' }, n: { $sum: 1 } } },
+      ]),
+    ]);
+    const roles = new Map(roleCounts.map((r) => [r._id, r.n]));
+    const tenants = (key: string, status: string) => entCounts.find((e) => e._id.product_key === key && e._id.status === status)?.n ?? 0;
+    h.ok(res, registered.map((p) => {
+      const a = apps.find((x) => x.product_key === p.product_key);
+      return {
+        product_key: p.product_key, name: p.name, status: a?.product_status ?? 'active', category: a?.product_category ?? null,
+        manifest_version: a?.manifest_version ?? null, icon: a?.icon ?? null, launch_url: a?.launch_url ?? null,
+        roles: roles.get(p.product_key) ?? 0, default_assignments: a?.default_assignments ?? [],
+        tenants_active: tenants(p.product_key, 'active'), tenants_suspended: tenants(p.product_key, 'suspended'), tenants_restricted: tenants(p.product_key, 'restricted'),
+      };
+    }));
   }));
 
   return router;

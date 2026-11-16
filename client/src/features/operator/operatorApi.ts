@@ -292,3 +292,11 @@ export const useResendInviteFor = () => {
     onError: (e) => toast.error(errMsg(e, 'Failed to send invitation')),
   });
 };
+
+/** Read-only product catalogue (GET /products). */
+export interface CatalogueProduct {
+  product_key: string; name: string; status: string; category: string | null; manifest_version: number | null; icon: string | null;
+  launch_url: string | null; roles: number; tenants_active: number; tenants_suspended: number; tenants_restricted: number;
+}
+export const useCatalogue = () =>
+  useQuery({ queryKey: ['operator', 'catalogue'], queryFn: async () => ((await operatorApi.get('/products')).data.data ?? []) as CatalogueProduct[] });

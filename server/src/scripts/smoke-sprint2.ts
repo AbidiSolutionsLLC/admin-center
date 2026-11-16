@@ -1570,6 +1570,21 @@ async function main() {
       }
     }
 
+    // ── Plan 4.13: products catalogue (read-only) ─────────────────────────────────────────
+    {
+      const { OrganizationEntitlement: Ent } = await import('../models');
+      const r = await op('/products');
+      const list = ((await r.json()) as any).data as any[];
+      check('4.13 /products lists the four built-in products with manifest facts and role counts', r.status === 200 && ['people', 'projects', 'sign', 'desk'].every((k) => list.some((p) => p.product_key === k && typeof p.name === 'string' && p.roles > 0 && p.status === 'active' && typeof p.category === 'string')), JSON.stringify(list)?.slice(0, 200));
+      const closedIds = await Company.find({ status: 'closed' }).distinct('_id');
+      const wantActive = await Ent.countDocuments({ product_key: 'people', status: 'active', company_id: { $nin: closedIds } });
+      check('4.13 tenants_active matches the active entitlements of non-closed organizations', list.find((p) => p.product_key === 'people')?.tenants_active === wantActive && wantActive > 0, `${list.find((p) => p.product_key === 'people')?.tenants_active} vs ${wantActive}`);
+      await OperatorAccount.updateOne({ email: 'op@karbexa.test' }, { $set: { roles: ['auditor'] } });
+      check('4.13 every operator role can read the catalogue (auditor = 200)', (await op('/products')).status === 200);
+      check('4.13 the catalogue is read-only: POST /products is not a route', (await op('/products', 'POST', {})).status === 404);
+      await OperatorAccount.updateOne({ email: 'op@karbexa.test' }, { $set: { roles: ['platform_admin'] } });
+    }
+
     // ── Plan 4.7: seats (SeatUsage, SEAT_LIMIT_REACHED on assignment, widening, not blocked elsewhere) ──
     {
       const { SeatUsage, Department, GroupMember, OrganizationEntitlement: Ent } = await import('../models');
