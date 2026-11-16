@@ -61,7 +61,44 @@ const config: Config = {
         glow: '0 0 20px rgba(245,158,11,0.35)',
         'glow-btn': '0 4px 15px rgba(245,158,11,0.4)',
       },
+      // DRD 9.1 tokens (structure only, no new colours)
+      fontSize: {
+        label: ['12px', { lineHeight: '16px', letterSpacing: '0.06em', fontWeight: '600' }],
+        table: ['13px', { lineHeight: '20px' }],
+        body: ['14px', { lineHeight: '20px' }],
+        section: ['16px', { lineHeight: '24px', fontWeight: '600' }],
+        title: ['20px', { lineHeight: '28px', fontWeight: '600' }],
+        tile: ['28px', { lineHeight: '32px', fontWeight: '600' }],
+      },
+      maxWidth: {
+        content: '1280px',
+      },
+      width: {
+        rail: '248px',
+        'rail-collapsed': '64px',
+      },
+      height: {
+        topbar: '56px',
+        row: '44px',
+        'row-compact': '36px',
+        dot: '8px',
+      },
+      minHeight: {
+        row: '44px',
+        'row-compact': '36px',
+      },
+      spacing: {
+        dot: '8px',
+        gutter: '24px',
+        'gutter-lg': '32px',
+      },
+      transitionDuration: {
+        fast: '150ms',
+        panel: '200ms',
+      },
       borderRadius: {
+        control: '8px',
+        card: '12px',
         'xl': '20px',
         '2xl': '24px',
         '3xl': '28px',

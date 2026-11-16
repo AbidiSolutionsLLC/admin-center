@@ -980,3 +980,15 @@ select option:disabled {
   font-weight: 600 !important;
   color: #1E293B !important;
 }
+
+/* 53. Tokens (DRD 9.1): motion and tabular numbers */
+.tabular { font-variant-numeric: tabular-nums; }
+
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
+  }
+}

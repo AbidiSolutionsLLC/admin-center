@@ -121,6 +121,33 @@ export const theme = {
     navLabel: 'text-[13px] font-medium',
   },
 
+  // DRD 9.1: structure tokens (mirrors tailwind.config.ts)
+  layout: {
+    contentMaxWidth: 1280,
+    gutter: 24,
+    gutterWide: 32,
+    railWidth: 248,
+    railCollapsedWidth: 64,
+    topBarHeight: 56,
+    rowHeight: 44,
+    rowHeightCompact: 36,
+    statusDot: 8,
+  },
+
+  typeScale: {
+    label: 12,
+    table: 13,
+    body: 14,
+    section: 16,
+    title: 20,
+    tile: 28,
+  },
+
+  motion: {
+    fastMs: 150,
+    panelMs: 200,
+  },
+
   animation: {
     // Standard easing for all transitions
     ease: 'cubic-bezier(0.4, 0, 0.2, 1)',
