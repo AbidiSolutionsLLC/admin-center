@@ -14,7 +14,7 @@ import { AuditEvent } from '../models/AuditEvent.model';
 import { Plan } from '../models/Plan.model';
 import { OrganizationEntitlement } from '../models/OrganizationEntitlement.model';
 import { OperatorAccount } from '../models/OperatorAccount.model';
-import { OperatorAuditEvent } from '../models/OperatorAuditEvent.model';
+import { OperatorAuditEvent, type AuditCategory } from '../models/OperatorAuditEvent.model';
 import { App } from '../models/App.model';
 import { AppAssignment } from '../models/AppAssignment.model';
 import { Group } from '../models/Group.model';
@@ -32,6 +32,7 @@ import { generateEmployeeId } from '../services/employeeId';
 import { AppError } from '../utils/AppError';
 import { asyncHandler } from '../utils/asyncHandler';
 import { requireOperator } from './middleware';
+import { buildAuditFilter, categoryOf, csvRow, CSV_COLUMNS, EXPORT_ROW_CAP, redact } from './audit';
 import { requirePermission, anyOperator, permissionsFor, operatorRolesSchema } from './permissions';
 import { findFirstAdmin, onboardingRoutes } from './onboarding';
 
@@ -64,12 +65,14 @@ router.get('/me', anyOperator, asyncHandler(async (req: Request, res: Response) 
 async function audit(req: Request, p: {
   action: string; target_type: string; target_id: string; company?: { _id: Types.ObjectId; name: string };
   details?: Record<string, unknown>; before?: unknown; after?: unknown;
+  category?: AuditCategory; reason?: string; result?: 'success' | 'failure';
 }, session?: ClientSession) {
   const op = req.operator!;
   const opts = { session: session ?? undefined };
   await OperatorAuditEvent.create([{
     operator_id: op._id, operator_email: op.email, action: p.action, target_type: p.target_type, target_id: p.target_id,
-    company_id: p.company?._id, details: p.details, correlation_id: (req as any).correlationId,
+    company_id: p.company?._id, details: redact(p.details), correlation_id: (req as any).correlationId,
+    category: p.category ?? categoryOf(p.action), before: redact(p.before), after: redact(p.after), reason: p.reason, result: p.result ?? 'success',
   }], opts);
   if (p.company) {
     await AuditEvent.create([{
@@ -448,19 +451,38 @@ router.patch('/plans/:key', requirePermission('plans.write'), asyncHandler(async
 }));
 
 // ── Audit ────────────────────────────────────────────────────────────────────────────────────
+const auditOut = (e: any) => ({
+  id: e._id.toString(), operator_id: e.operator_id.toString(), operator_email: e.operator_email, action: e.action,
+  category: e.category ?? categoryOf(e.action), result: e.result ?? 'success', reason: e.reason ?? null,
+  target_type: e.target_type, target_id: e.target_id ?? null, company_id: e.company_id?.toString() ?? null,
+  before: e.before ?? null, after: e.after ?? null,
+  details: e.details ?? null, correlation_id: e.correlation_id ?? null, created_at: e.created_at,
+});
+
 router.get('/audit', requirePermission('audit.read'), asyncHandler(async (req: Request, res: Response) => {
   const { limit } = paging(req);
-  const filter: Record<string, unknown> = {};
-  if (typeof req.query.company_id === 'string' && req.query.company_id) filter.company_id = oid(req.query.company_id, 'company_id');
-  if (typeof req.query.action === 'string' && req.query.action) filter.action = req.query.action;
+  const filter = buildAuditFilter(req.query);
   if (typeof req.query.cursor === 'string' && req.query.cursor) filter._id = { $lt: oid(req.query.cursor, 'cursor') };
   const rows = await OperatorAuditEvent.find(filter).sort({ _id: -1 }).limit(limit + 1);
   const page = rows.slice(0, limit);
-  ok(res, page.map((e) => ({
-    id: e._id.toString(), operator_id: e.operator_id.toString(), operator_email: e.operator_email, action: e.action,
-    target_type: e.target_type, target_id: e.target_id ?? null, company_id: e.company_id?.toString() ?? null,
-    details: e.details ?? null, correlation_id: e.correlation_id ?? null, created_at: e.created_at,
-  })), 200, { limit, next_cursor: rows.length > limit ? page[page.length - 1]._id.toString() : null });
+  ok(res, page.map(auditOut), 200, { limit, next_cursor: rows.length > limit ? page[page.length - 1]._id.toString() : null });
+}));
+
+// CSV of the filtered result, newest first, at most EXPORT_ROW_CAP rows. The export is itself audited (before any data leaves).
+router.get('/audit/export', requirePermission('audit.export'), asyncHandler(async (req: Request, res: Response) => {
+  const filter = buildAuditFilter(req.query);
+  await audit(req, {
+    action: 'audit.exported', target_type: 'AuditLog', target_id: 'operator', category: 'security',
+    details: { filter: Object.fromEntries(Object.entries(req.query).filter(([k]) => ['action', 'company_id', 'operator_id', 'category', 'from', 'to'].includes(k))), row_cap: EXPORT_ROW_CAP },
+  });
+  res.setHeader('Content-Type', 'text/csv; charset=utf-8');
+  res.setHeader('Content-Disposition', `attachment; filename="operator-audit-${new Date().toISOString().slice(0, 10)}.csv"`);
+  res.write('﻿' + csvRow([...CSV_COLUMNS]));
+  for await (const e of OperatorAuditEvent.find(filter).sort({ _id: -1 }).limit(EXPORT_ROW_CAP).cursor()) {
+    const o = auditOut(e);
+    if (!res.write(csvRow(CSV_COLUMNS.map((c) => (o as Record<string, unknown>)[c])))) await new Promise<void>((resolve) => res.once('drain', resolve));
+  }
+  res.end();
 }));
 
 // ── Operators ────────────────────────────────────────────────────────────────────────────────

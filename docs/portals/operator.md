@@ -74,7 +74,8 @@ The global per-IP rate limiter in `app.ts` also applies. Envelope: `{ success: t
 | GET | `/plans` | | All plans sorted by key |
 | POST | `/plans` | `{ key (^[a-z0-9_-]{2,40}$), name, products[], status? }` | Create; 409 on duplicate key |
 | PATCH | `/plans/:key` | partial `{ name, products, status }` | Update the plan document only (existing org entitlements are not changed) |
-| GET | `/audit` | `limit`, `cursor`, `company_id`, `action` | `OperatorAuditEvent` newest first; `meta: { limit, next_cursor }` |
+| GET | `/audit` | `limit`, `cursor`, `company_id`, `operator_id`, `category`, `action` (exact), `from`, `to` (ISO dates) | `OperatorAuditEvent` newest first with `category`, `result`, `reason`, `before`, `after`; `meta: { limit, next_cursor }`; 400 on a bad category, id or date. Permission `audit.read` |
+| GET | `/audit/export` | same filters | CSV stream (newest first, at most 50,000 rows, formula-safe cells), permission `audit.export`; the export is itself audited as `audit.exported` (category `security`) |
 | GET | `/operators` | | All operator accounts (never the hash or secret) |
 | POST | `/operators` | `{ email, full_name, password (≥12), roles? }` | Create (bcrypt cost 12, default roles `['platform_admin']`; roles from the four operator roles) |
 | PATCH | `/operators/:id` | partial `{ full_name, status ('active'\|'suspended'), roles, password, reset_mfa }` | Update; 409 `SELF_SUSPEND` when suspending yourself. `reset_mfa: true` sets `mfa = { enabled: false }` so the next login re-enrols |
@@ -102,7 +103,7 @@ The global per-IP rate limiter in `app.ts` also applies. Envelope: `{ success: t
 | Model (file) | Key fields | Notes |
 |---|---|---|
 | `OperatorAccount` (`server/src/models/OperatorAccount.model.ts`) | `email`, `full_name`, `password_hash`, `mfa.{enabled, secret_enc, verified_at}`, `roles[]`, `status` (`active`/`suspended`/`invited`), `last_login_at`, `failed_attempts`, `locked_until` | `secret_enc` encrypted with `ENCRYPTION_KEY` (`lib/cryptoService.ts`) |
-| `OperatorAuditEvent` (`OperatorAuditEvent.model.ts`) | `operator_id`, `operator_email`, `action`, `target_type`, `target_id`, `company_id`, `details`, `correlation_id`, `created_at` | Every operator write. When a company is involved, a tenant `AuditEvent` is also written with `source: 'operator'`, `module: 'operator'`, `actor_email: 'operator:<email>'` |
+| `OperatorAuditEvent` (`OperatorAuditEvent.model.ts`) | `operator_id`, `operator_email`, `action`, `target_type`, `target_id`, `company_id`, `details`, `category`, `before`, `after`, `reason`, `result`, `correlation_id`, `created_at` | Every operator write. When a company is involved, a tenant `AuditEvent` is also written with `source: 'operator'`, `module: 'operator'`, `actor_email: 'operator:<email>'` |
 | `Plan` (`Plan.model.ts`) | `key`, `name`, `products[]`, `status` (`active`/`archived`) | Default plans seeded by `seedProductRegistry` |
 | `OrganizationEntitlement` | `company_id`, `product_key`, `status`, `seats_limit`, `source`, `plan_key`, `updated_by_operator_id` | Unique per (company, product) |
 | `Company` | `status`, `is_active`, `plan`, `slug` | |

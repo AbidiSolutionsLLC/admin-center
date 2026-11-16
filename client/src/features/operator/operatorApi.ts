@@ -61,7 +61,11 @@ export interface AuditEntry {
   id?: string; _id?: string; action: string; operator_id?: string; operator_email?: string;
   target_type?: string; target_id?: string | null; company_id?: string | null;
   details?: Record<string, unknown> | null; correlation_id?: string | null; created_at?: string;
+  category?: string; result?: 'success' | 'failure'; reason?: string | null; before?: unknown; after?: unknown;
 }
+
+export const AUDIT_CATEGORIES = ['tenant', 'plan', 'entitlement', 'onboarding', 'operator', 'product', 'security', 'system'] as const;
+export interface AuditFilters { action?: string; category?: string; operator_id?: string; company_id?: string; from?: string; to?: string }
 
 const idOf = <T extends { id?: string; _id?: string }>(x: T) => (x.id ?? x._id) as string;
 export { idOf };
@@ -129,8 +133,9 @@ export const useSavePlan = () => {
   });
 };
 
-export const useOperators = () =>
+export const useOperators = (opts: { enabled?: boolean } = {}) =>
   useQuery({
+    enabled: opts.enabled ?? true,
     queryKey: ['operator', 'operators'],
     queryFn: async () => ((await operatorApi.get('/operators')).data.data ?? []) as OperatorUser[],
   });
@@ -145,7 +150,18 @@ export const useSaveOperator = () => {
   });
 };
 
-export const useOperatorAudit = (params: { cursor?: string; limit?: number; action?: string; company_id?: string }) =>
+/** GET /audit/export with the current filters; hands the CSV to the browser as a download. */
+export async function downloadAuditCsv(filters: AuditFilters) {
+  const res = await operatorApi.get('/audit/export', { params: filters, responseType: 'blob' });
+  const url = URL.createObjectURL(res.data as Blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = `operator-audit-${new Date().toISOString().slice(0, 10)}.csv`;
+  a.click();
+  URL.revokeObjectURL(url);
+}
+
+export const useOperatorAudit = (params: AuditFilters & { cursor?: string; limit?: number }) =>
   useQuery({
     queryKey: ['operator', 'audit', params],
     queryFn: async () => {

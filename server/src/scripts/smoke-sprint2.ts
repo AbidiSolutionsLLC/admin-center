@@ -1570,6 +1570,31 @@ async function main() {
       }
     }
 
+    // ── Plan 4.2: operator audit (category, before/after, filters, CSV export) ──────────────
+    {
+      const list = async (q = '') => ((await (await op(`/audit${q}`)).json()) as any).data as any[];
+      const supEvent = (await list('?action=org.suspended'))[0];
+      check('4.2 audit entries carry category, result, before and after', supEvent?.category === 'tenant' && supEvent.result === 'success' && supEvent.before?.status === 'active' && supEvent.after?.status === 'suspended', JSON.stringify(supEvent)?.slice(0, 160));
+      check('4.2 operator.created is categorised operator', (await list('?action=operator.created')).every((e) => e.category === 'operator'));
+      const byCat = await list('?category=entitlement');
+      check('4.2 category filter returns only that category', byCat.length > 0 && byCat.every((e) => e.category === 'entitlement'), byCat.length);
+      const opId = (await list())[0].operator_id;
+      check('4.2 operator_id filter', (await list(`?operator_id=${opId}`)).length > 0 && (await list('?operator_id=000000000000000000000000')).length === 0);
+      check('4.2 from/to filter: a future window is empty, a past-to-future window is not', (await list('?from=2099-01-01T00:00:00Z')).length === 0 && (await list('?from=2000-01-01T00:00:00Z&to=2099-01-01T00:00:00Z')).length > 0);
+      check('4.2 invalid category = 400', (await op('/audit?category=nope')).status === 400);
+      const before = await OperatorAuditEvent.countDocuments({ action: 'audit.exported' });
+      const exp = await op('/audit/export?category=tenant');
+      const csv = await exp.text();
+      check('4.2 export = 200 text/csv with a header and tenant rows only', exp.status === 200 && (exp.headers.get('content-type') || '').startsWith('text/csv') && /created_at,operator_email/.test(csv) && csv.includes('org.provisioned') && !csv.includes('entitlement.updated'), exp.status);
+      check('4.2 the export is itself audited (category security)', (await OperatorAuditEvent.countDocuments({ action: 'audit.exported', category: 'security' })) === before + 1);
+      const roleSave = (roles: string[]) => OperatorAccount.updateOne({ email: 'op@karbexa.test' }, { $set: { roles } });
+      await roleSave(['support']);
+      check('4.2 support cannot export = 403', (await op('/audit/export')).status === 403);
+      await roleSave(['auditor']);
+      check('4.2 auditor can export = 200', (await op('/audit/export')).status === 200);
+      await roleSave(['platform_admin']);
+    }
+
     // ── Plan 4.1: operator roles (the same token, the account's roles changed in the database) ──
     {
       const setRoles = (roles: string[]) => OperatorAccount.updateOne({ email: 'op@karbexa.test' }, { $set: { roles } });

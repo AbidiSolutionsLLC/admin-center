@@ -83,3 +83,30 @@ test('empty and error states', async ({ page }) => {
   await page.reload();
   await expect(page.getByText('Failed to load data')).toBeVisible();
 });
+
+test('plan 4.2: category filter is sent to the API; Export CSV needs audit.export and calls /audit/export', async ({ page }) => {
+  const seen: Array<string | null> = [];
+  let exported = false;
+  await page.route('**/operator/v1/me', (route) =>
+    fulfillJson(route, { success: true, data: { id: 'o1', email: 'op@karbexa.test', roles: ['auditor'], status: 'active', permissions: ['audit.read', 'audit.export', 'operators.read'] } })
+  );
+  await page.route('**/operator/v1/operators', (route) => fulfillJson(route, { success: true, data: [] }));
+  await page.route('**/operator/v1/audit/export**', (route) => {
+    exported = true;
+    return route.fulfill({ status: 200, contentType: 'text/csv', headers: { 'access-control-allow-origin': '*' }, body: 'created_at\r\n' });
+  });
+  await page.route('**/operator/v1/audit?**', (route) => {
+    seen.push(new URL(route.request().url()).searchParams.get('category'));
+    return fulfillJson(route, { success: true, data: [{ ...entry('a1', 'org.suspended'), category: 'tenant', result: 'success', reason: 'non-payment', before: { status: 'active' }, after: { status: 'suspended' } }], meta: { next_cursor: null } });
+  });
+  await page.goto('/operator/audit');
+  await page.getByLabel('Category').selectOption('tenant');
+  await expect(page).toHaveURL(/category=tenant/);
+  await expect.poll(() => seen).toContain('tenant');
+  await page.getByRole('row', { name: /org\.suspended/ }).click();
+  await expect(page.getByRole('dialog')).toContainText('non-payment');
+  await expect(page.getByRole('dialog')).toContainText('"status": "suspended"');
+  await page.keyboard.press('Escape');
+  await page.getByRole('button', { name: 'Export CSV' }).click();
+  await expect.poll(() => exported).toBe(true);
+});
