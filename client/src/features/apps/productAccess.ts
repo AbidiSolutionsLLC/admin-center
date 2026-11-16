@@ -16,6 +16,11 @@ export interface Entitlement {
   product_key: string;
   status: string;
   seats_limit?: number | null;
+  /** 'plan' | 'operator' | 'seed'. The stored value `operator` is labelled "Override" in the UI. */
+  source?: string;
+  plan_key?: string | null;
+  /** Overrides only: when the override falls back to the plan. */
+  expires_at?: string | null;
 }
 
 /** One registry product as the tenant sees it (GET /organization/subscription `products`). */
@@ -80,7 +85,12 @@ export const useSubscription = () =>
     queryKey: ['organization', 'subscription'],
     queryFn: async () => {
       const d = (await apiClient.get('/organization/subscription')).data.data;
-      return { entitlements: (d?.entitlements ?? []) as Entitlement[], products: (d?.products ?? []) as SubscriptionProduct[] };
+      return {
+        entitlements: (d?.entitlements ?? []) as Entitlement[],
+        products: (d?.products ?? []) as SubscriptionProduct[],
+        plan: (d?.plan ?? null) as { key: string; name: string } | null,
+        trial_ends_at: (d?.trial_ends_at ?? null) as string | null,
+      };
     },
     staleTime: 60_000,
   });

@@ -1,37 +1,68 @@
+import { PageHeader } from '@/components/ui/PageHeader';
+import { PageStates } from '@/components/templates/PageStates';
+import { StatTile } from '@/components/ui/StatTile';
+import { StatusBadge } from '@/components/ui/StatusBadge';
+import { SeatMeter } from '@/components/ui/SeatMeter';
 import { useSubscription } from '@/features/apps/productAccess';
-import { TableSkeleton } from '@/components/ui/TableSkeleton';
-import { ErrorState } from '@/components/ui/ErrorState';
 
+const fmt = (iso: string) => new Date(iso).toLocaleDateString(undefined, { year: 'numeric', month: 'short', day: 'numeric' });
+const DAY = 86_400_000;
+
+/** Subscription (elevation 5.5): read-only plan, products, seats and trial, as set by the operator. */
 export default function SubscriptionPage() {
   const { data, isLoading, isError, refetch } = useSubscription();
-  if (isLoading) return <TableSkeleton rows={3} columns={3} />;
-  if (isError) return <ErrorState onRetry={() => refetch()} />;
-  const rows = data?.entitlements ?? [];
+  const products = data?.products ?? [];
+  const entitlements = new Map((data?.entitlements ?? []).map((e) => [e.product_key, e]));
+  const active = products.filter((p) => p.entitled).length;
+
+  const trialEnd = data?.trial_ends_at ?? null;
+  const daysLeft = trialEnd ? Math.ceil((new Date(trialEnd).getTime() - Date.now()) / DAY) : null;
+  const trialValue = !trialEnd ? 'None' : daysLeft !== null && daysLeft < 0 ? 'Ended' : fmt(trialEnd);
+  const trialSub = !trialEnd ? undefined : daysLeft !== null && daysLeft < 0 ? `Ended ${fmt(trialEnd)}` : `${daysLeft} day(s) left`;
+
   return (
-    <div className="space-y-4">
-      <div>
-        <h1 className="text-xl font-semibold text-ink">Subscription</h1>
-        <p className="text-sm text-ink-muted">Products your organization is entitled to. Contact Karbexa to change your plan.</p>
-      </div>
-      <div className="bg-surface border border-line rounded-lg shadow-card overflow-hidden">
-        <table className="w-full text-sm">
-          <thead className="bg-surface-alt text-ink-muted text-xs uppercase">
-            <tr><th className="text-left p-3">Product</th><th className="text-left p-3">Status</th><th className="text-left p-3">Seats limit</th></tr>
-          </thead>
-          <tbody className="divide-y divide-line">
-            {rows.map((e) => (
-              <tr key={e.product_key}>
-                <td className="p-3 font-medium text-ink">{e.product_key}</td>
-                <td className="p-3">
-                  <span className={`text-[11px] font-semibold px-2 py-0.5 rounded-full ${e.status === 'active' ? 'bg-success/10 text-success' : 'bg-warning/10 text-warning'}`}>{e.status.toUpperCase()}</span>
-                </td>
-                <td className="p-3 text-ink-secondary">{e.seats_limit ?? 'Unlimited'}</td>
+    <div>
+      <PageHeader title="Subscription" subtitle="Your plan, products and seats. Contact Karbexa to change them." />
+      <PageStates isLoading={isLoading} isError={isError} onRetry={() => refetch()} isEmpty={!isLoading && products.length === 0} emptyTitle="No products" emptyDescription="Your organisation has no products yet.">
+        <div className="mb-4 grid grid-cols-2 gap-4 lg:grid-cols-4" data-testid="subscription-tiles">
+          <StatTile label="Plan" value={data?.plan?.name ?? 'Custom'} sub={data?.plan ? undefined : 'No plan applied'} />
+          <StatTile label="Products" value={`${active} of ${products.length}`} sub="active" />
+          <StatTile label="Trial ends" value={trialValue} sub={trialSub} tone={daysLeft !== null && daysLeft <= 7 ? 'warning' : 'neutral'} />
+        </div>
+        <div className="overflow-hidden rounded-card border border-line bg-surface">
+          <table className="w-full text-table">
+            <thead className="bg-surface-alt text-label uppercase text-ink-muted">
+              <tr>
+                <th className="p-3 text-left">Product</th>
+                <th className="p-3 text-left">Status</th>
+                <th className="p-3 text-left">Source</th>
+                <th className="p-3 text-left w-64">Seats</th>
               </tr>
-            ))}
-            {rows.length === 0 && <tr><td colSpan={3} className="p-6 text-center text-ink-muted italic">No entitlements.</td></tr>}
-          </tbody>
-        </table>
-      </div>
+            </thead>
+            <tbody className="divide-y divide-line">
+              {products.map((p) => {
+                const e = entitlements.get(p.product_key);
+                const source = !e ? '-' : e.source === 'operator' ? 'Override' : e.source === 'plan' ? `Plan${e.plan_key ? ` (${e.plan_key})` : ''}` : 'Included';
+                return (
+                  <tr key={p.product_key} data-testid={`sub-row-${p.product_key}`}>
+                    <td className="p-3 font-medium text-ink">{p.name}</td>
+                    <td className="p-3">
+                      <StatusBadge variant={p.entitled ? 'success' : e ? 'warning' : 'neutral'}>
+                        {p.entitled ? 'Active' : e ? e.status.charAt(0).toUpperCase() + e.status.slice(1) : 'Not included'}
+                      </StatusBadge>
+                    </td>
+                    <td className="p-3 text-ink-secondary">
+                      {source}
+                      {e?.source === 'operator' && e.expires_at ? `, until ${fmt(e.expires_at)}` : ''}
+                    </td>
+                    <td className="p-3">{p.entitled ? <SeatMeter used={p.seats_used} total={p.seats_limit} label="" /> : <span className="text-ink-muted">-</span>}</td>
+                  </tr>
+                );
+              })}
+            </tbody>
+          </table>
+        </div>
+      </PageStates>
     </div>
   );
 }

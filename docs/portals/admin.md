@@ -55,7 +55,7 @@ Guards: `GuestGuard` redirects to `/overview` when a token is in memory. `AuthGu
 | `/roles`, `/roles/:id` | Auth | `pages/roles/RolesPage.tsx` |
 | `/groups` | Auth | `pages/groups/GroupsPage.tsx` |
 | `/apps` | Auth | `pages/apps/AppsPage.tsx` (App Access) |  <!-- 5.4: product cards show a seat meter, default role, or a locked state with the plan that includes it; the selected product has a "Why does this person have this role?" section (`features/apps/EffectiveAccessPanel.tsx`). Buttons on this page still use the legacy role checks. -->
-| `/subscription` | Auth | `pages/subscription/SubscriptionPage.tsx` |
+| `/subscription` | Auth | `pages/subscription/SubscriptionPage.tsx` (read-only: plan, products, seats, trial; source `operator` is labelled "Override") |
 | `/security` | Auth | `pages/security/SecurityPage.tsx` |
 | `/audit-logs` | Auth | `pages/audit-logs/AuditLogsPage.tsx` |
 | `/policies`, `/policies/:id` | Auth | `pages/policies/PoliciesPage.tsx` |
@@ -150,7 +150,7 @@ The controller is in the file named after the mount unless the row says otherwis
 | GET | `/organization/health` | auth | `getOrgHealth` |
 | GET | `/organization/history` | auth | `getOrgHistory` |
 | GET | `/announcement` | auth | `routes/announcement.routes.ts`: the platform announcement `{ message, severity, ends_at }` or `null`, cached 60 s in the process; shown by `AnnouncementBanner` in `AppShell` (Plan 4.12) |
-| GET | `/organization/subscription` | auth | `appAccess.controller.getSubscription` (org entitlements; elevation 5.4 adds `products`: one row per registry product with `entitled`, `seats_limit`, `seats_used` from the stored `SeatUsage`, `default_role`, and `included_in_plans` for a locked product) |
+| GET | `/organization/subscription` | auth | `appAccess.controller.getSubscription` (org entitlements; elevation 5.4 adds `products`: one row per registry product with `entitled`, `seats_limit`, `seats_used` from the stored `SeatUsage`, `default_role`, and `included_in_plans` for a locked product; elevation 5.5 adds `plan` `{ key, name }`, `trial_ends_at`, and `expires_at` on each entitlement) |
 | DELETE | `/organization/business-units/:id` | ROLE_ADMINS | `deleteBusinessUnit` |
 | GET | `/organization/:id` | auth | `getDepartmentById` |
 | POST | `/organization` | ROLE_ADMINS | `createDepartment` |

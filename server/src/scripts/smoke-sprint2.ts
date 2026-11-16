@@ -2116,6 +2116,25 @@ async function main() {
       check('5.4 effective-access of a member of another company = 404', (await t.call(`/people/${other.admin._id}/effective-access`)).status === 404);
     }
 
+    // ── Plan 5.5: subscription shows the plan, the trial end and the override expiry ──
+    {
+      const t = await tenantCtx('sub55');
+      const get = async () => ((await (await t.call('/organization/subscription')).json()) as any).data;
+      const d = await get();
+      check('5.5 plan is the plan the plan-sourced entitlements came from', d.plan?.key === 'professional' && typeof d.plan?.name === 'string', JSON.stringify(d.plan));
+      check('5.5 every entitlement carries source, plan_key and expires_at', d.entitlements.length > 0 && d.entitlements.every((e: any) => 'source' in e && 'plan_key' in e && 'expires_at' in e));
+      const trial = new Date(Date.now() + 5 * 86400e3);
+      await Company.updateOne({ _id: t.cid }, { $set: { trial_ends_at: trial } });
+      check('5.5 trial_ends_at is returned', new Date((await get()).trial_ends_at).getTime() === trial.getTime());
+      const exp = new Date(Date.now() + 7 * 86400e3);
+      await OrganizationEntitlement.updateOne({ company_id: t.cid, product_key: 'sign' }, { $set: { source: 'operator', expires_at: exp, status: 'active' } }, { upsert: true });
+      const ov = (await get()).entitlements.find((e: any) => e.product_key === 'sign');
+      check('5.5 an override reports source operator and its expiry', ov?.source === 'operator' && new Date(ov.expires_at).getTime() === exp.getTime(), JSON.stringify(ov));
+      const other = await tenantCtx('sub55b');
+      await Company.updateOne({ _id: other.cid }, { $set: { trial_ends_at: null } });
+      check('5.5 another organisation sees only its own trial (tenant isolation)', (await ((await other.call('/organization/subscription')).json() as Promise<any>)).data.trial_ends_at === null);
+    }
+
     // ── audit ─────────────────────────────────────────────────────────────────────────────
     const actions = (await OperatorAuditEvent.find()).map((e) => e.action);
     check('E10 operator audit recorded', ['org.provisioned', 'entitlement.updated', 'org.suspended', 'org.reactivated'].every((a) => actions.includes(a)), actions);

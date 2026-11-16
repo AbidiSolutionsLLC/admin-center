@@ -15,6 +15,7 @@ import { Department } from '../models/Department.model';
 import { Group } from '../models/Group.model';
 import { Location } from '../models/Location.model';
 import { Plan } from '../models/Plan.model';
+import { Company } from '../models/Company.model';
 import { SeatUsage } from '../models/SeatUsage.model';
 import { computeEffectiveAccess, resolveAssignmentMemberIds } from '../lib/effectiveAccess';
 import { runInTransaction, emitAppAccessChanged, correlationIdFor } from '../lib/platformEvents';
@@ -135,6 +136,8 @@ export const getEffectiveAccess = asyncHandler(async (req: Request, res: Respons
  * GET /organization/subscription -> { success, data: { entitlements: [...], products: [...] } }
  * `products` (elevation 5.4, additive) has one row per registry product: entitlement state, seats (limit and the last
  * `SeatUsage` count, never computed here), default role, and for a locked product the plans that include it.
+ * Elevation 5.5 adds `plan` (the plan most of the plan-sourced entitlements came from) and `trial_ends_at`; each
+ * entitlement gains `expires_at` (overrides).
  */
 export const getSubscription = asyncHandler(async (req: Request, res: Response) => {
   const companyId = req.user!.company_id;
@@ -147,6 +150,13 @@ export const getSubscription = asyncHandler(async (req: Request, res: Response) 
     Plan.find({ status: 'active', products: { $in: keys } }).select('key name products').sort({ key: 1 }).lean(),
   ]);
   const usedBy = new Map(usage.map((u) => [u.product_key, u.used]));
+  const planCounts = new Map<string, number>();
+  for (const e of rows) if (e.source === 'plan' && e.plan_key) planCounts.set(e.plan_key, (planCounts.get(e.plan_key) ?? 0) + 1);
+  const planKey = [...planCounts.entries()].sort((a, b) => b[1] - a[1] || a[0].localeCompare(b[0]))[0]?.[0];
+  const [planDoc, company] = await Promise.all([
+    planKey ? Plan.findOne({ key: planKey }).select('key name').lean() : null,
+    Company.findOne({ _id: companyId }).select('trial_ends_at').lean(),
+  ]);
   const ent = new Map(rows.map((e) => [e.product_key as string, e]));
   const products = apps.filter((a) => a.product_key).map((a) => {
     const pk = a.product_key as string;
@@ -165,9 +175,11 @@ export const getSubscription = asyncHandler(async (req: Request, res: Response) 
     data: {
       entitlements: rows.map(e => ({
         product_key: e.product_key, status: e.status, seats_limit: e.seats_limit ?? null,
-        source: e.source, plan_key: e.plan_key ?? null,
+        source: e.source, plan_key: e.plan_key ?? null, expires_at: e.expires_at ?? null,
       })),
       products,
+      plan: planDoc ? { key: planDoc.key, name: planDoc.name } : planKey ? { key: planKey, name: planKey } : null,
+      trial_ends_at: company?.trial_ends_at ?? null,
     },
   });
 });
