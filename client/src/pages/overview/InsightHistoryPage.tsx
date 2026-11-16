@@ -1,9 +1,9 @@
 import { useState, useMemo } from 'react';
-import { ArrowLeft, Search, AlertCircle, RotateCw } from 'lucide-react';
-import { useNavigate } from 'react-router-dom';
+import { Search, AlertCircle, RotateCw } from 'lucide-react';
 import { useInsightHistory } from '@/features/overview/useInsightHistory';
 import { DataTable } from '@/components/ui/DataTable';
 import { ErrorState } from '@/components/ui/ErrorState';
+import { PageHeader } from '@/components/ui/PageHeader';
 import { EmptyState } from '@/components/ui/EmptyState';
 import { TableSkeleton } from '@/components/ui/TableSkeleton';
 import { ROUTES } from '@/constants/routes';
@@ -25,7 +25,6 @@ import {
 } from 'recharts';
 
 export default function InsightHistoryPage() {
-  const navigate = useNavigate();
   const [page, setPage] = useState(1);
   const [filters, setFilters] = useState({
     search: '',
@@ -58,7 +57,7 @@ export default function InsightHistoryPage() {
               <p className="text-sm font-semibold text-ink">{insight.title}</p>
               <p className="text-xs text-ink-secondary truncate max-w-md">{insight.description}</p>
               {insight.is_recurring && (
-                <span className="inline-flex mt-1 items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-bold bg-orange-500/10 text-orange-600 border border-orange-500/20">
+                <span className="inline-flex mt-1 items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-bold bg-warning/10 text-warning border border-warning/20">
                   <RotateCw className="w-3 h-3" />
                   Recurring Issue ({insight.recurrence_count}x)
                 </span>
@@ -74,10 +73,10 @@ export default function InsightHistoryPage() {
         cell: (info: CellContext<HistoryInsight, unknown>) => {
           const val = info.getValue() as string;
           const colors: Record<string, string> = {
-            critical: 'bg-red-50 text-red-700 border-red-200',
-            high: 'bg-orange-50 text-orange-700 border-orange-200',
-            medium: 'bg-amber-50 text-amber-700 border-amber-200',
-            low: 'bg-sky-50 text-sky-700 border-sky-200',
+            critical: 'bg-error/10 text-error border-error/30',
+            high: 'bg-warning/10 text-warning border-warning/30',
+            medium: 'bg-warning/10 text-warning border-warning/30',
+            low: 'bg-info/10 text-info border-info/30',
           };
           return (
             <span className={cn('px-2 py-0.5 rounded-full text-[11px] font-bold uppercase tracking-wider border', colors[val] || 'bg-surface-alt border-line')}>
@@ -96,7 +95,7 @@ export default function InsightHistoryPage() {
           
           if (isResolved) {
             return (
-              <span className="px-2 py-0.5 rounded-full text-[11px] font-bold uppercase tracking-wider border bg-emerald-50 text-emerald-700 border-emerald-200">
+              <span className="px-2 py-0.5 rounded-full text-[11px] font-bold uppercase tracking-wider border bg-success/10 text-success border-success/30">
                 Resolved
               </span>
             );
@@ -131,23 +130,11 @@ export default function InsightHistoryPage() {
 
   return (
     <div className="space-y-6">
-      {/* Page Header */}
-      <div className="flex items-start gap-4">
-        <button
-          onClick={() => navigate(ROUTES.OVERVIEW)}
-          className="mt-1 flex items-center justify-center w-8 h-8 rounded-md bg-surface border border-line text-ink-secondary hover:text-ink hover:bg-surface-alt transition-colors shadow-sm"
-        >
-          <ArrowLeft className="w-4 h-4" />
-        </button>
-        <div>
-          <h1 className="text-[22px] font-semibold tracking-tight text-ink">
-            Insight History & Trends
-          </h1>
-          <p className="mt-0.5 text-sm text-ink-secondary">
-            Track past system health improvements and identify recurring issues.
-          </p>
-        </div>
-      </div>
+      <PageHeader
+        title="Insight history & trends"
+        subtitle="Track past system health improvements and identify recurring issues."
+        breadcrumbs={[{ label: 'Overview', href: ROUTES.OVERVIEW }, { label: 'Insight history' }]}
+      />
 
       {error ? (
         <ErrorState
@@ -165,26 +152,26 @@ export default function InsightHistoryPage() {
             ) : data?.trends && data.trends.length > 0 ? (
               <ResponsiveContainer width="100%" height="100%">
                 <BarChart data={data.trends} margin={{ top: 10, right: 30, left: 0, bottom: 0 }}>
-                  <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#E2E6ED" />
+                  <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="var(--glass-border)" />
                   <XAxis 
                     dataKey="date" 
                     axisLine={false}
                     tickLine={false}
-                    tick={{ fontSize: 12, fill: '#5A6478' }}
+                    tick={{ fontSize: 12, fill: 'var(--text-muted)' }}
                     dy={10}
                   />
                   <YAxis 
                     axisLine={false}
                     tickLine={false}
-                    tick={{ fontSize: 12, fill: '#5A6478' }}
+                    tick={{ fontSize: 12, fill: 'var(--text-muted)' }}
                   />
                   <Tooltip 
-                    cursor={{ fill: '#F1F3F7' }}
-                    contentStyle={{ borderRadius: '8px', border: '1px solid #E2E6ED', boxShadow: '0 4px 12px 0 rgba(15, 22, 41, 0.10)' }}
+                    cursor={{ fill: 'var(--glass-hover)' }}
+                    contentStyle={{ borderRadius: '8px', border: '1px solid var(--glass-border)', background: 'var(--bg-color)', color: 'var(--text-main)', boxShadow: 'var(--glass-shadow)' }}
                   />
                   <Legend iconType="circle" wrapperStyle={{ paddingTop: '20px', fontSize: '12px' }} />
-                  <Bar dataKey="resolved" name="Resolved" fill="#059669" radius={[4, 4, 0, 0]} barSize={40} />
-                  <Bar dataKey="dismissed" name="Dismissed" fill="#9BA5B7" radius={[4, 4, 0, 0]} barSize={40} />
+                  <Bar dataKey="resolved" name="Resolved" fill="var(--success)" radius={[4, 4, 0, 0]} barSize={40} />
+                  <Bar dataKey="dismissed" name="Dismissed" fill="var(--text-muted)" radius={[4, 4, 0, 0]} barSize={40} />
                 </BarChart>
               </ResponsiveContainer>
             ) : (

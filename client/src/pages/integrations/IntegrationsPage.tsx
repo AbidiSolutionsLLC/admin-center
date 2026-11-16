@@ -9,7 +9,8 @@ import { IntegrationCard } from '@/features/integrations/components/IntegrationC
 import { IntegrationForm, type IntegrationFormData } from '@/features/integrations/components/IntegrationForm';
 import { SyncLogViewer } from '@/features/integrations/components/SyncLogViewer';
 import { FieldMappingTable } from '@/features/integrations/components/FieldMappingTable';
-import { ErrorState } from '@/components/ui/ErrorState';
+import { PageHeader } from '@/components/ui/PageHeader';
+import { PageStates } from '@/components/templates/PageStates';
 import { EmptyState } from '@/components/ui/EmptyState';
 import { Modal } from '@/components/ui/Modal';
 import { Button } from '@/components/ui/button';
@@ -101,19 +102,10 @@ export default function IntegrationsPage() {
     submitBtn?.click();
   };
 
-  // ── Loading state ────────────────────────────────────────────────────
-  if (isLoading) {
-    return (
-      <div className="space-y-5">
-        <div className="flex items-start justify-between">
-          <div>
-            <div className="h-7 w-40 bg-skeleton rounded animate-pulse" />
-            <div className="h-4 w-64 bg-skeleton rounded animate-pulse mt-2" />
-          </div>
-        </div>
+  const skeleton = (
         <div className="grid grid-cols-3 gap-4">
           {[1, 2, 3].map((i) => (
-            <div key={i} className="bg-white rounded-lg border border-line shadow-card p-5">
+            <div key={i} className="bg-surface rounded-lg border border-line shadow-card p-5">
               <div className="flex items-start gap-3 mb-4">
                 <div className="w-10 h-10 bg-skeleton rounded-lg animate-pulse" />
                 <div className="flex-1">
@@ -136,41 +128,12 @@ export default function IntegrationsPage() {
             </div>
           ))}
         </div>
-      </div>
-    );
-  }
-
-  // ── Error state ──────────────────────────────────────────────────────
-  if (isError) {
-    return (
-      <div className="space-y-5">
-        <div className="flex items-start justify-between">
-          <div>
-            <h1 className="text-[22px] font-semibold tracking-tight text-ink">Integrations</h1>
-            <p className="mt-0.5 text-sm text-ink-secondary">Connect your favorite tools</p>
-          </div>
-        </div>
-        <ErrorState
-          title="Failed to load integrations"
-          description="Something went wrong fetching integration data. Please try again."
-          onRetry={refetch}
-        />
-      </div>
-    );
-  }
+  );
 
   return (
     <div className="space-y-5">
-      {/* Page header */}
-      <div className="flex items-start justify-between">
-        <div>
-          <h1 className="text-[22px] font-semibold tracking-tight text-ink">Integrations</h1>
-          <p className="mt-0.5 text-sm text-ink-secondary">
-            Connect and sync data from third-party services
-          </p>
-        </div>
-      </div>
-
+      <PageHeader title="Integrations" subtitle="Connect and sync data from third-party services" />
+      <PageStates isLoading={isLoading} isError={isError} onRetry={() => refetch()} skeleton={skeleton}>
       {/* Connector Cards */}
       <div className="grid grid-cols-3 gap-4">
         {MVP_CONNECTORS.map((connector) => {
@@ -187,7 +150,7 @@ export default function IntegrationsPage() {
               ) : (
                 <button
                   onClick={() => openConnectModal(connector.type)}
-                  className="bg-white rounded-lg border-2 border-dashed border-line shadow-card p-8 text-center hover:border-primary hover:bg-primary-light/30 transition-colors w-full"
+                  className="bg-surface rounded-lg border-2 border-dashed border-line shadow-card p-8 text-center hover:border-primary hover:bg-primary-light/30 transition-colors w-full"
                 >
                   <div className="w-12 h-12 rounded-xl bg-primary-light flex items-center justify-center mx-auto mb-3">
                     <Plug className="w-6 h-6 text-primary" />
@@ -209,7 +172,7 @@ export default function IntegrationsPage() {
 
       {/* Empty state if no integrations connected */}
       {!integrations?.length && (
-        <div className="bg-white rounded-lg border border-line shadow-card p-8">
+        <div className="bg-surface rounded-lg border border-line shadow-card p-8">
           <EmptyState
             title="No integrations connected"
             description="Select a connector above to get started with your first integration."
@@ -217,6 +180,8 @@ export default function IntegrationsPage() {
           />
         </div>
       )}
+
+      </PageStates>
 
       {/* Connect Modal */}
       <Modal

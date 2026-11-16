@@ -1,6 +1,7 @@
 // src/pages/audit-logs/AuditLogsPage.tsx
 import { useState } from 'react';
-import { Download, AlertTriangle, ShieldCheck } from 'lucide-react';
+import { Download, ShieldCheck } from 'lucide-react';
+import { ListPage } from '@/components/templates/ListPage';
 import { useAuditEvents } from '@/features/audit/hooks/useAuditEvents';
 import { useExportAuditLog } from '@/features/audit/hooks/useExportAuditLog';
 import { useVerifyAuditLogs } from '@/features/audit/hooks/useVerifyAuditLogs';
@@ -32,7 +33,7 @@ export default function AuditLogsPage() {
   const [isDetailOpen, setIsDetailOpen] = useState(false);
   const [isLive, setIsLive] = useState(false);
 
-  const { data, isLoading, error } = useAuditEvents({
+  const { data, isLoading, error, refetch } = useAuditEvents({
     page,
     limit: 50,
     isLive,
@@ -69,69 +70,55 @@ export default function AuditLogsPage() {
     exportMutation.mutate({ ...filters, format });
   };
 
-  return (
-    <div className="space-y-5">
-      {/* Page Header */}
-      <div className="flex items-start justify-between">
-        <div>
-          <h1 className="text-[22px] font-semibold tracking-tight text-ink">
-            Audit Logs
-          </h1>
-          <p className="mt-0.5 text-sm text-ink-secondary">
-            Track all actions and changes across your organization
-          </p>
+  const actions = (
+    <div className="flex items-center gap-4">
+      <div className="flex items-center gap-2 border-r border-line pr-4">
+        <div className="flex flex-col items-end">
+          <span className="text-body font-medium text-ink">Live updates</span>
+          <span className="text-label normal-case tracking-normal text-ink-secondary">Auto-refresh latest events</span>
         </div>
-        <div className="flex items-center gap-4">
-          <div className="flex items-center gap-2 border-r border-line pr-4">
-            <div className="flex flex-col items-end">
-              <span className="text-sm font-medium text-ink">Live updates</span>
-              <span className="text-[10px] text-ink-secondary">Auto-refresh latest events</span>
-            </div>
-            <Switch checked={isLive} onCheckedChange={setIsLive} />
-          </div>
-          <div className="flex items-center gap-2">
-            <PermissionGate module="audit" action="export">
-            <button
-              onClick={() => handleExport('csv')}
-              disabled={exportMutation.isPending}
-              className="h-9 px-4 text-sm font-medium rounded-md border border-line bg-surface-alt text-ink hover:bg-surface-hover transition-colors duration-150 flex items-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed"
-            >
-              <Download className="w-4 h-4" />
-              CSV
-            </button>
-            <button
-              onClick={() => handleExport('json')}
-              disabled={exportMutation.isPending}
-              className="h-9 px-4 text-sm font-medium rounded-md border border-line bg-surface-alt text-ink hover:bg-surface-hover transition-colors duration-150 flex items-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed"
-            >
-              <Download className="w-4 h-4" />
-              JSON
-            </button>
-            <button
-              onClick={() => verifyMutation.mutate()}
-              disabled={verifyMutation.isPending}
-              className="h-9 px-4 text-sm font-medium rounded-md border border-line bg-surface-alt text-ink hover:bg-surface-hover transition-colors duration-150 flex items-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed"
-            >
-              <ShieldCheck className="w-4 h-4" />
-              {verifyMutation.isPending ? 'Verifying...' : 'Verify Integrity'}
-            </button>
-          </PermissionGate>
-        </div>
+        <Switch checked={isLive} onCheckedChange={setIsLive} aria-label="Live updates" />
       </div>
-    </div>
-      {/* Error State */}
-      {error && (
-        <div className="flex flex-col items-center justify-center py-16 px-4 text-center bg-surface backdrop-blur-glass rounded-2xl border border-line shadow-card">
-          <div className="w-12 h-12 rounded-xl bg-error/10 flex items-center justify-center mb-4">
-            <AlertTriangle className="w-6 h-6 text-error" />
-          </div>
-          <h3 className="text-sm font-semibold text-ink mb-1">Failed to load audit logs</h3>
-          <p className="text-sm text-ink-secondary mb-5">
-            Something went wrong. Check your connection and try again.
-          </p>
+      <PermissionGate module="audit_logs" action="export">
+        <div className="flex items-center gap-2">
+          <button
+            onClick={() => handleExport('csv')}
+            disabled={exportMutation.isPending}
+            className="h-9 px-4 text-sm font-medium rounded-md border border-line bg-surface-alt text-ink hover:bg-surface-hover transition-colors duration-150 flex items-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed"
+          >
+            <Download className="w-4 h-4" />
+            CSV
+          </button>
+          <button
+            onClick={() => handleExport('json')}
+            disabled={exportMutation.isPending}
+            className="h-9 px-4 text-sm font-medium rounded-md border border-line bg-surface-alt text-ink hover:bg-surface-hover transition-colors duration-150 flex items-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed"
+          >
+            <Download className="w-4 h-4" />
+            JSON
+          </button>
+          <button
+            onClick={() => verifyMutation.mutate()}
+            disabled={verifyMutation.isPending}
+            className="h-9 px-4 text-sm font-medium rounded-md border border-line bg-surface-alt text-ink hover:bg-surface-hover transition-colors duration-150 flex items-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed"
+          >
+            <ShieldCheck className="w-4 h-4" />
+            {verifyMutation.isPending ? 'Verifying...' : 'Verify Integrity'}
+          </button>
         </div>
-      )}
+      </PermissionGate>
+    </div>
+  );
 
+  return (
+    <ListPage
+      title="Audit log"
+      subtitle="Track all actions and changes across your organization"
+      primaryAction={actions}
+      isError={!!error}
+      onRetry={() => refetch()}
+    >
+      <div className="space-y-5">
       {/* Filters */}
       <AuditFilters
         search={filters.search}
@@ -191,6 +178,7 @@ export default function AuditLogsPage() {
         isOpen={isDetailOpen}
         onClose={() => setIsDetailOpen(false)}
       />
-    </div>
+      </div>
+    </ListPage>
   );
 }

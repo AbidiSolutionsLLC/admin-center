@@ -1,14 +1,13 @@
 import { useState, useMemo } from 'react';
 import { usePendingApprovals, useApproveRequest, useRejectRequest } from '@/features/workflows/hooks/useApprovals';
 import { Modal } from '@/components/ui/Modal';
-import { EmptyState } from '@/components/ui/EmptyState';
-import { TableSkeleton } from '@/components/ui/TableSkeleton';
+import { ListPage } from '@/components/templates/ListPage';
 import { formatDate } from '@/utils/formatDate';
-import { CheckCircle, XCircle, Clock, Search, X } from 'lucide-react';
+import { CheckCircle, XCircle, Clock, Search } from 'lucide-react';
 import type { ApprovalRequest } from '@/types';
 
 export default function ApprovalsPage() {
-  const { data: response, isLoading } = usePendingApprovals();
+  const { data: response, isLoading, isError, refetch } = usePendingApprovals();
   const approvals = response?.data || [];
 
   const [selectedApproval, setSelectedApproval] = useState<ApprovalRequest | null>(null);
@@ -49,94 +48,64 @@ export default function ApprovalsPage() {
   const hasData = approvals.length > 0;
 
   return (
-    <div className="space-y-6">
-      <PageHeader approvalCount={approvals.length} />
-
-      {/* ── Loading State ── */}
-      {isLoading ? (
-        <div className="bg-white rounded-lg border border-line overflow-hidden p-4">
-          <TableSkeleton rows={5} />
-        </div>
-      ) : (
-        <>
-          {/* ── Empty State ── */}
-          {!hasData ? (
-            <EmptyState
-              icon={CheckCircle}
-              title="No pending approvals"
-              description="You are all caught up! There are no requests requiring your approval."
-            />
-          ) : (
-            <>
-              {/* ── Filter Bar ── */}
-              <FilterBar
-                search={search}
-                onSearchChange={setSearch}
-                onClearFilters={() => setSearch('')}
-              />
-
-              {/* ── Approvals Table ── */}
-              {filteredApprovals.length === 0 ? (
-                <div className="bg-white rounded-lg border border-line shadow-card p-16 text-center">
-                  <div className="w-10 h-10 rounded-xl bg-primary-light flex items-center justify-center mx-auto mb-3">
-                    <Search className="w-5 h-5 text-primary" />
-                  </div>
-                  <h3 className="text-sm font-semibold text-ink mb-1">No results found</h3>
-                  <p className="text-sm text-ink-secondary">
-                    Try adjusting your search criteria.
-                  </p>
-                  <button
-                    onClick={() => setSearch('')}
-                    className="mt-4 h-9 px-4 text-sm font-medium rounded-md border border-line bg-white text-ink hover:bg-surface-alt transition-colors"
-                  >
-                    Clear Search
-                  </button>
-                </div>
-              ) : (
-                <div className="bg-white rounded-lg border border-line shadow-card overflow-hidden">
-                  <table className="w-full">
-                    <thead className="bg-white/5 border-b border-line">
-                      <tr>
-                        <th className="text-[11px] font-semibold text-ink-secondary uppercase tracking-wider h-10 px-4 text-left">
-                          Workflow Run ID
-                        </th>
-                        <th className="text-[11px] font-semibold text-ink-secondary uppercase tracking-wider h-10 px-4 text-left">
-                          Step
-                        </th>
-                        <th className="text-[11px] font-semibold text-ink-secondary uppercase tracking-wider h-10 px-4 text-left">
-                          Status
-                        </th>
-                        <th className="text-[11px] font-semibold text-ink-secondary uppercase tracking-wider h-10 px-4 text-left">
-                          Requested At
-                        </th>
-                        <th className="text-[11px] font-semibold text-ink-secondary uppercase tracking-wider h-10 px-4 text-right">
-                          Actions
-                        </th>
-                      </tr>
-                    </thead>
-                    <tbody>
-                      {filteredApprovals.map((approval) => (
-                        <ApprovalRow
-                          key={approval._id}
-                          approval={approval}
-                          onApprove={() => {
-                            setSelectedApproval(approval);
-                            setDecision('approve');
-                          }}
-                          onReject={() => {
-                            setSelectedApproval(approval);
-                            setDecision('reject');
-                          }}
-                        />
-                      ))}
-                    </tbody>
-                  </table>
-                </div>
-              )}
-            </>
-          )}
-        </>
-      )}
+    <>
+      <ListPage
+        title="Pending approvals"
+        subtitle={`Review and act upon requests that require your approval.${hasData ? ` ${approvals.length} pending.` : ''}`}
+        toolbar={hasData ? { search: { placeholder: 'Search by run ID or step', value: search, onChange: setSearch } } : undefined}
+        isLoading={isLoading}
+        isError={isError}
+        onRetry={() => refetch()}
+        isEmpty={!hasData}
+        emptyTitle="No pending approvals"
+        emptyDescription="You are all caught up. There are no requests requiring your approval."
+      >
+        {filteredApprovals.length === 0 ? (
+          <div className="bg-surface rounded-card border border-line p-16 text-center">
+            <div className="w-10 h-10 rounded-xl bg-primary-light flex items-center justify-center mx-auto mb-3">
+              <Search className="w-5 h-5 text-primary" />
+            </div>
+            <h3 className="text-sm font-semibold text-ink mb-1">No results found</h3>
+            <p className="text-sm text-ink-secondary">Try adjusting your search criteria.</p>
+            <button
+              onClick={() => setSearch('')}
+              className="mt-4 h-9 px-4 text-sm font-medium rounded-md border border-line bg-surface text-ink hover:bg-surface-hover transition-colors"
+            >
+              Clear search
+            </button>
+          </div>
+        ) : (
+          <div className="bg-surface rounded-card border border-line overflow-hidden">
+            <table className="w-full">
+              <thead className="bg-surface-alt border-b border-line">
+                <tr>
+                  <th className="text-label uppercase text-ink-secondary h-10 px-4 text-left">Workflow run ID</th>
+                  <th className="text-label uppercase text-ink-secondary h-10 px-4 text-left">Step</th>
+                  <th className="text-label uppercase text-ink-secondary h-10 px-4 text-left">Status</th>
+                  <th className="text-label uppercase text-ink-secondary h-10 px-4 text-left">Requested at</th>
+                  <th className="text-label uppercase text-ink-secondary h-10 px-4 text-right">Actions</th>
+                </tr>
+              </thead>
+              <tbody>
+                {filteredApprovals.map((approval) => (
+                  <ApprovalRow
+                    key={approval._id}
+                    approval={approval}
+                    onApprove={() => {
+                      setSelectedApproval(approval);
+                      setDecision('approve');
+                    }}
+                    onReject={() => {
+                      setSelectedApproval(approval);
+                      setDecision('reject');
+                    }}
+                  />
+                ))}
+              </tbody>
+            </table>
+          </div>
+        )}
+      </ListPage>
 
       {/* ── Decision Modal ── */}
       {selectedApproval && decision && (
@@ -163,7 +132,7 @@ export default function ApprovalsPage() {
                   setComments('');
                 }}
                 disabled={approveMutation.isPending || rejectMutation.isPending}
-                className="h-9 px-4 text-sm font-medium rounded-md border border-line bg-white text-ink hover:bg-surface-alt transition-colors"
+                className="h-9 px-4 text-sm font-medium rounded-md border border-line bg-surface text-ink hover:bg-surface-alt transition-colors"
               >
                 Cancel
               </button>
@@ -172,7 +141,7 @@ export default function ApprovalsPage() {
                 disabled={approveMutation.isPending || rejectMutation.isPending}
                 className={`h-9 px-4 text-sm font-medium rounded-md text-white transition-colors ${
                   decision === 'approve'
-                    ? 'bg-emerald-600 hover:bg-emerald-700'
+                    ? 'bg-success hover:bg-success/90'
                     : 'bg-error hover:bg-error/90'
                 }`}
               >
@@ -195,82 +164,17 @@ export default function ApprovalsPage() {
                 onChange={(e) => setComments(e.target.value)}
                 rows={3}
                 placeholder={`Add a note for why you are ${decision}ing this request...`}
-                className="w-full p-3 text-sm rounded-md border border-line bg-white text-ink focus:outline-none focus:ring-2 focus:ring-primary/30 focus:border-primary transition-all resize-none"
+                className="w-full p-3 text-sm rounded-md border border-line bg-surface text-ink focus:outline-none focus:ring-2 focus:ring-primary/30 focus:border-primary transition-all resize-none"
               />
             </div>
           </div>
         </Modal>
       )}
-    </div>
+    </>
   );
 }
 
 // ── Sub-components ─────────────────────────────────────────────────────────
-
-interface PageHeaderProps {
-  approvalCount?: number;
-}
-
-function PageHeader({ approvalCount }: PageHeaderProps) {
-  return (
-    <div className="flex items-start justify-between gap-4">
-      <div>
-        <h1 className="text-[22px] font-semibold tracking-tight text-ink">
-          Pending Approvals
-        </h1>
-        <div className="flex items-center gap-3 mt-0.5">
-          <p className="text-sm text-ink-secondary">
-            Review and act upon requests that require your approval.
-          </p>
-          {approvalCount !== undefined && approvalCount > 0 && (
-            <span className="text-xs text-ink-muted">
-              {approvalCount} {approvalCount === 1 ? 'approval' : 'approvals'}
-            </span>
-          )}
-        </div>
-      </div>
-    </div>
-  );
-}
-
-interface FilterBarProps {
-  search: string;
-  onSearchChange: (value: string) => void;
-  onClearFilters: () => void;
-}
-
-function FilterBar({
-  search,
-  onSearchChange,
-  onClearFilters,
-}: FilterBarProps) {
-  const hasFilters = Boolean(search);
-
-  return (
-    <div className="flex items-center justify-between gap-4">
-      <div className="flex-1 max-w-[320px] relative">
-        <Search className="w-4 h-4 text-ink-muted absolute left-3 top-1/2 -translate-y-1/2" />
-        <input
-          type="text"
-          value={search}
-          onChange={(e) => onSearchChange(e.target.value)}
-          placeholder="Search by Run ID or Step..."
-          className="w-full h-9 pl-9 pr-3 text-sm rounded-md border border-line bg-white text-ink placeholder:text-ink-muted focus:outline-none focus:ring-2 focus:ring-primary/30 focus:border-primary transition-all"
-        />
-      </div>
-
-      {hasFilters && (
-        <button
-          onClick={onClearFilters}
-          className="h-9 px-3 text-sm font-medium rounded-md text-ink-secondary hover:text-ink hover:bg-surface-alt transition-colors flex items-center gap-1.5"
-        >
-          <X className="w-3.5 h-3.5" />
-          Clear Filter
-        </button>
-      )}
-    </div>
-  );
-}
 
 interface ApprovalRowProps {
   approval: ApprovalRequest;
@@ -293,7 +197,7 @@ function ApprovalRow({ approval, onApprove, onReject }: ApprovalRowProps) {
         {stepName}
       </td>
       <td className="px-4 py-3">
-        <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-medium bg-amber-50 text-amber-700 border border-amber-200">
+        <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-medium bg-warning/10 text-warning border border-warning/30">
           <Clock className="w-3.5 h-3.5" />
           Pending
         </span>
@@ -305,14 +209,14 @@ function ApprovalRow({ approval, onApprove, onReject }: ApprovalRowProps) {
         <div className="flex items-center justify-end gap-2">
           <button
             onClick={onApprove}
-            className="p-1.5 text-emerald-600 hover:bg-emerald-50 rounded transition-colors"
+            className="p-1.5 text-success hover:bg-success/10 rounded transition-colors"
             title="Approve"
           >
             <CheckCircle className="w-4 h-4" />
           </button>
           <button
             onClick={onReject}
-            className="p-1.5 text-error hover:bg-error-light rounded transition-colors"
+            className="p-1.5 text-error hover:bg-error/10 rounded transition-colors"
             title="Reject"
           >
             <XCircle className="w-4 h-4" />

@@ -12,6 +12,7 @@ import { CustomFieldForm, type CustomFieldFormData } from '@/features/data-field
 import { TableSkeleton } from '@/components/ui/TableSkeleton';
 import { ErrorState } from '@/components/ui/ErrorState';
 import { Modal } from '@/components/ui/Modal';
+import { PageHeader } from '@/components/ui/PageHeader';
 import { Button } from '@/components/ui/button';
 import type { CustomField, TargetObject, CreateCustomFieldInput } from '@/types';
 import { cn } from '@/utils/cn';
@@ -138,26 +139,26 @@ export default function DataFieldsPage() {
 
   return (
     <div className="space-y-5">
-      {/* Page header */}
-      <div className="flex items-start justify-between">
-        <div>
-          <h1 className="text-[22px] font-semibold tracking-tight text-ink">Data & Fields</h1>
-          <p className="mt-0.5 text-sm text-ink-secondary">
-            Create and manage custom fields across your organization
-          </p>
-        </div>
-      </div>
+      <PageHeader
+        title="Data fields"
+        subtitle="Create and manage custom fields across your organization"
+        primaryAction={
+          <Button className="bg-primary hover:bg-primary-hover text-primary-foreground" onClick={openCreateModal}>
+            Add field
+          </Button>
+        }
+      />
 
       {/* Target object tabs */}
       <Tabs.Root value={targetObject} onValueChange={(v) => setTargetObject(v as TargetObject)}>
-        <Tabs.List className="inline-flex items-center gap-1 bg-white border border-line rounded-md p-0.5">
+        <Tabs.List className="inline-flex items-center gap-1 bg-surface border border-line rounded-md p-0.5">
           {TARGET_OBJECTS.map((obj) => (
             <Tabs.Trigger
               key={obj.value}
               value={obj.value}
               className={cn(
                 'flex items-center gap-1.5 px-3 py-1.5 text-sm font-medium rounded transition-colors',
-                'data-[state=active]:bg-primary data-[state=active]:text-white',
+                'data-[state=active]:bg-primary data-[state=active]:text-primary-foreground',
                 'data-[state=inactive]:text-ink-secondary hover:text-ink'
               )}
             >
@@ -183,7 +184,7 @@ export default function DataFieldsPage() {
               placeholder="Search fields..."
               value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value)}
-              className="w-full h-9 pl-8 pr-4 text-sm rounded-md border border-line bg-white text-ink
+              className="w-full h-9 pl-8 pr-4 text-sm rounded-md border border-line bg-surface text-ink
                          placeholder:text-ink-muted
                          focus:outline-none focus:ring-2 focus:ring-primary/30 focus:border-primary
                          transition-all duration-150"

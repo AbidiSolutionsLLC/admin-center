@@ -320,6 +320,12 @@ Role grants are additionally limited by `server/src/lib/roleHierarchy.ts` (`asse
 
 Response envelope for most tenant endpoints: `{ success: true, data }`; errors from `server/src/middleware/errorHandler.ts`: `{ success: false, error, code }` (plus `details` for validation errors).
 
+### Template roll-out (elevation 5.8 to 5.10)
+
+Pages are wrapped in the Phase 3 templates (`PageHeader`, `ListPage`, `Tabs`, `PageStates`) and off-theme colour classes in the page files are replaced by theme tokens (`bg-surface`, `text-ink`, `border-line`, `error`/`warning`/`success`/`info`); soft accents come from the `--accent-*` CSS variables in `client/src/index.css`. Feature components under `client/src/features/*` were not restyled.
+
+- Batch 1 (5.8, built, not yet run): Security (URL-synced tabs `?tab=`), Audit log (`ListPage`; export buttons now check `audit_logs:export`, as the server does), Data fields, Approvals (`ListPage`, all five states), Integrations, Insight history (chart colours from CSS variables).
+
 ## 4. Roles and permissions
 
 ### 4.1 Org roles (coarse, route level)

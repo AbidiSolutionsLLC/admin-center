@@ -16,6 +16,12 @@
   --text-muted: #94a3b8;
   --danger: #ef4444;
   --success: #10b981;
+  /* Soft accents for type badges and charts (elevation 5.8: tokens, not literals in pages) */
+  --accent-amber: #fbbf24;
+  --accent-green: #34d399;
+  --accent-violet: #c084fc;
+  --accent-blue: #60a5fa;
+  --accent-red: #f87171;
 }
 
 /* Page background with ambient radial glows */
