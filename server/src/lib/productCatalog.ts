@@ -19,7 +19,7 @@ export function productLaunchUrl(def: { path: string }): string {
 export const PRODUCT_DEFS: ProductDef[] = [
   {
     product_key: 'people', name: 'People', slug: 'karbexa-people', description: 'HR and people operations', env: 'PEOPLE_LAUNCH_URL', port: 5174, path: '/people/home',
-    icon: 'users', product_category: 'HR', default_assignments: [{ target: 'all_members', role: 'employee' }],
+    icon: 'users', product_category: 'talent', default_assignments: [{ target: 'all_members', role: 'employee' }],
     roles: [
       { key: 'people_administrator', name: 'People Administrator', rank: 40 },
       { key: 'hr', name: 'HR', rank: 30 },
@@ -29,7 +29,7 @@ export const PRODUCT_DEFS: ProductDef[] = [
   },
   {
     product_key: 'projects', name: 'Dictate', slug: 'karbexa-projects', description: 'Projects and work management', env: 'PROJECTS_LAUNCH_URL', port: 5174, path: '/project/projectDashboard',
-    icon: 'folder-kanban', product_category: 'Work', default_assignments: [],
+    icon: 'folder-kanban', product_category: 'work', default_assignments: [],
     roles: [
       { key: 'project_administrator', name: 'Project Administrator', rank: 30 },
       { key: 'project_manager', name: 'Project Manager', rank: 20 },
@@ -39,7 +39,7 @@ export const PRODUCT_DEFS: ProductDef[] = [
   },
   {
     product_key: 'sign', name: 'Sign', slug: 'karbexa-sign', description: 'Document signing', env: 'SIGN_LAUNCH_URL', port: 5174, path: '/sign/dashboard',
-    icon: 'file-signature', product_category: 'Documents', default_assignments: [],
+    icon: 'file-signature', product_category: 'core', default_assignments: [],
     roles: [
       { key: 'sign_administrator', name: 'Sign Administrator', rank: 20 },
       { key: 'sign_user', name: 'Sign User', rank: 10, is_default: true },
@@ -48,7 +48,7 @@ export const PRODUCT_DEFS: ProductDef[] = [
   },
   {
     product_key: 'desk', name: 'Desk', slug: 'karbexa-desk', description: 'Service desk', env: 'DESK_LAUNCH_URL', port: 5174, path: '/desk/home',
-    icon: 'headset', product_category: 'Service', default_assignments: [{ target: 'all_members', role: 'requester' }],
+    icon: 'headset', product_category: 'it', default_assignments: [{ target: 'all_members', role: 'requester' }],
     roles: [
       { key: 'desk_admin', name: 'Desk Admin', rank: 40 },
       { key: 'support_lead', name: 'Support Lead', rank: 30 },
@@ -91,7 +91,7 @@ export async function seedProductRegistry(): Promise<void> {
     );
     // Manifest fields: first seed only. A later published manifest (platform/manifest.ts) is never overwritten by a re-seed.
     await App.updateOne({ _id: app!._id, manifest_version: { $exists: false } }, {
-      $set: { manifest_version: 1, product_status: 'active', icon: def.icon, product_category: def.product_category, default_assignments: def.default_assignments },
+      $set: { manifest_version: 1, product_status: 'active', launch_path: def.path, icon: def.icon, product_category: def.product_category, default_assignments: def.default_assignments },
     });
     for (const r of def.roles) {
       await ProductRole.updateOne(

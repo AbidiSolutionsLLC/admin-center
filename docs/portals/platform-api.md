@@ -20,6 +20,7 @@ Related: [identity.md](identity.md) (services realm, keys), [admin.md](admin.md)
 | `server/src/platform/readApi.ts` | Orgs list, events, members, departments, locations, session revocations; mounts calendars and role catalog |
 | `server/src/platform/calendars.ts` | `GET /orgs/:orgId/calendars/effective` |
 | `server/src/platform/roleCatalog.ts` | `PUT /apps/:productKey/role-catalog` |
+| `server/src/platform/manifest.ts` | `PUT /apps/:productKey/manifest`, `GET /apps` |
 | `server/src/platform/requireServiceToken.ts` | `authenticateService`, `requireServiceToken(scope)`, `serviceMayAccessProduct` |
 | `server/src/platform/rateLimit.ts` | Per-client limiter and auth-failure limiter |
 | `server/src/platform/productsInternalToken.ts` | Admin's own client-credentials token for calling the products backend |
@@ -60,6 +61,8 @@ The global per-IP limiter in `app.ts` skips `/platform/v1`. Error shape: `{ erro
 | GET | `/orgs/:orgId/calendars/effective` | `platform.org.read` | `calendars.ts` | Query `member_id` or `location_id` (one required), `from`, `to` (`YYYY-MM-DD`, ≤ 366 days). `{ holidays: [{ date, name, calendar_id, calendar_name, holiday_code, recurring_type }], work_schedule }`. Location resolution: explicit `location_id`, else the member's location, else `Company.settings.default_location_id`. Only assignments targeting that exact location are used |
 | GET | `/sessions/revocations` | `platform.sessions.read` | `readApi.ts` | Query `since` (ISO), `limit` (1–1000, default 1000), `after_sid`, `realm` (`tenant`/`operator`). Array of `{ sid, member_id, org_id, revoked_at }`. More pages: headers `X-Has-More: true`, `X-Next-Since`, `X-Next-After-Sid` |
 | PUT | `/apps/:productKey/role-catalog` | `platform.role_catalog.write` | `roleCatalog.ts` | See 3.3 |
+| PUT | `/apps/:productKey/manifest` | `platform.role_catalog.write` | `manifest.ts` | See 3.3a |
+| GET | `/apps` | `platform.role_catalog.write` | `manifest.ts` | Registered products in the manifest view (below) |
 
 Member view fields (`memberView` in `readApi.ts`): `id`, `email`, `full_name`, `department_id`, `location_id`, `job_title` (from `custom_fields.job_title`), `employment_type`, `manager_id`, `reports_to` (same as `manager_id`), `lifecycle_state`, `employee_id`, `hire_date`, `termination_date`, `phone`, `avatar_url`, `identity_id`, `authz_ver`, `updated_at`.
 
@@ -77,6 +80,15 @@ Member view fields (`memberView` in `readApi.ts`): `id`, `email`, `full_name`, `
 - `version` lower than the stored `role_catalog_version`: 200 with the stored catalog, nothing written. An optimistic lock inside the transaction handles concurrent writers the same way.
 - Removing a role still used by an active `AppAssignment` (or removing the default while assignments without an explicit role exist): 409 `ROLE_IN_USE` with `roles`.
 - If the default role changed or a kept role's rank or name changed, `app_access.changed` is fanned out (with `authz_ver` bump) for every org that has active assignments for the app, after the response is sent (actor `system`).
+
+### 3.3a Manifest publish
+`PUT /platform/v1/apps/:productKey/manifest` is the role-catalog write plus product registration. Same scope, same `serviceMayAccessProduct` allow-list (`PRODUCT_NOT_ALLOWED`), same optimistic lock on `App.role_catalog_version` (the body's `version`), same `ROLE_IN_USE` rule, one transaction, same post-commit fan-out. Unlike the role-catalog route it **upserts** the `App`, so a new key registers a product; the key must match the path, match `^[a-z][a-z0-9_]{1,30}$` and not be `admin`.
+
+Body: `{ manifest_version: 1, key, name, description (≤160), icon, category: core|work|it|talent, status: active|beta|hidden|retired, version (int ≥1), hosting: { mode: 'suite', launch_path }, roles: [{ key, name, description?, rank (int ≥1), is_default?, assignable? }], default_assignments?: [{ target: 'all_members', role }], capabilities?: { seats, offboarding } }`. Exactly one default role; `default_assignments[].role` must be one of the roles. `capabilities` is validated and not stored yet. Standalone hosting, role audience, `self_signup` and `external_users` are deferred (Zyntrus and Assets).
+
+Writes `App.name, description, icon, product_category, product_status, manifest_version, launch_path, launch_url, default_role_key, default_assignments` and the `ProductRole` rows. `launch_url` is `<KEY>_LAUNCH_URL` from the environment when set, else the products web app origin plus `launch_path`. Stale `version` returns 200 with the stored manifest. No operator audit entry is written (an operator audit row needs an operator).
+
+`GET /platform/v1/apps` returns every registered product in the same view plus `product_key` and `role_catalog_version`. The in-process registry cache is cleared on publish; other processes see a new product within 60 seconds.
 
 ### 3.4 Outbound: Admin → products backend
 
@@ -175,5 +187,5 @@ From `server/`:
 
 | Command | Coverage |
 |---|---|
-| `npm run smoke:sprint2` | E4 platform read API, ack hook, dispatcher (signed nudges, backoff); E4a outbox atomicity and correlation ids; E4c per-client product scoping and `onCommit` hooks; E4d role-catalog lock and post-commit fan-out; L3-4 `karbexa-admin-backend` token; services token rate limit (`PLATFORM_RATE_LIMIT_PER_MIN=1`) |
+| `npm run smoke:sprint2` | E4 platform read API, ack hook, dispatcher (signed nudges, backoff); E4a outbox atomicity and correlation ids; E4c per-client product scoping and `onCommit` hooks; E4d role-catalog lock and post-commit fan-out; 1.3 manifest publish (new product, stale version, `ROLE_IN_USE`, client not allowed); L3-4 `karbexa-admin-backend` token; services token rate limit (`PLATFORM_RATE_LIMIT_PER_MIN=1`) |
 | `npm test` | `lib/__tests__/platformDispatcher.test.ts`, `lib/__tests__/ssrfGuard.test.ts`, `platform/__tests__/rateLimit.test.ts`, `controllers/__tests__/openItemsProxy.test.ts`, `controllers/__tests__/streamTickets.test.ts`, `lib/__tests__/standaloneMongo.test.ts` |

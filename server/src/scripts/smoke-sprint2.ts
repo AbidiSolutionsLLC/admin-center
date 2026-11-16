@@ -1180,6 +1180,51 @@ async function main() {
       const restored = await put3('sign', catBody3(signV3 + 1, signRows3));
       check('E4c role-catalog: default allow-list (env restored) permits sign', restored.status === 200, restored);
 
+      // 1.3: manifest publish (new product 'demo'), stale version, ROLE_IN_USE, client not allowed, then cleanup
+      {
+        const putM = async (key: string, body: unknown) => {
+          const x = await fetch(`${ORIGIN}/platform/v1/apps/${key}/manifest`, { method: 'PUT', headers: { 'content-type': 'application/json', authorization: `Bearer ${tk3.access_token}` }, body: JSON.stringify(body) });
+          return { status: x.status, json: (await x.json().catch(() => ({}))) as any };
+        };
+        const manifest = (version: number, roles: string[]) => ({
+          manifest_version: 1, key: 'demo', name: 'Demo', description: 'Smoke product', icon: 'box', category: 'work', status: 'active', version,
+          hosting: { mode: 'suite', launch_path: '/demo/home' },
+          roles: roles.map((k, i) => ({ key: k, name: k, rank: (roles.length - i) * 10, is_default: i === roles.length - 1 })),
+          default_assignments: [],
+        });
+        const { Plan: PlanM, AppAssignment: AssignM } = await import('../models');
+        const demoDenied = await putM('demo', manifest(1, ['demo_admin', 'demo_user']));
+        check('1.3 manifest: new key outside the client allow-list = 403 PRODUCT_NOT_ALLOWED', demoDenied.status === 403 && demoDenied.json.code === 'PRODUCT_NOT_ALLOWED', demoDenied);
+        process.env.PLATFORM_CLIENT_PRODUCTS = JSON.stringify({ 'karbexa-products-backend': ['demo', 'people'] });
+        try {
+          check('1.3 manifest: key mismatch with path = 400', (await putM('demo', { ...manifest(1, ['demo_admin', 'demo_user']), key: 'other' })).status === 400);
+          check('1.3 manifest: invalid body (two defaults) = 400', (await putM('demo', { ...manifest(1, ['a', 'b']), roles: [{ key: 'a', name: 'a', rank: 2, is_default: true }, { key: 'b', name: 'b', rank: 1, is_default: true }] })).status === 400);
+          const m1 = await putM('demo', manifest(2, ['demo_admin', 'demo_user']));
+          check('1.3 manifest: first publish registers the product (200, version, roles)', m1.status === 200 && m1.json.version === 2 && m1.json.roles?.length === 2 && m1.json.hosting?.launch_path === '/demo/home', m1.json);
+          const demoApp: any = await App.findOne({ product_key: 'demo', app_type: 'karbexa_product' }).lean();
+          check('1.3 manifest: App row written (name, icon, category, default role, launch_url)', demoApp?.name === 'Demo' && demoApp.icon === 'box' && demoApp.product_category === 'work' && demoApp.default_role_key === 'demo_user' && /\/demo\/home$/.test(demoApp.launch_url || ''), demoApp);
+          const { assertProductKey } = await import('../lib/productRegistry');
+          check('1.3 manifest: demo is a valid product key without a source edit', await assertProductKey('demo').then(() => true, () => false));
+          const planDemo = await fetch(`${ORIGIN}/platform/v1/apps`, { headers: { authorization: `Bearer ${tk3.access_token}` } });
+          const listed = (await planDemo.json()) as any[];
+          check('1.3 GET /apps lists registered products including demo', planDemo.status === 200 && listed.some((a) => a.key === 'demo') && listed.some((a) => a.key === 'people'), listed.map((a) => a.key));
+          const stale = await putM('demo', { ...manifest(1, ['demo_admin', 'demo_user', 'stale_only']), name: 'Stale' });
+          check('1.3 manifest: stale version returns the stored copy unchanged', stale.status === 200 && stale.json.version === 2 && stale.json.name === 'Demo' && !stale.json.roles.some((r: any) => r.key === 'stale_only') && !(await ProductRole.exists({ product_key: 'demo', key: 'stale_only' })), stale.json);
+          await AssignM.create({ company_id: orgId, app_id: demoApp._id, target_type: 'user', target_id: me._id, product_role_key: 'demo_admin', granted_by: me._id, is_active: true });
+          const inUse = await putM('demo', manifest(3, ['demo_user']));
+          check('1.3 manifest: removing an assigned role = 409 ROLE_IN_USE, nothing changed', inUse.status === 409 && inUse.json.code === 'ROLE_IN_USE' && inUse.json.roles?.includes('demo_admin') && (await ProductRole.countDocuments({ product_key: 'demo' })) === 2 && ((await App.findById(demoApp._id).lean()) as any)?.role_catalog_version === 2, inUse.json);
+          check('1.3 manifest: a plan can include demo (registry accepts it)', await (async () => { await PlanM.create({ key: 'demo-plan', name: 'Demo plan', products: ['demo'] }); return !!(await PlanM.exists({ key: 'demo-plan', products: 'demo' })); })());
+        } finally {
+          await AssignM.deleteMany({ app_id: (await App.findOne({ product_key: 'demo' }).lean())?._id });
+          await PlanM.deleteMany({ key: 'demo-plan' });
+          await ProductRole.deleteMany({ product_key: 'demo' });
+          await App.deleteMany({ product_key: 'demo' });
+          (await import('../lib/productRegistry')).invalidateProductRegistry();
+          if (prevClientProducts === undefined) delete process.env.PLATFORM_CLIENT_PRODUCTS; else process.env.PLATFORM_CLIENT_PRODUCTS = prevClientProducts;
+        }
+        check('1.3 manifest: demo removed again', !(await App.exists({ product_key: 'demo' })));
+      }
+
       // onCommit: runs after commit, not on abort
       let okRan = false; let okRanInside = true;
       await runInTransaction(async (session) => { onCommit(session, () => { okRan = true; }); okRanInside = okRan; });

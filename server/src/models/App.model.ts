@@ -27,6 +27,8 @@ export interface IApp extends Document {
   manifest_version?: number;
   product_status?: 'active' | 'beta' | 'hidden' | 'retired';
   icon?: string;
+  /** Entry page in the products web app; launch_url is derived from it. */
+  launch_path?: string;
   product_category?: string;
   /** Roles granted to the org's "All Members" group when the product is entitled. */
   default_assignments?: { target: 'all_members'; role: string }[];
@@ -60,6 +62,7 @@ const AppSchema = new Schema<IApp>({
   manifest_version: Number,
   product_status: { type: String, enum: ['active', 'beta', 'hidden', 'retired'], default: 'active' },
   icon: String,
+  launch_path: String,
   product_category: String,
   default_assignments: [{ _id: false, target: { type: String, enum: ['all_members'], required: true }, role: { type: String, required: true } }],
 }, { timestamps: { createdAt: 'created_at', updatedAt: 'updated_at' } });

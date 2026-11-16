@@ -13,6 +13,7 @@ import { SubscriptionCursor } from '../models/SubscriptionCursor.model';
 import { requireServiceToken } from './requireServiceToken';
 import { calendarsRouter } from './calendars';
 import { roleCatalogRouter } from './roleCatalog';
+import { manifestRouter } from './manifest';
 
 export const platformReadRouter = Router();
 
@@ -210,3 +211,4 @@ platformReadRouter.get('/sessions/revocations', requireServiceToken('platform.se
 
 platformReadRouter.use(calendarsRouter);
 platformReadRouter.use(roleCatalogRouter);
+platformReadRouter.use(manifestRouter);
