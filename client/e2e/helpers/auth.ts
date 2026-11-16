@@ -55,7 +55,17 @@ export async function signInTenant(page: Page, user: TenantUser = {}) {
   await page.route('**/api/v1/me/apps', (route) => fulfillJson(route, { success: true, data: [] }));
 }
 
+export const ALL_OPERATOR_PERMISSIONS = [
+  'overview.read', 'tenants.read', 'products.read', 'health.read', 'notes.write', 'onboarding.write', 'tenants.write', 'tenants.close',
+  'entitlements.write', 'plans.write', 'announcements.write', 'audit.read', 'security.read', 'audit.export', 'operators.read', 'operators.write',
+];
+
 /** Operator realm (Command Center): signs in as a platform operator. */
-export async function signInOperator(page: Page) {
+export async function signInOperator(page: Page, permissions: string[] = ALL_OPERATOR_PERMISSIONS) {
   await mockIdp(page, 'operator', '/operator/callback');
+  // GET /operator/v1/me drives navigation and buttons (plan 4.1). A spec that needs fewer permissions registers its own
+  // route for it afterwards (the later route wins) or passes a list.
+  await page.route('**/operator/v1/me', (route) =>
+    fulfillJson(route, { success: true, data: { id: 'o1', email: 'op@karbexa.test', full_name: 'Test Operator', roles: ['platform_admin'], status: 'active', permissions } })
+  );
 }
