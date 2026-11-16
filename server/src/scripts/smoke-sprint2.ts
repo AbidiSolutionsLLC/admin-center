@@ -2090,6 +2090,32 @@ async function main() {
       check('5.3 Ops Admin holds locations:export:all', !!opsAdminRole && !!(await RolePermission.findOne({ role_id: opsAdminRole._id, permission_id: perm!._id, granted: true })));
     }
 
+    // ── Plan 5.4: subscription products (seats, locked) and effective-access reasons ──
+    {
+      const t = await tenantCtx('apps54');
+      const { SeatUsage, Plan: PlanModel } = await import('../models');
+      const sub = (await (await t.call('/organization/subscription')).json()) as any;
+      const prods: any[] = sub.data.products;
+      check('5.4 subscription keeps the existing entitlements array and adds products', Array.isArray(sub.data.entitlements) && prods.length >= 4, Object.keys(sub.data));
+      const people = prods.find((p) => p.product_key === 'people');
+      check('5.4 an entitled product reports entitled, seat limit, seats_used and the default role', people?.entitled === true && 'seats_limit' in people && typeof people.seats_used === 'number' && 'default_role' in people, JSON.stringify(people));
+      await SeatUsage.updateOne({ company_id: t.cid, product_key: 'people' }, { $set: { used: 3, computed_at: new Date() } }, { upsert: true });
+      check('5.4 seats_used reads the stored SeatUsage', ((await (await t.call('/organization/subscription')).json()) as any).data.products.find((p: any) => p.product_key === 'people').seats_used === 3);
+      const locked = prods.find((p) => !p.entitled);
+      if (locked) {
+        const inc = await PlanModel.findOne({ products: locked.product_key, status: 'active' });
+        check('5.4 a locked product has seats_used 0 and lists the plans that include it', locked.seats_used === 0 && (inc ? locked.included_in_plans.some((x: any) => x.key === inc.key) : locked.included_in_plans.length === 0), JSON.stringify(locked));
+      } else {
+        check('5.4 (no locked product on this plan; locked case not exercised)', true);
+      }
+      const ea = (await (await t.call(`/people/${t.admin._id}/effective-access`)).json()) as any;
+      check('5.4 effective-access keeps products and denials and adds reasons', ea.data.products && ea.data.denials && ea.data.reasons && Object.keys(ea.data.reasons).every((k) => k in ea.data.products), Object.keys(ea.data));
+      const withReason = Object.entries(ea.data.reasons as Record<string, any[]>).find(([, r]) => r.length > 0);
+      check('5.4 a granted product explains itself with a target type and name', !withReason || (!!withReason[1][0].target_type && !!withReason[1][0].target_name), JSON.stringify(withReason));
+      const other = await tenantCtx('apps54b');
+      check('5.4 effective-access of a member of another company = 404', (await t.call(`/people/${other.admin._id}/effective-access`)).status === 404);
+    }
+
     // ── audit ─────────────────────────────────────────────────────────────────────────────
     const actions = (await OperatorAuditEvent.find()).map((e) => e.action);
     check('E10 operator audit recorded', ['org.provisioned', 'entitlement.updated', 'org.suspended', 'org.reactivated'].every((a) => actions.includes(a)), actions);

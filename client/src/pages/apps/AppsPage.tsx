@@ -12,6 +12,9 @@ import { AccessTimeline } from '@/features/apps/AccessTimeline';
 import { ProductRoleFields } from '@/features/apps/ProductRoleFields';
 import { useAppRoles, useSubscription, useUpdateAssignment, isProductApp, appProductKey, isEntitled } from '@/features/apps/productAccess';
 import { AssignmentRuleBuilder } from '@/features/apps/AssignmentRuleBuilder';
+import { EffectiveAccessPanel } from '@/features/apps/EffectiveAccessPanel';
+import { PageHeader } from '@/components/ui/PageHeader';
+import { UserSelect } from '@/components/ui/UserSelect';
 import { Modal } from '@/components/ui/Modal';
 import { TableSkeleton } from '@/components/ui/TableSkeleton';
 import { ErrorState } from '@/components/ui/ErrorState';
@@ -39,6 +42,7 @@ export default function AppsPage() {
   const [isAssignModalOpen, setIsAssignModalOpen] = useState(false);
   const [isTimelineModalOpen, setIsTimelineModalOpen] = useState(false);
   const [isWarningModalOpen, setIsWarningModalOpen] = useState(false);
+  const [explainMemberId, setExplainMemberId] = useState('');
 
   // Assignment form state
   const [assignTargetType, setAssignTargetType] = useState<'role' | 'department' | 'group' | 'user' | 'attribute' | 'location'>('role');
@@ -91,6 +95,7 @@ export default function AppsPage() {
   // ── Handlers ─────────────────────────────────────────────────────────
   const handleSelectApp = (app: App) => {
     setSelectedApp(app);
+    setExplainMemberId('');
   };
 
   const handleOpenAssignModal = () => {
@@ -222,39 +227,32 @@ export default function AppsPage() {
   // ── Main Content ─────────────────────────────────────────────────────
   return (
     <div className="space-y-6">
-      {/* Page Header */}
-      <div className="flex items-center justify-between">
-        <div>
-          <h1 className="text-[22px] font-semibold tracking-tight text-ink">App Assignment</h1>
-          <p className="text-sm text-ink-muted mt-1">
-            Manage app access across roles, departments, groups, and users
-          </p>
-        </div>
-        {selectedApp && (
-          <div className="flex items-center gap-2">
-            {isOpsAdmin && (
-              <>
-                <button
-                  onClick={handleOpenTimelineModal}
-                  className="inline-flex items-center gap-2 h-9 px-4 text-sm font-medium text-ink-secondary border border-line rounded-md hover:bg-surface-alt transition-colors"
-                >
-                  <Clock className="h-4 w-4" />
-                  Timeline
-                </button>
-                <button
-                  onClick={handleOpenAssignModal}
-                  disabled={!entitled}
-                  title={entitled ? undefined : 'Your organization has no active entitlement for this product'}
-                  className="disabled:opacity-50 disabled:cursor-not-allowed inline-flex items-center gap-2 h-9 px-4 bg-primary text-white text-sm font-medium rounded-md hover:bg-primary-hover transition-colors"
-                >
-                  <Users className="h-4 w-4" />
-                  Assign App
-                </button>
-              </>
-            )}
-          </div>
-        )}
-      </div>
+      <PageHeader
+        title="Apps & Access"
+        subtitle="Products and apps, who has them, and why"
+        primaryAction={
+          selectedApp && isOpsAdmin ? (
+            <div className="flex items-center gap-2">
+              <button
+                onClick={handleOpenTimelineModal}
+                className="inline-flex items-center gap-2 h-9 px-4 text-sm font-medium text-ink-secondary border border-line rounded-md hover:bg-surface-alt transition-colors"
+              >
+                <Clock className="h-4 w-4" />
+                Timeline
+              </button>
+              <button
+                onClick={handleOpenAssignModal}
+                disabled={!entitled}
+                title={entitled ? undefined : 'Your organization has no active entitlement for this product'}
+                className="disabled:opacity-50 disabled:cursor-not-allowed inline-flex items-center gap-2 h-9 px-4 bg-primary text-white text-sm font-medium rounded-md hover:bg-primary-hover transition-colors"
+              >
+                <Users className="h-4 w-4" />
+                Assign App
+              </button>
+            </div>
+          ) : undefined
+        }
+      />
 
       {/* Search and Filters Bar */}
       <div className="flex flex-col md:flex-row gap-3 bg-surface border border-line p-4 rounded-lg shadow-sm">
@@ -317,6 +315,7 @@ export default function AppsPage() {
             isLoading={isLoadingApps}
             onSelect={handleSelectApp}
             selectedApp={selectedApp}
+            products={subscription?.products}
           />
 
           {/* Pagination Footer */}
@@ -526,6 +525,17 @@ export default function AppsPage() {
             </div>
           )}
         </div>
+      )}
+
+      {currentApp && isProduct && entitled && (
+        <section className="bg-surface border border-line rounded-lg shadow-card p-6 space-y-3" data-testid="why-this-role">
+          <div>
+            <h2 className="text-base font-semibold text-ink">Why does this person have this role?</h2>
+            <p className="text-xs text-ink-muted mt-1">Pick a member to see the assignments that give them {currentApp.name}.</p>
+          </div>
+          <UserSelect value={explainMemberId} onChange={setExplainMemberId} placeholder="Select a member" />
+          {explainMemberId && <EffectiveAccessPanel memberId={explainMemberId} productKey={appProductKey(currentApp)} />}
+        </section>
       )}
 
       {/* Assign App Modal */}

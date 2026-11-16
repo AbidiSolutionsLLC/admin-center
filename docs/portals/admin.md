@@ -54,7 +54,7 @@ Guards: `GuestGuard` redirects to `/overview` when a token is in memory. `AuthGu
 | `/people/:id` | Auth | `pages/people/UserDetailPage.tsx` (includes product access tab, effective access, security panel with MFA reset, product open items) |
 | `/roles`, `/roles/:id` | Auth | `pages/roles/RolesPage.tsx` |
 | `/groups` | Auth | `pages/groups/GroupsPage.tsx` |
-| `/apps` | Auth | `pages/apps/AppsPage.tsx` (App Access) |
+| `/apps` | Auth | `pages/apps/AppsPage.tsx` (App Access) |  <!-- 5.4: product cards show a seat meter, default role, or a locked state with the plan that includes it; the selected product has a "Why does this person have this role?" section (`features/apps/EffectiveAccessPanel.tsx`). Buttons on this page still use the legacy role checks. -->
 | `/subscription` | Auth | `pages/subscription/SubscriptionPage.tsx` |
 | `/security` | Auth | `pages/security/SecurityPage.tsx` |
 | `/audit-logs` | Auth | `pages/audit-logs/AuditLogsPage.tsx` |
@@ -122,7 +122,7 @@ The controller is in the file named after the mount unless the row says otherwis
 | GET | `/people/:id/history` | PEOPLE_ADMINS | `getUserHistory` |
 | GET | `/people/:id/app-history` | PEOPLE_ADMINS | `getUserAppAccessHistory` |
 | GET | `/people/:id/effective-permissions` | PEOPLE_ADMINS | `getEffectivePermissions` |
-| GET | `/people/:id/effective-access` | PEOPLE_ADMINS | `appAccess.controller.getEffectiveAccess` |
+| GET | `/people/:id/effective-access` | PEOPLE_ADMINS | `appAccess.controller.getEffectiveAccess` (elevation 5.4 adds `reasons`: per granted product, the assignments that explain the role, looked up by `company_id`) |
 | GET | `/people/:id/product-open-items` | PEOPLE_ADMINS | `getProductOpenItems` (proxies the products backend, see platform-api.md) |
 | GET | `/people/:id/effective-settings` | auth | `getUserEffectiveSettings` |
 | POST | `/people/:id/resend-invite` | PEOPLE_ADMINS | `resendInvite`; `?copy=true` issues a new invitation without e-mail and returns `data.invite_link` once (audited `user.invite_link_copied`) |
@@ -150,7 +150,7 @@ The controller is in the file named after the mount unless the row says otherwis
 | GET | `/organization/health` | auth | `getOrgHealth` |
 | GET | `/organization/history` | auth | `getOrgHistory` |
 | GET | `/announcement` | auth | `routes/announcement.routes.ts`: the platform announcement `{ message, severity, ends_at }` or `null`, cached 60 s in the process; shown by `AnnouncementBanner` in `AppShell` (Plan 4.12) |
-| GET | `/organization/subscription` | auth | `appAccess.controller.getSubscription` (org entitlements) |
+| GET | `/organization/subscription` | auth | `appAccess.controller.getSubscription` (org entitlements; elevation 5.4 adds `products`: one row per registry product with `entitled`, `seats_limit`, `seats_used` from the stored `SeatUsage`, `default_role`, and `included_in_plans` for a locked product) |
 | DELETE | `/organization/business-units/:id` | ROLE_ADMINS | `deleteBusinessUnit` |
 | GET | `/organization/:id` | auth | `getDepartmentById` |
 | POST | `/organization` | ROLE_ADMINS | `createDepartment` |

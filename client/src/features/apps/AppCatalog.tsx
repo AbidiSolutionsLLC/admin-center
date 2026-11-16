@@ -1,5 +1,9 @@
 // client/src/features/apps/AppCatalog.tsx
 import { Package, Users, Calendar, Clock } from 'lucide-react';
+import { Lock } from 'lucide-react';
+import { SeatMeter } from '@/components/ui/SeatMeter';
+import { isProductApp, appProductKey } from './productAccess';
+import type { SubscriptionProduct } from './productAccess';
 import type { App } from '@/types';
 
 interface AppCatalogProps {
@@ -7,6 +11,8 @@ interface AppCatalogProps {
   isLoading?: boolean;
   onSelect: (app: App) => void;
   selectedApp?: App | null;
+  /** Registry products with entitlement and seats (GET /organization/subscription `products`). */
+  products?: SubscriptionProduct[];
 }
 
 /**
@@ -18,6 +24,7 @@ export const AppCatalog: React.FC<AppCatalogProps> = ({
   isLoading = false,
   onSelect,
   selectedApp,
+  products = [],
 }) => {
   if (isLoading) {
     return (
@@ -70,13 +77,15 @@ export const AppCatalog: React.FC<AppCatalogProps> = ({
         const Icon = getCategoryIcon(app.category);
         const isDisabled = app.is_active === false || app.status === 'inactive';
         const isSelected = selectedApp?._id === app._id;
+        const product = isProductApp(app) ? products.find((p) => p.product_key === appProductKey(app)) : undefined;
+        const locked = !!product && !product.entitled;
 
         return (
           <button
             key={app._id}
             onClick={() => onSelect(app)}
             className={`p-4 rounded-lg border text-left transition-all hover:shadow-card ${
-              isDisabled ? 'opacity-65 grayscale-[30%]' : ''
+              isDisabled || locked ? 'opacity-65 grayscale-[30%]' : ''
             } ${
               isSelected
                 ? 'border-primary bg-primary-light shadow-card'
@@ -113,6 +122,26 @@ export const AppCatalog: React.FC<AppCatalogProps> = ({
               <p className="text-xs text-ink-secondary mt-2 line-clamp-2">
                 {app.description}
               </p>
+            )}
+
+            {product && (
+              <div className="mt-3 space-y-2" data-testid={`product-card-${product.product_key}`}>
+                {locked ? (
+                  <p className="flex items-center gap-1.5 text-xs text-ink-secondary" data-testid="product-locked">
+                    <Lock className="h-3 w-3" aria-hidden />
+                    {product.included_in_plans.length > 0
+                      ? `Locked: included in plan ${product.included_in_plans.map((p) => p.name).join(', ')}`
+                      : 'Locked: not in your plan'}
+                  </p>
+                ) : (
+                  <>
+                    <SeatMeter used={product.seats_used} total={product.seats_limit} label="Seats" />
+                    <p className="text-xs text-ink-muted">
+                      {product.default_role ? `Default role: ${product.default_role.name}` : 'No default role'}
+                    </p>
+                  </>
+                )}
+              </div>
             )}
 
             <div className="flex items-center gap-3 mt-3 text-xs text-ink-muted">

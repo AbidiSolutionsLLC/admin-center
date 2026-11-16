@@ -18,12 +18,48 @@ export interface Entitlement {
   seats_limit?: number | null;
 }
 
+/** One registry product as the tenant sees it (GET /organization/subscription `products`). */
+export interface SubscriptionProduct {
+  product_key: string;
+  name: string;
+  description: string | null;
+  app_id: string;
+  entitled: boolean;
+  status: string | null;
+  seats_limit: number | null;
+  /** Last SeatUsage count: members with effective access. */
+  seats_used: number;
+  default_role: { key: string; name: string } | null;
+  /** For a locked product: the active plans that include it. */
+  included_in_plans: Array<{ key: string; name: string }>;
+}
+
+/** An assignment that explains a member's role in a product (GET /people/:id/effective-access `reasons`). */
+export interface AccessReason {
+  assignment_id: string;
+  target_type: string;
+  target_name: string;
+  product_role_key: string | null;
+  include_descendants: boolean | null;
+}
+
 export interface EffectiveAccess {
   member_id: string;
   authz_ver: number;
   products: Record<string, { role: string; role_name: string; granted_by: string[] }>;
   denials: Record<string, string>;
+  reasons?: Record<string, AccessReason[]>;
 }
+
+/** Plain-language text for a denial code from computeEffectiveAccess. */
+export const DENIAL_TEXT: Record<string, string> = {
+  NO_ASSIGNMENT: 'No assignment reaches this member.',
+  NO_ENTITLEMENT: 'Assigned, but the organisation has no active entitlement for this product.',
+  NO_ROLE: 'Assigned, but the assignment names no usable role.',
+  ORG_SUSPENDED: 'The organisation is not active.',
+  MEMBER_NOT_ACTIVE: 'The member is not active.',
+  IDENTITY_NOT_ACTIVE: 'The sign-in identity of the member is not active.',
+};
 
 // Server field is `app_type` (App.model); `type` kept as a fallback for older payloads.
 export const isProductApp = (app?: { app_type?: string; type?: string } | null) =>
@@ -44,7 +80,7 @@ export const useSubscription = () =>
     queryKey: ['organization', 'subscription'],
     queryFn: async () => {
       const d = (await apiClient.get('/organization/subscription')).data.data;
-      return { entitlements: (d?.entitlements ?? []) as Entitlement[] };
+      return { entitlements: (d?.entitlements ?? []) as Entitlement[], products: (d?.products ?? []) as SubscriptionProduct[] };
     },
     staleTime: 60_000,
   });
