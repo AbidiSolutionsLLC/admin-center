@@ -73,13 +73,12 @@ The global per-IP rate limiter in `app.ts` also applies. Envelope: `{ success: t
 | POST | `/operators` | `{ email, full_name, password (≥12), roles? }` | Create (bcrypt cost 12, default roles `['platform_admin']`) |
 | PATCH | `/operators/:id` | partial `{ full_name, status ('active'\|'suspended'), roles, password, reset_mfa }` | Update; 409 `SELF_SUSPEND` when suspending yourself. `reset_mfa: true` sets `mfa = { enabled: false }` so the next login re-enrols |
 
-**Provisioning (`POST /orgs`) in order** (`routes.ts:187-289`):
-1. Plan must exist with `status: 'active'` (404 `PLAN_NOT_FOUND`).
-2. `Company.create` with `status: 'provisioning'`, `is_active: false` (outside the transaction).
-3. `seedDatabase(companyId)`: permissions, system roles, default security policy (outside the transaction).
-4. In one transaction: entitlements for every plan product (`source: 'plan'`), first admin `User` (`lifecycle_state: 'invited'`, legacy `role: 'Super Admin'`, pre-set `employee_id`), `UserRole` Super Admin, `Invitation` (`kind: 'first_admin'`, sha256 of a random token, 72 h, made by `lib/invitations.createInvitation`), default access rules (section 4), company set `active`, platform events, operator audit + mirrored tenant `AuditEvent`.
-5. After commit: welcome e-mail with `${CLIENT_URL}/onboarding?token=...&email=...`, accepted into the e-mail outbox (`EmailDelivery`, Plan 0.6, built, tests not yet run) and sent by the sender loop; its fate is in `EmailDelivery.status`. A failure to accept is logged and reported as `invite_email_sent: false`; it does not fail the request.
-6. On any failure the roles, role permissions, security policy and the `provisioning` company are deleted so the slug can be retried.
+**Provisioning (`POST /orgs`) in order** (`routes.ts`, Plan 2.5, built, tests not yet run):
+1. Plan must exist with `status: 'active'` (404 `PLAN_NOT_FOUND`). An existing slug returns 200 `already_existed`.
+2. `seedPermissions()` (global, idempotent) runs before the transaction.
+3. In **one transaction**: `Company` (created already `active`), system roles and role permissions (`seedSystemRoles(id, session)`), default security policy (`seedSecurityPolicy(id, session)`), entitlements for every plan product (`source: 'plan'`), first admin `User` (`lifecycle_state: 'invited'`, legacy `role: 'Super Admin'`, pre-set `employee_id`), `UserRole` Super Admin, `Invitation` (`kind: 'first_admin'`, sha256 of a random token, 72 h, made by `lib/invitations.createInvitation`), default access rules (section 4), platform events, operator audit + mirrored tenant `AuditEvent`, and the welcome e-mail row in the outbox (`EmailDelivery`, written with the transaction's session).
+4. After commit the sender loop delivers the e-mail (in test/`MOCK_EMAIL` mode an after-commit hook does); its fate is in `EmailDelivery.status`, linked from the response as `invite_delivery_id`. `invite_email_sent: true` means "accepted for delivery".
+5. On any failure the transaction rolls back and nothing exists for the slug (no company, roles, policy, e-mail or invitation), so the same request can be sent again. There is no cleanup step and no `provisioning` stub.
 
 **Status changes** (`setOrgStatus`, `routes.ts:291-322`): in one transaction set `status`/`is_active`, bump every member's `authz_ver`, mark legacy `RefreshToken`s revoked, revoke live `Session` rows (`revokeSessionsTx`, reason `org_suspended` / `org_closed`), emit the org event, write audit. After commit: tear down provider sessions, then fan out per-member `app_access.changed` in batches of 200.
 
@@ -125,7 +124,7 @@ No events for plan create/update, operator account changes, or IdP tenant approv
 ### Built ✓
 - Operator realm with mandatory TOTP and 30 min session: `server/src/identity/providers.ts` `buildOperator`, `server/src/operator/interactions.ts`.
 - Operator API with all endpoints in section 3.2, operator audit mirrored into the tenant audit log: `server/src/operator/routes.ts`.
-- Transactional provisioning with default access rules and cleanup on failure.
+- Transactional provisioning with default access rules; a failure leaves nothing behind.
 - Org status changes revoke tenant sessions and propagate access changes.
 - IP allow-list, fail-closed in production: `server/src/operator/middleware.ts`.
 - Console UI for orgs, plans, operators and audit: `client/src/pages/operator/*`.

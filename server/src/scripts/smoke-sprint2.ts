@@ -153,6 +153,30 @@ async function main() {
     check('E10 entitlements come from plan (people, projects, sign)', ['people', 'projects', 'sign'].every((k) => created.data?.entitlements.some((e) => e.product_key === k)) && !created.data?.entitlements.some((e) => e.product_key === 'desk'), created.data?.entitlements);
     res = await op('/orgs', 'POST', { name: 'Acme Corp', slug: 'acme', plan_key: 'professional', first_admin: { email: 'admin@acme.test', full_name: 'Ada Admin' } });
     check('E10 provisioning idempotent by slug', (await Company.countDocuments({ slug: 'acme' })) === 1, res.status);
+    // ── Plan 2.5: provisioning is one transaction ───────────────────────────────────────────
+    {
+      const { Role: RoleM, SecurityPolicy: PolM, EmailDelivery: DelM, Invitation: InvM, Plan: PlanM } = await import('../models');
+      // A plan that lists a product twice makes the entitlement insert fail AFTER the company, roles and policy were written.
+      await PlanM.create({ key: 'dup-products', name: 'Duplicate products', products: ['people', 'people'], status: 'active' });
+      const before = { roles: await RoleM.countDocuments(), policies: await PolM.countDocuments(), mails: await DelM.countDocuments(), invites: await InvM.countDocuments() };
+      const bad = await op('/orgs', 'POST', { name: 'Forced Fail', slug: 'forced-fail', plan_key: 'dup-products', first_admin: { email: 'admin@forced.test', full_name: 'Fay Fail' } });
+      check('2.5 a failure after seeding is not a 201', bad.status !== 201, bad.status);
+      check('2.5 ...and leaves no Company, Role, SecurityPolicy, e-mail row or invitation behind',
+        (await Company.countDocuments({ slug: 'forced-fail' })) === 0
+        && (await RoleM.countDocuments()) === before.roles && (await PolM.countDocuments()) === before.policies
+        && (await DelM.countDocuments()) === before.mails && (await InvM.countDocuments()) === before.invites
+        && !(await User.exists({ email: 'admin@forced.test' })), before);
+      await PlanM.updateOne({ key: 'dup-products' }, { $set: { products: ['people'] } });
+      const retry = await op('/orgs', 'POST', { name: 'Forced Fail', slug: 'forced-fail', plan_key: 'dup-products', first_admin: { email: 'admin@forced.test', full_name: 'Fay Fail' } });
+      const retryJson = await retry.json() as { data?: { id: string; status: string; invite_email_sent: boolean; invite_delivery_id: string | null } };
+      check('2.5 the same request then succeeds: active company, six system roles, one policy', retry.status === 201 && retryJson.data?.status === 'active'
+        && (await RoleM.countDocuments({ company_id: retryJson.data?.id, type: 'system' })) === 6 && (await PolM.countDocuments({ company_id: retryJson.data?.id })) === 1, retry.status);
+      const mail = retryJson.data?.invite_delivery_id ? await DelM.findById(retryJson.data.invite_delivery_id) : null;
+      check('2.5 the welcome e-mail row exists and is linked from the response', !!mail && mail.template === 'welcome' && retryJson.data?.invite_email_sent === true, mail?.status);
+      const inv = await InvM.findOne({ company_id: retryJson.data?.id, kind: 'first_admin' });
+      check('2.5 the first admin has one pending first_admin invitation', !!inv && inv.state === 'pending' && (await InvM.countDocuments({ company_id: retryJson.data?.id })) === 1, inv?.state);
+    }
+
     const admin = await User.findOne({ company_id: orgId, email: 'admin@acme.test' });
     check('E10 first admin membership created', !!admin, admin?.lifecycle_state);
 

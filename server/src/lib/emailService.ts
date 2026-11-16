@@ -7,7 +7,8 @@
 
 import nodemailer, { type Transporter } from 'nodemailer';
 import { EmailClient } from '@azure/communication-email';
-import mongoose, { Types } from 'mongoose';
+import mongoose, { Types, type ClientSession } from 'mongoose';
+import { onCommit } from './platformEvents';
 import { escapeHtml } from '../identity/html';
 import { EmailDelivery, EmailRelatedType } from '../models/EmailDelivery.model';
 import { encrypt } from './cryptoService';
@@ -18,7 +19,7 @@ interface WelcomeEmailParams {
   employee_id: string;
   company_name: string;
   invite_link?: string;
-  meta?: Pick<EmailMeta, 'company_id' | 'related'>;
+  meta?: Pick<EmailMeta, 'company_id' | 'related' | 'session'>;
 }
 
 interface BulkEmailResult {
@@ -100,6 +101,12 @@ export interface EmailMeta {
   related?: { type: EmailRelatedType; id: string };
   /** Send in the request instead of queueing (codes that expire in minutes, DRD §5.3). The row is still logged. */
   direct?: boolean;
+  /**
+   * The caller's transaction (Plan 2.5). The outbox row is written inside it, so a rolled-back change leaves no e-mail.
+   * Delivery never happens inside the transaction: the sender loop picks the row up after commit, and inline/direct
+   * mode delivers in an after-commit hook.
+   */
+  session?: ClientSession | null;
 }
 
 export interface SendEmailParams {
@@ -190,10 +197,12 @@ const sendEmailInternal = async (params: SendEmailParams): Promise<string | unde
     related: meta?.related,
   };
 
+  const session = meta?.session ?? undefined;
+
   if (!to || typeof to !== 'string' || !EMAIL_RE.test(to)) {
     console.warn(`[EmailService] Invalid or missing email address: "${to}". Skipping email delivery.`);
     if (dbConnected()) {
-      const row = await EmailDelivery.create({ ...base, to: String(to ?? ''), status: 'failed', last_error: 'INVALID_ADDRESS: invalid or missing recipient' });
+      const [row] = await EmailDelivery.create([{ ...base, to: String(to ?? ''), status: 'failed', last_error: 'INVALID_ADDRESS: invalid or missing recipient' }], { session });
       return String(row._id);
     }
     return undefined;
@@ -205,22 +214,31 @@ const sendEmailInternal = async (params: SendEmailParams): Promise<string | unde
   }
 
   const direct = inlineMode() || meta?.direct === true;
-  const row = await EmailDelivery.create({
+  const [row] = await EmailDelivery.create([{
     ...base,
     status: direct ? 'sending' : 'queued',
     attempts: direct ? 1 : 0,
     html_enc: encrypt(html),
     ...(text ? { text_enc: encrypt(text) } : {}),
-  });
+  }], { session });
   if (!direct) return String(row._id);
 
-  try {
-    const result = await deliverNow({ to, subject, html, text });
-    await EmailDelivery.updateOne({ _id: row._id }, { $set: { status: 'sent', sent_at: new Date(), provider_message_id: result.provider_message_id }, $unset: { html_enc: 1, text_enc: 1 } });
-  } catch (err) {
-    await EmailDelivery.updateOne({ _id: row._id }, { $set: { status: 'failed', last_error: errorText(err) }, $unset: { html_enc: 1, text_enc: 1 } });
-    throw err;
+  const deliverRow = async () => {
+    try {
+      const result = await deliverNow({ to, subject, html, text });
+      await EmailDelivery.updateOne({ _id: row._id }, { $set: { status: 'sent', sent_at: new Date(), provider_message_id: result.provider_message_id }, $unset: { html_enc: 1, text_enc: 1 } });
+    } catch (err) {
+      await EmailDelivery.updateOne({ _id: row._id }, { $set: { status: 'failed', last_error: errorText(err) }, $unset: { html_enc: 1, text_enc: 1 } });
+      throw err;
+    }
+  };
+
+  if (session) {
+    // Inside a transaction: deliver only if it commits. A failure is recorded on the row (and logged by onCommit).
+    onCommit(session, deliverRow);
+    return String(row._id);
   }
+  await deliverRow();
   return String(row._id);
 };
 

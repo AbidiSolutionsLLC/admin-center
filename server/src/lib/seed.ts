@@ -3,7 +3,7 @@ import { Permission } from '../models/Permission.model';
 import { Role } from '../models/Role.model';
 import { RolePermission } from '../models/RolePermission.model';
 import { SecurityPolicy } from '../models/SecurityPolicy.model';
-import { Types } from 'mongoose';
+import { Types, type ClientSession } from 'mongoose';
 import { ROLES } from '../constants/roles';
 
 /**
@@ -80,7 +80,7 @@ export const seedPermissions = async (): Promise<void> => {
  * 
  * @param companyId - The company to seed roles for
  */
-export const seedSystemRoles = async (companyId: string | Types.ObjectId): Promise<void> => {
+export const seedSystemRoles = async (companyId: string | Types.ObjectId, session?: ClientSession | null): Promise<void> => {
   console.log(`🌱 Seeding system roles for company ${companyId}...`);
 
   const companyObjectId = typeof companyId === 'string' ? new Types.ObjectId(companyId) : companyId;
@@ -133,7 +133,7 @@ export const seedSystemRoles = async (companyId: string | Types.ObjectId): Promi
           is_active: true,
         },
       },
-      { upsert: true, returnDocument: 'after' }
+      { upsert: true, returnDocument: 'after', session: session ?? undefined }
     );
 
     if (role) {
@@ -144,7 +144,7 @@ export const seedSystemRoles = async (companyId: string | Types.ObjectId): Promi
   console.log(`✅ System roles created: ${Object.keys(createdRoles).length}`);
 
   // Assign permissions to roles
-  await assignRolePermissions(createdRoles, companyObjectId);
+  await assignRolePermissions(createdRoles, companyObjectId, session);
 
   console.log('✅ System role permissions assigned');
 };
@@ -155,10 +155,11 @@ export const seedSystemRoles = async (companyId: string | Types.ObjectId): Promi
  */
 async function assignRolePermissions(
   roles: { [key: string]: Types.ObjectId },
-  companyId: Types.ObjectId
+  companyId: Types.ObjectId,
+  session?: ClientSession | null,
 ): Promise<void> {
   // Get all permissions from DB
-  const allPermissions = await Permission.find({}).lean();
+  const allPermissions = await Permission.find({}).session(session ?? null).lean();
   const permissionMap = new Map<string, Types.ObjectId>();
 
   allPermissions.forEach((p) => {
@@ -180,7 +181,7 @@ async function assignRolePermissions(
         $set: { granted },
         $setOnInsert: { role_id: roleId, permission_id: permId, company_id: companyId } 
       },
-      { upsert: true }
+      { upsert: true, session: session ?? undefined }
     );
   };
 
@@ -282,20 +283,20 @@ async function assignRolePermissions(
  *
  * @param companyId - The company to seed security policy for
  */
-export const seedSecurityPolicy = async (companyId: string | Types.ObjectId): Promise<void> => {
+export const seedSecurityPolicy = async (companyId: string | Types.ObjectId, session?: ClientSession | null): Promise<void> => {
   console.log(`🌱 Seeding security policy for company ${companyId}...`);
 
   const companyObjectId = typeof companyId === 'string' ? new Types.ObjectId(companyId) : companyId;
 
   // Check if policy already exists
-  const existingPolicy = await SecurityPolicy.findOne({ company_id: companyObjectId });
+  const existingPolicy = await SecurityPolicy.findOne({ company_id: companyObjectId }).session(session ?? null);
   if (existingPolicy) {
     console.log('Security policy already exists.');
     return;
   }
 
   // Create default security policy
-  await SecurityPolicy.create({
+  await SecurityPolicy.create([{
     company_id: companyObjectId,
     policy_name: 'Default Security Policy',
     description: 'Default security policy with standard protection settings',
@@ -317,7 +318,7 @@ export const seedSecurityPolicy = async (companyId: string | Types.ObjectId): Pr
       ip_blacklist: [],
       alert_settings: { },
     },
-  });
+  }], { session: session ?? undefined });
 
   console.log('✅ Security policy seeded');
 };
@@ -327,12 +328,12 @@ export const seedSecurityPolicy = async (companyId: string | Types.ObjectId): Pr
  *
  * @param companyId - The company to seed roles for
  */
-export const seedDatabase = async (companyId: string | Types.ObjectId): Promise<void> => {
+export const seedDatabase = async (companyId: string | Types.ObjectId, session?: ClientSession | null): Promise<void> => {
   console.log('🌱 Starting database seed...');
 
-  await seedPermissions();
-  await seedSystemRoles(companyId);
-  await seedSecurityPolicy(companyId);
+  await seedPermissions(); // global and idempotent: never part of a tenant transaction
+  await seedSystemRoles(companyId, session);
+  await seedSecurityPolicy(companyId, session);
 
   console.log('✅ Database seeding complete');
 };

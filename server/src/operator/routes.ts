@@ -23,9 +23,7 @@ import { seedProductRegistry } from '../lib/productCatalog';
 import { assertProductKey, assertProductKeys, listProducts } from '../lib/productRegistry';
 import { runInTransaction, emitPlatformEvent, emitAppAccessChanged, fanOutAppAccessChanged } from '../lib/platformEvents';
 import { RefreshToken } from '../models/RefreshToken.model';
-import { RolePermission } from '../models/RolePermission.model';
-import { SecurityPolicy } from '../models/SecurityPolicy.model';
-import { seedDatabase } from '../lib/seed';
+import { seedPermissions, seedSystemRoles, seedSecurityPolicy } from '../lib/seed';
 import { sendWelcomeEmail } from '../lib/emailService';
 import { revokeSessionsTx, destroyProviderSession } from '../identity/sessions';
 import { ROLES } from '../constants/roles';
@@ -193,16 +191,23 @@ router.post('/orgs', asyncHandler(async (req: Request, res: Response) => {
   const plan = await Plan.findOne({ key: input.plan_key, status: 'active' });
   if (!plan) throw new AppError('Plan not found or archived', 404, 'PLAN_NOT_FOUND');
 
-  const company = await Company.create({ name: input.name, slug, status: 'provisioning', is_active: false, plan: plan.key });
-  let rawToken = '';
+  // Permissions are global and idempotent, so they are seeded before the transaction. Everything the tenant owns
+  // (company, roles, security policy, entitlements, first admin, invitation, e-mail row, events) commits together or
+  // not at all (Plan 2.5): a failure leaves nothing behind and the same request can simply be sent again.
+  await seedPermissions();
   const passwordHash = await bcrypt.hash(crypto.randomBytes(24).toString('hex'), 10); // placeholder until invite acceptance
+  let rawToken = '';
+  let created;
   try {
-    // seedDatabase() takes no session: it runs before the txn and is undone in the catch below on failure.
-    await seedDatabase(company._id.toString()); // permissions + system roles + default security policy
-    const user = await runInTransaction(async (session) => {
+    created = await runInTransaction(async (session) => {
       const opts = { session: session ?? undefined };
       const actor = actorOf(req);
       const correlation_id = corrOf(req);
+
+      const [company] = await Company.create([{ name: input.name, slug, status: 'active', is_active: true, plan: plan.key }], opts);
+      await seedSystemRoles(company._id, session);
+      await seedSecurityPolicy(company._id, session);
+
       if (plan.products.length) {
         await OrganizationEntitlement.insertMany(plan.products.map((pk) => ({
           company_id: company._id, product_key: pk, status: 'active', source: 'plan', plan_key: plan.key, updated_by_operator_id: req.operator!._id,
@@ -233,8 +238,6 @@ router.post('/orgs', asyncHandler(async (req: Request, res: Response) => {
 
       await ensureDefaultAccess(company._id, user._id, session);
 
-      company.status = 'active';
-      company.is_active = true;
       company.employee_id_counter = 1;
       await company.save(opts);
 
@@ -255,40 +258,24 @@ router.post('/orgs', asyncHandler(async (req: Request, res: Response) => {
       });
       await emitAppAccessChanged(session, company._id, [user._id], { actor, correlation_id });
       await audit(req, { action: 'org.provisioned', target_type: 'Organization', target_id: orgId, company, details: { slug, plan_key: plan.key, first_admin_email: user.email } }, session);
-      return user;
-    });
 
-    // Side effects after commit.
-    // `invite_email_sent` means "accepted for delivery" (queued in the e-mail outbox); `invite_delivery_id` is its EmailDelivery id.
-    let emailSent = true;
-    let deliveryId: string | undefined;
-    try {
-      deliveryId = await sendWelcomeEmail({
+      // The welcome e-mail is queued in the outbox inside the transaction (its row rolls back with everything else);
+      // the sender loop delivers it after commit. Its fate is readable through the delivery id.
+      const deliveryId = await sendWelcomeEmail({
         email: user.email, full_name: user.full_name, employee_id: user.employee_id, company_name: company.name,
         invite_link: inviteLink(rawToken, user.email),
-        meta: { company_id: company._id, related: { type: 'user', id: String(user._id) } },
+        meta: { company_id: company._id, related: { type: 'user', id: String(user._id) }, session },
       });
-    } catch (e) {
-      emailSent = false;
-      console.error('[operator] invite email failed', e);
-    }
-
-    const detail = await orgDetail(company._id.toString());
-    ok(res, { ...detail, invite_email_sent: emailSent, invite_delivery_id: deliveryId ?? null, ...(!isProd() && process.env.EXPOSE_INVITE_TOKEN === 'true' ? { invite_token: rawToken } : {}) }, 201);
+      return { companyId: orgId, deliveryId };
+    });
   } catch (err) {
-    // The txn rolled back; undo the pre-txn company + seeded roles/policy so the slug is free for a clean retry.
     console.error('[operator] provisioning failed for', slug, err);
-    try {
-      const roleIds = await Role.find({ company_id: company._id }).distinct('_id');
-      await RolePermission.deleteMany({ role_id: { $in: roleIds } });
-      await Role.deleteMany({ company_id: company._id });
-      await SecurityPolicy.deleteMany({ company_id: company._id });
-      await Company.deleteOne({ _id: company._id, status: 'provisioning' });
-    } catch (cleanupErr) {
-      console.error('[operator] provisioning cleanup failed for', slug, cleanupErr);
-    }
-    throw err;
+    throw err; // the transaction rolled back: no company, roles or policy exist for this slug
   }
+
+  // `invite_email_sent` means "accepted for delivery" (queued in the e-mail outbox); `invite_delivery_id` is its EmailDelivery id.
+  const detail = await orgDetail(created.companyId);
+  ok(res, { ...detail, invite_email_sent: true, invite_delivery_id: created.deliveryId ?? null, ...(!isProd() && process.env.EXPOSE_INVITE_TOKEN === 'true' ? { invite_token: rawToken } : {}) }, 201);
 }));
 
 async function setOrgStatus(req: Request, res: Response, status: 'active' | 'suspended' | 'closed', action: string) {
