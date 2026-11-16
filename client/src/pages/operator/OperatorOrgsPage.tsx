@@ -11,30 +11,14 @@ import { useNavigate } from 'react-router-dom';
 import { ROUTES } from '@/constants/routes';
 import { Modal } from '@/components/ui/Modal';
 import { ConfirmDialog } from '@/components/ui/ConfirmDialog';
-import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import { toast } from 'sonner';
 import {
-  errMsg, idOf, operatorApi, useCreateOrg, useOperatorCan, useOrgAction, useOrgs, usePlans, useSetEntitlement,
+  idOf, useCreateOrg, useOperatorCan, useOrgAction, useOrgs, usePlans,
   type OperatorOrg,
 } from '@/features/operator/operatorApi';
 
 const inputCls = 'w-full h-9 px-3 text-sm bg-surface border border-line rounded-md focus:outline-none focus:ring-2 focus:ring-primary-600';
 const LIMIT = 20;
 const cap = (s: string) => s[0].toUpperCase() + s.slice(1);
-
-// Plan assignment: PATCH /orgs/:id {plan_key} -> { id, plan_key, products } (activates the plan's products).
-const useAssignPlan = () => {
-  const qc = useQueryClient();
-  return useMutation({
-    mutationFn: async ({ id, plan_key }: { id: string; plan_key: string }) => (await operatorApi.patch(`/orgs/${id}`, { plan_key })).data,
-    onSuccess: () => {
-      qc.invalidateQueries({ queryKey: ['operator', 'orgs'] });
-      qc.invalidateQueries({ queryKey: ['operator', 'org'] });
-      toast.success('Plan assigned');
-    },
-    onError: (e) => toast.error(errMsg(e, 'Failed to assign plan')),
-  });
-};
 
 function CreateOrgDialog({ onClose }: { onClose: () => void }) {
   const { data: plans } = usePlans();
@@ -92,58 +76,6 @@ function CreateOrgDialog({ onClose }: { onClose: () => void }) {
   );
 }
 
-function EntitlementsDialog({ org, onClose }: { org: OperatorOrg; onClose: () => void }) {
-  const { data: plans } = usePlans();
-  const setEnt = useSetEntitlement();
-  const assignPlan = useAssignPlan();
-  const [plan, setPlan] = useState('');
-  const { data: detail } = useQuery({
-    queryKey: ['operator', 'org', idOf(org)],
-    queryFn: async () => (await operatorApi.get(`/orgs/${idOf(org)}`)).data.data as OperatorOrg,
-  });
-  const ents = detail?.entitlements ?? org.entitlements ?? [];
-  const productKeys = Array.from(new Set([...(plans ?? []).flatMap((p) => p.products), ...ents.map((e) => e.product_key)]));
-  const statusOf = (k: string) => ents.find((e) => e.product_key === k)?.status ?? 'none';
-
-  return (
-    <Modal isOpen onClose={onClose} title={`Entitlements: ${org.name}`} size="sm">
-      <div className="space-y-4">
-        <div className="flex gap-2">
-          <select className={inputCls} value={plan} onChange={(e) => setPlan(e.target.value)}>
-            <option value="">Assign plan...</option>
-            {(plans ?? []).map((p) => <option key={p.key} value={p.key}>{p.name}</option>)}
-          </select>
-          <button
-            disabled={!plan || assignPlan.isPending}
-            onClick={() => assignPlan.mutate({ id: idOf(org), plan_key: plan })}
-            className="h-9 px-3 text-sm bg-primary text-white rounded-md disabled:opacity-50"
-          >Apply</button>
-        </div>
-        <div className="divide-y divide-line border border-line rounded-md">
-          {productKeys.map((k) => {
-            const st = statusOf(k);
-            const active = st === 'active';
-            return (
-              <div key={k} className="flex items-center justify-between p-3 text-sm">
-                <div>
-                  <p className="font-medium text-ink">{k}</p>
-                  <p className="text-xs text-ink-muted">{st}</p>
-                </div>
-                <button
-                  disabled={setEnt.isPending}
-                  onClick={() => setEnt.mutate({ orgId: idOf(org), productKey: k, status: active ? 'suspended' : 'active' })}
-                  className="h-8 px-3 text-xs rounded-md border border-line hover:bg-surface-alt"
-                >{active ? 'Suspend' : 'Activate'}</button>
-              </div>
-            );
-          })}
-          {productKeys.length === 0 && <p className="p-3 text-sm text-ink-muted italic">No products defined.</p>}
-        </div>
-      </div>
-    </Modal>
-  );
-}
-
 const fieldCls =
   'h-9 rounded-control border border-line bg-surface px-2 text-body text-ink focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary';
 const STATUS_VARIANT: Record<string, 'success' | 'warning' | 'neutral'> = { active: 'success', suspended: 'warning', closed: 'neutral' };
@@ -159,7 +91,6 @@ export default function OperatorOrgsPage() {
   const [trial, setTrial] = useUrlParam('trial');
   const [sort, setSort] = useUrlParam('sort', 'created');
   const [creating, setCreating] = useState(false);
-  const [editing, setEditing] = useState<OperatorOrg | null>(null);
   const [confirm, setConfirm] = useState<{ org: OperatorOrg; action: 'suspend' | 'reactivate' | 'close' } | null>(null);
 
   const params = {
@@ -234,7 +165,7 @@ export default function OperatorOrgsPage() {
           const o = row.original;
           return (
             <div className="flex justify-end gap-2 whitespace-nowrap" onClick={(e) => e.stopPropagation()}>
-              {canEntitle && <Button variant="outline" size="sm" onClick={() => setEditing(o)}>Entitlements</Button>}
+              {canEntitle && <Button variant="outline" size="sm" onClick={() => navigate(`${ROUTES.OPERATOR_ORGS}/${idOf(o)}?tab=products`)}>Entitlements</Button>}
               {canWrite && o.status === 'active' && <Button variant="outline" size="sm" onClick={() => setConfirm({ org: o, action: 'suspend' })}>Suspend</Button>}
               {canWrite && o.status === 'suspended' && <Button variant="outline" size="sm" onClick={() => setConfirm({ org: o, action: 'reactivate' })}>Reactivate</Button>}
               {canClose && o.status !== 'closed' && <Button variant="outline" size="sm" onClick={() => setConfirm({ org: o, action: 'close' })}>Close</Button>}
@@ -243,7 +174,7 @@ export default function OperatorOrgsPage() {
         },
       },
     ],
-    [canEntitle, canWrite, canClose]
+    [canEntitle, canWrite, canClose, navigate]
   );
 
   return (
@@ -299,7 +230,6 @@ export default function OperatorOrgsPage() {
       </ListPage>
 
       {creating && <CreateOrgDialog onClose={() => setCreating(false)} />}
-      {editing && <EntitlementsDialog org={editing} onClose={() => setEditing(null)} />}
       <ConfirmDialog
         isOpen={!!confirm}
         onClose={() => setConfirm(null)}

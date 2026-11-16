@@ -5,7 +5,8 @@ export const AUDIT_CATEGORIES = ['tenant', 'plan', 'entitlement', 'onboarding', 
 export type AuditCategory = (typeof AUDIT_CATEGORIES)[number];
 
 export interface IOperatorAuditEvent extends Document {
-  operator_id: Types.ObjectId;
+  /** Absent on an entry written by the system itself (a scheduled job); `operator_email` is then `system`. */
+  operator_id?: Types.ObjectId;
   operator_email: string;
   action: string;
   target_type: string;
@@ -22,7 +23,7 @@ export interface IOperatorAuditEvent extends Document {
 }
 
 const OperatorAuditEventSchema = new Schema<IOperatorAuditEvent>({
-  operator_id: { type: Schema.Types.ObjectId, ref: 'OperatorAccount', required: true },
+  operator_id: { type: Schema.Types.ObjectId, ref: 'OperatorAccount' },
   operator_email: { type: String, required: true },
   action: { type: String, required: true },
   target_type: { type: String, required: true },

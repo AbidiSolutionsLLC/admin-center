@@ -32,6 +32,7 @@ import { buildAuditFilter, categoryOf, csvRow, CSV_COLUMNS, EXPORT_ROW_CAP, writ
 import { requirePermission, anyOperator, permissionsFor, operatorRolesSchema } from './permissions';
 import { findFirstAdmin, onboardingRoutes } from './onboarding';
 import { tenantRoutes } from './tenants';
+import { overrideRoutes } from './overrides';
 import { planRoutes, applyPlanToOrg, ensureDefaultAccess, bumpOrgAuthz, dryRunSummary } from './plans';
 
 const router = Router();
@@ -358,12 +359,22 @@ router.patch('/orgs/:id', requirePermission('tenants.write'), asyncHandler(async
 
 router.put('/orgs/:id/entitlements/:productKey', requirePermission('entitlements.write'), asyncHandler(async (req: Request, res: Response) => {
   const key = await assertProductKey(productKey.parse(req.params.productKey));
-  const body = z.object({ status: z.enum(['active', 'suspended']), seats_limit: z.number().int().min(0).nullable().optional() }).parse(req.body);
+  const body = z.object({
+    status: z.enum(['active', 'suspended']), seats_limit: z.number().int().min(0).nullable().optional(),
+    reason: z.string().trim().max(500).optional(),
+    expires_at: z.string().refine((v) => !Number.isNaN(new Date(v).getTime()), 'Invalid date').nullable().optional(),
+  }).parse(req.body);
+  // An override says why it exists (Plan 4.6) and may say when it ends; only an active override can expire (DRD 3.2 rule 5).
+  if (!body.reason) throw new AppError('A reason is required', 400, 'REASON_REQUIRED');
+  const expiresAt = body.expires_at ? new Date(body.expires_at) : null;
+  if (expiresAt && expiresAt.getTime() <= Date.now()) throw new AppError('expires_at must be in the future', 400, 'VALIDATION_ERROR');
+  if (expiresAt && body.status !== 'active') throw new AppError('Only an active override can expire', 400, 'VALIDATION_ERROR');
   const company = await Company.findById(oid(String(req.params.id)));
   if (!company) throw new AppError('Organization not found', 404, 'NOT_FOUND');
   const prior = await OrganizationEntitlement.findOne({ company_id: company._id, product_key: key });
-  const set: Record<string, unknown> = { status: body.status, source: 'operator', updated_by_operator_id: req.operator!._id };
+  const set: Record<string, unknown> = { status: body.status, source: 'operator', updated_by_operator_id: req.operator!._id, reason: body.reason };
   const unset: Record<string, 1> = {};
+  if (expiresAt) set.expires_at = expiresAt; else unset.expires_at = 1; // a new PUT replaces the previous override, expiry included
   if (body.seats_limit === null) unset.seats_limit = 1;
   else if (body.seats_limit !== undefined) set.seats_limit = body.seats_limit;
   const ent = await runInTransaction(async (session) => {
@@ -374,18 +385,18 @@ router.put('/orgs/:id/entitlements/:productKey', requirePermission('entitlements
     );
     await emitPlatformEvent(session, {
       org_id: company._id.toString(), type: 'entitlement.changed', subject: { type: 'org', id: company._id.toString() },
-      actor: actorOf(req), correlation_id: corrOf(req), data: { product_key: key, status: ent!.status },
+      actor: actorOf(req), correlation_id: corrOf(req), data: { product_key: key, status: ent!.status, source: 'operator', ...(ent!.seats_limit != null ? { seats_limit: ent!.seats_limit } : {}), ...(expiresAt ? { expires_at: expiresAt.toISOString() } : {}) },
     });
     await bumpOrgAuthz(company._id, session);
     await audit(req, {
-      action: 'entitlement.updated', target_type: 'Entitlement', target_id: `${company._id}:${key}`, company,
-      before: prior ? { status: prior.status, seats_limit: prior.seats_limit ?? null } : null,
-      after: { product_key: key, status: ent!.status, seats_limit: ent!.seats_limit ?? null },
+      action: 'entitlement.updated', target_type: 'Entitlement', target_id: `${company._id}:${key}`, company, reason: body.reason,
+      before: prior ? { status: prior.status, source: prior.source === 'operator' ? 'override' : prior.source, seats_limit: prior.seats_limit ?? null, expires_at: prior.expires_at ?? null } : null,
+      after: { product_key: key, status: ent!.status, source: 'override', seats_limit: ent!.seats_limit ?? null, expires_at: expiresAt },
     }, session);
     return ent;
   });
   await fanOutOrgAccess(req, company._id);
-  ok(res, { product_key: ent!.product_key, status: ent!.status, seats_limit: ent!.seats_limit ?? null, source: ent!.source });
+  ok(res, { product_key: ent!.product_key, status: ent!.status, seats_limit: ent!.seats_limit ?? null, source: ent!.source, reason: ent!.reason ?? null, expires_at: ent!.expires_at ?? null });
 }));
 
 // ── Identity provider tenant approval (review M-2, decided 2026-11-12) ──
@@ -426,7 +437,7 @@ router.post('/orgs/:id/identity-providers/:connId/approve-tenant', requirePermis
 
 // ── Audit ────────────────────────────────────────────────────────────────────────────────────
 const auditOut = (e: any) => ({
-  id: e._id.toString(), operator_id: e.operator_id.toString(), operator_email: e.operator_email, action: e.action,
+  id: e._id.toString(), operator_id: e.operator_id?.toString() ?? null, operator_email: e.operator_email, action: e.action,
   category: e.category ?? categoryOf(e.action), result: e.result ?? 'success', reason: e.reason ?? null,
   target_type: e.target_type, target_id: e.target_id ?? null, company_id: e.company_id?.toString() ?? null,
   before: e.before ?? null, after: e.after ?? null,
@@ -500,5 +511,6 @@ router.patch('/operators/:id', requirePermission('operators.write'), asyncHandle
 router.use(onboardingRoutes({ ok, oid, audit, actorOf, corrOf })); // Plan 2.6
 router.use(tenantRoutes({ ok, oid, audit })); // Plan 4.4
 router.use(planRoutes({ ok, audit, corrOf })); // Plan 4.5
+router.use(overrideRoutes({ ok, oid, audit, actorOf, corrOf })); // Plan 4.6
 
 export default router;

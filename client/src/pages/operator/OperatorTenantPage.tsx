@@ -8,13 +8,14 @@ import { Tag } from '@/components/ui/Tag';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Textarea } from '@/components/ui/Textarea';
+import { Modal } from '@/components/ui/Modal';
 import { FormField } from '@/components/ui/FormField';
 import { Timeline } from '@/components/ui/Timeline';
 import { ConfirmDialog } from '@/components/ui/ConfirmDialog';
 import { EmptyState } from '@/components/ui/EmptyState';
 import { ROUTES } from '@/constants/routes';
 import {
-  useAddNote, useApproveTenant, useChangeFirstAdmin, useDeleteNote, useOperatorAudit, useOperatorCan, useOperatorMe, useOrg,
+  useAddNote, useApproveTenant, useChangeFirstAdmin, useChangePlan, useOrgPlanPreview, usePlans, useRemoveOverride, useSetEntitlement, useDeleteNote, useOperatorAudit, useOperatorCan, useOperatorMe, useOrg,
   useOrgAdmins, useOrgIdps, useOrgNotes, useOrgOnboarding, useOrgProducts, usePatchOrg, useResendInvite,
   type OrgAdmin, type OrgProduct,
 } from '@/features/operator/operatorApi';
@@ -101,18 +102,168 @@ function SummaryTab({ id }: { id: string }) {
   );
 }
 
+function OverrideDialog({ orgId, product, onClose }: { orgId: string; product: OrgProduct; onClose: () => void }) {
+  const set = useSetEntitlement();
+  const [status, setStatus] = useState<'active' | 'suspended'>(product.status === 'suspended' ? 'suspended' : 'active');
+  const [seats, setSeats] = useState(product.seats_limit === null ? '' : String(product.seats_limit));
+  const [reason, setReason] = useState('');
+  const [expires, setExpires] = useState('');
+  const submit = () =>
+    set.mutate(
+      {
+        orgId, productKey: product.product_key, status, reason: reason.trim(),
+        seats_limit: seats === '' ? null : Number(seats),
+        expires_at: status === 'active' && expires ? new Date(`${expires}T23:59:59`).toISOString() : null,
+      },
+      { onSuccess: onClose }
+    );
+  return (
+    <Modal
+      isOpen
+      onClose={onClose}
+      title={`Override: ${product.name ?? product.product_key}`}
+      size="sm"
+      footer={
+        <>
+          <Button variant="outline" onClick={onClose}>Cancel</Button>
+          <Button disabled={!reason.trim() || set.isPending} onClick={submit}>Save override</Button>
+        </>
+      }
+    >
+      <div className="space-y-3">
+        <FormField label="State" required>
+          {(p) => (
+            <select {...p} className="h-9 w-full rounded-control border border-line bg-surface px-2 text-body text-ink" value={status} onChange={(e) => setStatus(e.target.value as 'active' | 'suspended')}>
+              <option value="active">Active</option>
+              <option value="suspended">Suspended</option>
+            </select>
+          )}
+        </FormField>
+        <FormField label="Seat limit" hint="Empty = no limit">
+          {(p) => <Input {...p} type="number" min={0} value={seats} onChange={(e) => setSeats(e.target.value)} />}
+        </FormField>
+        {status === 'active' && (
+          <FormField label="Expires" hint="Empty = never. At the end the product returns to the plan's state.">
+            {(p) => <Input {...p} type="date" value={expires} onChange={(e) => setExpires(e.target.value)} />}
+          </FormField>
+        )}
+        <FormField label="Reason" hint="Recorded in the audit log" required>
+          {(p) => <Textarea {...p} maxLength={500} rows={2} value={reason} onChange={(e) => setReason(e.target.value)} />}
+        </FormField>
+      </div>
+    </Modal>
+  );
+}
+
+/** What moving the organization to another plan would change (a dry run), then the confirm. */
+function ChangePlanDialog({ orgId, current, onClose }: { orgId: string; current: string | null; onClose: () => void }) {
+  const { data: plans } = usePlans();
+  const [plan, setPlan] = useState('');
+  const preview = useOrgPlanPreview(orgId, plan);
+  const change = useChangePlan(orgId);
+  const lists = preview.data && ([['Products added', preview.data.added], ['Products restricted', preview.data.restricted]] as const);
+  return (
+    <Modal
+      isOpen
+      onClose={onClose}
+      title="Change plan"
+      size="sm"
+      footer={
+        <>
+          <Button variant="outline" onClick={onClose}>Cancel</Button>
+          <Button disabled={!plan || !preview.data || change.isPending} onClick={() => change.mutate(plan, { onSuccess: onClose })}>Change plan</Button>
+        </>
+      }
+    >
+      <div className="space-y-3">
+        <FormField label="Plan" hint={current ? `Current plan: ${current}` : undefined}>
+          {(p) => (
+            <select {...p} className="h-9 w-full rounded-control border border-line bg-surface px-2 text-body text-ink" value={plan} onChange={(e) => setPlan(e.target.value)}>
+              <option value="">Choose a plan</option>
+              {(plans ?? []).filter((x) => x.status !== 'archived').map((x) => <option key={x.key} value={x.key}>{x.name}</option>)}
+            </select>
+          )}
+        </FormField>
+        {plan && preview.isLoading && <p className="text-body text-ink-muted">Working out the changes</p>}
+        {lists && (
+          <div className="space-y-2">
+            {lists.map(([title, rows]) => (
+              <div key={title}>
+                <h3 className="text-label uppercase text-ink-muted">{title}</h3>
+                <p className="text-body text-ink">{rows.length ? rows.map((r) => r.product_key).join(', ') : 'None'}</p>
+              </div>
+            ))}
+            <p className="text-table text-ink-muted">Overrides are not changed. A restricted product keeps its data but has no access.</p>
+          </div>
+        )}
+      </div>
+    </Modal>
+  );
+}
+
 function ProductsTab({ id }: { id: string }) {
   const { data, isLoading, isError, refetch } = useOrgProducts(id);
+  const { data: org } = useOrg(id);
+  const remove = useRemoveOverride(id);
+  const canEntitle = useOperatorCan('entitlements.write');
+  const canWrite = useOperatorCan('tenants.write');
+  const [overriding, setOverriding] = useState<OrgProduct | null>(null);
+  const [removing, setRemoving] = useState<OrgProduct | null>(null);
+  const [changingPlan, setChangingPlan] = useState(false);
   const columns: ColumnDef<OrgProduct>[] = [
     { header: 'Product', id: 'name', cell: ({ row }) => <span className="font-medium">{row.original.name ?? row.original.product_key}</span> },
     { header: 'State', id: 'state', cell: ({ row }) => <StatusBadge variant={STATUS_VARIANT[row.original.status] ?? 'neutral'}>{row.original.status.replace('_', ' ')}</StatusBadge> },
-    { header: 'Source', id: 'source', cell: ({ row }) => (row.original.source === 'operator' ? 'Override' : row.original.source ?? '-') },
-    { header: 'Plan', id: 'plan', cell: ({ row }) => row.original.plan_key ?? '-' },
+    {
+      header: 'Source',
+      id: 'source',
+      cell: ({ row }) => (
+        <div>
+          <p>{row.original.source === 'operator' ? 'Override' : row.original.source ?? '-'}</p>
+          {row.original.reason && <p className="text-label text-ink-muted">{row.original.reason}</p>}
+        </div>
+      ),
+    },
+    { header: 'Plan', id: 'plan', cell: ({ row }) => (row.original.plan_key ? `${row.original.plan_key}${row.original.plan_version ? ` v${row.original.plan_version}` : ''}` : '-') },
     { header: 'Seat limit', id: 'seats', cell: ({ row }) => <span className="tabular">{row.original.seats_limit ?? 'No limit'}</span> },
+    { header: 'Expires', id: 'expires', cell: ({ row }) => day(row.original.expires_at) },
+    {
+      header: '',
+      id: 'actions',
+      cell: ({ row }) =>
+        canEntitle ? (
+          <div className="flex justify-end gap-2 whitespace-nowrap">
+            <Button variant="outline" size="sm" onClick={() => setOverriding(row.original)}>Override</Button>
+            {row.original.source === 'operator' && <Button variant="outline" size="sm" onClick={() => setRemoving(row.original)}>Remove override</Button>}
+          </div>
+        ) : null,
+    },
   ];
   if (isError) return <EmptyState title="Could not load products" description="Try again." action={{ label: 'Retry', onClick: () => refetch() }} />;
   if (isLoading) return <p className="text-body text-ink-muted">Loading</p>;
-  return <DataTable columns={columns} data={data ?? []} />;
+  return (
+    <div className="space-y-3">
+      {canWrite && (
+        <div className="flex items-center justify-between">
+          <p className="text-body text-ink-secondary">Plan: {org?.plan_key ?? 'none'}</p>
+          <Button variant="outline" onClick={() => setChangingPlan(true)}>Change plan</Button>
+        </div>
+      )}
+      <DataTable columns={columns} data={data ?? []} />
+      {overriding && <OverrideDialog orgId={id} product={overriding} onClose={() => setOverriding(null)} />}
+      {changingPlan && <ChangePlanDialog orgId={id} current={org?.plan_key ?? null} onClose={() => setChangingPlan(false)} />}
+      <ConfirmDialog
+        isOpen={!!removing}
+        onClose={() => setRemoving(null)}
+        title={removing ? `Remove the override on ${removing.name ?? removing.product_key}?` : ''}
+        description="The product returns to the plan's state, or is removed when the plan does not include it."
+        confirmLabel="Remove override"
+        variant="warning"
+        reasonField={{ required: true }}
+        isLoading={remove.isPending}
+        onConfirm={(reason) => removing && remove.mutate({ productKey: removing.product_key, reason: reason ?? '' }, { onSettled: () => setRemoving(null) })}
+      />
+    </div>
+  );
 }
 
 function OnboardingTab({ id }: { id: string }) {

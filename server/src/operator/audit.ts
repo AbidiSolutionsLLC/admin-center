@@ -69,7 +69,8 @@ export function csvField(v: unknown): string {
 
 export const csvRow = (cells: unknown[]) => cells.map(csvField).join(',') + '\r\n';
 
-export interface AuditActor { operator: { _id: Types.ObjectId; email: string }; correlation_id?: string; ip?: string }
+/** `operator: null` = the system itself (a scheduled job). */
+export interface AuditActor { operator: { _id: Types.ObjectId; email: string } | null; correlation_id?: string; ip?: string }
 export interface AuditInput {
   action: string; target_type: string; target_id: string; company?: { _id: Types.ObjectId; name: string };
   details?: Record<string, unknown>; before?: unknown; after?: unknown;
@@ -85,13 +86,13 @@ export interface AuditInput {
 export async function writeAudit(a: AuditActor, p: AuditInput, session?: ClientSession): Promise<void> {
   const opts = { session: session ?? undefined };
   await OperatorAuditEvent.create([{
-    operator_id: a.operator._id, operator_email: a.operator.email, action: p.action, target_type: p.target_type, target_id: p.target_id,
+    operator_id: a.operator?._id, operator_email: a.operator?.email ?? 'system', action: p.action, target_type: p.target_type, target_id: p.target_id,
     company_id: p.company?._id, details: redact(p.details), correlation_id: a.correlation_id,
     category: p.category ?? categoryOf(p.action), before: redact(p.before), after: redact(p.after), reason: p.reason, result: p.result ?? 'success',
   }], opts);
   if (p.company && p.mirror !== false) {
     await AuditEvent.create([{
-      company_id: p.company._id, actor_id: null, actor_email: `operator:${a.operator.email}`, action: p.action, module: 'operator',
+      company_id: p.company._id, actor_id: null, actor_email: a.operator ? `operator:${a.operator.email}` : 'system', action: p.action, module: 'operator',
       category: 'Operator', object_type: p.target_type, object_id: p.target_id, object_label: p.company.name,
       before_state: (p.before as any) ?? null, after_state: (p.after as any) ?? p.details ?? null, ip_address: a.ip, source: 'operator',
       correlation_id: a.correlation_id,

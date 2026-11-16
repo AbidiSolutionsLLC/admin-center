@@ -88,3 +88,30 @@ test('not found and error states', async ({ page }) => {
   await page.goto('/operator/organizations/missing');
   await expect(page.getByText('Not found')).toBeVisible();
 });
+
+test('plan 4.6: set an override with a reason and expiry; remove an override with a reason', async ({ page }) => {
+  await mockApi(page, [...ALL, 'entitlements.write']);
+  let put: unknown = null;
+  let removeUrl = '';
+  await page.route('**/operator/v1/orgs/c1/products', (route) =>
+    fulfillJson(route, { success: true, data: [
+      { product_key: 'people', name: 'People', status: 'active', source: 'plan', plan_key: 'professional', plan_version: 2, seats_limit: 50 },
+      { product_key: 'sign', name: 'Sign', status: 'active', source: 'operator', plan_key: null, seats_limit: null, reason: 'Pilot access', expires_at: '2027-01-31T00:00:00.000Z' },
+    ] })
+  );
+  await page.route('**/operator/v1/orgs/c1/entitlements/people', (route) => { put = route.request().postDataJSON(); return fulfillJson(route, { success: true, data: {} }); });
+  await page.route('**/operator/v1/orgs/c1/entitlements/sign/override**', (route) => { removeUrl = route.request().url(); return fulfillJson(route, { success: true, data: { status: 'removed' } }); });
+  await page.goto('/operator/organizations/c1?tab=products');
+  await expect(page.getByRole('row', { name: /Sign/ })).toContainText('Pilot access');
+  await page.getByRole('row', { name: /People/ }).getByRole('button', { name: 'Override' }).click();
+  const dialog = page.getByRole('dialog', { name: 'Override: People' });
+  await expect(dialog.getByRole('button', { name: 'Save override' })).toBeDisabled();
+  await dialog.getByLabel('Reason').fill('Billing hold');
+  await dialog.getByLabel('Expires').fill('2027-03-01');
+  await dialog.getByRole('button', { name: 'Save override' }).click();
+  await expect.poll(() => (put as { reason?: string } | null)?.reason).toBe('Billing hold');
+  await page.getByRole('row', { name: /Sign/ }).getByRole('button', { name: 'Remove override' }).click();
+  await page.getByRole('dialog').getByRole('textbox').fill('Pilot over');
+  await page.getByRole('dialog').getByRole('button', { name: 'Remove override' }).click();
+  await expect.poll(() => removeUrl).toContain('reason=Pilot');
+});

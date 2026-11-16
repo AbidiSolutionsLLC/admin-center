@@ -10,6 +10,7 @@ import { startPlatformDispatcher, stopPlatformDispatcher } from './lib/platformD
 import { startEmailSender, stopEmailSender } from './lib/emailSender';
 import { startInvitationJobs, stopInvitationJobs } from './lib/invitationJobs';
 import { startJobRunner, stopJobRunner } from './lib/jobs';
+import { startOverrideJobs, stopOverrideJobs } from './lib/overrideJobs';
 
 export { createServer };
 
@@ -44,6 +45,9 @@ connectDB().then(async () => {
     startEmailSender();
     startInvitationJobs();
     startJobRunner();
+    startOverrideJobs();
+    process.once('SIGTERM', stopOverrideJobs);
+    process.once('SIGINT', stopOverrideJobs);
     process.once('SIGTERM', stopJobRunner);
     process.once('SIGINT', stopJobRunner);
     process.once('SIGTERM', stopInvitationJobs);

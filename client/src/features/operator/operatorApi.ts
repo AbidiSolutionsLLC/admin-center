@@ -111,17 +111,20 @@ export const useCreateOrg = () => {
   });
 };
 
+export interface EntitlementOverride { orgId: string; productKey: string; status: 'active' | 'suspended'; seats_limit?: number | null; reason: string; expires_at?: string | null }
+
+/** Set an override (PUT): a reason is required, an active override may expire. */
 export const useSetEntitlement = () => {
   const qc = useQueryClient();
   return useMutation({
-    mutationFn: async ({ orgId, productKey, status, seats_limit }: { orgId: string; productKey: string; status: string; seats_limit?: number }) =>
-      (await operatorApi.put(`/orgs/${orgId}/entitlements/${productKey}`, { status, seats_limit })).data,
+    mutationFn: async ({ orgId, productKey, ...body }: EntitlementOverride) =>
+      (await operatorApi.put(`/orgs/${orgId}/entitlements/${productKey}`, body)).data,
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ['operator', 'orgs'] });
       qc.invalidateQueries({ queryKey: ['operator', 'org'] });
-      toast.success('Entitlement updated');
+      toast.success('Override saved');
     },
-    onError: (e) => toast.error(errMsg(e, 'Failed to update entitlement')),
+    onError: (e) => toast.error(errMsg(e, 'Failed to save override')),
   });
 };
 
@@ -198,7 +201,10 @@ export const useOperatorAudit = (params: AuditFilters & { cursor?: string; limit
 
 // ── Tenant profile (Plan 4.4) ────────────────────────────────────────────────────────────────
 export interface OperatorOrgDetail extends OperatorOrg { first_admin: { email: string; full_name: string; lifecycle_state: string } | null }
-export interface OrgProduct { product_key: string; name?: string; status: string; source: string | null; plan_key: string | null; seats_limit: number | null }
+export interface OrgProduct {
+  product_key: string; name?: string; status: string; source: string | null; plan_key: string | null; seats_limit: number | null;
+  plan_version?: number | null; reason?: string | null; expires_at?: string | null;
+}
 export interface OrgAdmin { id: string; full_name: string; email: string; roles: string[]; mfa_enabled: boolean; last_login_at: string | null; status: string }
 export interface OrgNote { id: string; operator_id: string; operator_email: string; body: string; created_at: string }
 export interface OrgOnboarding {
@@ -249,3 +255,18 @@ export const useChangeFirstAdmin = (id: string) =>
   useOrgMutation(id, (body: { email: string; full_name: string }) => operatorApi.patch(`/orgs/${id}/onboarding/first-admin`, body), 'First admin updated', 'Failed to update first admin');
 export const useApproveTenant = (id: string) =>
   useOrgMutation(id, (connId: string) => operatorApi.post(`/orgs/${id}/identity-providers/${connId}/approve-tenant`), 'Tenant approved', 'Failed to approve');
+
+export const useRemoveOverride = (id: string) =>
+  useOrgMutation(id, ({ productKey, reason }: { productKey: string; reason: string }) =>
+    operatorApi.delete(`/orgs/${id}/entitlements/${productKey}/override`, { params: { reason } }), 'Override removed', 'Failed to remove override');
+
+/** Dry run of moving one organization to a plan (PATCH ?dry_run=true): nothing is written. */
+export const useOrgPlanPreview = (id: string, planKey: string) =>
+  useQuery({
+    enabled: !!planKey,
+    queryKey: ['operator', 'org', id, 'plan-preview', planKey],
+    gcTime: 0,
+    queryFn: async () => (await operatorApi.patch(`/orgs/${id}`, { plan_key: planKey }, { params: { dry_run: true } })).data.data as PlanPreview,
+  });
+export const useChangePlan = (id: string) =>
+  useOrgMutation(id, (plan_key: string) => operatorApi.patch(`/orgs/${id}`, { plan_key }), 'Plan changed', 'Failed to change plan');

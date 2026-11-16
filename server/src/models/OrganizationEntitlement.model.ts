@@ -13,6 +13,10 @@ export interface IOrganizationEntitlement extends Document {
   plan_key?: string;
   /** Plan version when the plan was applied (Plan 4.5) */
   plan_version?: number;
+  /** Required on an override (`source: 'operator'`): why it was set (Plan 4.6) */
+  reason?: string;
+  /** Overrides only: when it falls back to plan state (hourly job `lib/overrideJobs.ts`) */
+  expires_at?: Date;
   updated_by_operator_id?: Types.ObjectId;
 }
 
@@ -24,9 +28,12 @@ const OrganizationEntitlementSchema = new Schema<IOrganizationEntitlement>({
   source: { type: String, enum: ['plan', 'operator', 'seed'], default: 'operator' },
   plan_key: String,
   plan_version: Number,
+  reason: { type: String, maxlength: 500 },
+  expires_at: Date,
   updated_by_operator_id: { type: Schema.Types.ObjectId, ref: 'OperatorAccount' },
 }, { timestamps: { createdAt: 'created_at', updatedAt: 'updated_at' } });
 
 OrganizationEntitlementSchema.index({ company_id: 1, product_key: 1 }, { unique: true });
+OrganizationEntitlementSchema.index({ expires_at: 1 }, { sparse: true });
 
 export const OrganizationEntitlement = model<IOrganizationEntitlement>('OrganizationEntitlement', OrganizationEntitlementSchema);

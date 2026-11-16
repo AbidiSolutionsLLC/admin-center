@@ -297,7 +297,7 @@ async function main() {
 
     // ── entitlement suspend → effective access denies ────────────────────────────────────
     const verBefore = (await User.findById(me._id))?.authz_ver ?? 0;
-    res = await op(`/orgs/${orgId}/entitlements/projects`, 'PUT', { status: 'suspended' });
+    res = await op(`/orgs/${orgId}/entitlements/projects`, 'PUT', { status: 'suspended', reason: 'Smoke: suspend projects' });
     check('E10 entitlement change bumps authz_ver', ((await User.findById(me._id))?.authz_ver ?? 0) > verBefore, { verBefore, after: (await User.findById(me._id))?.authz_ver });
     check('E10 PUT entitlement suspended = 200', res.status === 200, res.status);
     const ea2 = await computeEffectiveAccess(orgId, me._id.toString());
@@ -1570,6 +1570,59 @@ async function main() {
       }
     }
 
+    // ── Plan 4.6: overrides (reason required, expiry, back to plan state, expiry job) ───────
+    {
+      const { OrganizationEntitlement: Ent, PlatformEvent } = await import('../models');
+      const { expireOverrides } = await import('../operator/overrides');
+      const json = async (r: any) => (await r.json()) as any;
+      const prov = await json(await op('/orgs', 'POST', { name: 'Override Co', slug: 'override-co', plan_key: 'professional', first_admin: { email: 'admin@override.test', full_name: 'Ora Ride' } }));
+      const cid = prov.data.id as string;
+      const plan = (await Plan.findOne({ key: 'professional' }))!;
+      const inPlan = plan.products[0];
+      const outOfPlan = ['people', 'projects', 'sign', 'desk'].find((k) => !plan.products.includes(k))!;
+      const put = (key: string, body: Record<string, unknown>) => op(`/orgs/${cid}/entitlements/${key}`, 'PUT', body);
+
+      const noReason = await put(inPlan, { status: 'suspended' });
+      check('4.6 PUT without a reason = 400 REASON_REQUIRED', noReason.status === 400 && (await json(noReason)).code === 'REASON_REQUIRED', noReason.status);
+      check('4.6 a past expiry = 400', (await put(inPlan, { status: 'active', reason: 'x', expires_at: '2020-01-01T00:00:00Z' })).status === 400);
+      check('4.6 a suspended override cannot carry an expiry = 400', (await put(inPlan, { status: 'suspended', reason: 'x', expires_at: new Date(Date.now() + 86400e3).toISOString() })).status === 400);
+
+      const soon = new Date(Date.now() + 3600e3).toISOString();
+      const set = await put(outOfPlan, { status: 'active', reason: 'Pilot access', expires_at: soon, seats_limit: 5 });
+      const setj = await json(set);
+      check('4.6 override stored with source operator, reason, expiry, seats', set.status === 200 && setj.data.source === 'operator' && setj.data.reason === 'Pilot access' && !!setj.data.expires_at && setj.data.seats_limit === 5, JSON.stringify(setj));
+      const evt = await PlatformEvent.findOne({ org_id: cid, type: 'entitlement.changed', 'data.product_key': outOfPlan }).sort({ seq: -1 });
+      check('4.6 entitlement.changed carries source, seats_limit and expires_at (additive)', (evt as any)?.data?.source === 'operator' && (evt as any)?.data?.seats_limit === 5 && !!(evt as any)?.data?.expires_at, JSON.stringify((evt as any)?.data));
+      check('4.6 the override is audited with its reason', !!(await OperatorAuditEvent.findOne({ action: 'entitlement.updated', target_id: `${cid}:${outOfPlan}`, reason: 'Pilot access' })));
+      const prodRow = (await json(await op(`/orgs/${cid}/products`))).data.find((p: any) => p.product_key === outOfPlan);
+      check('4.6 /products shows the override reason and expiry', prodRow.source === 'operator' && prodRow.reason === 'Pilot access' && !!prodRow.expires_at, JSON.stringify(prodRow));
+
+      const noReasonDel = await op(`/orgs/${cid}/entitlements/${outOfPlan}/override`, 'DELETE');
+      check('4.6 DELETE override without a reason = 400', noReasonDel.status === 400);
+      check('4.6 DELETE override on a product with none = 404', (await op(`/orgs/${cid}/entitlements/${inPlan}/override?reason=x`, 'DELETE')).status === 404);
+      const del = await op(`/orgs/${cid}/entitlements/${outOfPlan}/override?reason=Pilot%20over`, 'DELETE');
+      check('4.6 removing an override on a product outside the plan deletes the entitlement', del.status === 200 && (await json(del)).data.status === 'removed' && !(await Ent.findOne({ company_id: cid, product_key: outOfPlan })), del.status);
+
+      await put(inPlan, { status: 'suspended', reason: 'Billing hold' });
+      const back = await op(`/orgs/${cid}/entitlements/${inPlan}/override?reason=Resolved`, 'DELETE');
+      const row = await Ent.findOne({ company_id: cid, product_key: inPlan });
+      check('4.6 removing an override on a plan product returns it to plan state', back.status === 200 && row?.source === 'plan' && row?.status === 'active' && !row?.reason, JSON.stringify(row));
+      check('4.6 removal is audited with the reason', !!(await OperatorAuditEvent.findOne({ action: 'entitlement.override_removed', target_id: `${cid}:${inPlan}`, reason: 'Resolved' })));
+
+      // Expiry job: an active override whose date has passed falls back; audited with actor system.
+      await put(outOfPlan, { status: 'active', reason: 'Trial extension', expires_at: soon });
+      await Ent.updateOne({ company_id: cid, product_key: outOfPlan }, { $set: { expires_at: new Date(Date.now() - 60e3) } });
+      await put(inPlan, { status: 'active', reason: 'No expiry' });
+      check('4.6 expiry job removes only the expired override', (await expireOverrides()) === 1 && !(await Ent.findOne({ company_id: cid, product_key: outOfPlan })) && (await Ent.findOne({ company_id: cid, product_key: inPlan }))?.source === 'operator');
+      const sys = await OperatorAuditEvent.findOne({ action: 'entitlement.override_removed', target_id: `${cid}:${outOfPlan}` });
+      check('4.6 expiry is audited with actor system', sys?.operator_email === 'system' && !sys.operator_id && sys.reason === 'Override expired', JSON.stringify(sys));
+      check('4.6 expiry job is idempotent', (await expireOverrides()) === 0);
+
+      await OperatorAccount.updateOne({ email: 'op@karbexa.test' }, { $set: { roles: ['support'] } });
+      check('4.6 support cannot set or remove overrides = 403', (await put(inPlan, { status: 'active', reason: 'x' })).status === 403 && (await op(`/orgs/${cid}/entitlements/${inPlan}/override?reason=x`, 'DELETE')).status === 403);
+      await OperatorAccount.updateOne({ email: 'op@karbexa.test' }, { $set: { roles: ['platform_admin'] } });
+    }
+
     // ── Plan 4.5: plans (editor fields, version, apply with preview, one job per tenant, overrides kept) ──
     {
       const { OrganizationEntitlement: Ent, Job } = await import('../models');
@@ -1587,7 +1640,7 @@ async function main() {
       const people = await Ent.findOne({ company_id: cid, product_key: 'people' });
       check('4.5 provisioning stores plan_version and the seat default on the entitlement', people?.plan_version === 1 && people?.seats_limit === 25, JSON.stringify(people));
 
-      await op(`/orgs/${cid}/entitlements/people`, 'PUT', { status: 'suspended' }); // an override
+      await op(`/orgs/${cid}/entitlements/people`, 'PUT', { status: 'suspended', reason: 'Smoke override' }); // an override
       const edit = await json(await op('/plans/p45', 'PATCH', { products: ['people', 'sign'] }));
       check('4.5 every plan edit raises the version', edit.data.version === 2, edit.data.version);
 

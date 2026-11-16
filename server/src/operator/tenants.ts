@@ -60,6 +60,9 @@ export function tenantRoutes(h: Helpers): Router {
         source: e?.source ?? null,
         plan_key: e?.plan_key ?? null,
         seats_limit: e?.seats_limit ?? null,
+        plan_version: e?.plan_version ?? null,
+        reason: e?.source === 'operator' ? e.reason ?? null : null,
+        expires_at: e?.source === 'operator' ? e.expires_at ?? null : null,
       };
     }));
   }));
