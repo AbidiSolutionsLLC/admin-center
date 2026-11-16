@@ -31,7 +31,8 @@ import { useLocations } from '@/features/locations/hooks/useLocations';
 import { DynamicCustomFields, isFieldRequired } from '@/features/data-fields/components/DynamicCustomFields';
 import { useEffectiveCustomFields } from '@/features/data-fields/hooks/useEffectiveCustomFields';
 import { TableSkeleton } from '@/components/ui/TableSkeleton';
-import { ErrorState } from '@/components/ui/ErrorState';
+import { PageHeader as SharedPageHeader } from '@/components/ui/PageHeader';
+import { PageStates } from '@/components/templates/PageStates';
 import { EmptyState } from '@/components/ui/EmptyState';
 import { Modal } from '@/components/ui/Modal';
 import { ConfirmDialog } from '@/components/ui/ConfirmDialog';
@@ -59,11 +60,11 @@ const CATEGORY_LABELS: Record<PolicyCategory, string> = {
 };
 
 const CATEGORY_COLORS: Record<PolicyCategory, string> = {
-  hr: 'bg-violet-50 text-violet-700 border-violet-200',
-  it: 'bg-sky-50 text-sky-700 border-sky-200',
-  security: 'bg-red-50 text-red-700 border-red-200',
-  compliance: 'bg-amber-50 text-amber-700 border-amber-200',
-  operations: 'bg-emerald-50 text-emerald-700 border-emerald-200',
+  hr: 'bg-accent/10 text-accent border-accent/30',
+  it: 'bg-info/10 text-info border-info/30',
+  security: 'bg-error/10 text-error border-error/30',
+  compliance: 'bg-warning/10 text-warning border-warning/30',
+  operations: 'bg-success/10 text-success border-success/30',
   other: 'bg-surface-alt text-ink-secondary border-line',
 };
 
@@ -74,8 +75,8 @@ const STATUS_LABELS: Record<string, string> = {
 };
 
 const STATUS_COLORS: Record<string, string> = {
-  draft: 'bg-sky-50 text-sky-700 border-sky-200',
-  published: 'bg-emerald-50 text-emerald-700 border-emerald-200',
+  draft: 'bg-info/10 text-info border-info/30',
+  published: 'bg-success/10 text-success border-success/30',
   archived: 'bg-surface-alt text-ink-secondary border-line',
 };
 
@@ -166,26 +167,19 @@ export default function PoliciesPage() {
     setCurrentPage(1);
   }, [search, categoryFilter, statusFilter]);
 
-  // ── Render: Loading ────────────────────────────────────────────────
-  if (isLoading) {
+  // ── Render: Loading / Error ────────────────────────────────────────
+  if (isLoading || isError) {
     return (
-      <div className="space-y-5">
+      <div>
         <PageHeader onPublishClick={() => setIsPublishModalOpen(true)} />
-        <TableSkeleton rows={6} columns={6} />
-      </div>
-    );
-  }
-
-  // ── Render: Error ──────────────────────────────────────────────────
-  if (isError) {
-    return (
-      <div className="space-y-5">
-        <PageHeader onPublishClick={() => setIsPublishModalOpen(true)} />
-        <ErrorState
-          title="Failed to load policies"
-          description="Something went wrong fetching policy data. Please try again."
-          onRetry={refetch}
-        />
+        <PageStates
+          isLoading={isLoading}
+          isError={isError}
+          onRetry={() => refetch()}
+          skeleton={<TableSkeleton rows={6} columns={6} />}
+        >
+          {null}
+        </PageStates>
       </div>
     );
   }
@@ -282,7 +276,7 @@ export default function PoliciesPage() {
 
           {/* ── Policies Table ── */}
           {filteredPolicies?.length === 0 ? (
-            <div className="bg-white rounded-lg border border-line shadow-card p-16 text-center">
+            <div className="bg-surface rounded-lg border border-line shadow-card p-16 text-center">
               <div className="w-10 h-10 rounded-xl bg-primary-light flex items-center justify-center mx-auto mb-3">
                 <Search className="w-5 h-5 text-primary" />
               </div>
@@ -296,16 +290,16 @@ export default function PoliciesPage() {
                   setCategoryFilter('');
                   setStatusFilter('');
                 }}
-                className="mt-4 h-9 px-4 text-sm font-medium rounded-md border border-line bg-white text-ink hover:bg-surface-alt transition-colors"
+                className="mt-4 h-9 px-4 text-sm font-medium rounded-md border border-line bg-surface text-ink hover:bg-surface-alt transition-colors"
               >
                 Clear Filters
               </button>
             </div>
           ) : (
-            <div className="bg-white rounded-lg border border-line shadow-card overflow-hidden">
+            <div className="bg-surface rounded-lg border border-line shadow-card overflow-hidden">
               <div className="overflow-x-auto">
                 <table className="min-w-full">
-                  <thead className="bg-surface-base border-b border-line">
+                  <thead className="bg-surface border-b border-line">
                   <tr>
                     <th className="text-[11px] font-semibold text-ink-secondary uppercase tracking-wider h-10 px-4 text-left">
                       Policy
@@ -349,19 +343,19 @@ export default function PoliciesPage() {
               </div>
               {/* Pagination Controls */}
               {totalPages > 1 && (
-                <div className="flex items-center justify-between px-4 py-3 border-t border-line bg-surface-base sm:px-6">
+                <div className="flex items-center justify-between px-4 py-3 border-t border-line bg-surface sm:px-6">
                   <div className="flex flex-1 justify-between sm:hidden">
                     <button
                       onClick={() => setCurrentPage(p => Math.max(1, p - 1))}
                       disabled={currentPage === 1}
-                      className="relative inline-flex items-center rounded-md border border-line bg-white px-4 py-2 text-sm font-medium text-ink hover:bg-surface-alt disabled:opacity-50"
+                      className="relative inline-flex items-center rounded-md border border-line bg-surface px-4 py-2 text-sm font-medium text-ink hover:bg-surface-alt disabled:opacity-50"
                     >
                       Previous
                     </button>
                     <button
                       onClick={() => setCurrentPage(p => Math.min(totalPages, p + 1))}
                       disabled={currentPage === totalPages}
-                      className="relative ml-3 inline-flex items-center rounded-md border border-line bg-white px-4 py-2 text-sm font-medium text-ink hover:bg-surface-alt disabled:opacity-50"
+                      className="relative ml-3 inline-flex items-center rounded-md border border-line bg-surface px-4 py-2 text-sm font-medium text-ink hover:bg-surface-alt disabled:opacity-50"
                     >
                       Next
                     </button>
@@ -482,30 +476,19 @@ interface PageHeaderProps {
 
 function PageHeader({ onPublishClick, policyCount }: PageHeaderProps) {
   return (
-    <div className="flex items-start justify-between gap-4">
-      <div>
-        <h1 className="text-[22px] font-semibold tracking-tight text-ink">
-          Policies
-        </h1>
-        <div className="flex items-center gap-3 mt-0.5">
-          <p className="text-sm text-ink-secondary">
-            Manage and publish organizational policies.
-          </p>
-          {policyCount !== undefined && (
-            <span className="text-xs text-ink-muted">
-              {policyCount} {policyCount === 1 ? 'policy' : 'policies'}
-            </span>
-          )}
-        </div>
-      </div>
-      <button
-        onClick={onPublishClick}
-        className="h-9 px-4 text-sm font-medium rounded-md bg-primary hover:bg-primary-hover text-white transition-colors flex items-center gap-2 flex-shrink-0"
-      >
-        <Plus className="w-4 h-4" />
-        Publish Policy
-      </button>
-    </div>
+    <SharedPageHeader
+      title="Policies"
+      subtitle={`Manage and publish organizational policies.${policyCount !== undefined ? ` ${policyCount} ${policyCount === 1 ? 'policy' : 'policies'}.` : ''}`}
+      primaryAction={
+        <button
+          onClick={onPublishClick}
+          className="h-9 px-4 text-sm font-medium rounded-md bg-primary hover:bg-primary-hover text-primary-foreground transition-colors flex items-center gap-2 flex-shrink-0"
+        >
+          <Plus className="w-4 h-4" />
+          Publish policy
+        </button>
+      }
+    />
   );
 }
 
@@ -540,7 +523,7 @@ function FilterBar({
           value={search}
           onChange={(e) => onSearchChange(e.target.value)}
           placeholder="Search policies..."
-          className="w-full h-9 pl-9 pr-8 text-sm rounded-md border border-line bg-white text-ink placeholder:text-ink-muted focus:outline-none focus:ring-2 focus:ring-primary/30 focus:border-primary transition-all duration-150"
+          className="w-full h-9 pl-9 pr-8 text-sm rounded-md border border-line bg-surface text-ink placeholder:text-ink-muted focus:outline-none focus:ring-2 focus:ring-primary/30 focus:border-primary transition-all duration-150"
         />
         {search && (
           <button
@@ -558,7 +541,7 @@ function FilterBar({
         <select
           value={categoryFilter}
           onChange={(e) => onCategoryChange(e.target.value as PolicyCategory | '')}
-          className="h-9 pl-3 pr-8 text-sm rounded-md border border-line bg-white text-ink focus:outline-none focus:ring-2 focus:ring-primary/30 focus:border-primary transition-all duration-150 appearance-none cursor-pointer"
+          className="h-9 pl-3 pr-8 text-sm rounded-md border border-line bg-surface text-ink focus:outline-none focus:ring-2 focus:ring-primary/30 focus:border-primary transition-all duration-150 appearance-none cursor-pointer"
         >
           <option value="">All Categories</option>
           {Object.entries(CATEGORY_LABELS).map(([key, label]) => (
@@ -575,7 +558,7 @@ function FilterBar({
         <select
           value={statusFilter}
           onChange={(e) => onStatusChange(e.target.value)}
-          className="h-9 pl-3 pr-8 text-sm rounded-md border border-line bg-white text-ink focus:outline-none focus:ring-2 focus:ring-primary/30 focus:border-primary transition-all duration-150 appearance-none cursor-pointer"
+          className="h-9 pl-3 pr-8 text-sm rounded-md border border-line bg-surface text-ink focus:outline-none focus:ring-2 focus:ring-primary/30 focus:border-primary transition-all duration-150 appearance-none cursor-pointer"
         >
           <option value="">All Statuses</option>
           {Object.entries(STATUS_LABELS).map(([key, label]) => (
@@ -612,7 +595,7 @@ function PolicyRow({ policy, onView, onEdit, onArchive, onDelete }: PolicyRowPro
   const { data: ackStatus } = useAcknowledgmentStatus(policy._id);
 
   return (
-    <tr className="border-b border-line last:border-0 hover:bg-surface-base transition-colors duration-100">
+    <tr className="border-b border-line last:border-0 hover:bg-surface transition-colors duration-100">
       <td className="h-14 px-4">
         <div>
           <p className="text-sm font-medium text-ink">{policy.title}</p>
@@ -658,7 +641,7 @@ function PolicyRow({ policy, onView, onEdit, onArchive, onDelete }: PolicyRowPro
         <div className="flex items-center justify-end gap-1.5">
           <button
             onClick={onView}
-            className="h-7 px-3 text-xs font-medium rounded-md border border-line bg-white text-ink hover:bg-surface-alt transition-colors inline-flex items-center gap-1.5"
+            className="h-7 px-3 text-xs font-medium rounded-md border border-line bg-surface text-ink hover:bg-surface-alt transition-colors inline-flex items-center gap-1.5"
           >
             <Eye className="w-3.5 h-3.5" />
             View
@@ -666,7 +649,7 @@ function PolicyRow({ policy, onView, onEdit, onArchive, onDelete }: PolicyRowPro
           {policy.status === 'published' && (
             <button
               onClick={onArchive}
-              className="h-7 px-3 text-xs font-medium rounded-md border border-line bg-white text-ink-secondary hover:text-warning hover:border-warning/30 hover:bg-warning-light transition-colors inline-flex items-center gap-1.5"
+              className="h-7 px-3 text-xs font-medium rounded-md border border-line bg-surface text-ink-secondary hover:text-warning hover:border-warning/30 hover:bg-warning-light transition-colors inline-flex items-center gap-1.5"
               title="Archive this version"
             >
               <Archive className="w-3.5 h-3.5" />
@@ -675,7 +658,7 @@ function PolicyRow({ policy, onView, onEdit, onArchive, onDelete }: PolicyRowPro
           {policy.status !== 'published' && (
             <button
               onClick={onEdit}
-              className="h-7 px-3 text-xs font-medium rounded-md border border-line bg-white text-ink hover:bg-surface-alt transition-colors inline-flex items-center gap-1.5"
+              className="h-7 px-3 text-xs font-medium rounded-md border border-line bg-surface text-ink hover:bg-surface-alt transition-colors inline-flex items-center gap-1.5"
               title="Edit draft policy"
             >
               <Edit className="w-3.5 h-3.5" />
@@ -684,14 +667,14 @@ function PolicyRow({ policy, onView, onEdit, onArchive, onDelete }: PolicyRowPro
           {policy.status !== 'published' && (
             <button
               onClick={onDelete}
-              className="h-7 px-3 text-xs font-medium rounded-md border border-line bg-white text-ink-secondary hover:text-error hover:border-error/30 hover:bg-error-light transition-colors inline-flex items-center gap-1.5"
+              className="h-7 px-3 text-xs font-medium rounded-md border border-line bg-surface text-ink-secondary hover:text-error hover:border-error/30 hover:bg-error-light transition-colors inline-flex items-center gap-1.5"
               title="Delete this policy"
             >
               <X className="w-3.5 h-3.5" />
             </button>
           )}
           {ackStatus?.acknowledged && (
-            <span className="h-7 px-2 text-[11px] text-emerald-600 bg-emerald-50 border border-emerald-200 rounded-md flex items-center gap-1">
+            <span className="h-7 px-2 text-[11px] text-success bg-success/10 border border-success/30 rounded-md flex items-center gap-1">
               <CheckCircle className="w-3 h-3" />
               Done
             </span>
@@ -865,7 +848,7 @@ function PublishPolicyModal({
           <button
             onClick={onClose}
             disabled={publishMutation.isPending || draftMutation.isPending}
-            className="h-9 px-4 text-sm font-medium rounded-md border border-line bg-white text-ink hover:bg-surface-alt transition-colors disabled:opacity-50 disabled:cursor-not-allowed mr-auto"
+            className="h-9 px-4 text-sm font-medium rounded-md border border-line bg-surface text-ink hover:bg-surface-alt transition-colors disabled:opacity-50 disabled:cursor-not-allowed mr-auto"
           >
             Cancel
           </button>
@@ -878,7 +861,7 @@ function PublishPolicyModal({
               !formData.effective_date ||
               (!!formData.expiry_date && (new Date(formData.expiry_date) < new Date(new Date().setHours(0,0,0,0)) || new Date(formData.expiry_date) <= new Date(formData.effective_date)))
             }
-            className="h-9 px-4 text-sm font-medium rounded-md border border-line bg-white text-ink hover:bg-surface-alt transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+            className="h-9 px-4 text-sm font-medium rounded-md border border-line bg-surface text-ink hover:bg-surface-alt transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
           >
             {draftMutation.isPending || updateDraftMutation?.isPending ? 'Saving...' : 'Save as Draft'}
           </button>
@@ -914,7 +897,7 @@ function PublishPolicyModal({
                 setFormData({ ...formData, title: e.target.value })
               }
               placeholder="e.g., Remote Work Policy"
-              className="w-full h-9 px-3 text-sm rounded-md border border-line bg-white text-ink placeholder:text-ink-muted focus:outline-none focus:ring-2 focus:ring-primary/30 focus:border-primary transition-all duration-150"
+              className="w-full h-9 px-3 text-sm rounded-md border border-line bg-surface text-ink placeholder:text-ink-muted focus:outline-none focus:ring-2 focus:ring-primary/30 focus:border-primary transition-all duration-150"
             />
           </div>
 
@@ -930,7 +913,7 @@ function PublishPolicyModal({
                   category: e.target.value as PolicyCategory,
                 })
               }
-              className="w-full h-9 px-3 text-sm rounded-md border border-line bg-white text-ink focus:outline-none focus:ring-2 focus:ring-primary/30 focus:border-primary transition-all duration-150"
+              className="w-full h-9 px-3 text-sm rounded-md border border-line bg-surface text-ink focus:outline-none focus:ring-2 focus:ring-primary/30 focus:border-primary transition-all duration-150"
             >
               {Object.entries(CATEGORY_LABELS).map(([key, label]) => (
                 <option key={key} value={key}>
@@ -952,7 +935,7 @@ function PublishPolicyModal({
               onChange={(e) =>
                 setFormData({ ...formData, effective_date: e.target.value })
               }
-              className="w-full h-9 px-3 text-sm rounded-md border border-line bg-white text-ink focus:outline-none focus:ring-2 focus:ring-primary/30 focus:border-primary transition-all duration-150"
+              className="w-full h-9 px-3 text-sm rounded-md border border-line bg-surface text-ink focus:outline-none focus:ring-2 focus:ring-primary/30 focus:border-primary transition-all duration-150"
             />
           </div>
 
@@ -967,7 +950,7 @@ function PublishPolicyModal({
                 setFormData({ ...formData, summary: e.target.value })
               }
               placeholder="Brief description of changes"
-              className="w-full h-9 px-3 text-sm rounded-md border border-line bg-white text-ink placeholder:text-ink-muted focus:outline-none focus:ring-2 focus:ring-primary/30 focus:border-primary transition-all duration-150"
+              className="w-full h-9 px-3 text-sm rounded-md border border-line bg-surface text-ink placeholder:text-ink-muted focus:outline-none focus:ring-2 focus:ring-primary/30 focus:border-primary transition-all duration-150"
             />
           </div>
 
@@ -981,7 +964,7 @@ function PublishPolicyModal({
               onChange={(e) =>
                 setFormData({ ...formData, expiry_date: e.target.value })
               }
-              className="w-full h-9 px-3 text-sm rounded-md border border-line bg-white text-ink focus:outline-none focus:ring-2 focus:ring-primary/30 focus:border-primary transition-all duration-150"
+              className="w-full h-9 px-3 text-sm rounded-md border border-line bg-surface text-ink focus:outline-none focus:ring-2 focus:ring-primary/30 focus:border-primary transition-all duration-150"
             />
           </div>
         </div>
@@ -1058,26 +1041,26 @@ function PolicyDetailModal({
             <button
               onClick={handleAcknowledge}
               disabled={ackMutation.isPending}
-              className="h-9 px-4 text-sm font-medium rounded-md bg-emerald-600 hover:bg-emerald-700 text-white transition-colors disabled:opacity-50"
+              className="h-9 px-4 text-sm font-medium rounded-md bg-success hover:bg-success text-white transition-colors disabled:opacity-50"
             >
               {ackMutation.isPending ? 'Acknowledging...' : 'Acknowledge Policy'}
             </button>
           )}
           {policy.status === 'published' && ackStatus?.targeted && ackStatus.acknowledged && (
             <span className="text-xs text-ink-secondary flex items-center gap-1">
-              <CheckCircle className="w-3.5 h-3.5 text-emerald-500" />
+              <CheckCircle className="w-3.5 h-3.5 text-success" />
               Acknowledged on {ackStatus.acknowledged_at ? formatDate(ackStatus.acknowledged_at) : 'N/A'}
             </span>
           )}
           {(!ackStatus?.targeted || policy.status !== 'published') && policy.status === 'published' && (
             <span className="text-xs text-ink-secondary flex items-center gap-1">
-              <CheckCircle className="w-3.5 h-3.5 text-emerald-500" />
+              <CheckCircle className="w-3.5 h-3.5 text-success" />
               Published — create a new version to make changes
             </span>
           )}
           <button
             onClick={onClose}
-            className="h-9 px-4 text-sm font-medium rounded-md border border-line bg-white text-ink hover:bg-surface-alt transition-colors ml-auto"
+            className="h-9 px-4 text-sm font-medium rounded-md border border-line bg-surface text-ink hover:bg-surface-alt transition-colors ml-auto"
           >
             Close
           </button>
@@ -1263,7 +1246,7 @@ function PolicyVersionsView({
 
       <div className="border border-line rounded-md overflow-hidden">
         <table className="w-full">
-          <thead className="bg-surface-base border-b border-line">
+          <thead className="bg-surface border-b border-line">
             <tr>
               <th className="text-[11px] font-semibold text-ink-secondary uppercase tracking-wider h-10 px-4 text-left w-10">
                 {/* Checkbox column */}
@@ -1290,7 +1273,7 @@ function PolicyVersionsView({
               <tr
                 key={version._id}
                 className={cn(
-                  'border-b border-line last:border-0 hover:bg-surface-base cursor-pointer transition-colors',
+                  'border-b border-line last:border-0 hover:bg-surface cursor-pointer transition-colors',
                   selectedVersions.includes(String(version.version_number)) && 'bg-primary-light'
                 )}
                 onClick={() => toggleVersion(String(version.version_number))}
@@ -1335,7 +1318,7 @@ function PolicyVersionsView({
                       setVersionToRollback({ id: version._id, num: version.version_number });
                     }}
                     disabled={rollbackMutation.isPending || version.status !== 'published'}
-                    className="h-7 px-3 text-xs font-medium rounded-md border border-line bg-white text-ink hover:bg-surface-alt transition-colors disabled:opacity-50 inline-flex items-center gap-1.5"
+                    className="h-7 px-3 text-xs font-medium rounded-md border border-line bg-surface text-ink hover:bg-surface-alt transition-colors disabled:opacity-50 inline-flex items-center gap-1.5"
                     title="Rollback to this version"
                   >
                     <History className="w-3.5 h-3.5" />
@@ -1408,7 +1391,7 @@ function VersionDiffView({ policyKey, versionA, versionB, onClose }: VersionDiff
       {/* Diff Summary */}
       <div className="px-4 py-3 border-b border-line">
         <div className="flex items-center gap-4 text-xs">
-          <span className="text-emerald-600 font-medium">
+          <span className="text-success font-medium">
             +{diffData.diff_summary.added_lines} lines added
           </span>
           <span className="text-error font-medium">
@@ -1472,12 +1455,12 @@ function PolicyAcknowledgmentsView({ policyId }: { policyId: string }) {
         </div>
         <div className="w-full h-2 bg-line rounded-full overflow-hidden">
           <div
-            className="h-full bg-emerald-500 rounded-full transition-all duration-300"
+            className="h-full bg-success rounded-full transition-all duration-300"
             style={{ width: `${percentage}%` }}
           />
         </div>
         {ackStatus?.acknowledged && (
-          <p className="text-xs text-emerald-600 mt-2 flex items-center gap-1">
+          <p className="text-xs text-success mt-2 flex items-center gap-1">
             <CheckCircle className="w-3 h-3" />
             You have acknowledged this policy
           </p>
@@ -1492,7 +1475,7 @@ function PolicyAcknowledgmentsView({ policyId }: { policyId: string }) {
         {allUsers.length > 0 ? (
           <div className="border border-line rounded-md overflow-hidden max-h-64 overflow-y-auto">
             <table className="w-full">
-              <thead className="bg-surface-base border-b border-line">
+              <thead className="bg-surface border-b border-line">
                 <tr>
                   <th className="text-[11px] font-semibold text-ink-secondary uppercase tracking-wider h-10 px-4 text-left">
                     User
@@ -1513,11 +1496,11 @@ function PolicyAcknowledgmentsView({ policyId }: { policyId: string }) {
                     </td>
                     <td className="h-10 px-4">
                       {item.status === 'Acknowledged' ? (
-                        <span className="inline-flex items-center gap-1 text-[11px] font-semibold text-emerald-700 bg-emerald-50 border border-emerald-200 rounded-full px-2.5 py-0.5">
+                        <span className="inline-flex items-center gap-1 text-[11px] font-semibold text-success bg-success/10 border border-success/30 rounded-full px-2.5 py-0.5">
                           Acknowledged
                         </span>
                       ) : (
-                        <span className="inline-flex items-center gap-1 text-[11px] font-semibold text-amber-700 bg-amber-50 border border-amber-200 rounded-full px-2.5 py-0.5">
+                        <span className="inline-flex items-center gap-1 text-[11px] font-semibold text-warning bg-warning/10 border border-warning/30 rounded-full px-2.5 py-0.5">
                           Pending
                         </span>
                       )}
@@ -1575,7 +1558,7 @@ function PolicyTargetingView({ policyId }: PolicyTargetingViewProps) {
       ) : assignments && assignments.length > 0 ? (
         <div className="border border-line rounded-md overflow-hidden">
           <table className="w-full">
-            <thead className="bg-white/5 border-b border-line">
+            <thead className="bg-surface-alt border-b border-line">
               <tr>
                 <th className="text-[11px] font-semibold text-ink-secondary uppercase tracking-wider h-10 px-4 text-left">
                   Target Type
@@ -1721,7 +1704,7 @@ function TargetingModal({ isOpen, policyId, onClose, saveMutation, onSaved }: Ta
         <select
           value={rule.target_id}
           onChange={(e) => updateRule(index, { target_id: e.target.value })}
-          className="flex-1 h-9 px-3 text-sm rounded-md border border-line bg-white text-ink focus:outline-none focus:ring-2 focus:ring-primary/30 focus:border-primary transition-all duration-150"
+          className="flex-1 h-9 px-3 text-sm rounded-md border border-line bg-surface text-ink focus:outline-none focus:ring-2 focus:ring-primary/30 focus:border-primary transition-all duration-150"
           aria-label="Select department"
         >
           <option value="">Select department...</option>
@@ -1739,7 +1722,7 @@ function TargetingModal({ isOpen, policyId, onClose, saveMutation, onSaved }: Ta
         <select
           value={rule.target_id}
           onChange={(e) => updateRule(index, { target_id: e.target.value })}
-          className="flex-1 h-9 px-3 text-sm rounded-md border border-line bg-white text-ink focus:outline-none focus:ring-2 focus:ring-primary/30 focus:border-primary transition-all duration-150"
+          className="flex-1 h-9 px-3 text-sm rounded-md border border-line bg-surface text-ink focus:outline-none focus:ring-2 focus:ring-primary/30 focus:border-primary transition-all duration-150"
           aria-label="Select role"
         >
           <option value="">Select role...</option>
@@ -1757,7 +1740,7 @@ function TargetingModal({ isOpen, policyId, onClose, saveMutation, onSaved }: Ta
         <select
           value={rule.target_id}
           onChange={(e) => updateRule(index, { target_id: e.target.value })}
-          className="flex-1 h-9 px-3 text-sm rounded-md border border-line bg-white text-ink focus:outline-none focus:ring-2 focus:ring-primary/30 focus:border-primary transition-all duration-150"
+          className="flex-1 h-9 px-3 text-sm rounded-md border border-line bg-surface text-ink focus:outline-none focus:ring-2 focus:ring-primary/30 focus:border-primary transition-all duration-150"
           aria-label="Select group"
         >
           <option value="">Select group...</option>
@@ -1775,7 +1758,7 @@ function TargetingModal({ isOpen, policyId, onClose, saveMutation, onSaved }: Ta
         <select
           value={rule.target_id}
           onChange={(e) => updateRule(index, { target_id: e.target.value })}
-          className="flex-1 h-9 px-3 text-sm rounded-md border border-line bg-white text-ink focus:outline-none focus:ring-2 focus:ring-primary/30 focus:border-primary transition-all duration-150"
+          className="flex-1 h-9 px-3 text-sm rounded-md border border-line bg-surface text-ink focus:outline-none focus:ring-2 focus:ring-primary/30 focus:border-primary transition-all duration-150"
           aria-label="Select location"
         >
           <option value="">Select location...</option>
@@ -1793,7 +1776,7 @@ function TargetingModal({ isOpen, policyId, onClose, saveMutation, onSaved }: Ta
         <select
           value={rule.target_id}
           onChange={(e) => updateRule(index, { target_id: e.target.value })}
-          className="flex-1 h-9 px-3 text-sm rounded-md border border-line bg-white text-ink focus:outline-none focus:ring-2 focus:ring-primary/30 focus:border-primary transition-all duration-150"
+          className="flex-1 h-9 px-3 text-sm rounded-md border border-line bg-surface text-ink focus:outline-none focus:ring-2 focus:ring-primary/30 focus:border-primary transition-all duration-150"
           aria-label="Select user"
         >
           <option value="">Select user...</option>
@@ -1831,7 +1814,7 @@ function TargetingModal({ isOpen, policyId, onClose, saveMutation, onSaved }: Ta
               });
             }}
             disabled={simulateMutation.isPending || rules.every((r) => !r.target_id)}
-            className="h-9 px-4 text-sm font-medium rounded-md border border-line bg-white text-ink hover:bg-surface-alt transition-colors disabled:opacity-50 disabled:cursor-not-allowed mr-auto flex items-center gap-2"
+            className="h-9 px-4 text-sm font-medium rounded-md border border-line bg-surface text-ink hover:bg-surface-alt transition-colors disabled:opacity-50 disabled:cursor-not-allowed mr-auto flex items-center gap-2"
           >
             <Eye className="w-4 h-4" />
             {simulateMutation.isPending ? 'Simulating...' : 'Preview Impact'}
@@ -1839,7 +1822,7 @@ function TargetingModal({ isOpen, policyId, onClose, saveMutation, onSaved }: Ta
           <button
             onClick={onClose}
             disabled={saveMutation.isPending}
-            className="h-9 px-4 text-sm font-medium rounded-md border border-line bg-white text-ink hover:bg-surface-alt transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+            className="h-9 px-4 text-sm font-medium rounded-md border border-line bg-surface text-ink hover:bg-surface-alt transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
           >
             Cancel
           </button>
@@ -1866,7 +1849,7 @@ function TargetingModal({ isOpen, policyId, onClose, saveMutation, onSaved }: Ta
                   target_id: newType === 'all' ? 'all' : '' 
                 });
               }}
-              className="h-9 px-3 text-sm rounded-md border border-line bg-white text-ink focus:outline-none focus:ring-2 focus:ring-primary/30 focus:border-primary transition-all duration-150 w-40"
+              className="h-9 px-3 text-sm rounded-md border border-line bg-surface text-ink focus:outline-none focus:ring-2 focus:ring-primary/30 focus:border-primary transition-all duration-150 w-40"
               aria-label="Select target type"
             >
               {Object.entries(TARGET_TYPE_LABELS).map(([key, label]) => (
@@ -1942,7 +1925,7 @@ function TargetingModal({ isOpen, policyId, onClose, saveMutation, onSaved }: Ta
             <div className="space-y-4">
               <div>
                 <p className="text-xs font-semibold text-ink-secondary mb-1">Affected Users ({simulationResult.affected_users.length})</p>
-                <div className="max-h-32 overflow-y-auto border border-line rounded bg-white text-xs text-ink divide-y divide-line">
+                <div className="max-h-32 overflow-y-auto border border-line rounded bg-surface text-xs text-ink divide-y divide-line">
                   {simulationResult.affected_users.length > 0 ? (
                     simulationResult.affected_users.map((u) => (
                       <div key={u._id} className="p-2 flex justify-between">

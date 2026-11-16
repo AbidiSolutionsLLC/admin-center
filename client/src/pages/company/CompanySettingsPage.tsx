@@ -16,6 +16,8 @@ import { useLocations } from '@/features/locations/hooks/useLocations';
 import { AVAILABLE_USER_FIELDS } from '@/types';
 import { COMMON_TIMEZONES, formatTimezoneLabel } from '@/constants/timezones';
 import { toast } from 'sonner';
+import { PageHeader } from '@/components/ui/PageHeader';
+import { PageStates } from '@/components/templates/PageStates';
 
 type FormValues = {
   employee_id_format: string;
@@ -92,7 +94,7 @@ function CompanyProfileSection() {
   }
 
   return (
-    <Card className="bg-white border-line shadow-card">
+    <Card className="bg-surface border-line shadow-card">
       <CardHeader>
         <CardTitle>Company Profile</CardTitle>
         <CardDescription>
@@ -141,7 +143,7 @@ function CompanyProfileSection() {
                 id="company-timezone"
                 value={timezone}
                 onChange={(e) => setTimezone(e.target.value)}
-                className="flex-1 h-10 pl-3 pr-8 text-sm rounded-md border border-line bg-white text-ink focus:outline-none focus:ring-2 focus:ring-primary/30 focus:border-primary transition-all appearance-none"
+                className="flex-1 h-10 pl-3 pr-8 text-sm rounded-md border border-line bg-surface text-ink focus:outline-none focus:ring-2 focus:ring-primary/30 focus:border-primary transition-all appearance-none"
               >
                 {COMMON_TIMEZONES.map((tz) => (
                   <option key={tz} value={tz}>{formatTimezoneLabel(tz)}</option>
@@ -167,7 +169,7 @@ function CompanyProfileSection() {
                 id="company-locale"
                 value={locale}
                 onChange={(e) => setLocale(e.target.value)}
-                className="flex-1 h-10 pl-3 pr-8 text-sm rounded-md border border-line bg-white text-ink focus:outline-none focus:ring-2 focus:ring-primary/30 focus:border-primary transition-all appearance-none"
+                className="flex-1 h-10 pl-3 pr-8 text-sm rounded-md border border-line bg-surface text-ink focus:outline-none focus:ring-2 focus:ring-primary/30 focus:border-primary transition-all appearance-none"
               >
                 {COMMON_LOCALES.map((loc) => (
                   <option key={loc.value} value={loc.value}>{loc.label}</option>
@@ -194,7 +196,7 @@ function CompanyProfileSection() {
               id="company-default-location"
               value={defaultLocationId}
               onChange={(e) => setDefaultLocationId(e.target.value)}
-              className="flex-1 h-10 pl-3 pr-8 text-sm rounded-md border border-line bg-white text-ink focus:outline-none focus:ring-2 focus:ring-primary/30 focus:border-primary transition-all appearance-none"
+              className="flex-1 h-10 pl-3 pr-8 text-sm rounded-md border border-line bg-surface text-ink focus:outline-none focus:ring-2 focus:ring-primary/30 focus:border-primary transition-all appearance-none"
             >
               <option value="">— No default —</option>
               {locations?.map((loc) => (
@@ -254,7 +256,7 @@ function RequiredUserFieldsSection() {
   }
 
   return (
-    <Card className="bg-white border-line shadow-card">
+    <Card className="bg-surface border-line shadow-card">
       <CardHeader>
         <CardTitle>Required User Fields</CardTitle>
         <CardDescription>
@@ -266,7 +268,7 @@ function RequiredUserFieldsSection() {
           {AVAILABLE_USER_FIELDS.map((field) => (
             <div
               key={field.key}
-              className="flex items-center justify-between gap-3 rounded-lg border border-line bg-white p-3 transition-colors hover:bg-surface-alt"
+              className="flex items-center justify-between gap-3 rounded-lg border border-line bg-surface p-3 transition-colors hover:bg-surface-alt"
             >
               <div className="flex flex-col">
                 <span className="text-sm font-medium text-ink">{field.label}</span>
@@ -368,7 +370,7 @@ function DomainEnforcementSection() {
   }
 
   return (
-    <Card className="bg-white border-line shadow-card">
+    <Card className="bg-surface border-line shadow-card">
       <CardHeader>
         <CardTitle>Email Domain Enforcement</CardTitle>
         <CardDescription>
@@ -504,7 +506,7 @@ function AuditLogRetentionSection() {
   ];
 
   return (
-    <Card className="bg-white border-line shadow-card">
+    <Card className="bg-surface border-line shadow-card">
       <CardHeader>
         <CardTitle>Audit Log Retention</CardTitle>
         <CardDescription>
@@ -522,7 +524,7 @@ function AuditLogRetentionSection() {
               <select
                 value={retentionDays}
                 onChange={(e) => setRetentionDays(Number(e.target.value))}
-                className="w-full sm:w-64 h-10 pl-3 pr-8 text-sm rounded-md border border-line bg-white text-ink focus:outline-none focus:ring-2 focus:ring-primary/30 focus:border-primary transition-all appearance-none"
+                className="w-full sm:w-64 h-10 pl-3 pr-8 text-sm rounded-md border border-line bg-surface text-ink focus:outline-none focus:ring-2 focus:ring-primary/30 focus:border-primary transition-all appearance-none"
               >
                 {RETENTION_OPTIONS.map((opt) => (
                   <option key={opt.value} value={opt.value}>{opt.label}</option>
@@ -544,11 +546,11 @@ function AuditLogRetentionSection() {
           </div>
           
           {retentionDays > 0 ? (
-            <p className="text-xs text-amber-600 bg-amber-50 p-2 rounded border border-amber-200">
+            <p className="text-xs text-warning bg-warning/10 p-2 rounded border border-warning/30">
               Note: Logs older than {retentionDays} days will be permanently deleted and cannot be recovered.
             </p>
           ) : (
-            <p className="text-xs text-blue-600 bg-blue-50 p-2 rounded border border-blue-200">
+            <p className="text-xs text-info bg-info/10 p-2 rounded border border-info/30">
               Logs will be kept indefinitely.
             </p>
           )}
@@ -589,7 +591,7 @@ function generateFormatPreview(format: string, counter: number) {
 }
 
 export default function CompanySettingsPage() {
-  const { data, isLoading, isError } = useEmployeeIdFormat();
+  const { data, isLoading, isError, refetch } = useEmployeeIdFormat();
   const updateEmployeeIdFormat = useUpdateEmployeeIdFormat();
 
   const {
@@ -633,39 +635,38 @@ export default function CompanySettingsPage() {
     return () => window.removeEventListener('beforeunload', handler);
   }, [isDirty]);
 
-  if (isLoading) {
-    return (
-      <div className="flex h-full items-center justify-center">
-        <p className="text-sm text-ink-muted">Loading company settings...</p>
-      </div>
-    );
-  }
+  const header = (
+    <PageHeader
+      title="Company settings"
+      subtitle="Configure company-level settings including employee ID format and required fields for user invitations."
+    />
+  );
 
-  if (isError) {
+  if (isLoading || isError) {
     return (
-      <div className="rounded-lg border bg-card p-6">
-        <h1 className="text-2xl font-semibold text-ink">Company Settings</h1>
-        <p className="mt-3 text-sm text-error">Unable to load employee ID settings. Please try again later.</p>
+      <div>
+        {header}
+        <PageStates
+          isLoading={isLoading}
+          isError={isError}
+          onRetry={() => refetch()}
+          skeleton={<div className="h-40 animate-pulse rounded-card border border-line bg-surface" aria-busy="true" />}
+        >
+          {null}
+        </PageStates>
       </div>
     );
   }
 
   return (
     <div className="space-y-6">
-      <div className="flex items-start justify-between gap-4">
-        <div>
-          <h1 className="text-[22px] font-semibold tracking-tight text-ink">Company Settings</h1>
-          <p className="mt-1 text-sm text-ink-secondary">
-            Configure company-level settings including employee ID format and required fields for user invitations.
-          </p>
-        </div>
-      </div>
+      {header}
 
-      <Card className="bg-white border-line shadow-card">
+      <Card className="bg-surface border-line shadow-card">
         <CardHeader>
           <CardTitle>Employee ID Format</CardTitle>
           <CardDescription>
-            Define how employee IDs are generated. The format must contain a <code className="rounded bg-slate-100 px-1 py-[2px] text-xs">{`{counter:N}`}</code> placeholder.
+            Define how employee IDs are generated. The format must contain a <code className="rounded bg-surface-alt px-1 py-[2px] text-xs">{`{counter:N}`}</code> placeholder.
           </CardDescription>
         </CardHeader>
         <CardContent>
@@ -763,7 +764,7 @@ function InsightSensitivitySection() {
   ];
 
   return (
-    <Card className="bg-white border-line shadow-card">
+    <Card className="bg-surface border-line shadow-card">
       <CardHeader>
         <CardTitle>Insight Sensitivity</CardTitle>
         <CardDescription>
@@ -780,7 +781,7 @@ function InsightSensitivitySection() {
               <select
                 value={sensitivity}
                 onChange={(e) => setSensitivity(e.target.value as 'low' | 'medium' | 'high')}
-                className="w-full sm:w-80 h-10 pl-3 pr-8 text-sm rounded-md border border-line bg-white text-ink focus:outline-none focus:ring-2 focus:ring-primary/30 focus:border-primary transition-all appearance-none"
+                className="w-full sm:w-80 h-10 pl-3 pr-8 text-sm rounded-md border border-line bg-surface text-ink focus:outline-none focus:ring-2 focus:ring-primary/30 focus:border-primary transition-all appearance-none"
               >
                 {SENSITIVITY_OPTIONS.map((opt) => (
                   <option key={opt.value} value={opt.value}>{opt.label}</option>
@@ -824,9 +825,9 @@ function ResetToFactorySection() {
 
   return (
     <>
-      <Card className="border-red-200 bg-red-50/30 shadow-card">
+      <Card className="border-error/30 bg-error/30 shadow-card">
         <CardHeader>
-          <CardTitle className="text-red-700">Danger Zone</CardTitle>
+          <CardTitle className="text-error">Danger Zone</CardTitle>
           <CardDescription>
             Resetting to factory defaults will revert all company-level configurations to their original state. 
             Custom fields, employee ID formats, and required field settings will be restored.

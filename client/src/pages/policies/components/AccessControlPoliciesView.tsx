@@ -60,9 +60,9 @@ export const AccessControlPoliciesView = () => {
           action={{ label: 'Create Policy', onClick: () => setIsCreateOpen(true) }}
         />
       ) : (
-        <div className="bg-white rounded-lg border border-line shadow-card overflow-hidden">
+        <div className="bg-surface rounded-lg border border-line shadow-card overflow-hidden">
           <table className="w-full text-left">
-            <thead className="bg-white/5 border-b border-line">
+            <thead className="bg-surface-alt border-b border-line">
               <tr>
                 <th className="h-10 px-4 text-[11px] font-semibold text-ink-secondary uppercase tracking-wider">Policy Name</th>
                 <th className="h-10 px-4 text-[11px] font-semibold text-ink-secondary uppercase tracking-wider">Target Type</th>
@@ -73,7 +73,7 @@ export const AccessControlPoliciesView = () => {
             </thead>
             <tbody>
               {policies.map((p) => (
-                <tr key={p._id} className="border-b border-line last:border-0 hover:bg-white/5 transition-colors duration-100">
+                <tr key={p._id} className="border-b border-line last:border-0 hover:bg-surface-hover transition-colors duration-100">
                   <td className="h-14 px-4">
                     <div className="text-sm font-medium text-ink">{p.name}</div>
                     <div className="text-xs text-ink-secondary mt-0.5">{p.description}</div>
@@ -81,12 +81,12 @@ export const AccessControlPoliciesView = () => {
                   <td className="h-14 px-4 text-sm text-ink capitalize">{p.target_type}</td>
                   <td className="h-14 px-4 text-sm text-ink">{p.priority}</td>
                   <td className="h-14 px-4">
-                    <span className={`inline-flex items-center text-[11px] font-semibold tracking-wide rounded-full px-2.5 py-0.5 border ${p.is_active ? 'bg-emerald-50 text-emerald-700 border-emerald-200' : 'bg-[#F1F3F7] text-ink-secondary border-[#C8CDD8]'}`}>
+                    <span className={`inline-flex items-center text-[11px] font-semibold tracking-wide rounded-full px-2.5 py-0.5 border ${p.is_active ? 'bg-success/10 text-success border-success/30' : 'bg-[var(--glass-hover)] text-ink-secondary border-[var(--text-muted)]'}`}>
                       {p.is_active ? 'Active' : 'Inactive'}
                     </span>
                   </td>
                   <td className="h-14 px-4 text-right">
-                    <button onClick={() => setDeleteId(p._id)} className="h-8 w-8 inline-flex items-center justify-center rounded-md text-ink-secondary hover:text-error hover:bg-red-50 transition-colors duration-150">
+                    <button onClick={() => setDeleteId(p._id)} className="h-8 w-8 inline-flex items-center justify-center rounded-md text-ink-secondary hover:text-error hover:bg-error/10 transition-colors duration-150">
                       <Trash2 className="w-4 h-4" />
                     </button>
                   </td>
@@ -105,7 +105,7 @@ export const AccessControlPoliciesView = () => {
               type="text"
               value={newPolicy.name}
               onChange={(e) => setNewPolicy({ ...newPolicy, name: e.target.value })}
-              className="w-full h-9 px-3 text-sm rounded-md border border-line bg-white text-ink placeholder:text-ink-muted focus:outline-none focus:ring-2 focus:ring-primary/30 focus:border-primary transition-all duration-150"
+              className="w-full h-9 px-3 text-sm rounded-md border border-line bg-surface text-ink placeholder:text-ink-muted focus:outline-none focus:ring-2 focus:ring-primary/30 focus:border-primary transition-all duration-150"
               placeholder="e.g. Finance Data Access"
             />
           </div>
@@ -115,7 +115,7 @@ export const AccessControlPoliciesView = () => {
               type="text"
               value={newPolicy.description}
               onChange={(e) => setNewPolicy({ ...newPolicy, description: e.target.value })}
-              className="w-full h-9 px-3 text-sm rounded-md border border-line bg-white text-ink placeholder:text-ink-muted focus:outline-none focus:ring-2 focus:ring-primary/30 focus:border-primary transition-all duration-150"
+              className="w-full h-9 px-3 text-sm rounded-md border border-line bg-surface text-ink placeholder:text-ink-muted focus:outline-none focus:ring-2 focus:ring-primary/30 focus:border-primary transition-all duration-150"
               placeholder="Restricts access to financial records"
             />
           </div>
@@ -125,7 +125,7 @@ export const AccessControlPoliciesView = () => {
               <select
                 value={newPolicy.target_type}
                 onChange={(e) => setNewPolicy({ ...newPolicy, target_type: e.target.value as any })}
-                className="w-full h-9 px-3 text-sm rounded-md border border-line bg-white text-ink focus:outline-none focus:ring-2 focus:ring-primary/30 focus:border-primary transition-all duration-150"
+                className="w-full h-9 px-3 text-sm rounded-md border border-line bg-surface text-ink focus:outline-none focus:ring-2 focus:ring-primary/30 focus:border-primary transition-all duration-150"
               >
                 <option value="role">Role</option>
                 <option value="department">Department</option>
@@ -139,12 +139,12 @@ export const AccessControlPoliciesView = () => {
                 type="number"
                 value={newPolicy.priority}
                 onChange={(e) => setNewPolicy({ ...newPolicy, priority: parseInt(e.target.value) })}
-                className="w-full h-9 px-3 text-sm rounded-md border border-line bg-white text-ink placeholder:text-ink-muted focus:outline-none focus:ring-2 focus:ring-primary/30 focus:border-primary transition-all duration-150"
+                className="w-full h-9 px-3 text-sm rounded-md border border-line bg-surface text-ink placeholder:text-ink-muted focus:outline-none focus:ring-2 focus:ring-primary/30 focus:border-primary transition-all duration-150"
               />
             </div>
           </div>
           <div className="pt-4 flex justify-end space-x-2 border-t border-line mt-6">
-            <button onClick={() => setIsCreateOpen(false)} className="h-9 px-4 text-sm font-medium rounded-md border border-line bg-white text-ink hover:bg-surface-alt transition-colors duration-150">
+            <button onClick={() => setIsCreateOpen(false)} className="h-9 px-4 text-sm font-medium rounded-md border border-line bg-surface text-ink hover:bg-surface-alt transition-colors duration-150">
               Cancel
             </button>
             <button

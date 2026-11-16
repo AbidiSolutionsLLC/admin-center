@@ -112,50 +112,50 @@ export default function UserDetailPage() {
           {/* Effective Settings (Location Inheritance) */}
           <div className="rounded-xl p-5" style={{ background: 'rgba(255,255,255,0.03)', border: '1px solid rgba(255,255,255,0.07)' }}>
             <div className="flex items-center gap-2 mb-4">
-              <Briefcase className="w-4 h-4" style={{ color: '#f59e0b' }} />
+              <Briefcase className="w-4 h-4" style={{ color: 'var(--primary)' }} />
               <h2 className="text-sm font-bold" style={{ color: 'var(--text-main)' }}>Effective Settings (Location Inheritance)</h2>
             </div>
             <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
               <div>
                 <div className="flex items-center gap-1.5 mb-1">
-                  <Clock className="w-3 h-3" style={{ color: '#60a5fa' }} />
-                  <span className="text-[10px] font-semibold uppercase tracking-wider" style={{ color: '#94a3b8' }}>Timezone</span>
-                  {effectiveSettings?.timezone && <ArrowRight className="w-2.5 h-2.5" style={{ color: '#60a5fa' }} />}
+                  <Clock className="w-3 h-3" style={{ color: 'var(--accent-blue)' }} />
+                  <span className="text-[10px] font-semibold uppercase tracking-wider" style={{ color: 'var(--text-muted)' }}>Timezone</span>
+                  {effectiveSettings?.timezone && <ArrowRight className="w-2.5 h-2.5" style={{ color: 'var(--accent-blue)' }} />}
                 </div>
                 <p className="text-sm font-semibold font-mono" style={{ color: 'var(--text-main)' }}>{effectiveSettings?.timezone || 'Company default'}</p>
               </div>
               <div>
                 <div className="flex items-center gap-1.5 mb-1">
-                  <CalendarDays className="w-3 h-3" style={{ color: '#34d399' }} />
-                  <span className="text-[10px] font-semibold uppercase tracking-wider" style={{ color: '#94a3b8' }}>Holiday Calendar</span>
-                  {effectiveSettings?.holiday_calendar && <ArrowRight className="w-2.5 h-2.5" style={{ color: '#34d399' }} />}
+                  <CalendarDays className="w-3 h-3" style={{ color: 'var(--accent-green)' }} />
+                  <span className="text-[10px] font-semibold uppercase tracking-wider" style={{ color: 'var(--text-muted)' }}>Holiday Calendar</span>
+                  {effectiveSettings?.holiday_calendar && <ArrowRight className="w-2.5 h-2.5" style={{ color: 'var(--accent-green)' }} />}
                 </div>
                 <p className="text-sm font-semibold" style={{ color: 'var(--text-main)' }}>{effectiveSettings?.holiday_calendar?.name || 'None assigned'}</p>
               </div>
               <div>
                 <div className="flex items-center gap-1.5 mb-1">
-                  <Clock className="w-3 h-3" style={{ color: '#fbbf24' }} />
-                  <span className="text-[10px] font-semibold uppercase tracking-wider" style={{ color: '#94a3b8' }}>Work Schedule</span>
-                  {effectiveSettings?.work_schedule && <ArrowRight className="w-2.5 h-2.5" style={{ color: '#fbbf24' }} />}
+                  <Clock className="w-3 h-3" style={{ color: 'var(--accent-amber)' }} />
+                  <span className="text-[10px] font-semibold uppercase tracking-wider" style={{ color: 'var(--text-muted)' }}>Work Schedule</span>
+                  {effectiveSettings?.work_schedule && <ArrowRight className="w-2.5 h-2.5" style={{ color: 'var(--accent-amber)' }} />}
                 </div>
                 <p className="text-sm font-semibold" style={{ color: 'var(--text-main)' }}>{effectiveSettings?.work_schedule?.name || 'None assigned'}</p>
                 {effectiveSettings?.work_schedule?.working_hours ? (
-                  <p className="text-[10px]" style={{ color: '#94a3b8' }}>{effectiveSettings.work_schedule.working_hours.start} – {effectiveSettings.work_schedule.working_hours.end}</p>
+                  <p className="text-[10px]" style={{ color: 'var(--text-muted)' }}>{effectiveSettings.work_schedule.working_hours.start} – {effectiveSettings.work_schedule.working_hours.end}</p>
                 ) : (
-                  <p className="text-[10px]" style={{ color: '#94a3b8' }}>No hours configured</p>
+                  <p className="text-[10px]" style={{ color: 'var(--text-muted)' }}>No hours configured</p>
                 )}
               </div>
               <div>
                 <div className="flex items-center gap-1.5 mb-1">
-                  <FileText className="w-3 h-3" style={{ color: '#c084fc' }} />
-                  <span className="text-[10px] font-semibold uppercase tracking-wider" style={{ color: '#94a3b8' }}>Resolved Policies</span>
-                  {effectiveSettings?.policies && effectiveSettings.policies.length > 0 && <ArrowRight className="w-2.5 h-2.5" style={{ color: '#c084fc' }} />}
+                  <FileText className="w-3 h-3" style={{ color: 'var(--accent-violet)' }} />
+                  <span className="text-[10px] font-semibold uppercase tracking-wider" style={{ color: 'var(--text-muted)' }}>Resolved Policies</span>
+                  {effectiveSettings?.policies && effectiveSettings.policies.length > 0 && <ArrowRight className="w-2.5 h-2.5" style={{ color: 'var(--accent-violet)' }} />}
                 </div>
                 <p className="text-sm font-semibold" style={{ color: 'var(--text-main)' }}>{effectiveSettings?.policies?.length ?? 0} polic{(effectiveSettings?.policies?.length ?? 0) !== 1 ? 'ies' : 'y'}</p>
                 {effectiveSettings?.policies && effectiveSettings.policies.length > 0 && (
                   <div className="mt-1 space-y-0.5">
                     {effectiveSettings.policies.slice(0, 3).map((p: any) => (
-                      <p key={p.policy_version_id} className="text-[10px]" style={{ color: '#94a3b8' }}>
+                      <p key={p.policy_version_id} className="text-[10px]" style={{ color: 'var(--text-muted)' }}>
                         {p.title}
                         <span className="ml-1 opacity-60">({p.source})</span>
                       </p>
@@ -168,7 +168,7 @@ export default function UserDetailPage() {
               </div>
             </div>
             {typeof navigator !== 'undefined' && !navigator.onLine && (
-              <div className="mt-3 flex items-center gap-1.5 text-[10px]" style={{ color: '#f59e0b' }}>
+              <div className="mt-3 flex items-center gap-1.5 text-[10px]" style={{ color: 'var(--primary)' }}>
                 <WifiOff className="w-3 h-3" />
                 <span>Some settings may be stale — you are offline.</span>
               </div>
@@ -332,7 +332,7 @@ export default function UserDetailPage() {
                 <button
                   onClick={() => setIsEditModalOpen(false)}
                   disabled={updateUser.isPending}
-                  className="h-9 px-4 text-sm font-medium rounded-md border border-line bg-white text-ink hover:bg-surface-alt transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                  className="h-9 px-4 text-sm font-medium rounded-md border border-line bg-surface text-ink hover:bg-surface-alt transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
                 >
                   Cancel
                 </button>
@@ -387,11 +387,11 @@ export default function UserDetailPage() {
 function LifecycleStateBadge({ state }: { state: string }) {
   const config: Record<string, { bg: string; text: string; label: string }> = {
     invited: { bg: 'bg-primary-light', text: 'text-primary', label: 'Invited' },
-    onboarding: { bg: 'bg-sky-50', text: 'text-sky-600', label: 'Onboarding' },
-    active: { bg: 'bg-emerald-50', text: 'text-emerald-600', label: 'Active' },
-    probation: { bg: 'bg-violet-50', text: 'text-violet-600', label: 'Probation' },
-    on_leave: { bg: 'bg-amber-50', text: 'text-amber-600', label: 'On Leave' },
-    terminated: { bg: 'bg-red-50', text: 'text-red-600', label: 'Terminated' },
+    onboarding: { bg: 'bg-info/10', text: 'text-info', label: 'Onboarding' },
+    active: { bg: 'bg-success/10', text: 'text-success', label: 'Active' },
+    probation: { bg: 'bg-accent/10', text: 'text-accent', label: 'Probation' },
+    on_leave: { bg: 'bg-warning/10', text: 'text-warning', label: 'On Leave' },
+    terminated: { bg: 'bg-error/10', text: 'text-error', label: 'Terminated' },
     archived: { bg: 'bg-surface-alt', text: 'text-ink-muted', label: 'Archived' },
   };
 
@@ -437,7 +437,7 @@ function RiskLevelBadge({ level, score }: { level: string; score?: number }) {
     <span
       className={cn(
         'inline-flex items-center gap-1 text-[11px] font-semibold border rounded-full px-2.5 py-0.5 tracking-wide border-current cursor-help',
-        isHigh ? 'bg-red-50 text-red-600' : 'bg-amber-50 text-amber-600'
+        isHigh ? 'bg-error/10 text-error' : 'bg-warning/10 text-warning'
       )}
       title={`Risk Score: ${score}`}
     >

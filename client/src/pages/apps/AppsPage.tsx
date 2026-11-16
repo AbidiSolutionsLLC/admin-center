@@ -792,7 +792,7 @@ export default function AppsPage() {
             <button
               onClick={handleConfirmRevoke}
               disabled={revokeAppMutation.isPending}
-              className="h-9 px-4 text-sm font-medium text-white bg-error rounded-md hover:bg-red-700 transition-colors flex items-center justify-center gap-2"
+              className="h-9 px-4 text-sm font-medium text-white bg-error rounded-md hover:bg-error transition-colors flex items-center justify-center gap-2"
             >
               {revokeAppMutation.isPending ? 'Revoking...' : 'Confirm'}
             </button>

@@ -61,7 +61,7 @@ export const PolicyTemplatesView = () => {
       ) : (
         <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-6">
           {templates.map((t) => (
-            <div key={t._id} className="bg-white rounded-lg border border-line shadow-card p-5 flex flex-col h-full hover:shadow-card-hover transition-all duration-200">
+            <div key={t._id} className="bg-surface rounded-lg border border-line shadow-card p-5 flex flex-col h-full hover:shadow-card-hover transition-all duration-200">
               <div className="flex justify-between items-start mb-4">
                 <div>
                   <h3 className="text-sm font-semibold text-ink">{t.name}</h3>
@@ -69,14 +69,14 @@ export const PolicyTemplatesView = () => {
                     {t.category}
                   </span>
                 </div>
-                <button onClick={() => setDeleteId(t._id)} className="h-8 w-8 inline-flex items-center justify-center rounded-md text-ink-secondary hover:text-error hover:bg-red-50 transition-colors duration-150">
+                <button onClick={() => setDeleteId(t._id)} className="h-8 w-8 inline-flex items-center justify-center rounded-md text-ink-secondary hover:text-error hover:bg-error/10 transition-colors duration-150">
                   <Trash2 className="w-4 h-4" />
                 </button>
               </div>
               
               <p className="text-sm text-ink-secondary mb-6 flex-grow">{t.description}</p>
               
-              <button className="w-full h-9 px-4 text-sm font-medium rounded-md border border-line bg-white text-ink hover:bg-surface-alt transition-colors duration-150 flex items-center justify-center">
+              <button className="w-full h-9 px-4 text-sm font-medium rounded-md border border-line bg-surface text-ink hover:bg-surface-alt transition-colors duration-150 flex items-center justify-center">
                 <Copy className="w-4 h-4 mr-2 text-ink-muted" />
                 Use Template
               </button>
@@ -93,7 +93,7 @@ export const PolicyTemplatesView = () => {
               type="text"
               value={newTemplate.name}
               onChange={(e) => setNewTemplate({ ...newTemplate, name: e.target.value })}
-              className="w-full h-9 px-3 text-sm rounded-md border border-line bg-white text-ink placeholder:text-ink-muted focus:outline-none focus:ring-2 focus:ring-primary/30 focus:border-primary transition-all duration-150"
+              className="w-full h-9 px-3 text-sm rounded-md border border-line bg-surface text-ink placeholder:text-ink-muted focus:outline-none focus:ring-2 focus:ring-primary/30 focus:border-primary transition-all duration-150"
               placeholder="e.g. Standard Remote Work Policy"
             />
           </div>
@@ -103,7 +103,7 @@ export const PolicyTemplatesView = () => {
               type="text"
               value={newTemplate.description}
               onChange={(e) => setNewTemplate({ ...newTemplate, description: e.target.value })}
-              className="w-full h-9 px-3 text-sm rounded-md border border-line bg-white text-ink placeholder:text-ink-muted focus:outline-none focus:ring-2 focus:ring-primary/30 focus:border-primary transition-all duration-150"
+              className="w-full h-9 px-3 text-sm rounded-md border border-line bg-surface text-ink placeholder:text-ink-muted focus:outline-none focus:ring-2 focus:ring-primary/30 focus:border-primary transition-all duration-150"
             />
           </div>
           <div className="grid grid-cols-2 gap-4">
@@ -112,7 +112,7 @@ export const PolicyTemplatesView = () => {
               <select
                 value={newTemplate.category}
                 onChange={(e) => setNewTemplate({ ...newTemplate, category: e.target.value })}
-                className="w-full h-9 px-3 text-sm rounded-md border border-line bg-white text-ink focus:outline-none focus:ring-2 focus:ring-primary/30 focus:border-primary transition-all duration-150"
+                className="w-full h-9 px-3 text-sm rounded-md border border-line bg-surface text-ink focus:outline-none focus:ring-2 focus:ring-primary/30 focus:border-primary transition-all duration-150"
               >
                 <option value="hr">HR</option>
                 <option value="it">IT</option>
@@ -127,12 +127,12 @@ export const PolicyTemplatesView = () => {
               value={newTemplate.content_template}
               onChange={(e) => setNewTemplate({ ...newTemplate, content_template: e.target.value })}
               rows={8}
-              className="w-full p-3 text-sm rounded-md border border-line bg-white text-ink placeholder:text-ink-muted focus:outline-none focus:ring-2 focus:ring-primary/30 focus:border-primary transition-all duration-150 font-mono"
+              className="w-full p-3 text-sm rounded-md border border-line bg-surface text-ink placeholder:text-ink-muted focus:outline-none focus:ring-2 focus:ring-primary/30 focus:border-primary transition-all duration-150 font-mono"
               placeholder="Enter markdown content here. Use {{variable}} for placeholders."
             />
           </div>
           <div className="pt-4 flex justify-end space-x-2 border-t border-line mt-6">
-            <button onClick={() => setIsCreateOpen(false)} className="h-9 px-4 text-sm font-medium rounded-md border border-line bg-white text-ink hover:bg-surface-alt transition-colors duration-150">
+            <button onClick={() => setIsCreateOpen(false)} className="h-9 px-4 text-sm font-medium rounded-md border border-line bg-surface text-ink hover:bg-surface-alt transition-colors duration-150">
               Cancel
             </button>
             <button

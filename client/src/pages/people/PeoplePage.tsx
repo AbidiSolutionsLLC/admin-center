@@ -24,7 +24,8 @@ import { UserHistoryPanel } from '@/features/people/components/UserHistoryPanel'
 import { LifecycleStateSelector } from '@/features/people/components/LifecycleStateSelector';
 
 import { TableSkeleton } from '@/components/ui/TableSkeleton';
-import { ErrorState } from '@/components/ui/ErrorState';
+import { PageHeader as SharedPageHeader } from '@/components/ui/PageHeader';
+import { PageStates } from '@/components/templates/PageStates';
 import { EmptyState } from '@/components/ui/EmptyState';
 import { PermissionGate } from '@/components/ui/PermissionGate';
 import { Modal } from '@/components/ui/Modal';
@@ -299,27 +300,19 @@ export default function PeoplePage() {
   }, []);
 
 
-  // ── Render: Loading ──────────────────────────────────────────────────
-  if (isLoading) {
+  // ── Render: Loading / Error ────────────────────────────────────────
+  if (isLoading || isError) {
     return (
-      <div className="space-y-5">
+      <div>
         <PageHeader onInviteClick={handleOpenInvite} />
-        <StatsSkeleton />
-        <TableSkeleton rows={8} columns={7} />
-      </div>
-    );
-  }
-
-  // ── Render: Error ────────────────────────────────────────────────────
-  if (isError) {
-    return (
-      <div className="space-y-5">
-        <PageHeader onInviteClick={handleOpenInvite} />
-        <ErrorState
-          title="Failed to load users"
-          description="Something went wrong fetching user data. Please try again."
-          onRetry={refetch}
-        />
+        <PageStates
+          isLoading={isLoading}
+          isError={isError}
+          onRetry={() => refetch()}
+          skeleton={<><StatsSkeleton /><TableSkeleton rows={8} columns={7} /></>}
+        >
+          {null}
+        </PageStates>
       </div>
     );
   }
@@ -359,7 +352,7 @@ export default function PeoplePage() {
 
           {/* ── User Table ── */}
           {filteredUsers.length === 0 ? (
-            <div className="bg-white rounded-lg border border-line shadow-card p-16 text-center">
+            <div className="bg-surface rounded-lg border border-line shadow-card p-16 text-center">
               <div className="w-10 h-10 rounded-xl bg-primary-light flex items-center justify-center mx-auto mb-3">
                 <Search className="w-5 h-5 text-primary" />
               </div>
@@ -369,7 +362,7 @@ export default function PeoplePage() {
               </p>
               <button
                 onClick={handleClearFilters}
-                className="mt-4 h-9 px-4 text-sm font-medium rounded-md border border-line bg-white text-ink hover:bg-surface-alt transition-colors"
+                className="mt-4 h-9 px-4 text-sm font-medium rounded-md border border-line bg-surface text-ink hover:bg-surface-alt transition-colors"
               >
                 Clear Filters
               </button>
@@ -511,30 +504,19 @@ interface PageHeaderProps {
 
 function PageHeader({ onInviteClick, userCount }: PageHeaderProps) {
   return (
-    <div className="flex items-start justify-between gap-4">
-      <div>
-        <h1 className="text-[22px] font-semibold tracking-tight text-ink">
-          People
-        </h1>
-        <div className="flex items-center gap-3 mt-0.5">
-          <p className="text-sm text-ink-secondary">
-            Manage your team members, roles, and access.
-          </p>
-          {userCount !== undefined && (
-            <span className="text-xs text-ink-muted">
-              {userCount} {userCount === 1 ? 'user' : 'users'}
-            </span>
-          )}
-        </div>
-      </div>
-      <button
-        onClick={onInviteClick}
-        className="h-9 px-4 text-sm font-medium rounded-md bg-primary hover:bg-primary-hover text-white transition-colors flex items-center gap-2 flex-shrink-0"
-      >
-        <UserPlus className="w-4 h-4" />
-        Invite User
-      </button>
-    </div>
+    <SharedPageHeader
+      title="People"
+      subtitle={`Manage your team members, roles, and access.${userCount !== undefined ? ` ${userCount} ${userCount === 1 ? 'user' : 'users'}.` : ''}`}
+      primaryAction={
+        <button
+          onClick={onInviteClick}
+          className="h-9 px-4 text-sm font-medium rounded-md bg-primary hover:bg-primary-hover text-primary-foreground transition-colors flex items-center gap-2 flex-shrink-0"
+        >
+          <UserPlus className="w-4 h-4" />
+          Invite user
+        </button>
+      }
+    />
   );
 }
 
@@ -550,10 +532,10 @@ function StatsRow({ stats, isLoading }: StatsRowProps) {
 
   const statItems = [
     { label: 'Total', value: stats.total, icon: Users, color: 'text-ink' },
-    { label: 'Active', value: stats.active, icon: Users, color: 'text-emerald-600' },
-    { label: 'Invited', value: stats.invited, icon: Users, color: 'text-sky-600' },
-    { label: 'On Leave', value: stats.on_leave, icon: Users, color: 'text-amber-600' },
-    { label: 'Terminated', value: stats.terminated, icon: Users, color: 'text-red-600' },
+    { label: 'Active', value: stats.active, icon: Users, color: 'text-success' },
+    { label: 'Invited', value: stats.invited, icon: Users, color: 'text-info' },
+    { label: 'On Leave', value: stats.on_leave, icon: Users, color: 'text-warning' },
+    { label: 'Terminated', value: stats.terminated, icon: Users, color: 'text-error' },
   ];
 
   return (
@@ -630,7 +612,7 @@ function FilterBar({
           value={filters.search}
           onChange={(e) => onFilterChange({ ...filters, search: e.target.value })}
           placeholder="Search users..."
-          className="w-full h-9 pl-9 pr-8 text-sm rounded-md border border-line bg-white text-ink placeholder:text-ink-muted focus:outline-none focus:ring-2 focus:ring-primary/30 focus:border-primary transition-all duration-150"
+          className="w-full h-9 pl-9 pr-8 text-sm rounded-md border border-line bg-surface text-ink placeholder:text-ink-muted focus:outline-none focus:ring-2 focus:ring-primary/30 focus:border-primary transition-all duration-150"
         />
         {filters.search && (
           <button
@@ -653,7 +635,7 @@ function FilterBar({
               lifecycle_state: e.target.value as UserFilters['lifecycle_state'],
             })
           }
-          className="h-9 pl-3 pr-8 text-sm rounded-md border border-line bg-white text-ink focus:outline-none focus:ring-2 focus:ring-primary/30 focus:border-primary transition-all duration-150 appearance-none cursor-pointer"
+          className="h-9 pl-3 pr-8 text-sm rounded-md border border-line bg-surface text-ink focus:outline-none focus:ring-2 focus:ring-primary/30 focus:border-primary transition-all duration-150 appearance-none cursor-pointer"
         >
           {LIFECYCLE_STATE_OPTIONS.map((opt) => (
             <option key={opt.value} value={opt.value}>
@@ -671,7 +653,7 @@ function FilterBar({
           onChange={(e) =>
             onFilterChange({ ...filters, department_id: e.target.value })
           }
-          className="h-9 pl-3 pr-8 text-sm rounded-md border border-line bg-white text-ink focus:outline-none focus:ring-2 focus:ring-primary/30 focus:border-primary transition-all duration-150 appearance-none cursor-pointer"
+          className="h-9 pl-3 pr-8 text-sm rounded-md border border-line bg-surface text-ink focus:outline-none focus:ring-2 focus:ring-primary/30 focus:border-primary transition-all duration-150 appearance-none cursor-pointer"
         >
           <option value="">All Departments</option>
           {departments.map((d) => (
@@ -690,7 +672,7 @@ function FilterBar({
           onChange={(e) =>
             onFilterChange({ ...filters, location_id: e.target.value })
           }
-          className="h-9 pl-3 pr-8 text-sm rounded-md border border-line bg-white text-ink focus:outline-none focus:ring-2 focus:ring-primary/30 focus:border-primary transition-all duration-150 appearance-none cursor-pointer"
+          className="h-9 pl-3 pr-8 text-sm rounded-md border border-line bg-surface text-ink focus:outline-none focus:ring-2 focus:ring-primary/30 focus:border-primary transition-all duration-150 appearance-none cursor-pointer"
         >
           <option value="">All Locations</option>
           {locations.map((loc) => (
@@ -712,7 +694,7 @@ function FilterBar({
               employment_type: e.target.value as UserFilters['employment_type'],
             })
           }
-          className="h-9 pl-3 pr-8 text-sm rounded-md border border-line bg-white text-ink focus:outline-none focus:ring-2 focus:ring-primary/30 focus:border-primary transition-all duration-150 appearance-none cursor-pointer"
+          className="h-9 pl-3 pr-8 text-sm rounded-md border border-line bg-surface text-ink focus:outline-none focus:ring-2 focus:ring-primary/30 focus:border-primary transition-all duration-150 appearance-none cursor-pointer"
         >
           {EMPLOYMENT_TYPE_OPTIONS.map((opt) => (
             <option key={opt.value} value={opt.value}>
@@ -796,7 +778,7 @@ function EditUserModal({ user, isOpen, onClose, departments, locations, required
             <button
               onClick={onClose}
               disabled={updateUser.isPending}
-              className="h-9 px-4 text-sm font-medium rounded-md border border-line bg-white text-ink hover:bg-surface-alt transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+              className="h-9 px-4 text-sm font-medium rounded-md border border-line bg-surface text-ink hover:bg-surface-alt transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
             >
               Cancel
             </button>
@@ -819,7 +801,7 @@ function EditUserModal({ user, isOpen, onClose, departments, locations, required
         ) : (
           <button
             onClick={onClose}
-            className="h-9 px-4 text-sm font-medium rounded-md border border-line bg-white text-ink hover:bg-surface-alt transition-colors"
+            className="h-9 px-4 text-sm font-medium rounded-md border border-line bg-surface text-ink hover:bg-surface-alt transition-colors"
           >
             Close
           </button>
@@ -908,7 +890,7 @@ function LifecycleChangeModal({ user, isOpen, onClose }: LifecycleChangeModalPro
       footer={
         <button
           onClick={onClose}
-          className="h-9 px-4 text-sm font-medium rounded-md border border-line bg-white text-ink hover:bg-surface-alt transition-colors"
+          className="h-9 px-4 text-sm font-medium rounded-md border border-line bg-surface text-ink hover:bg-surface-alt transition-colors"
         >
           Close
         </button>
@@ -936,28 +918,28 @@ interface BulkActionBarProps {
 
 function BulkActionBar({ selectedCount, onClearSelection, onChangeLifecycle, onAssignRole, onChangeLocation, onExport }: BulkActionBarProps) {
   return (
-    <div className="bg-white rounded-lg border border-line shadow-card px-4 py-3 flex items-center gap-3">
+    <div className="bg-surface rounded-lg border border-line shadow-card px-4 py-3 flex items-center gap-3">
       <span className="text-sm font-medium text-ink">
         {selectedCount} selected
       </span>
       <div className="h-5 w-px bg-line" />
       <button
         onClick={onChangeLifecycle}
-        className="h-8 px-3 text-xs font-medium rounded-md border border-line bg-white text-ink hover:bg-surface-alt transition-colors inline-flex items-center gap-1.5"
+        className="h-8 px-3 text-xs font-medium rounded-md border border-line bg-surface text-ink hover:bg-surface-alt transition-colors inline-flex items-center gap-1.5"
       >
         <ArrowRightCircle className="w-3.5 h-3.5" />
         Change State
       </button>
       <button
         onClick={onAssignRole}
-        className="h-8 px-3 text-xs font-medium rounded-md border border-line bg-white text-ink hover:bg-surface-alt transition-colors inline-flex items-center gap-1.5"
+        className="h-8 px-3 text-xs font-medium rounded-md border border-line bg-surface text-ink hover:bg-surface-alt transition-colors inline-flex items-center gap-1.5"
       >
         <UserCheck className="w-3.5 h-3.5" />
         Assign Role
       </button>
       <button
         onClick={onChangeLocation}
-        className="h-8 px-3 text-xs font-medium rounded-md border border-line bg-white text-ink hover:bg-surface-alt transition-colors inline-flex items-center gap-1.5"
+        className="h-8 px-3 text-xs font-medium rounded-md border border-line bg-surface text-ink hover:bg-surface-alt transition-colors inline-flex items-center gap-1.5"
       >
         <MapPin className="w-3.5 h-3.5" />
         Change Location
@@ -965,7 +947,7 @@ function BulkActionBar({ selectedCount, onClearSelection, onChangeLifecycle, onA
       <PermissionGate module="people" action="export">
         <button
           onClick={onExport}
-          className="h-8 px-3 text-xs font-medium rounded-md border border-line bg-white text-ink hover:bg-surface-alt transition-colors inline-flex items-center gap-1.5 ml-auto"
+          className="h-8 px-3 text-xs font-medium rounded-md border border-line bg-surface text-ink hover:bg-surface-alt transition-colors inline-flex items-center gap-1.5 ml-auto"
         >
           <Download className="w-3.5 h-3.5" />
           Export CSV
@@ -1005,7 +987,7 @@ function BulkLifecycleModal({ isOpen, onClose, selectedCount, onSubmit, targetSt
       size="md"
       footer={
         <>
-          <button onClick={onClose} disabled={isPending} className="h-9 px-4 text-sm font-medium rounded-md border border-line bg-white text-ink hover:bg-surface-alt transition-colors disabled:opacity-50">
+          <button onClick={onClose} disabled={isPending} className="h-9 px-4 text-sm font-medium rounded-md border border-line bg-surface text-ink hover:bg-surface-alt transition-colors disabled:opacity-50">
             Cancel
           </button>
           <button
@@ -1027,7 +1009,7 @@ function BulkLifecycleModal({ isOpen, onClose, selectedCount, onSubmit, targetSt
           <select
             value={targetState}
             onChange={(e) => onTargetChange(e.target.value as LifecycleState | '')}
-            className="w-full h-9 px-3 text-sm rounded-md border border-line bg-white text-ink focus:outline-none focus:ring-2 focus:ring-primary/30 focus:border-primary transition-all duration-150"
+            className="w-full h-9 px-3 text-sm rounded-md border border-line bg-surface text-ink focus:outline-none focus:ring-2 focus:ring-primary/30 focus:border-primary transition-all duration-150"
           >
             <option value="">Select target state...</option>
             {LIFECYCLE_STATE_OPTIONS.filter((o) => o.value !== '').map((opt) => (
@@ -1048,7 +1030,7 @@ function BulkLifecycleModal({ isOpen, onClose, selectedCount, onSubmit, targetSt
               onChange={(e) => onReasonChange(e.target.value)}
               placeholder="Please provide a reason for this action..."
               rows={3}
-              className="w-full px-3 py-2 text-sm rounded-md border border-line bg-white text-ink placeholder:text-ink-muted focus:outline-none focus:ring-2 focus:ring-primary/30 focus:border-primary transition-all duration-150 resize-none"
+              className="w-full px-3 py-2 text-sm rounded-md border border-line bg-surface text-ink placeholder:text-ink-muted focus:outline-none focus:ring-2 focus:ring-primary/30 focus:border-primary transition-all duration-150 resize-none"
             />
             <p className="text-xs text-ink-secondary mt-1">
               This reason will be included in notification emails and audit logs.
@@ -1089,7 +1071,7 @@ function BulkRoleModal({ isOpen, onClose, selectedCount, onSubmit, targetRole, o
       size="md"
       footer={
         <>
-          <button onClick={onClose} disabled={isPending} className="h-9 px-4 text-sm font-medium rounded-md border border-line bg-white text-ink hover:bg-surface-alt transition-colors disabled:opacity-50">
+          <button onClick={onClose} disabled={isPending} className="h-9 px-4 text-sm font-medium rounded-md border border-line bg-surface text-ink hover:bg-surface-alt transition-colors disabled:opacity-50">
             Cancel
           </button>
           <button
@@ -1111,7 +1093,7 @@ function BulkRoleModal({ isOpen, onClose, selectedCount, onSubmit, targetRole, o
           <select
             value={targetRole}
             onChange={(e) => onTargetChange(e.target.value)}
-            className="w-full h-9 px-3 text-sm rounded-md border border-line bg-white text-ink focus:outline-none focus:ring-2 focus:ring-primary/30 focus:border-primary transition-all duration-150"
+            className="w-full h-9 px-3 text-sm rounded-md border border-line bg-surface text-ink focus:outline-none focus:ring-2 focus:ring-primary/30 focus:border-primary transition-all duration-150"
           >
             <option value="">Select role...</option>
             {roles.map((role) => (
@@ -1149,7 +1131,7 @@ function BulkLocationModal({ isOpen, onClose, selectedCount, onSubmit, targetLoc
       size="md"
       footer={
         <>
-          <button onClick={onClose} disabled={isPending} className="h-9 px-4 text-sm font-medium rounded-md border border-line bg-white text-ink hover:bg-surface-alt transition-colors disabled:opacity-50">
+          <button onClick={onClose} disabled={isPending} className="h-9 px-4 text-sm font-medium rounded-md border border-line bg-surface text-ink hover:bg-surface-alt transition-colors disabled:opacity-50">
             Cancel
           </button>
           <button
@@ -1171,7 +1153,7 @@ function BulkLocationModal({ isOpen, onClose, selectedCount, onSubmit, targetLoc
           <select
             value={targetLocation}
             onChange={(e) => onTargetChange(e.target.value)}
-            className="w-full h-9 px-3 text-sm rounded-md border border-line bg-white text-ink focus:outline-none focus:ring-2 focus:ring-primary/30 focus:border-primary transition-all duration-150"
+            className="w-full h-9 px-3 text-sm rounded-md border border-line bg-surface text-ink focus:outline-none focus:ring-2 focus:ring-primary/30 focus:border-primary transition-all duration-150"
           >
             <option value="">Select location...</option>
             {locations.map((loc) => (

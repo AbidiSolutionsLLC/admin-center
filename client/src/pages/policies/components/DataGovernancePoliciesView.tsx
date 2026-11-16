@@ -73,9 +73,9 @@ export const DataGovernancePoliciesView = () => {
           action={{ label: 'Create Rule', onClick: () => setIsCreateOpen(true) }}
         />
       ) : (
-        <div className="bg-white rounded-lg border border-line shadow-card overflow-hidden">
+        <div className="bg-surface rounded-lg border border-line shadow-card overflow-hidden">
           <table className="w-full text-left">
-            <thead className="bg-white/5 border-b border-line">
+            <thead className="bg-surface-alt border-b border-line">
               <tr>
                 <th className="h-10 px-4 text-[11px] font-semibold text-ink-secondary uppercase tracking-wider">Rule Name</th>
                 <th className="h-10 px-4 text-[11px] font-semibold text-ink-secondary uppercase tracking-wider">Resource</th>
@@ -87,7 +87,7 @@ export const DataGovernancePoliciesView = () => {
             </thead>
             <tbody>
               {policies.map((p) => (
-                <tr key={p._id} className="border-b border-line last:border-0 hover:bg-white/5 transition-colors duration-100">
+                <tr key={p._id} className="border-b border-line last:border-0 hover:bg-surface-hover transition-colors duration-100">
                   <td className="h-14 px-4">
                     <div className="text-sm font-medium text-ink">{p.name}</div>
                     <div className="text-xs text-ink-secondary mt-0.5">{p.description}</div>
@@ -104,13 +104,13 @@ export const DataGovernancePoliciesView = () => {
                   <td className="h-14 px-4">
                     <button
                       onClick={() => toggleActive(p)}
-                      className={`inline-flex items-center text-[11px] font-semibold tracking-wide rounded-full px-2.5 py-0.5 border transition-colors duration-150 ${p.is_active ? 'bg-emerald-50 text-emerald-700 border-emerald-200 hover:bg-emerald-100' : 'bg-[#F1F3F7] text-ink-secondary border-[#C8CDD8] hover:bg-[#E5E7EB]'}`}
+                      className={`inline-flex items-center text-[11px] font-semibold tracking-wide rounded-full px-2.5 py-0.5 border transition-colors duration-150 ${p.is_active ? 'bg-success/10 text-success border-success/30 hover:bg-success/10' : 'bg-[var(--glass-hover)] text-ink-secondary border-[var(--text-muted)] hover:bg-[var(--glass-border)]'}`}
                     >
                       {p.is_active ? 'Active' : 'Inactive'}
                     </button>
                   </td>
                   <td className="h-14 px-4 text-right">
-                    <button onClick={() => setDeleteId(p._id)} className="h-8 w-8 inline-flex items-center justify-center rounded-md text-ink-secondary hover:text-error hover:bg-red-50 transition-colors duration-150">
+                    <button onClick={() => setDeleteId(p._id)} className="h-8 w-8 inline-flex items-center justify-center rounded-md text-ink-secondary hover:text-error hover:bg-error/10 transition-colors duration-150">
                       <Trash2 className="w-4 h-4" />
                     </button>
                   </td>
@@ -129,7 +129,7 @@ export const DataGovernancePoliciesView = () => {
               type="text"
               value={newPolicy.name}
               onChange={(e) => setNewPolicy({ ...newPolicy, name: e.target.value })}
-              className="w-full h-9 px-3 text-sm rounded-md border border-line bg-white text-ink placeholder:text-ink-muted focus:outline-none focus:ring-2 focus:ring-primary/30 focus:border-primary transition-all duration-150"
+              className="w-full h-9 px-3 text-sm rounded-md border border-line bg-surface text-ink placeholder:text-ink-muted focus:outline-none focus:ring-2 focus:ring-primary/30 focus:border-primary transition-all duration-150"
               placeholder="e.g. Mask Employee SSN"
             />
           </div>
@@ -139,7 +139,7 @@ export const DataGovernancePoliciesView = () => {
               type="text"
               value={newPolicy.description}
               onChange={(e) => setNewPolicy({ ...newPolicy, description: e.target.value })}
-              className="w-full h-9 px-3 text-sm rounded-md border border-line bg-white text-ink placeholder:text-ink-muted focus:outline-none focus:ring-2 focus:ring-primary/30 focus:border-primary transition-all duration-150"
+              className="w-full h-9 px-3 text-sm rounded-md border border-line bg-surface text-ink placeholder:text-ink-muted focus:outline-none focus:ring-2 focus:ring-primary/30 focus:border-primary transition-all duration-150"
             />
           </div>
           <div className="grid grid-cols-2 gap-4">
@@ -148,7 +148,7 @@ export const DataGovernancePoliciesView = () => {
               <select
                 value={newPolicy.resource}
                 onChange={(e) => setNewPolicy({ ...newPolicy, resource: e.target.value })}
-                className="w-full h-9 px-3 text-sm rounded-md border border-line bg-white text-ink focus:outline-none focus:ring-2 focus:ring-primary/30 focus:border-primary transition-all duration-150"
+                className="w-full h-9 px-3 text-sm rounded-md border border-line bg-surface text-ink focus:outline-none focus:ring-2 focus:ring-primary/30 focus:border-primary transition-all duration-150"
               >
                 <option value="User">User</option>
                 <option value="Department">Department</option>
@@ -160,7 +160,7 @@ export const DataGovernancePoliciesView = () => {
               <select
                 value={newPolicy.granularity}
                 onChange={(e) => setNewPolicy({ ...newPolicy, granularity: e.target.value as any })}
-                className="w-full h-9 px-3 text-sm rounded-md border border-line bg-white text-ink focus:outline-none focus:ring-2 focus:ring-primary/30 focus:border-primary transition-all duration-150"
+                className="w-full h-9 px-3 text-sm rounded-md border border-line bg-surface text-ink focus:outline-none focus:ring-2 focus:ring-primary/30 focus:border-primary transition-all duration-150"
               >
                 <option value="column">Column (Field Level)</option>
                 <option value="row">Row (Record Level)</option>
@@ -180,7 +180,7 @@ export const DataGovernancePoliciesView = () => {
                     rules: [{ ...newPolicy.rules?.[0]!, fields }]
                   });
                 }}
-                className="w-full h-9 px-3 font-mono text-xs rounded-md border border-line bg-white text-ink placeholder:text-ink-muted focus:outline-none focus:ring-2 focus:ring-primary/30 focus:border-primary transition-all duration-150"
+                className="w-full h-9 px-3 font-mono text-xs rounded-md border border-line bg-surface text-ink placeholder:text-ink-muted focus:outline-none focus:ring-2 focus:ring-primary/30 focus:border-primary transition-all duration-150"
                 placeholder="e.g. ssn, salary, custom_fields.dob"
               />
             </div>
@@ -194,7 +194,7 @@ export const DataGovernancePoliciesView = () => {
                     rules: [{ ...newPolicy.rules?.[0]!, action: e.target.value as any }]
                   });
                 }}
-                className="w-full h-9 px-3 text-sm rounded-md border border-line bg-white text-ink focus:outline-none focus:ring-2 focus:ring-primary/30 focus:border-primary transition-all duration-150"
+                className="w-full h-9 px-3 text-sm rounded-md border border-line bg-surface text-ink focus:outline-none focus:ring-2 focus:ring-primary/30 focus:border-primary transition-all duration-150"
               >
                 <option value="mask">Mask Data</option>
                 <option value="hide">Hide Data (Strip entirely)</option>
@@ -215,12 +215,12 @@ export const DataGovernancePoliciesView = () => {
                   applied_to: { ...newPolicy.applied_to, roles }
                 });
               }}
-              className="w-full h-9 px-3 text-sm rounded-md border border-line bg-white text-ink placeholder:text-ink-muted focus:outline-none focus:ring-2 focus:ring-primary/30 focus:border-primary transition-all duration-150"
+              className="w-full h-9 px-3 text-sm rounded-md border border-line bg-surface text-ink placeholder:text-ink-muted focus:outline-none focus:ring-2 focus:ring-primary/30 focus:border-primary transition-all duration-150"
               placeholder="e.g. 64b8f0..."
             />
           </div>
           <div className="pt-4 flex justify-end space-x-2 border-t border-line mt-6">
-            <button onClick={() => setIsCreateOpen(false)} className="h-9 px-4 text-sm font-medium rounded-md border border-line bg-white text-ink hover:bg-surface-alt transition-colors duration-150">
+            <button onClick={() => setIsCreateOpen(false)} className="h-9 px-4 text-sm font-medium rounded-md border border-line bg-surface text-ink hover:bg-surface-alt transition-colors duration-150">
               Cancel
             </button>
             <button

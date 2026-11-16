@@ -27,7 +27,8 @@ import { useSaveWorkflowAsTemplate } from '@/features/workflows/hooks/useWorkflo
 import { WorkflowTemplatesView } from './components/WorkflowTemplatesView';
 import { MultiUserSelect } from '@/components/ui/MultiUserSelect';
 import { TableSkeleton } from '@/components/ui/TableSkeleton';
-import { ErrorState } from '@/components/ui/ErrorState';
+import { PageHeader as SharedPageHeader } from '@/components/ui/PageHeader';
+import { PageStates } from '@/components/templates/PageStates';
 import { EmptyState } from '@/components/ui/EmptyState';
 import { UserSelect } from '@/components/ui/UserSelect';
 import { useUsers } from '@/features/people/hooks/useUsers';
@@ -55,8 +56,8 @@ const STATUS_LABELS: Record<WorkflowStatus, string> = {
 };
 
 const STATUS_COLORS: Record<WorkflowStatus, string> = {
-  draft: 'bg-sky-500',
-  published: 'bg-emerald-500',
+  draft: 'bg-info',
+  published: 'bg-success',
   archived: 'bg-ink-muted',
 };
 
@@ -76,7 +77,7 @@ const LIFECYCLE_STATES = [
 ];
 
 const RUN_STATUS_ICONS: Record<string, { icon: React.ReactNode; color: string; label: string }> = {
-  success: { icon: <CheckCircle className="w-3.5 h-3.5" />, color: 'text-emerald-600', label: 'Success' },
+  success: { icon: <CheckCircle className="w-3.5 h-3.5" />, color: 'text-success', label: 'Success' },
   failure: { icon: <XCircle className="w-3.5 h-3.5" />, color: 'text-error', label: 'Failed' },
   partial: { icon: <AlertTriangle className="w-3.5 h-3.5" />, color: 'text-warning', label: 'Partial' },
 };
@@ -121,26 +122,19 @@ export default function WorkflowsPage() {
     });
   }, [workflows, search, statusFilter]);
 
-  // ── Render: Loading ────────────────────────────────────────────────
-  if (isLoading) {
+  // ── Render: Loading / Error ────────────────────────────────────────
+  if (isLoading || isError) {
     return (
-      <div className="space-y-5">
+      <div>
         <PageHeader onCreateClick={() => setIsCreateModalOpen(true)} />
-        <TableSkeleton rows={6} columns={5} />
-      </div>
-    );
-  }
-
-  // ── Render: Error ──────────────────────────────────────────────────
-  if (isError) {
-    return (
-      <div className="space-y-5">
-        <PageHeader onCreateClick={() => setIsCreateModalOpen(true)} />
-        <ErrorState
-          title="Failed to load workflows"
-          description="Something went wrong fetching workflow data. Please try again."
-          onRetry={refetch}
-        />
+        <PageStates
+          isLoading={isLoading}
+          isError={isError}
+          onRetry={() => refetch()}
+          skeleton={<TableSkeleton rows={6} columns={5} />}
+        >
+          {null}
+        </PageStates>
       </div>
     );
   }
@@ -209,7 +203,7 @@ export default function WorkflowsPage() {
 
           {/* ── Workflows Table ── */}
           {filteredWorkflows?.length === 0 ? (
-            <div className="bg-white rounded-lg border border-line shadow-card p-16 text-center">
+            <div className="bg-surface rounded-lg border border-line shadow-card p-16 text-center">
               <div className="w-10 h-10 rounded-xl bg-primary-light flex items-center justify-center mx-auto mb-3">
                 <Search className="w-5 h-5 text-primary" />
               </div>
@@ -222,16 +216,16 @@ export default function WorkflowsPage() {
                   setSearch('');
                   setStatusFilter('');
                 }}
-                className="mt-4 h-9 px-4 text-sm font-medium rounded-md border border-line bg-white text-ink hover:bg-surface-alt transition-colors"
+                className="mt-4 h-9 px-4 text-sm font-medium rounded-md border border-line bg-surface text-ink hover:bg-surface-alt transition-colors"
               >
                 Clear Filters
               </button>
             </div>
           ) : (
-            <div className="bg-white rounded-lg border border-line shadow-card overflow-hidden">
+            <div className="bg-surface rounded-lg border border-line shadow-card overflow-hidden">
               <div className="overflow-x-auto">
                 <table className="w-full min-w-[800px]">
-                <thead className="bg-white/5 border-b border-line">
+                <thead className="bg-surface-alt border-b border-line">
                   <tr>
                     <th className="text-[11px] font-semibold text-ink-secondary uppercase tracking-wider h-10 px-4 text-left">
                       Workflow
@@ -337,30 +331,19 @@ interface PageHeaderProps {
 
 function PageHeader({ onCreateClick, workflowCount }: PageHeaderProps) {
   return (
-    <div className="flex items-start justify-between gap-4">
-      <div>
-        <h1 className="text-[22px] font-semibold tracking-tight text-ink">
-          Workflows
-        </h1>
-        <div className="flex items-center gap-3 mt-0.5">
-          <p className="text-sm text-ink-secondary">
-            Automate actions triggered by lifecycle changes.
-          </p>
-          {workflowCount !== undefined && (
-            <span className="text-xs text-ink-muted">
-              {workflowCount} {workflowCount === 1 ? 'workflow' : 'workflows'}
-            </span>
-          )}
-        </div>
-      </div>
-      <button
-        onClick={onCreateClick}
-        className="h-9 px-4 text-sm font-medium rounded-md bg-primary hover:bg-primary-hover text-white transition-colors flex items-center gap-2 flex-shrink-0"
-      >
-        <Plus className="w-4 h-4" />
-        Create Workflow
-      </button>
-    </div>
+    <SharedPageHeader
+      title="Workflows"
+      subtitle={`Automate actions triggered by lifecycle changes.${workflowCount !== undefined ? ` ${workflowCount} ${workflowCount === 1 ? 'workflow' : 'workflows'}.` : ''}`}
+      primaryAction={
+        <button
+          onClick={onCreateClick}
+          className="h-9 px-4 text-sm font-medium rounded-md bg-primary hover:bg-primary-hover text-primary-foreground transition-colors flex items-center gap-2 flex-shrink-0"
+        >
+          <Plus className="w-4 h-4" />
+          Create workflow
+        </button>
+      }
+    />
   );
 }
 
@@ -391,7 +374,7 @@ function FilterBar({
           value={search}
           onChange={(e) => onSearchChange(e.target.value)}
           placeholder="Search workflows..."
-          className="w-full h-9 pl-9 pr-8 text-sm rounded-md border border-line bg-white text-ink placeholder:text-ink-muted focus:outline-none focus:ring-2 focus:ring-primary/30 focus:border-primary transition-all duration-150"
+          className="w-full h-9 pl-9 pr-8 text-sm rounded-md border border-line bg-surface text-ink placeholder:text-ink-muted focus:outline-none focus:ring-2 focus:ring-primary/30 focus:border-primary transition-all duration-150"
         />
         {search && (
           <button
@@ -409,7 +392,7 @@ function FilterBar({
         <select
           value={statusFilter}
           onChange={(e) => onStatusChange(e.target.value as WorkflowStatus | '')}
-          className="h-9 pl-3 pr-8 text-sm rounded-md border border-line bg-white text-ink focus:outline-none focus:ring-2 focus:ring-primary/30 focus:border-primary transition-all duration-150 appearance-none cursor-pointer"
+          className="h-9 pl-3 pr-8 text-sm rounded-md border border-line bg-surface text-ink focus:outline-none focus:ring-2 focus:ring-primary/30 focus:border-primary transition-all duration-150 appearance-none cursor-pointer"
         >
           <option value="">All Statuses</option>
           {Object.entries(STATUS_LABELS).map(([key, label]) => (
@@ -457,7 +440,7 @@ function WorkflowRow({ workflow, onView, onEdit, onDelete }: WorkflowRowProps) {
   };
 
   return (
-    <tr className="border-b border-line last:border-0 hover:bg-white/5 transition-colors duration-100">
+    <tr className="border-b border-line last:border-0 hover:bg-surface-hover transition-colors duration-100">
       <td className="h-14 px-4">
         <div>
           <p className="text-sm font-medium text-ink">{workflow.name}</p>
@@ -489,7 +472,7 @@ function WorkflowRow({ workflow, onView, onEdit, onDelete }: WorkflowRowProps) {
         <div className="flex items-center justify-end gap-1.5">
           <button
             onClick={onView}
-            className="h-7 px-3 text-xs font-medium rounded-md border border-line bg-white text-ink hover:bg-surface-alt transition-colors inline-flex items-center gap-1.5"
+            className="h-7 px-3 text-xs font-medium rounded-md border border-line bg-surface text-ink hover:bg-surface-alt transition-colors inline-flex items-center gap-1.5"
           >
             <Eye className="w-3.5 h-3.5" />
             View
@@ -499,7 +482,7 @@ function WorkflowRow({ workflow, onView, onEdit, onDelete }: WorkflowRowProps) {
               {onEdit && (
                 <button
                   onClick={onEdit}
-                  className="h-7 px-2 text-xs font-medium rounded-md border border-line bg-white text-ink hover:bg-surface-alt transition-colors inline-flex items-center gap-1"
+                  className="h-7 px-2 text-xs font-medium rounded-md border border-line bg-surface text-ink hover:bg-surface-alt transition-colors inline-flex items-center gap-1"
                   title="Edit workflow"
                 >
                   <Edit2 className="w-3.5 h-3.5" />
@@ -508,7 +491,7 @@ function WorkflowRow({ workflow, onView, onEdit, onDelete }: WorkflowRowProps) {
               <button
                 onClick={() => publishMutation.mutate()}
                 disabled={publishMutation.isPending}
-                className="h-7 px-2 text-xs font-medium rounded-md border border-line bg-white text-emerald-600 hover:bg-emerald-50 transition-colors inline-flex items-center gap-1 disabled:opacity-50"
+                className="h-7 px-2 text-xs font-medium rounded-md border border-line bg-surface text-success hover:bg-success/10 transition-colors inline-flex items-center gap-1 disabled:opacity-50"
                 title="Publish workflow"
               >
                 <Power className="w-3.5 h-3.5" />
@@ -520,7 +503,7 @@ function WorkflowRow({ workflow, onView, onEdit, onDelete }: WorkflowRowProps) {
               <button
                 onClick={() => draftMutation.mutate()}
                 disabled={draftMutation.isPending}
-                className="h-7 px-2 text-xs font-medium rounded-md border border-line bg-white text-primary hover:bg-primary-light transition-colors inline-flex items-center gap-1 disabled:opacity-50"
+                className="h-7 px-2 text-xs font-medium rounded-md border border-line bg-surface text-primary hover:bg-primary-light transition-colors inline-flex items-center gap-1 disabled:opacity-50"
                 title="Create new draft from this version"
               >
                 <GitBranch className="w-3.5 h-3.5" />
@@ -528,7 +511,7 @@ function WorkflowRow({ workflow, onView, onEdit, onDelete }: WorkflowRowProps) {
               <button
                 onClick={() => archiveMutation.mutate()}
                 disabled={archiveMutation.isPending}
-                className="h-7 px-2 text-xs font-medium rounded-md border border-line bg-white text-warning hover:bg-warning-light transition-colors inline-flex items-center gap-1 disabled:opacity-50"
+                className="h-7 px-2 text-xs font-medium rounded-md border border-line bg-surface text-warning hover:bg-warning-light transition-colors inline-flex items-center gap-1 disabled:opacity-50"
                 title="Archive workflow"
               >
                 <PowerOff className="w-3.5 h-3.5" />
@@ -536,7 +519,7 @@ function WorkflowRow({ workflow, onView, onEdit, onDelete }: WorkflowRowProps) {
               <button
                 onClick={handleSaveAsTemplate}
                 disabled={saveTemplateMutation.isPending}
-                className="h-7 px-2 text-xs font-medium rounded-md border border-line bg-white text-ink-secondary hover:bg-surface-alt transition-colors inline-flex items-center gap-1 disabled:opacity-50"
+                className="h-7 px-2 text-xs font-medium rounded-md border border-line bg-surface text-ink-secondary hover:bg-surface-alt transition-colors inline-flex items-center gap-1 disabled:opacity-50"
                 title="Save as Template"
               >
                 <Save className="w-3.5 h-3.5" />
@@ -547,7 +530,7 @@ function WorkflowRow({ workflow, onView, onEdit, onDelete }: WorkflowRowProps) {
             <button
               onClick={() => draftMutation.mutate()}
               disabled={draftMutation.isPending}
-              className="h-7 px-2 text-xs font-medium rounded-md border border-line bg-white text-primary hover:bg-primary-light transition-colors inline-flex items-center gap-1 disabled:opacity-50"
+              className="h-7 px-2 text-xs font-medium rounded-md border border-line bg-surface text-primary hover:bg-primary-light transition-colors inline-flex items-center gap-1 disabled:opacity-50"
               title="Create new draft from this version"
             >
               <GitBranch className="w-3.5 h-3.5" />
@@ -556,7 +539,7 @@ function WorkflowRow({ workflow, onView, onEdit, onDelete }: WorkflowRowProps) {
           {workflow.status === 'draft' && (
             <button
               onClick={onDelete}
-              className="h-7 px-2 text-xs font-medium rounded-md border border-line bg-white text-ink-secondary hover:text-error hover:border-error/30 hover:bg-error-light transition-colors inline-flex items-center gap-1"
+              className="h-7 px-2 text-xs font-medium rounded-md border border-line bg-surface text-ink-secondary hover:text-error hover:border-error/30 hover:bg-error-light transition-colors inline-flex items-center gap-1"
               title="Delete draft workflow"
             >
               <Trash2 className="w-3.5 h-3.5" />
@@ -697,7 +680,7 @@ function CreateWorkflowModal({ isOpen, onClose, createMutation }: CreateWorkflow
           <button
             onClick={onClose}
             disabled={createMutation.isPending}
-            className="h-9 px-4 text-sm font-medium rounded-md border border-line bg-white text-ink hover:bg-surface-alt transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+            className="h-9 px-4 text-sm font-medium rounded-md border border-line bg-surface text-ink hover:bg-surface-alt transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
           >
             Cancel
           </button>
@@ -728,7 +711,7 @@ function CreateWorkflowModal({ isOpen, onClose, createMutation }: CreateWorkflow
             value={formData.name}
             onChange={(e) => { setFormData({ ...formData, name: e.target.value }); setFormErrors(prev => ({ ...prev, name: '' })); }}
             placeholder="e.g., Offboarding Automation"
-            className={cn("w-full h-9 px-3 text-sm rounded-md border bg-white text-ink placeholder:text-ink-muted focus:outline-none focus:ring-2 focus:ring-primary/30 focus:border-primary transition-all duration-150", formErrors.name ? 'border-error' : 'border-line')}
+            className={cn("w-full h-9 px-3 text-sm rounded-md border bg-surface text-ink placeholder:text-ink-muted focus:outline-none focus:ring-2 focus:ring-primary/30 focus:border-primary transition-all duration-150", formErrors.name ? 'border-error' : 'border-line')}
           />
           {formErrors.name && <p className="mt-1 text-xs text-error">{formErrors.name}</p>}
         </div>
@@ -744,7 +727,7 @@ function CreateWorkflowModal({ isOpen, onClose, createMutation }: CreateWorkflow
               setFormData({ ...formData, description: e.target.value })
             }
             placeholder="Brief description of this workflow"
-            className="w-full h-9 px-3 text-sm rounded-md border border-line bg-white text-ink placeholder:text-ink-muted focus:outline-none focus:ring-2 focus:ring-primary/30 focus:border-primary transition-all duration-150"
+            className="w-full h-9 px-3 text-sm rounded-md border border-line bg-surface text-ink placeholder:text-ink-muted focus:outline-none focus:ring-2 focus:ring-primary/30 focus:border-primary transition-all duration-150"
           />
         </div>
 
@@ -755,7 +738,7 @@ function CreateWorkflowModal({ isOpen, onClose, createMutation }: CreateWorkflow
           <select
             value={formData.trigger}
             onChange={(e) => setFormData({ ...formData, trigger: e.target.value as WorkflowTrigger })}
-            className="w-full h-9 px-3 text-sm rounded-md border border-line bg-white text-ink focus:outline-none focus:ring-2 focus:ring-primary/30 focus:border-primary transition-all duration-150"
+            className="w-full h-9 px-3 text-sm rounded-md border border-line bg-surface text-ink focus:outline-none focus:ring-2 focus:ring-primary/30 focus:border-primary transition-all duration-150"
           >
             <option value="user.created">User Created (Invited)</option>
             <option value="user.lifecycle_changed">Lifecycle Status Changed</option>
@@ -822,11 +805,11 @@ function CreateWorkflowModal({ isOpen, onClose, createMutation }: CreateWorkflow
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                <div>
                   <label className="text-sm font-medium text-ink block mb-1.5">From Role IDs <span className="text-error">*</span></label>
-                  <input type="text" placeholder="e.g. role_id_1, role_id_2" value={formData.role_from.join(',')} onChange={(e) => { setFormData({...formData, role_from: e.target.value.split(',').filter(Boolean)}); setFormErrors(prev => ({ ...prev, role_from: '' })); }} className="w-full h-9 px-3 text-sm rounded-md border border-line bg-white" />
+                  <input type="text" placeholder="e.g. role_id_1, role_id_2" value={formData.role_from.join(',')} onChange={(e) => { setFormData({...formData, role_from: e.target.value.split(',').filter(Boolean)}); setFormErrors(prev => ({ ...prev, role_from: '' })); }} className="w-full h-9 px-3 text-sm rounded-md border border-line bg-surface" />
                </div>
                <div>
                   <label className="text-sm font-medium text-ink block mb-1.5">To Role IDs <span className="text-error">*</span></label>
-                  <input type="text" placeholder="e.g. role_id_3" value={formData.role_to.join(',')} onChange={(e) => { setFormData({...formData, role_to: e.target.value.split(',').filter(Boolean)}); setFormErrors(prev => ({ ...prev, role_to: '' })); }} className="w-full h-9 px-3 text-sm rounded-md border border-line bg-white" />
+                  <input type="text" placeholder="e.g. role_id_3" value={formData.role_to.join(',')} onChange={(e) => { setFormData({...formData, role_to: e.target.value.split(',').filter(Boolean)}); setFormErrors(prev => ({ ...prev, role_to: '' })); }} className="w-full h-9 px-3 text-sm rounded-md border border-line bg-surface" />
                </div>
             </div>
             {formErrors.role_from && <p className="mt-1 text-xs text-error">{formErrors.role_from}</p>}
@@ -840,11 +823,11 @@ function CreateWorkflowModal({ isOpen, onClose, createMutation }: CreateWorkflow
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                <div>
                   <label className="text-sm font-medium text-ink block mb-1.5">From Dept IDs <span className="text-error">*</span></label>
-                  <input type="text" placeholder="e.g. dept_id_1" value={formData.department_from.join(',')} onChange={(e) => { setFormData({...formData, department_from: e.target.value.split(',').filter(Boolean)}); setFormErrors(prev => ({ ...prev, department_from: '' })); }} className="w-full h-9 px-3 text-sm rounded-md border border-line bg-white" />
+                  <input type="text" placeholder="e.g. dept_id_1" value={formData.department_from.join(',')} onChange={(e) => { setFormData({...formData, department_from: e.target.value.split(',').filter(Boolean)}); setFormErrors(prev => ({ ...prev, department_from: '' })); }} className="w-full h-9 px-3 text-sm rounded-md border border-line bg-surface" />
                </div>
                <div>
                   <label className="text-sm font-medium text-ink block mb-1.5">To Dept IDs <span className="text-error">*</span></label>
-                  <input type="text" placeholder="e.g. dept_id_2" value={formData.department_to.join(',')} onChange={(e) => { setFormData({...formData, department_to: e.target.value.split(',').filter(Boolean)}); setFormErrors(prev => ({ ...prev, department_to: '' })); }} className="w-full h-9 px-3 text-sm rounded-md border border-line bg-white" />
+                  <input type="text" placeholder="e.g. dept_id_2" value={formData.department_to.join(',')} onChange={(e) => { setFormData({...formData, department_to: e.target.value.split(',').filter(Boolean)}); setFormErrors(prev => ({ ...prev, department_to: '' })); }} className="w-full h-9 px-3 text-sm rounded-md border border-line bg-surface" />
                </div>
             </div>
             {formErrors.department_from && <p className="mt-1 text-xs text-error">{formErrors.department_from}</p>}
@@ -869,7 +852,7 @@ function CreateWorkflowModal({ isOpen, onClose, createMutation }: CreateWorkflow
                 value={formData.sla_threshold_minutes}
                 onChange={(e) => { const v = e.target.value; if (v === '' || /^\d+$/.test(v)) { setFormData({ ...formData, sla_threshold_minutes: v }); setFormErrors(prev => ({ ...prev, sla_threshold: '' })); } }}
                 onKeyDown={(e) => { if (e.key === 'e' || e.key === 'E' || e.key === '+' || e.key === '-') e.preventDefault(); }}
-                className={cn("w-full h-8 px-3 text-sm rounded-md border bg-white text-ink placeholder:text-ink-muted focus:outline-none focus:ring-2 focus:ring-primary/30 focus:border-primary transition-all duration-150", formErrors.sla_threshold ? 'border-error' : 'border-line')}
+                className={cn("w-full h-8 px-3 text-sm rounded-md border bg-surface text-ink placeholder:text-ink-muted focus:outline-none focus:ring-2 focus:ring-primary/30 focus:border-primary transition-all duration-150", formErrors.sla_threshold ? 'border-error' : 'border-line')}
               />
               {formErrors.sla_threshold && <p className="mt-1 text-xs text-error">{formErrors.sla_threshold}</p>}
             </div>
@@ -986,7 +969,7 @@ function EditWorkflowModal({ isOpen, onClose, workflow }: EditWorkflowModalProps
           <button
             onClick={onClose}
             disabled={updateMutation.isPending}
-            className="h-9 px-4 text-sm font-medium rounded-md border border-line bg-white text-ink hover:bg-surface-alt transition-colors"
+            className="h-9 px-4 text-sm font-medium rounded-md border border-line bg-surface text-ink hover:bg-surface-alt transition-colors"
           >
             Cancel
           </button>
@@ -1012,7 +995,7 @@ function EditWorkflowModal({ isOpen, onClose, workflow }: EditWorkflowModalProps
             value={formData.name}
             onChange={(e) => setFormData({ ...formData, name: e.target.value })}
             placeholder="e.g., Send termination email"
-            className="w-full h-9 px-3 text-sm rounded-md border border-line bg-white text-ink placeholder:text-ink-muted focus:outline-none focus:ring-2 focus:ring-primary/30 focus:border-primary transition-all duration-150"
+            className="w-full h-9 px-3 text-sm rounded-md border border-line bg-surface text-ink placeholder:text-ink-muted focus:outline-none focus:ring-2 focus:ring-primary/30 focus:border-primary transition-all duration-150"
           />
         </div>
           <div className="col-span-2">
@@ -1024,7 +1007,7 @@ function EditWorkflowModal({ isOpen, onClose, workflow }: EditWorkflowModalProps
               value={formData.description}
               onChange={(e) => setFormData({ ...formData, description: e.target.value })}
               placeholder="Briefly describe what this workflow does..."
-              className="w-full h-9 px-3 text-sm rounded-md border border-line bg-white text-ink focus:ring-2 focus:ring-primary/30 focus:border-primary transition-all"
+              className="w-full h-9 px-3 text-sm rounded-md border border-line bg-surface text-ink focus:ring-2 focus:ring-primary/30 focus:border-primary transition-all"
             />
           </div>
         </div>
@@ -1046,7 +1029,7 @@ function EditWorkflowModal({ isOpen, onClose, workflow }: EditWorkflowModalProps
                   'text-left p-3 rounded-lg border transition-all',
                   formData.trigger === t.id
                     ? 'border-primary bg-primary/5 ring-1 ring-primary/20'
-                    : 'border-line bg-white hover:border-primary/50'
+                    : 'border-line bg-surface hover:border-primary/50'
                 )}
               >
                 <div className="text-sm font-medium text-ink mb-1">{t.label}</div>
@@ -1069,7 +1052,7 @@ function EditWorkflowModal({ isOpen, onClose, workflow }: EditWorkflowModalProps
                       'px-3 py-1 text-xs font-medium rounded-full border transition-colors',
                       formData.lifecycle_from.includes(state)
                         ? 'bg-primary text-white border-primary'
-                        : 'bg-white text-ink-secondary border-line hover:border-primary/50'
+                        : 'bg-surface text-ink-secondary border-line hover:border-primary/50'
                     )}
                   >
                     {state}
@@ -1089,7 +1072,7 @@ function EditWorkflowModal({ isOpen, onClose, workflow }: EditWorkflowModalProps
                       'px-3 py-1 text-xs font-medium rounded-full border transition-colors',
                       formData.lifecycle_to.includes(state)
                         ? 'bg-accent text-white border-accent'
-                        : 'bg-white text-ink-secondary border-line hover:border-accent/50'
+                        : 'bg-surface text-ink-secondary border-line hover:border-accent/50'
                     )}
                   >
                     {state}
@@ -1114,7 +1097,7 @@ function EditWorkflowModal({ isOpen, onClose, workflow }: EditWorkflowModalProps
                 value={formData.sla_threshold_minutes}
                 onChange={(e) => setFormData({ ...formData, sla_threshold_minutes: e.target.value })}
                 placeholder="e.g., 1440 for 24h"
-                className="w-full h-9 px-3 text-sm rounded-md border border-line bg-white text-ink focus:ring-2 focus:ring-primary/30 focus:border-primary transition-all"
+                className="w-full h-9 px-3 text-sm rounded-md border border-line bg-surface text-ink focus:ring-2 focus:ring-primary/30 focus:border-primary transition-all"
               />
             </div>
             <div className="flex items-center mt-6">
@@ -1170,7 +1153,7 @@ function WorkflowDetailModal({
         <div className="flex items-center gap-2">
           <button
             onClick={onClose}
-            className="h-9 px-4 text-sm font-medium rounded-md border border-line bg-white text-ink hover:bg-surface-alt transition-colors ml-auto"
+            className="h-9 px-4 text-sm font-medium rounded-md border border-line bg-surface text-ink hover:bg-surface-alt transition-colors ml-auto"
           >
             Close
           </button>
@@ -1221,7 +1204,7 @@ function WorkflowVersionsView({ workflow }: { workflow: Workflow }) {
         <div className="border border-line rounded-md overflow-hidden">
           <div className="overflow-x-auto">
             <table className="w-full min-w-[600px]">
-              <thead className="bg-white/5 border-b border-line">
+              <thead className="bg-surface-alt border-b border-line">
               <tr>
                 <th className="text-[11px] font-semibold text-ink-secondary uppercase tracking-wider h-10 px-4 text-left">
                   Version
@@ -1242,7 +1225,7 @@ function WorkflowVersionsView({ workflow }: { workflow: Workflow }) {
             </thead>
             <tbody>
               {versions.map((v) => (
-                <tr key={v._id} className="border-b border-line last:border-0 hover:bg-white/5 transition-colors">
+                <tr key={v._id} className="border-b border-line last:border-0 hover:bg-surface-hover transition-colors">
                   <td className="h-10 px-4 text-sm font-medium text-ink">
                     v{v.version_number || 1} {v._id === workflow._id && <span className="text-[10px] bg-primary/10 text-primary px-1.5 py-0.5 rounded ml-1">Current</span>}
                   </td>
@@ -1263,7 +1246,7 @@ function WorkflowVersionsView({ workflow }: { workflow: Workflow }) {
                       <button
                         onClick={() => rollbackMutation.mutate()}
                         disabled={rollbackMutation.isPending}
-                        className="h-7 px-3 text-xs font-medium rounded-md border border-line bg-white text-ink hover:bg-surface-alt transition-colors inline-flex items-center gap-1.5"
+                        className="h-7 px-3 text-xs font-medium rounded-md border border-line bg-surface text-ink hover:bg-surface-alt transition-colors inline-flex items-center gap-1.5"
                       >
                         <History className="w-3.5 h-3.5" />
                         Rollback
@@ -1362,7 +1345,7 @@ function WorkflowStepsView({ workflowId, status }: { workflowId: string; status:
               }
               setIsSimulateModalOpen(true);
             }}
-            className="h-9 px-4 text-sm font-medium rounded-md border border-line bg-white text-ink hover:bg-surface-alt transition-colors flex items-center gap-2"
+            className="h-9 px-4 text-sm font-medium rounded-md border border-line bg-surface text-ink hover:bg-surface-alt transition-colors flex items-center gap-2"
           >
             <FlaskConical className="w-4 h-4" />
             Simulate
@@ -1385,7 +1368,7 @@ function WorkflowStepsView({ workflowId, status }: { workflowId: string; status:
           {/* Start Node */}
           <div className="flex items-center gap-3 p-3 bg-surface-alt border border-line rounded-md border-dashed opacity-80">
             {isEditable && <div className="w-4 flex-shrink-0" />}
-            <span className="h-6 w-6 flex items-center justify-center rounded-full bg-emerald-50 text-emerald-700 text-xs font-semibold flex-shrink-0 border border-emerald-200">
+            <span className="h-6 w-6 flex items-center justify-center rounded-full bg-success/10 text-success text-xs font-semibold flex-shrink-0 border border-success/30">
               S
             </span>
             <div className="flex-1 min-w-0">
@@ -1406,7 +1389,7 @@ function WorkflowStepsView({ workflowId, status }: { workflowId: string; status:
                 onDragOver={isEditable ? handleDragOver : undefined}
                 onDrop={isEditable ? () => handleDrop(index) : undefined}
                 className={cn(
-                  'flex items-center gap-3 p-3 bg-white border border-line rounded-md transition-colors',
+                  'flex items-center gap-3 p-3 bg-surface border border-line rounded-md transition-colors',
                   isEditable ? 'cursor-grab hover:bg-surface-alt' : 'cursor-default'
                 )}
               >
@@ -1427,17 +1410,17 @@ function WorkflowStepsView({ workflowId, status }: { workflowId: string; status:
                   <p className="text-sm font-medium text-ink flex items-center gap-2">
                     {step.name}
                     {step.conditions && step.conditions.length > 0 && (
-                      <span className="text-[10px] font-medium px-1.5 py-0.5 rounded bg-blue-50 text-blue-600 border border-blue-200">
+                      <span className="text-[10px] font-medium px-1.5 py-0.5 rounded bg-info/10 text-info border border-info/30">
                         Conditional
                       </span>
                     )}
                     {step.action_type === 'require_approval' && step.action_config && (step.action_config.escalations as unknown[])?.length > 0 && (
-                      <span className="text-[10px] font-medium px-1.5 py-0.5 rounded bg-orange-50 text-orange-600 border border-orange-200">
+                      <span className="text-[10px] font-medium px-1.5 py-0.5 rounded bg-warning/10 text-warning border border-warning/30">
                         Escalation
                       </span>
                     )}
                     {step.sla_config && step.sla_config.threshold_minutes > 0 && (
-                      <span className="text-[10px] font-medium px-1.5 py-0.5 rounded bg-purple-50 text-purple-600 border border-purple-200">
+                      <span className="text-[10px] font-medium px-1.5 py-0.5 rounded bg-accent/10 text-accent border border-accent/30">
                         SLA: {step.sla_config.threshold_minutes}m
                       </span>
                     )}
@@ -1601,7 +1584,7 @@ function AddStepModal({ isOpen, onClose, addMutation, currentStepCount }: AddSte
           <button
             onClick={onClose}
             disabled={addMutation.isPending}
-            className="h-9 px-4 text-sm font-medium rounded-md border border-line bg-white text-ink hover:bg-surface-alt transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+            className="h-9 px-4 text-sm font-medium rounded-md border border-line bg-surface text-ink hover:bg-surface-alt transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
           >
             Cancel
           </button>
@@ -1626,7 +1609,7 @@ function AddStepModal({ isOpen, onClose, addMutation, currentStepCount }: AddSte
             value={formData.name}
             onChange={(e) => setFormData({ ...formData, name: e.target.value })}
             placeholder="e.g., Send termination email"
-            className="w-full h-9 px-3 text-sm rounded-md border border-line bg-white text-ink placeholder:text-ink-muted focus:outline-none focus:ring-2 focus:ring-primary/30 focus:border-primary transition-all duration-150"
+            className="w-full h-9 px-3 text-sm rounded-md border border-line bg-surface text-ink placeholder:text-ink-muted focus:outline-none focus:ring-2 focus:ring-primary/30 focus:border-primary transition-all duration-150"
           />
         </div>
 
@@ -1641,7 +1624,7 @@ function AddStepModal({ isOpen, onClose, addMutation, currentStepCount }: AddSte
               setFormData({ ...formData, description: e.target.value })
             }
             placeholder="What does this step do?"
-            className="w-full h-9 px-3 text-sm rounded-md border border-line bg-white text-ink placeholder:text-ink-muted focus:outline-none focus:ring-2 focus:ring-primary/30 focus:border-primary transition-all duration-150"
+            className="w-full h-9 px-3 text-sm rounded-md border border-line bg-surface text-ink placeholder:text-ink-muted focus:outline-none focus:ring-2 focus:ring-primary/30 focus:border-primary transition-all duration-150"
           />
         </div>
 
@@ -1657,7 +1640,7 @@ function AddStepModal({ isOpen, onClose, addMutation, currentStepCount }: AddSte
                 action_type: e.target.value as WorkflowActionType,
               })
             }
-            className="w-full h-9 px-3 text-sm rounded-md border border-line bg-white text-ink focus:outline-none focus:ring-2 focus:ring-primary/30 focus:border-primary transition-all duration-150"
+            className="w-full h-9 px-3 text-sm rounded-md border border-line bg-surface text-ink focus:outline-none focus:ring-2 focus:ring-primary/30 focus:border-primary transition-all duration-150"
           >
             {Object.entries(ACTION_TYPE_LABELS).map(([key, label]) => (
               <option key={key} value={key}>
@@ -1688,7 +1671,7 @@ function AddStepModal({ isOpen, onClose, addMutation, currentStepCount }: AddSte
               <select
                 value={formData.approval_condition}
                 onChange={(e) => setFormData({ ...formData, approval_condition: e.target.value as 'any' | 'all' })}
-                className="w-full h-9 px-3 text-sm rounded-md border border-line bg-white text-ink focus:outline-none focus:ring-2 focus:ring-primary/30 focus:border-primary transition-all duration-150"
+                className="w-full h-9 px-3 text-sm rounded-md border border-line bg-surface text-ink focus:outline-none focus:ring-2 focus:ring-primary/30 focus:border-primary transition-all duration-150"
               >
                 <option value="any">Any one approves (First responder decides)</option>
                 <option value="all">All must approve (Everyone must approve)</option>
@@ -1714,7 +1697,7 @@ function AddStepModal({ isOpen, onClose, addMutation, currentStepCount }: AddSte
                     placeholder="e.g. 24"
                     value={formData.escalation_timeout_hours}
                     onChange={(e) => setFormData({ ...formData, escalation_timeout_hours: e.target.value })}
-                    className="w-full h-8 px-3 text-sm rounded-md border border-line bg-white text-ink placeholder:text-ink-muted focus:outline-none focus:ring-2 focus:ring-primary/30 focus:border-primary transition-all duration-150"
+                    className="w-full h-8 px-3 text-sm rounded-md border border-line bg-surface text-ink placeholder:text-ink-muted focus:outline-none focus:ring-2 focus:ring-primary/30 focus:border-primary transition-all duration-150"
                   />
                 </div>
                 <div>
@@ -1827,7 +1810,7 @@ function AddStepModal({ isOpen, onClose, addMutation, currentStepCount }: AddSte
                 placeholder="e.g. 15"
                 value={formData.sla_threshold_minutes}
                 onChange={(e) => setFormData({ ...formData, sla_threshold_minutes: e.target.value })}
-                className="w-full h-8 px-3 text-sm rounded-md border border-line bg-white text-ink placeholder:text-ink-muted focus:outline-none focus:ring-2 focus:ring-primary/30 focus:border-primary transition-all duration-150"
+                className="w-full h-8 px-3 text-sm rounded-md border border-line bg-surface text-ink placeholder:text-ink-muted focus:outline-none focus:ring-2 focus:ring-primary/30 focus:border-primary transition-all duration-150"
               />
             </div>
             <div className="flex items-center mt-5">
@@ -1912,7 +1895,7 @@ function EditStepModal({ isOpen, onClose, workflowId, step }: EditStepModalProps
           <button
             onClick={onClose}
             disabled={updateMutation.isPending}
-            className="h-9 px-4 text-sm font-medium rounded-md border border-line bg-white text-ink hover:bg-surface-alt transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+            className="h-9 px-4 text-sm font-medium rounded-md border border-line bg-surface text-ink hover:bg-surface-alt transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
           >
             Cancel
           </button>
@@ -1937,7 +1920,7 @@ function EditStepModal({ isOpen, onClose, workflowId, step }: EditStepModalProps
             value={formData.name}
             onChange={(e) => setFormData({ ...formData, name: e.target.value })}
             placeholder="e.g., Send termination email"
-            className="w-full h-9 px-3 text-sm rounded-md border border-line bg-white text-ink placeholder:text-ink-muted focus:outline-none focus:ring-2 focus:ring-primary/30 focus:border-primary transition-all duration-150"
+            className="w-full h-9 px-3 text-sm rounded-md border border-line bg-surface text-ink placeholder:text-ink-muted focus:outline-none focus:ring-2 focus:ring-primary/30 focus:border-primary transition-all duration-150"
           />
         </div>
 
@@ -1949,7 +1932,7 @@ function EditStepModal({ isOpen, onClose, workflowId, step }: EditStepModalProps
             type="text"
             value={formData.description}
             onChange={(e) => setFormData({ ...formData, description: e.target.value })}
-            className="w-full h-9 px-3 text-sm rounded-md border border-line bg-white text-ink focus:outline-none focus:ring-2 focus:ring-primary/30 focus:border-primary transition-all duration-150"
+            className="w-full h-9 px-3 text-sm rounded-md border border-line bg-surface text-ink focus:outline-none focus:ring-2 focus:ring-primary/30 focus:border-primary transition-all duration-150"
           />
         </div>
 
@@ -1960,7 +1943,7 @@ function EditStepModal({ isOpen, onClose, workflowId, step }: EditStepModalProps
           <select
             value={formData.action_type}
             onChange={(e) => setFormData({ ...formData, action_type: e.target.value as WorkflowActionType })}
-            className="w-full h-9 px-3 text-sm rounded-md border border-line bg-white text-ink focus:outline-none focus:ring-2 focus:ring-primary/30 focus:border-primary"
+            className="w-full h-9 px-3 text-sm rounded-md border border-line bg-surface text-ink focus:outline-none focus:ring-2 focus:ring-primary/30 focus:border-primary"
           >
             <option value="send_email">Send Email</option>
             <option value="assign_role">Assign Role</option>
@@ -1984,7 +1967,7 @@ function EditStepModal({ isOpen, onClose, workflowId, step }: EditStepModalProps
               <select
                 value={formData.approval_condition}
                 onChange={(e) => setFormData({ ...formData, approval_condition: e.target.value as 'any' | 'all' })}
-                className="w-full h-9 px-3 text-sm rounded-md border border-line bg-white text-ink"
+                className="w-full h-9 px-3 text-sm rounded-md border border-line bg-surface text-ink"
               >
                 <option value="any">Any approver can approve</option>
                 <option value="all">All approvers must approve</option>
@@ -1998,7 +1981,7 @@ function EditStepModal({ isOpen, onClose, workflowId, step }: EditStepModalProps
                 value={formData.escalation_timeout_hours}
                 onChange={(e) => setFormData({ ...formData, escalation_timeout_hours: e.target.value })}
                 placeholder="e.g., 48"
-                className="w-full h-9 px-3 text-sm rounded-md border border-line bg-white text-ink mb-3"
+                className="w-full h-9 px-3 text-sm rounded-md border border-line bg-surface text-ink mb-3"
               />
               {formData.escalation_timeout_hours && (
                 <div>
@@ -2041,7 +2024,7 @@ function EditStepModal({ isOpen, onClose, workflowId, step }: EditStepModalProps
                       newConds[idx].field = e.target.value;
                       setFormData({ ...formData, conditions: newConds });
                     }}
-                    className="flex-1 h-8 px-2 text-xs rounded border border-line bg-white"
+                    className="flex-1 h-8 px-2 text-xs rounded border border-line bg-surface"
                   />
                   <select
                     value={cond.operator}
@@ -2050,7 +2033,7 @@ function EditStepModal({ isOpen, onClose, workflowId, step }: EditStepModalProps
                       newConds[idx].operator = e.target.value as any;
                       setFormData({ ...formData, conditions: newConds });
                     }}
-                    className="w-24 h-8 px-2 text-xs rounded border border-line bg-white"
+                    className="w-24 h-8 px-2 text-xs rounded border border-line bg-surface"
                   >
                     <option value="equals">Equals</option>
                     <option value="not_equals">Not Equals</option>
@@ -2067,7 +2050,7 @@ function EditStepModal({ isOpen, onClose, workflowId, step }: EditStepModalProps
                       newConds[idx].value = e.target.value;
                       setFormData({ ...formData, conditions: newConds });
                     }}
-                    className="flex-1 h-8 px-2 text-xs rounded border border-line bg-white"
+                    className="flex-1 h-8 px-2 text-xs rounded border border-line bg-surface"
                   />
                   <button
                     onClick={() => {
@@ -2098,7 +2081,7 @@ function EditStepModal({ isOpen, onClose, workflowId, step }: EditStepModalProps
                 value={formData.sla_threshold_minutes}
                 onChange={(e) => setFormData({ ...formData, sla_threshold_minutes: e.target.value })}
                 placeholder="e.g., 60 for 1h"
-                className="w-full h-9 px-3 text-sm rounded-md border border-line bg-white text-ink focus:ring-2 focus:ring-primary/30 focus:border-primary transition-all"
+                className="w-full h-9 px-3 text-sm rounded-md border border-line bg-surface text-ink focus:ring-2 focus:ring-primary/30 focus:border-primary transition-all"
               />
             </div>
             <div className="flex items-center mt-6">
@@ -2196,8 +2179,8 @@ function SimulateWorkflowModal({ isOpen, onClose, simulateMutation, workflow }: 
                <p className="text-xs text-ink-secondary uppercase">Evaluated</p>
             </div>
             <div className="flex-1 text-center border-r border-line">
-               <p className="text-xl font-semibold text-emerald-600">{simulationResult.stepsTriggered}</p>
-               <p className="text-xs text-emerald-600/80 uppercase">Triggered</p>
+               <p className="text-xl font-semibold text-success">{simulationResult.stepsTriggered}</p>
+               <p className="text-xs text-success/80 uppercase">Triggered</p>
             </div>
             <div className="flex-1 text-center">
                <p className="text-xl font-semibold text-ink-secondary">{simulationResult.stepsSkipped}</p>
@@ -2208,10 +2191,10 @@ function SimulateWorkflowModal({ isOpen, onClose, simulateMutation, workflow }: 
           <div className="relative border-l-2 border-line ml-3 space-y-6 pb-2">
             {simulationResult.stepResults.map((result, idx) => (
               <div key={idx} className="relative pl-6">
-                <div className={cn("absolute -left-[9px] top-1 h-4 w-4 rounded-full border-2 border-white", result.executed ? "bg-emerald-500" : "bg-line-strong")} />
+                <div className={cn("absolute -left-[9px] top-1 h-4 w-4 rounded-full border-2 border-white", result.executed ? "bg-success" : "bg-line-strong")} />
                 <p className="text-sm font-semibold text-ink">{result.stepName}</p>
                 <p className="text-xs font-mono bg-surface-alt px-1.5 py-0.5 rounded text-ink-secondary inline-block mt-1 mb-1.5">{result.actionType}</p>
-                <div className={cn("text-xs p-2 rounded-md border", result.executed ? "bg-emerald-50 text-emerald-800 border-emerald-100" : "bg-surface-alt text-ink-secondary border-line")}>
+                <div className={cn("text-xs p-2 rounded-md border", result.executed ? "bg-success/10 text-success border-success/30" : "bg-surface-alt text-ink-secondary border-line")}>
                   {result.reason}
                 </div>
               </div>
@@ -2241,7 +2224,7 @@ function SimulateWorkflowModal({ isOpen, onClose, simulateMutation, workflow }: 
           <button
             onClick={onClose}
             disabled={simulateMutation.isPending}
-            className="h-9 px-4 text-sm font-medium rounded-md border border-line bg-white text-ink hover:bg-surface-alt transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+            className="h-9 px-4 text-sm font-medium rounded-md border border-line bg-surface text-ink hover:bg-surface-alt transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
           >
             Cancel
           </button>
@@ -2317,7 +2300,7 @@ function SimulateWorkflowModal({ isOpen, onClose, simulateMutation, workflow }: 
                 onChange={(e) =>
                   setFormData({ ...formData, lifecycle_from: e.target.value })
                 }
-                className="w-full h-9 px-3 text-sm rounded-md border border-line bg-white text-ink focus:outline-none focus:ring-2 focus:ring-primary/30 focus:border-primary transition-all duration-150"
+                className="w-full h-9 px-3 text-sm rounded-md border border-line bg-surface text-ink focus:outline-none focus:ring-2 focus:ring-primary/30 focus:border-primary transition-all duration-150"
               >
                 {LIFECYCLE_STATES.map((state) => (
                   <option key={state} value={state}>
@@ -2335,7 +2318,7 @@ function SimulateWorkflowModal({ isOpen, onClose, simulateMutation, workflow }: 
                 onChange={(e) =>
                   setFormData({ ...formData, lifecycle_to: e.target.value })
                 }
-                className="w-full h-9 px-3 text-sm rounded-md border border-line bg-white text-ink focus:outline-none focus:ring-2 focus:ring-primary/30 focus:border-primary transition-all duration-150"
+                className="w-full h-9 px-3 text-sm rounded-md border border-line bg-surface text-ink focus:outline-none focus:ring-2 focus:ring-primary/30 focus:border-primary transition-all duration-150"
               >
                 {LIFECYCLE_STATES.map((state) => (
                   <option key={state} value={state}>
@@ -2351,11 +2334,11 @@ function SimulateWorkflowModal({ isOpen, onClose, simulateMutation, workflow }: 
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
             <div>
               <label className="text-sm font-medium text-ink block mb-1.5">Role From</label>
-              <input type="text" value={formData.role_from} onChange={(e) => setFormData({...formData, role_from: e.target.value})} placeholder="e.g. Employee" className="w-full h-9 px-3 text-sm rounded-md border border-line bg-white text-ink" />
+              <input type="text" value={formData.role_from} onChange={(e) => setFormData({...formData, role_from: e.target.value})} placeholder="e.g. Employee" className="w-full h-9 px-3 text-sm rounded-md border border-line bg-surface text-ink" />
             </div>
             <div>
               <label className="text-sm font-medium text-ink block mb-1.5">Role To</label>
-              <input type="text" value={formData.role_to} onChange={(e) => setFormData({...formData, role_to: e.target.value})} placeholder="e.g. Manager" className="w-full h-9 px-3 text-sm rounded-md border border-line bg-white text-ink" />
+              <input type="text" value={formData.role_to} onChange={(e) => setFormData({...formData, role_to: e.target.value})} placeholder="e.g. Manager" className="w-full h-9 px-3 text-sm rounded-md border border-line bg-surface text-ink" />
             </div>
           </div>
         )}
@@ -2364,11 +2347,11 @@ function SimulateWorkflowModal({ isOpen, onClose, simulateMutation, workflow }: 
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
             <div>
               <label className="text-sm font-medium text-ink block mb-1.5">Department From</label>
-              <input type="text" value={formData.department_from} onChange={(e) => setFormData({...formData, department_from: e.target.value})} placeholder="e.g. Engineering" className="w-full h-9 px-3 text-sm rounded-md border border-line bg-white text-ink" />
+              <input type="text" value={formData.department_from} onChange={(e) => setFormData({...formData, department_from: e.target.value})} placeholder="e.g. Engineering" className="w-full h-9 px-3 text-sm rounded-md border border-line bg-surface text-ink" />
             </div>
             <div>
               <label className="text-sm font-medium text-ink block mb-1.5">Department To</label>
-              <input type="text" value={formData.department_to} onChange={(e) => setFormData({...formData, department_to: e.target.value})} placeholder="e.g. Sales" className="w-full h-9 px-3 text-sm rounded-md border border-line bg-white text-ink" />
+              <input type="text" value={formData.department_to} onChange={(e) => setFormData({...formData, department_to: e.target.value})} placeholder="e.g. Sales" className="w-full h-9 px-3 text-sm rounded-md border border-line bg-surface text-ink" />
             </div>
           </div>
         )}
@@ -2402,7 +2385,7 @@ function WorkflowRunsView({ workflowId }: { workflowId: string }) {
         <div className="border border-line rounded-md overflow-hidden">
           <div className="overflow-x-auto">
             <table className="w-full min-w-[800px]">
-              <thead className="bg-white/5 border-b border-line">
+              <thead className="bg-surface-alt border-b border-line">
               <tr>
                 <th className="w-10 px-4 text-left h-10"></th>
                 <th className="text-[11px] font-semibold text-ink-secondary uppercase tracking-wider h-10 px-4 text-left">
@@ -2469,7 +2452,7 @@ function WorkflowRunsView({ workflowId }: { workflowId: string }) {
                             Met
                           </span>
                         ) : run.sla_status === 'pending' ? (
-                          <span className="inline-flex items-center gap-1 text-[11px] font-semibold bg-amber-50 text-amber-700 border border-amber-200 rounded-full px-2.5 py-0.5">
+                          <span className="inline-flex items-center gap-1 text-[11px] font-semibold bg-warning/10 text-warning border border-warning/30 rounded-full px-2.5 py-0.5">
                             Pending
                           </span>
                         ) : (

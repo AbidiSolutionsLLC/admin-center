@@ -74,7 +74,7 @@ export const WorkflowTemplatesView = () => {
       ) : (
         <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-6">
           {templates.map((t) => (
-            <div key={t._id} className="bg-white rounded-lg border border-line shadow-card p-5 flex flex-col h-full hover:shadow-card-hover transition-all duration-200">
+            <div key={t._id} className="bg-surface rounded-lg border border-line shadow-card p-5 flex flex-col h-full hover:shadow-card-hover transition-all duration-200">
               <div className="flex justify-between items-start mb-4">
                 <div className="flex-1 min-w-0 pr-3">
                   <h3 className="text-sm font-semibold text-ink truncate" title={t.name}>{t.name}</h3>
@@ -82,7 +82,7 @@ export const WorkflowTemplatesView = () => {
                     {t.trigger}
                   </span>
                 </div>
-                <button onClick={() => setDeleteId(t._id)} className="h-8 w-8 inline-flex items-center justify-center rounded-md text-ink-secondary hover:text-error hover:bg-red-50 transition-colors duration-150">
+                <button onClick={() => setDeleteId(t._id)} className="h-8 w-8 inline-flex items-center justify-center rounded-md text-ink-secondary hover:text-error hover:bg-error/10 transition-colors duration-150">
                   <Trash2 className="w-4 h-4" />
                 </button>
               </div>
@@ -93,7 +93,7 @@ export const WorkflowTemplatesView = () => {
                 <span className="text-xs text-ink-muted">{t.steps?.length || 0} steps</span>
                 <button
                   onClick={() => setInstantiateId(t._id)}
-                  className="h-8 px-3 text-xs font-medium rounded-md border border-line bg-white text-ink hover:bg-surface-alt transition-colors duration-150 flex items-center justify-center"
+                  className="h-8 px-3 text-xs font-medium rounded-md border border-line bg-surface text-ink hover:bg-surface-alt transition-colors duration-150 flex items-center justify-center"
                 >
                   <Copy className="w-3.5 h-3.5 mr-1.5 text-ink-muted" />
                   Use Template
@@ -113,7 +113,7 @@ export const WorkflowTemplatesView = () => {
               type="text"
               value={newTemplate.name}
               onChange={(e) => setNewTemplate({ ...newTemplate, name: e.target.value })}
-              className="w-full h-9 px-3 text-sm rounded-md border border-line bg-white text-ink placeholder:text-ink-muted focus:outline-none focus:ring-2 focus:ring-primary/30 focus:border-primary transition-all duration-150"
+              className="w-full h-9 px-3 text-sm rounded-md border border-line bg-surface text-ink placeholder:text-ink-muted focus:outline-none focus:ring-2 focus:ring-primary/30 focus:border-primary transition-all duration-150"
               placeholder="e.g. Standard Offboarding"
             />
           </div>
@@ -123,7 +123,7 @@ export const WorkflowTemplatesView = () => {
               type="text"
               value={newTemplate.description}
               onChange={(e) => setNewTemplate({ ...newTemplate, description: e.target.value })}
-              className="w-full h-9 px-3 text-sm rounded-md border border-line bg-white text-ink placeholder:text-ink-muted focus:outline-none focus:ring-2 focus:ring-primary/30 focus:border-primary transition-all duration-150"
+              className="w-full h-9 px-3 text-sm rounded-md border border-line bg-surface text-ink placeholder:text-ink-muted focus:outline-none focus:ring-2 focus:ring-primary/30 focus:border-primary transition-all duration-150"
             />
           </div>
           <div className="space-y-1.5">
@@ -131,7 +131,7 @@ export const WorkflowTemplatesView = () => {
             <select
               value={newTemplate.trigger}
               onChange={(e) => setNewTemplate({ ...newTemplate, trigger: e.target.value })}
-              className="w-full h-9 px-3 text-sm rounded-md border border-line bg-white text-ink focus:outline-none focus:ring-2 focus:ring-primary/30 focus:border-primary transition-all duration-150"
+              className="w-full h-9 px-3 text-sm rounded-md border border-line bg-surface text-ink focus:outline-none focus:ring-2 focus:ring-primary/30 focus:border-primary transition-all duration-150"
             >
               <option value="user.lifecycle_changed">User Lifecycle Changed</option>
               <option value="user.created">User Created</option>
@@ -141,7 +141,7 @@ export const WorkflowTemplatesView = () => {
           </div>
           
           <div className="pt-4 flex justify-end space-x-2 border-t border-line mt-6">
-            <button onClick={() => setIsCreateOpen(false)} className="h-9 px-4 text-sm font-medium rounded-md border border-line bg-white text-ink hover:bg-surface-alt transition-colors duration-150">
+            <button onClick={() => setIsCreateOpen(false)} className="h-9 px-4 text-sm font-medium rounded-md border border-line bg-surface text-ink hover:bg-surface-alt transition-colors duration-150">
               Cancel
             </button>
             <button
@@ -164,13 +164,13 @@ export const WorkflowTemplatesView = () => {
               type="text"
               value={newWorkflowName}
               onChange={(e) => setNewWorkflowName(e.target.value)}
-              className="w-full h-9 px-3 text-sm rounded-md border border-line bg-white text-ink placeholder:text-ink-muted focus:outline-none focus:ring-2 focus:ring-primary/30 focus:border-primary transition-all duration-150"
+              className="w-full h-9 px-3 text-sm rounded-md border border-line bg-surface text-ink placeholder:text-ink-muted focus:outline-none focus:ring-2 focus:ring-primary/30 focus:border-primary transition-all duration-150"
               placeholder="e.g. Sales Department Offboarding"
             />
           </div>
           
           <div className="pt-4 flex justify-end space-x-2 border-t border-line mt-6">
-            <button onClick={() => setInstantiateId(null)} className="h-9 px-4 text-sm font-medium rounded-md border border-line bg-white text-ink hover:bg-surface-alt transition-colors duration-150">
+            <button onClick={() => setInstantiateId(null)} className="h-9 px-4 text-sm font-medium rounded-md border border-line bg-surface text-ink hover:bg-surface-alt transition-colors duration-150">
               Cancel
             </button>
             <button

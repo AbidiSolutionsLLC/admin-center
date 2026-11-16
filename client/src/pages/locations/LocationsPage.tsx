@@ -23,6 +23,8 @@ import { WorkScheduleTable } from '@/features/work-schedules/components/WorkSche
 import { WorkScheduleForm } from '@/features/work-schedules/components/WorkScheduleForm';
 import { WorkScheduleLocationAssignment } from '@/features/work-schedules/components/WorkScheduleLocationAssignment';
 import { TableSkeleton } from '@/components/ui/TableSkeleton';
+import { PageHeader } from '@/components/ui/PageHeader';
+import { PageStates } from '@/components/templates/PageStates';
 import { ErrorState } from '@/components/ui/ErrorState';
 import { EmptyState } from '@/components/ui/EmptyState';
 import { Modal } from '@/components/ui/Modal';
@@ -54,15 +56,10 @@ export default function LocationsPage() {
 
   return (
     <div className="space-y-6 page-enter">
-      {/* Page header */}
-      <div className="flex items-start justify-between gap-4 flex-wrap">
-        <div>
-          <h1 className="text-[22px] font-semibold tracking-tight text-ink">Locations</h1>
-          <p className="mt-0.5 text-sm text-ink-secondary">
-            Manage your company's location hierarchy, holiday calendars, and work schedules
-          </p>
-        </div>
-      </div>
+      <PageHeader
+        title="Locations"
+        subtitle="Manage your company's location hierarchy, holiday calendars, and work schedules"
+      />
 
       {/* Tab navigation */}
       <div className="flex bg-surface-alt p-1 rounded-lg gap-1 w-fit">
@@ -73,7 +70,7 @@ export default function LocationsPage() {
             className={cn(
               'flex items-center gap-1.5 px-4 py-2 text-sm font-medium rounded-md transition-all',
               activeTab === tab.key
-                ? 'bg-white text-ink shadow-sm'
+                ? 'bg-surface text-ink shadow-sm'
                 : 'text-ink-secondary hover:text-ink'
             )}
           >
@@ -148,26 +145,16 @@ function LocationsTab() {
     btn?.click();
   };
 
-  if (isLoading) {
+  if (isLoading || isError) {
     return (
-      <div className="space-y-6 page-enter">
-        <div className="flex items-start justify-between">
-          <div className="space-y-2">
-            <div className="h-7 w-40 rounded-lg animate-pulse" style={{ background: 'rgba(255,255,255,0.06)' }} />
-            <div className="h-4 w-64 rounded-lg animate-pulse" style={{ background: 'rgba(255,255,255,0.04)' }} />
-          </div>
-          <div className="h-9 w-36 rounded-xl animate-pulse" style={{ background: 'rgba(255,255,255,0.06)' }} />
-        </div>
-        <TableSkeleton rows={8} columns={6} />
-      </div>
-    );
-  }
-
-  if (isError) {
-    return (
-      <div className="space-y-6">
-        <ErrorState title="Failed to load locations" description="Something went wrong fetching location data. Please try again." onRetry={refetch} />
-      </div>
+      <PageStates
+        isLoading={isLoading}
+        isError={isError}
+        onRetry={() => refetch()}
+        skeleton={<TableSkeleton rows={8} columns={6} />}
+      >
+        {null}
+      </PageStates>
     );
   }
 
@@ -180,7 +167,7 @@ function LocationsTab() {
             onClick={() => setViewMode('table')}
             className={cn(
               'flex items-center gap-1.5 px-3 py-1.5 text-sm font-medium rounded-md transition-all',
-              viewMode === 'table' ? 'bg-white text-ink shadow-sm' : 'text-ink-secondary hover:text-ink'
+              viewMode === 'table' ? 'bg-surface text-ink shadow-sm' : 'text-ink-secondary hover:text-ink'
             )}
           >
             <Layers className="w-3.5 h-3.5" />
@@ -190,7 +177,7 @@ function LocationsTab() {
             onClick={() => setViewMode('tree')}
             className={cn(
               'flex items-center gap-1.5 px-3 py-1.5 text-sm font-medium rounded-md transition-all',
-              viewMode === 'tree' ? 'bg-white text-ink shadow-sm' : 'text-ink-secondary hover:text-ink'
+              viewMode === 'tree' ? 'bg-surface text-ink shadow-sm' : 'text-ink-secondary hover:text-ink'
             )}
           >
             <Building2 className="w-3.5 h-3.5" />
@@ -206,7 +193,7 @@ function LocationsTab() {
               placeholder="Search locations..."
               value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value)}
-              className="h-9 pl-9 pr-8 text-sm rounded-md border border-line bg-white text-ink placeholder:text-ink-muted focus:outline-none focus:ring-2 focus:ring-primary/30 focus:border-primary transition-all duration-150 w-56"
+              className="h-9 pl-9 pr-8 text-sm rounded-md border border-line bg-surface text-ink placeholder:text-ink-muted focus:outline-none focus:ring-2 focus:ring-primary/30 focus:border-primary transition-all duration-150 w-56"
             />
             {searchQuery && (
               <button onClick={() => setSearchQuery('')} className="absolute right-2 top-1/2 -translate-y-1/2 text-ink-muted hover:text-ink">
@@ -218,7 +205,7 @@ function LocationsTab() {
             <select
               value={typeFilter}
               onChange={(e) => setTypeFilter(e.target.value)}
-              className="h-9 pl-3 pr-8 text-sm rounded-md border border-line bg-white text-ink focus:outline-none focus:ring-2 focus:ring-primary/30 focus:border-primary transition-all duration-150 appearance-none cursor-pointer min-w-[120px]"
+              className="h-9 pl-3 pr-8 text-sm rounded-md border border-line bg-surface text-ink focus:outline-none focus:ring-2 focus:ring-primary/30 focus:border-primary transition-all duration-150 appearance-none cursor-pointer min-w-[120px]"
             >
               <option value="all">All Types</option>
               <option value="region">Region</option>
@@ -288,7 +275,7 @@ function LocationsTab() {
               type="button"
               onClick={handleCloseModal}
               disabled={createMutation.isPending || updateMutation.isPending}
-              className="h-9 px-4 text-sm font-medium rounded-md border border-line bg-white text-ink hover:bg-surface-alt transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+              className="h-9 px-4 text-sm font-medium rounded-md border border-line bg-surface text-ink hover:bg-surface-alt transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
             >
               Cancel
             </button>
@@ -446,7 +433,7 @@ function HolidaysTab() {
           onClick={() => setActiveHolidayTab('calendars')}
           className={cn(
             'flex items-center gap-1.5 px-3 py-1.5 text-sm font-medium rounded-md transition-all',
-            activeHolidayTab === 'calendars' ? 'bg-white text-ink shadow-sm' : 'text-ink-secondary hover:text-ink'
+            activeHolidayTab === 'calendars' ? 'bg-surface text-ink shadow-sm' : 'text-ink-secondary hover:text-ink'
           )}
         >
           <Calendar className="w-3.5 h-3.5" />
@@ -456,7 +443,7 @@ function HolidaysTab() {
           onClick={() => setActiveHolidayTab('holidays')}
           className={cn(
             'flex items-center gap-1.5 px-3 py-1.5 text-sm font-medium rounded-md transition-all',
-            activeHolidayTab === 'holidays' ? 'bg-white text-ink shadow-sm' : 'text-ink-secondary hover:text-ink'
+            activeHolidayTab === 'holidays' ? 'bg-surface text-ink shadow-sm' : 'text-ink-secondary hover:text-ink'
           )}
         >
           <Clock className="w-3.5 h-3.5" />
@@ -495,17 +482,17 @@ function HolidaysTab() {
                     borderRadius: '12px',
                     background: 'rgba(255,255,255,0.06)',
                     border: '1px solid rgba(255,255,255,0.08)',
-                    color: '#f8fafc',
+                    color: 'var(--text-main)',
                   }}
                 >
-                  <option value="" style={{ background: '#1e293b' }}>Choose a holiday calendar...</option>
+                  <option value="" style={{ background: 'var(--bg-color)' }}>Choose a holiday calendar...</option>
                   {calendars.map((cal) => (
-                    <option key={cal._id} value={cal._id} style={{ background: '#1e293b' }}>
+                    <option key={cal._id} value={cal._id} style={{ background: 'var(--bg-color)' }}>
                       {cal.name} {!cal.is_active ? '(Inactive)' : ''}
                     </option>
                   ))}
                 </select>
-                <ChevronDown className="absolute right-3 top-1/2 -translate-y-1/2 w-4 h-4 pointer-events-none" style={{ color: '#94a3b8' }} />
+                <ChevronDown className="absolute right-3 top-1/2 -translate-y-1/2 w-4 h-4 pointer-events-none" style={{ color: 'var(--text-muted)' }} />
               </div>
             ) : (
               <p className="text-sm" style={{ color: 'var(--text-muted)' }}>
@@ -549,11 +536,11 @@ function HolidaysTab() {
                   <table className="w-full">
                     <thead>
                       <tr style={{ borderBottom: '1px solid rgba(255,255,255,0.06)' }}>
-                        <th className="h-10 px-5 text-left text-[11px] font-semibold uppercase tracking-wider" style={{ color: '#94a3b8' }}>Name</th>
-                        <th className="h-10 px-5 text-left text-[11px] font-semibold uppercase tracking-wider" style={{ color: '#94a3b8' }}>Date</th>
-                        <th className="h-10 px-5 text-left text-[11px] font-semibold uppercase tracking-wider" style={{ color: '#94a3b8' }}>Recurrence</th>
-                        <th className="h-10 px-5 text-left text-[11px] font-semibold uppercase tracking-wider" style={{ color: '#94a3b8' }}>Code</th>
-                        <th className="h-10 px-5 text-right text-[11px] font-semibold uppercase tracking-wider" style={{ color: '#94a3b8' }}>Actions</th>
+                        <th className="h-10 px-5 text-left text-[11px] font-semibold uppercase tracking-wider" style={{ color: 'var(--text-muted)' }}>Name</th>
+                        <th className="h-10 px-5 text-left text-[11px] font-semibold uppercase tracking-wider" style={{ color: 'var(--text-muted)' }}>Date</th>
+                        <th className="h-10 px-5 text-left text-[11px] font-semibold uppercase tracking-wider" style={{ color: 'var(--text-muted)' }}>Recurrence</th>
+                        <th className="h-10 px-5 text-left text-[11px] font-semibold uppercase tracking-wider" style={{ color: 'var(--text-muted)' }}>Code</th>
+                        <th className="h-10 px-5 text-right text-[11px] font-semibold uppercase tracking-wider" style={{ color: 'var(--text-muted)' }}>Actions</th>
                       </tr>
                     </thead>
                     <tbody>
@@ -565,13 +552,13 @@ function HolidaysTab() {
                           <td className="h-14 px-5">
                             <div className="flex items-center gap-3">
                               <div className="w-8 h-8 rounded-lg flex items-center justify-center flex-shrink-0" style={{ background: 'rgba(245,158,11,0.12)' }}>
-                                <Calendar className="w-4 h-4" style={{ color: '#f59e0b' }} />
+                                <Calendar className="w-4 h-4" style={{ color: 'var(--primary)' }} />
                               </div>
                               <div>
                                 <p className="text-sm font-medium" style={{ color: 'var(--text-main)' }}>{holiday.name}</p>
                                 {holiday.is_observed && (
                                   <span className="inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-semibold mt-0.5"
-                                    style={{ background: 'rgba(245,158,11,0.12)', color: '#f59e0b', border: '1px solid rgba(245,158,11,0.25)' }}>
+                                    style={{ background: 'rgba(245,158,11,0.12)', color: 'var(--primary)', border: '1px solid rgba(245,158,11,0.25)' }}>
                                     Observed
                                   </span>
                                 )}
@@ -583,12 +570,12 @@ function HolidaysTab() {
                           </td>
                           <td className="h-14 px-5">
                             <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-[11px] font-semibold"
-                              style={{ background: 'rgba(255,255,255,0.06)', color: '#94a3b8', border: '1px solid rgba(255,255,255,0.08)' }}>
+                              style={{ background: 'rgba(255,255,255,0.06)', color: 'var(--text-muted)', border: '1px solid rgba(255,255,255,0.08)' }}>
                               {formatRecurringType(holiday.recurring_type)}
                             </span>
                           </td>
                           <td className="h-14 px-5">
-                            <span className="text-sm font-mono" style={{ color: '#94a3b8' }}>
+                            <span className="text-sm font-mono" style={{ color: 'var(--text-muted)' }}>
                               {holiday.holiday_code || '—'}
                             </span>
                           </td>
@@ -597,14 +584,14 @@ function HolidaysTab() {
                               <button
                                 onClick={() => handleEditHoliday(holiday)}
                                 className="h-8 w-8 flex items-center justify-center rounded-lg transition-all"
-                                style={{ color: '#94a3b8' }}
+                                style={{ color: 'var(--text-muted)' }}
                                 onMouseEnter={(e) => {
                                   (e.currentTarget as HTMLElement).style.background = 'rgba(245,158,11,0.1)';
-                                  (e.currentTarget as HTMLElement).style.color = '#f59e0b';
+                                  (e.currentTarget as HTMLElement).style.color = 'var(--primary)';
                                 }}
                                 onMouseLeave={(e) => {
                                   (e.currentTarget as HTMLElement).style.background = 'transparent';
-                                  (e.currentTarget as HTMLElement).style.color = '#94a3b8';
+                                  (e.currentTarget as HTMLElement).style.color = 'var(--text-muted)';
                                 }}
                                 title="Edit holiday"
                               >
@@ -613,14 +600,14 @@ function HolidaysTab() {
                               <button
                                 onClick={() => handleDeleteHoliday(holiday)}
                                 className="h-8 w-8 flex items-center justify-center rounded-lg transition-all"
-                                style={{ color: '#94a3b8' }}
+                                style={{ color: 'var(--text-muted)' }}
                                 onMouseEnter={(e) => {
                                   (e.currentTarget as HTMLElement).style.background = 'rgba(239,68,68,0.1)';
-                                  (e.currentTarget as HTMLElement).style.color = '#ef4444';
+                                  (e.currentTarget as HTMLElement).style.color = 'var(--danger)';
                                 }}
                                 onMouseLeave={(e) => {
                                   (e.currentTarget as HTMLElement).style.background = 'transparent';
-                                  (e.currentTarget as HTMLElement).style.color = '#94a3b8';
+                                  (e.currentTarget as HTMLElement).style.color = 'var(--text-muted)';
                                 }}
                                 title="Delete holiday"
                               >
@@ -652,7 +639,7 @@ function HolidaysTab() {
               type="button"
               onClick={closeCalendarFormModal}
               disabled={isCreatingCalendar || isUpdatingCalendar}
-              className="h-9 px-4 text-sm font-medium rounded-md border border-line bg-white text-ink hover:bg-surface-alt transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+              className="h-9 px-4 text-sm font-medium rounded-md border border-line bg-surface text-ink hover:bg-surface-alt transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
             >
               Cancel
             </button>
@@ -705,7 +692,7 @@ function HolidaysTab() {
               type="button"
               onClick={closeHolidayFormModal}
               disabled={isCreatingHoliday}
-              className="h-9 px-4 text-sm font-medium rounded-md border border-line bg-white text-ink hover:bg-surface-alt transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+              className="h-9 px-4 text-sm font-medium rounded-md border border-line bg-surface text-ink hover:bg-surface-alt transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
             >
               Cancel
             </button>
@@ -832,7 +819,7 @@ function WorkSchedulesTab() {
             <button
               onClick={closeFormModal}
               className="px-4 py-2 text-sm font-semibold rounded-xl transition-all"
-              style={{ background: 'rgba(255,255,255,0.06)', border: '1px solid rgba(255,255,255,0.08)', color: '#f8fafc' }}
+              style={{ background: 'rgba(255,255,255,0.06)', border: '1px solid rgba(255,255,255,0.08)', color: 'var(--text-main)' }}
             >
               Cancel
             </button>

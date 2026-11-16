@@ -326,6 +326,7 @@ Pages are wrapped in the Phase 3 templates (`PageHeader`, `ListPage`, `Tabs`, `P
 
 - Batch 1 (5.8, built, not yet run): Security (URL-synced tabs `?tab=`), Audit log (`ListPage`; export buttons now check `audit_logs:export`, as the server does), Data fields, Approvals (`ListPage`, all five states), Integrations, Insight history (chart colours from CSS variables).
 - Batch 2 (5.9, built, not yet run): Teams, Organization structure and Notifications (shared `PageHeader`, loading and error through `PageStates`), Groups and Admin roles (`ListPage` with toolbar search, all five states; roles keep the list/map toggle in the toolbar and move Simulate access to the overflow menu), Location detail (`ObjectPage`: header, status badges, key facts, URL-synced tabs).
+- Batch 3 (5.10, built, not yet run; wrap only, page internals untouched): People, Policies, Workflows (shared `PageHeader`, loading and error through `PageStates`), Locations (header, loading and error of the locations tab through `PageStates`), Company settings (`PageHeader`, `PageStates`). Off-theme classes and raw hex in these page files and in `pages/*/components` are replaced; `bg-white/5` overlays became `bg-surface-alt` and `hover:bg-surface-hover`.
 
 ## 4. Roles and permissions
 
