@@ -214,6 +214,7 @@ export interface OrgOnboarding {
   invitation: { state: string; sent_at: string | null; sent_count: number; expires_at: string; accepted_at: string | null; revoked_at: string | null } | null;
   delivery: { status: string; attempts: number; last_error: string | null; sent_at: string | null; queued_at: string } | null;
 }
+export interface OnboardingRow extends OrgOnboarding { organization: { id: string; slug: string; name: string; status: string } }
 export interface OrgIdp {
   id: string; type: string; display_name: string; status: string; tenant_id: string | null;
   tenant_approval: { tenant_id: string; approved_at: string; operator_id: string } | null;
@@ -271,3 +272,23 @@ export const useOrgPlanPreview = (id: string, planKey: string) =>
   });
 export const useChangePlan = (id: string) =>
   useOrgMutation(id, (plan_key: string) => operatorApi.patch(`/orgs/${id}`, { plan_key }), 'Plan changed', 'Failed to change plan');
+
+/** Organizations whose first admin has not finished onboarding (GET /onboarding), each with its stage. */
+export const useOnboardingList = (params: { cursor?: string; limit?: number }) =>
+  useQuery({
+    queryKey: ['operator', 'onboarding', params],
+    queryFn: async () => {
+      const r = (await operatorApi.get('/onboarding', { params })).data;
+      return { data: (r.data ?? []) as OnboardingRow[], next_cursor: (r.meta?.next_cursor ?? null) as string | null };
+    },
+  });
+
+/** Resend the first-admin invitation of any organization (POST /orgs/:id/onboarding/resend-invite). */
+export const useResendInviteFor = () => {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: async (orgId: string) => (await operatorApi.post(`/orgs/${orgId}/onboarding/resend-invite`)).data,
+    onSuccess: () => { qc.invalidateQueries({ queryKey: ['operator'] }); toast.success('Invitation sent'); },
+    onError: (e) => toast.error(errMsg(e, 'Failed to send invitation')),
+  });
+};

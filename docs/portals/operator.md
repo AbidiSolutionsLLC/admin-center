@@ -17,10 +17,10 @@ Related: [identity.md](identity.md) (realm internals, tokens), [admin.md](admin.
 | Area | Path |
 |---|---|
 | Client routes | `client/src/App.tsx` (operator block), `client/src/constants/routes.ts` (`OPERATOR_*`) |
-| Guard and layout | `client/src/features/operator/OperatorGuard.tsx`, `OperatorLayout.tsx` |
+| Guard and shell | `client/src/features/operator/OperatorGuard.tsx`, `client/src/components/layout/shells.tsx` (`OperatorShell`) |
 | OIDC + token store (memory only) | `client/src/features/operator/operatorAuth.ts` |
 | API client, hooks, response types | `client/src/features/operator/operatorApi.ts` |
-| Pages | `client/src/pages/operator/OperatorOrgsPage.tsx`, `OperatorPlansPage.tsx`, `OperatorOperatorsPage.tsx`, `OperatorAuditPage.tsx`, `OperatorCallbackPage.tsx` |
+| Pages | `client/src/pages/operator/OperatorOrgsPage.tsx`, `OperatorTenantPage.tsx`, `OperatorOnboardingPage.tsx`, `OperatorPlansPage.tsx`, `OperatorOperatorsPage.tsx`, `OperatorAuditPage.tsx`, `OperatorCallbackPage.tsx` |
 | Operator API | `server/src/operator/routes.ts` (mounted at `/operator/v1` in `server/src/app.ts`) |
 | Auth middleware | `server/src/operator/middleware.ts` (`requireOperator`, `requireOperatorIp`) |
 | Account lookup | `server/src/operator/accounts.ts` (`findOperatorAccount`, `hasOperatorRole`) |
@@ -33,16 +33,18 @@ Related: [identity.md](identity.md) (realm internals, tokens), [admin.md](admin.
 
 ### 3.1 Client routes
 
-All pages except the callback are inside `OperatorGuard` (no token in memory → refresh if a refresh token exists, else redirect to the operator realm) and `OperatorLayout` (nav: Organizations, Plans, Operators, Audit).
+All pages except the callback are inside `OperatorGuard` (no token in memory → refresh if a refresh token exists, else redirect to the operator realm) and the shared `AppShell` with the `operator` config (nav: Organizations, Onboarding, Plans, Operators, Audit; each item shown only with its permission from `GET /me`).
 
 | Route | Component | Uses |
 |---|---|---|
 | `/operator/callback` | `pages/operator/OperatorCallbackPage.tsx` | `completeOperatorLogin` (code exchange), then navigates to the saved `return_to` or `/operator/organizations` |
 | `/operator` | redirect to `/operator/organizations` | |
-| `/operator/organizations` | `pages/operator/OperatorOrgsPage.tsx` | list/search/paginate orgs, create org, org detail, suspend/reactivate/close, assign plan, set entitlement. Shows the invite token outside production builds when the API returns it |
-| `/operator/plans` | `pages/operator/OperatorPlansPage.tsx` | list, create, edit plans |
+| `/operator/organizations` | `pages/operator/OperatorOrgsPage.tsx` | `ListPage`: search, status, plan, tag, in-trial filters and sort (all in the URL), create org, suspend/reactivate/close; a row opens the tenant page |
+| `/operator/organizations/:id` | `pages/operator/OperatorTenantPage.tsx` | `ObjectPage`: Summary (tags, trial, identity providers with the Entra tenant approval), Products (override, remove override, change plan with preview, seat meter), Onboarding, Admins, Activity, Notes. `?tab=` holds the tab |
+| `/operator/onboarding` | `pages/operator/OperatorOnboardingPage.tsx` | `ListPage` over `GET /onboarding`: stage, first admin, invitation sent/expiry, last delivery error, Resend invitation; stage filter in the URL; a row opens the tenant's Onboarding tab |
+| `/operator/plans` | `pages/operator/OperatorPlansPage.tsx` | list (organizations on each, trial, version), create, edit (description, products, default seats, trial days), apply to organizations with a dry-run preview |
 | `/operator/operators` | `pages/operator/OperatorOperatorsPage.tsx` | list, create, edit operators |
-| `/operator/audit` | `pages/operator/OperatorAuditPage.tsx` | operator audit log with cursor paging |
+| `/operator/audit` | `pages/operator/OperatorAuditPage.tsx` | audit log with category, operator, date and action filters, detail drawer (before/after/reason), cursor paging, Export CSV |
 
 Client config: `VITE_ID_ISSUER_ORIGIN` (authority = `${VITE_ID_ISSUER_ORIGIN}/realms/operator`), `VITE_OPERATOR_API_URL` (default `http://<host>:5000/operator/v1`). Client id `karbexa-operator-spa` and resource `urn:karbexa:operator` are hard-coded in `operatorAuth.ts`. Logout goes to `/realms/operator/oauth/end_session` with `id_token_hint` and `post_logout_redirect_uri = <origin>/operator`.
 

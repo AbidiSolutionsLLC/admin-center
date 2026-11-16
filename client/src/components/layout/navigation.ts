@@ -14,6 +14,7 @@ import {
   CalendarDays,
   Layers,
   ShieldCheck,
+  UserPlus,
 } from 'lucide-react';
 import type { LucideIcon } from 'lucide-react';
 import { ROUTES } from '@/constants/routes';
@@ -136,6 +137,7 @@ export const OPERATOR_SHELL: ShellConfig = {
       label: 'Platform',
       items: [
         { label: 'Organizations', href: ROUTES.OPERATOR_ORGS, icon: Building2, permission: 'tenants.read' },
+        { label: 'Onboarding', href: ROUTES.OPERATOR_ONBOARDING, icon: UserPlus, permission: 'tenants.read' },
         { label: 'Plans', href: ROUTES.OPERATOR_PLANS, icon: Layers, permission: 'tenants.read' },
         { label: 'Operators', href: ROUTES.OPERATOR_OPERATORS, icon: ShieldCheck, permission: 'operators.read' },
         { label: 'Audit', href: ROUTES.OPERATOR_AUDIT, icon: ClipboardList, permission: 'audit.read' },
