@@ -2145,6 +2145,25 @@ async function main() {
       check('5.5 another organisation sees only its own trial (tenant isolation)', (await ((await other.call('/organization/subscription')).json() as Promise<any>)).data.trial_ends_at === null);
     }
 
+    // ── Plan 5.7: setup checklist derived from live data, scoped by company ──
+    {
+      const t = await tenantCtx('check57');
+      const { Department, SecurityPolicy: SecPol } = await import('../models');
+      const get = async () => ((await (await t.call('/overview/setup-progress')).json()) as any).data.checklist as Array<{ key: string; done: boolean }>;
+      const done = (c: Array<{ key: string; done: boolean }>, k: string) => c.find((x) => x.key === k)?.done;
+      let c = await get();
+      check('5.7 checklist has the four steps in order', c.map((x) => x.key).join() === 'organization,security_policy,invite_people,assign_apps', JSON.stringify(c));
+      check('5.7 a fresh tenant has the people and apps steps open', done(c, 'invite_people') === false && done(c, 'assign_apps') === false, JSON.stringify(c));
+      await Department.create({ company_id: t.cid, name: 'Ops', slug: 'ops-57', type: 'department', is_active: true } as never);
+      await User.create({ company_id: t.cid, full_name: 'Second Member', email: 'second@check57.test', password_hash: 'x', role: 'Employee', lifecycle_state: 'active', is_active: true, employment_type: 'full_time', employee_id: 'C57-2' });
+      await SecPol.updateOne({ company_id: t.cid }, { $set: { updated_at: new Date(Date.now() + 60_000) } }, { timestamps: false });
+      c = await get();
+      check('5.7 department, second member and an edited security policy complete their steps', done(c, 'organization') && done(c, 'invite_people') && done(c, 'security_policy'), JSON.stringify(c));
+      const other = await tenantCtx('check57b');
+      const oc = ((await (await other.call('/overview/setup-progress')).json()) as any).data.checklist as Array<{ key: string; done: boolean }>;
+      check('5.7 another tenant is unaffected: its organization and invite steps stay open', done(oc, 'organization') === false && done(oc, 'invite_people') === false, JSON.stringify(oc));
+    }
+
     // ── audit ─────────────────────────────────────────────────────────────────────────────
     const actions = (await OperatorAuditEvent.find()).map((e) => e.action);
     check('E10 operator audit recorded', ['org.provisioned', 'entitlement.updated', 'org.suspended', 'org.reactivated'].every((a) => actions.includes(a)), actions);

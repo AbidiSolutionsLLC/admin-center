@@ -9,6 +9,8 @@ import { Role } from '../models/Role.model';
 import { AuditEvent } from '../models/AuditEvent.model';
 import { Insight } from '../models/Insight.model';
 import { Company } from '../models/Company.model';
+import { SecurityPolicy } from '../models/SecurityPolicy.model';
+import { AppAssignment } from '../models/AppAssignment.model';
 
 /**
  * Resolves or standardizes the affected_area of an insight.
@@ -185,6 +187,20 @@ export const getSetupProgress = asyncHandler(async (req: Request, res: Response)
 
   const overallPercentage = Math.round((completedChecks / totalChecks) * 100);
 
+  // Elevation 5.7 (ON-8): first-admin checklist derived from live data, every query scoped by company_id.
+  const [deptCount, policy, memberCount, assignmentCount] = await Promise.all([
+    Department.countDocuments({ company_id: companyId, is_active: true }),
+    SecurityPolicy.findOne({ company_id: companyId }).select('created_at updated_at').lean(),
+    User.countDocuments({ company_id: companyId, is_active: true }),
+    AppAssignment.countDocuments({ company_id: companyId, is_active: true }),
+  ]);
+  const checklist = [
+    { key: 'organization', label: 'Set up your organisation structure', done: deptCount > 0, href: '/organization' },
+    { key: 'security_policy', label: 'Review your security policy', done: !!policy && policy.updated_at.getTime() - policy.created_at.getTime() > 1000, href: '/security' },
+    { key: 'invite_people', label: 'Invite your people', done: memberCount > 1, href: '/people' },
+    { key: 'assign_apps', label: 'Assign apps to people', done: assignmentCount > 0, href: '/apps' },
+  ];
+
   res.status(200).json({
     success: true,
     data: {
@@ -192,6 +208,7 @@ export const getSetupProgress = asyncHandler(async (req: Request, res: Response)
       modules: progress,
       total_checks: totalChecks,
       completed_checks: completedChecks,
+      checklist,
     },
   });
 });

@@ -957,6 +957,8 @@ export interface SetupProgress {
   modules: SetupProgressModule[];
   total_checks: number;
   completed_checks: number;
+  /** First-admin checklist (elevation 5.7), derived from live data. */
+  checklist?: Array<{ key: string; label: string; done: boolean; href: string }>;
 }
 
 export interface AuditEvent {

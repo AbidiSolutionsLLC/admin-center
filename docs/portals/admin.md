@@ -320,6 +320,10 @@ Role grants are additionally limited by `server/src/lib/roleHierarchy.ts` (`asse
 
 Response envelope for most tenant endpoints: `{ success: true, data }`; errors from `server/src/middleware/errorHandler.ts`: `{ success: false, error, code }` (plus `details` for validation errors).
 
+### Setup checklist (elevation 5.7)
+
+`GET /overview/setup-progress` also returns `checklist`: four steps (organisation structure, security policy edited, more than one member, an active app assignment) derived from live data, each query scoped by `company_id`; `Company.setup_progress` is not used. The Overview shows it (`features/overview/SetupChecklist.tsx`) until every step is done; "Skip for now" is remembered per browser.
+
 ### Template roll-out (elevation 5.8 to 5.10)
 
 Pages are wrapped in the Phase 3 templates (`PageHeader`, `ListPage`, `Tabs`, `PageStates`) and off-theme colour classes in the page files are replaced by theme tokens (`bg-surface`, `text-ink`, `border-line`, `error`/`warning`/`success`/`info`); soft accents come from the `--accent-*` CSS variables in `client/src/index.css`. Feature components under `client/src/features/*` were not restyled.
