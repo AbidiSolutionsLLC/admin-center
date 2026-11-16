@@ -287,7 +287,7 @@ export const exportAuditLogCSV = asyncHandler(async (req: Request, res: Response
   const canExport = await hasPermission(
     new Types.ObjectId(req.user.userId as string),
     new Types.ObjectId(req.user.company_id as string),
-    'audit',
+    'audit_logs',
     'export',
     'all'
   );
@@ -447,7 +447,7 @@ export const exportAuditLogJSON = asyncHandler(async (req: Request, res: Respons
   const canExport = await hasPermission(
     new Types.ObjectId(req.user.userId as string),
     new Types.ObjectId(req.user.company_id as string),
-    'audit',
+    'audit_logs',
     'export',
     'all'
   );

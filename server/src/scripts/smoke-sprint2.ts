@@ -2060,6 +2060,36 @@ async function main() {
       check('5.2 the terminated session no longer lists', !((await json(await tenant('/security/sessions'))).data as any[]).some((s) => s._id === target));
     }
 
+    // Phase 5 helper: a provisioned organisation with an active first admin and a signed tenant call.
+    const tenantCtx = async (slug: string) => {
+      const prov = (await (await op('/orgs', 'POST', { name: `P5 ${slug}`, slug, plan_key: 'professional', first_admin: { email: `admin@${slug}.test`, full_name: `Admin ${slug}` } })).json()) as any;
+      const cid = prov.data.id as string;
+      const admin = (await User.findOne({ company_id: cid, email: `admin@${slug}.test` }))!;
+      await User.updateOne({ _id: admin._id }, { $set: { lifecycle_state: 'active', is_active: true } });
+      const sid = crypto.randomUUID();
+      await Session.create({ _id: sid, identity_id: new mongoose.Types.ObjectId(), member_id: admin._id, company_id: cid, realm: 'tenant', idle_expires_at: new Date(Date.now() + 3600e3), absolute_expires_at: new Date(Date.now() + 3600e3), amr: ['pwd'] });
+      const key = await jose.importJWK(tenantPrivateJwk, 'RS256');
+      const at = await new jose.SignJWT({ token_use: 'access', org: cid, sid, email: admin.email })
+        .setProtectedHeader({ alg: 'RS256', kid: 'tenant-smoke', typ: 'at+jwt' })
+        .setIssuer(`${ORIGIN}/realms/tenant`).setAudience('urn:karbexa:admin').setSubject(String(admin._id)).setIssuedAt().setExpirationTime('10m').sign(key);
+      const call = (path: string, method = 'GET', body?: unknown) => fetch(`${ORIGIN}/api/v1${path}`, { method, headers: { authorization: `Bearer ${at}`, 'content-type': 'application/json' }, body: body ? JSON.stringify(body) : undefined });
+      return { cid, admin, call };
+    };
+
+    // ── Plan 5.3: exports check seeded permission modules (audit_logs, locations) ──
+    {
+      const t = await tenantCtx('exports');
+      const csv = await t.call('/audit-logs/export/csv');
+      check('5.3 Super Admin can export the audit log as CSV = 200 text/csv', csv.status === 200 && (csv.headers.get('content-type') || '').includes('csv'), csv.status);
+      const js = await t.call('/audit-logs/export/json');
+      check('5.3 Super Admin can export the audit log as JSON = 200', js.status === 200, js.status);
+      const { Permission, RolePermission, Role } = await import('../models');
+      const perm = await Permission.findOne({ module: 'locations', action: 'export', data_scope: 'all' });
+      check('5.3 the locations:export:all permission exists in the seed (holiday export checks it)', !!perm);
+      const opsAdminRole = await Role.findOne({ company_id: t.cid, name: 'Ops Admin' });
+      check('5.3 Ops Admin holds locations:export:all', !!opsAdminRole && !!(await RolePermission.findOne({ role_id: opsAdminRole._id, permission_id: perm!._id, granted: true })));
+    }
+
     // ── audit ─────────────────────────────────────────────────────────────────────────────
     const actions = (await OperatorAuditEvent.find()).map((e) => e.action);
     check('E10 operator audit recorded', ['org.provisioned', 'entitlement.updated', 'org.suspended', 'org.reactivated'].every((a) => actions.includes(a)), actions);

@@ -1276,7 +1276,7 @@ export const moveHoliday = asyncHandler(async (req: Request, res: Response) => {
  */
 export const exportHolidays = asyncHandler(async (req: Request, res: Response) => {
   // @ts-ignore
-  const canExport = await hasPermission(req.user.userId, req.user.company_id, 'company', 'export', 'all');
+  const canExport = await hasPermission(req.user.userId, req.user.company_id, 'locations', 'export', 'all');
   if (!canExport) {
     await auditLogger.log({
       req,
