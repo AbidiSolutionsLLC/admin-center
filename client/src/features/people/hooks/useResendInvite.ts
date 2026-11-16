@@ -12,6 +12,7 @@ export const useResendInvite = () => {
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: QUERY_KEYS.USERS });
+      queryClient.invalidateQueries({ queryKey: ['user-invitation'] });
       toast.success('Invitation resent successfully');
     },
     onError: (error: unknown) => {

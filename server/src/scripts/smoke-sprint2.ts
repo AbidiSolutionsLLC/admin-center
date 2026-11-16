@@ -1323,6 +1323,45 @@ async function main() {
       const statuses = rr2.map((x) => x.status).sort().join();
       check('E4d concurrent conflicting lifecycle transitions -> one success, one 409 LIFECYCLE_CONFLICT', statuses === '200,409' && rr2.some((x) => x.status === 409 && /LIFECYCLE_CONFLICT/.test(x.text)), rr2.map((x) => `${x.status} ${x.text.slice(0, 120)}`));
 
+      // ── Plan 2.4: invitation panel API (state, delivery, revoke, copy link) ────────────────────────────────
+      {
+        const { Invitation: InvM, EmailDelivery: DelM, AuditEvent: AuM } = await import('../models');
+        const jsonOf = (t: string) => { try { return JSON.parse(t); } catch { return {}; } };
+        await apiL('/people/invite', 'POST', { full_name: 'Panel Member', email: 'panel.member@acme.test' }, 'p24-invite');
+        const pm = await User.findOne({ company_id: orgId, email: 'panel.member@acme.test' });
+        const g1 = await apiL(`/people/${pm?._id}/invitation`, 'GET', undefined, 'p24-get1');
+        const g1j = jsonOf(g1.text);
+        check('2.4 GET invitation = pending, sent_count 1, no token in the body', g1.status === 200 && g1j.data?.invitation?.state === 'pending' && g1j.data?.invitation?.sent_count === 1 && !/token/i.test(g1.text), g1.text.slice(0, 200));
+        check('2.4 GET invitation reports the e-mail delivery row', !!g1j.data?.delivery?.status, g1j.data?.delivery);
+        await DelM.updateOne({ 'related.id': String(pm?._id) }, { $set: { status: 'failed', last_error: 'ECONNREFUSED: test' } });
+        const g1b = jsonOf((await apiL(`/people/${pm?._id}/invitation`, 'GET', undefined, 'p24-get1b')).text);
+        check('2.4 a failed delivery shows status failed and its last error', g1b.data?.delivery?.status === 'failed' && g1b.data?.delivery?.last_error === 'ECONNREFUSED: test', g1b.data?.delivery);
+
+        const cp = await apiL(`/people/${pm?._id}/resend-invite?copy=true`, 'POST', undefined, 'p24-copy');
+        const cpj = jsonOf(cp.text);
+        const link = String(cpj.data?.invite_link ?? '');
+        check('2.4 resend ?copy=true returns the link once, supersedes the old invitation', cp.status === 200 && /\/onboarding\?token=[0-9a-f]{64}&email=/.test(link) && (await InvM.countDocuments({ user_id: pm?._id, state: 'pending' })) === 1 && (await InvM.countDocuments({ user_id: pm?._id, state: 'superseded' })) === 1, cp.text.slice(0, 200));
+        check('2.4 copy-link is audited', !!(await AuM.exists({ company_id: orgId, action: 'user.invite_link_copied', object_id: String(pm?._id) })));
+        const g2 = jsonOf((await apiL(`/people/${pm?._id}/invitation`, 'GET', undefined, 'p24-get2')).text);
+        check('2.4 copied invitation shows sent_count 0 (no e-mail went with it)', g2.data?.invitation?.sent_count === 0, g2.data?.invitation);
+
+        const rv = await apiL(`/people/${pm?._id}/invitation/revoke`, 'POST', undefined, 'p24-revoke');
+        const g3 = jsonOf((await apiL(`/people/${pm?._id}/invitation`, 'GET', undefined, 'p24-get3')).text);
+        check('2.4 revoke = 200 and the panel shows revoked', rv.status === 200 && g3.data?.invitation?.state === 'revoked', g3.data?.invitation);
+        const rv2 = await apiL(`/people/${pm?._id}/invitation/revoke`, 'POST', undefined, 'p24-revoke2');
+        check('2.4 revoke with nothing pending = 409 NO_PENDING_INVITATION', rv2.status === 409 && /NO_PENDING_INVITATION/.test(rv2.text), rv2.text.slice(0, 120));
+        check('2.4 revoke is audited', !!(await AuM.exists({ company_id: orgId, action: 'user.invite_revoked', object_id: String(pm?._id) })));
+        const verRev = await fetch(`${ORIGIN}/api/v1/people/verify-invite`, { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ token: link.match(/token=([0-9a-f]{64})/)?.[1] }) });
+        check('2.4 a revoked link verifies as 410 INVITE_REVOKED', verRev.status === 410 && ((await verRev.json()) as any).code === 'INVITE_REVOKED', verRev.status);
+
+        // tenant isolation: another organisation's member is invisible
+        const foreign = await Company.create({ name: 'Other Org', slug: `p24-other-${Date.now()}` });
+        const fu = await User.create({ company_id: foreign._id, full_name: 'Foreign', email: 'foreign@other.test', password_hash: 'x', lifecycle_state: 'invited', is_active: false });
+        const gf = await apiL(`/people/${fu._id}/invitation`, 'GET', undefined, 'p24-foreign');
+        const rf = await apiL(`/people/${fu._id}/invitation/revoke`, 'POST', undefined, 'p24-foreign-revoke');
+        check('2.4 another organisation's member: GET and revoke = 404', gf.status === 404 && rf.status === 404, [gf.status, rf.status]);
+      }
+
       // stale role-catalog version is a no-op
       const rcTok = await mint4('platform.role_catalog.write');
       const signApp = await App.findOne({ product_key: 'sign', app_type: 'karbexa_product' }).lean();

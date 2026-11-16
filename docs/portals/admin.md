@@ -125,7 +125,9 @@ The controller is in the file named after the mount unless the row says otherwis
 | GET | `/people/:id/effective-access` | PEOPLE_ADMINS | `appAccess.controller.getEffectiveAccess` |
 | GET | `/people/:id/product-open-items` | PEOPLE_ADMINS | `getProductOpenItems` (proxies the products backend, see platform-api.md) |
 | GET | `/people/:id/effective-settings` | auth | `getUserEffectiveSettings` |
-| POST | `/people/:id/resend-invite` | PEOPLE_ADMINS | `resendInvite` |
+| POST | `/people/:id/resend-invite` | PEOPLE_ADMINS | `resendInvite`; `?copy=true` issues a new invitation without e-mail and returns `data.invite_link` once (audited `user.invite_link_copied`) |
+| GET | `/people/:id/invitation` | PEOPLE_ADMINS | `getUserInvitation`: latest invitation (state incl. derived `expired`, sent, expires) and latest `EmailDelivery` (status, last error); never a token |
+| POST | `/people/:id/invitation/revoke` | PEOPLE_ADMINS | `revokeUserInvitation`: pending to revoked (409 `NO_PENDING_INVITATION` otherwise; audited `user.invite_revoked`) |
 | PUT | `/people/:id` | PEOPLE_ADMINS | `updateUser` |
 | PUT | `/people/:id/lifecycle` | PEOPLE_ADMINS | `updateUserLifecycle` |
 | DELETE | `/people/:id` | PEOPLE_ADMINS | `deleteUser` (transitions to `archived`, it does not delete the document) |

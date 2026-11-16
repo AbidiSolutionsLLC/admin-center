@@ -16,6 +16,8 @@ export interface InvitationInput {
   email: string;
   created_by: { type: InvitationCreatorType; id?: Id };
   ttl_hours?: number;
+  /** False when no e-mail goes with this invitation (admin "copy link"): sent_count stays 0. Default true. */
+  mark_sent?: boolean;
 }
 
 export interface CreatedInvitation {
@@ -41,7 +43,8 @@ function buildDoc(input: InvitationInput, now: Date) {
     token_hash: hashToken(rawToken),
     state: 'pending' as const,
     expires_at: new Date(now.getTime() + (input.ttl_hours ?? DEFAULT_INVITE_TTL_HOURS) * 3600 * 1000),
-    sent_count: 0,
+    sent_count: input.mark_sent === false ? 0 : 1,
+    ...(input.mark_sent === false ? {} : { last_sent_at: now }),
     created_by: { type: input.created_by.type, ...(input.created_by.id ? { id: oid(input.created_by.id) } : {}) },
   };
   return { doc, rawToken };

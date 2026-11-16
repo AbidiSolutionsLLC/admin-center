@@ -16,6 +16,8 @@ import {
   exportUsers,
   deleteUser,
   resendInvite,
+  getUserInvitation,
+  revokeUserInvitation,
   getUserHistory,
   getEffectivePermissions,
   getUserAppAccessHistory,
@@ -137,6 +139,13 @@ router.get('/:id/effective-settings', getUserEffectiveSettings);
  * Resend invitation email to an invited user
  */
 router.post('/:id/resend-invite', requireRole(PEOPLE_MANAGERS), resendInvite);
+
+/**
+ * GET /people/:id/invitation, POST /people/:id/invitation/revoke
+ * Invitation panel: state, sent, expiry, delivery status; cancel a pending invitation.
+ */
+router.get('/:id/invitation', requireRole(PEOPLE_MANAGERS), getUserInvitation);
+router.post('/:id/invitation/revoke', requireRole(PEOPLE_MANAGERS), revokeUserInvitation);
 
 /**
  * PUT /people/:id

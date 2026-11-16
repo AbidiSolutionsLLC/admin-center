@@ -11,6 +11,7 @@ import { ReportingLinesPanel } from '@/features/people/components/ReportingLines
 import { EffectivePermissionsPanel } from '@/features/people/components/EffectivePermissionsPanel';
 import { UserDelegatesPanel } from '@/features/people/components/UserDelegatesPanel';
 import { UserProductAccessTab } from '@/features/people/components/UserProductAccessTab';
+import { InvitationPanel } from '@/features/people/components/InvitationPanel';
 import { UserSecurityPanel } from '@/features/people/components/UserSecurityPanel';
 import { OffboardingModal } from '@/features/people/components/OffboardingModal';
 import { formatTimeInTimezone, getTimezoneOffset } from '@/lib/timezone';
@@ -261,6 +262,8 @@ export default function UserDetailPage() {
       {/* ── Tab Content: Profile ── */}
       {activeTab === 'profile' && (
         <div className="space-y-5">
+          {user.lifecycle_state === 'invited' && <InvitationPanel userId={user._id} />}
+
           {/* User Info Cards */}
           <div className="grid grid-cols-4 gap-4">
             <InfoCard label="Department" value={user.department?.name || 'Not assigned'} />

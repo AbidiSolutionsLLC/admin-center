@@ -59,6 +59,7 @@ const getRouteId = (param: string | string[]): string =>
 
 import crypto from 'crypto';
 import { Invitation } from '../models/Invitation.model';
+import { EmailDelivery } from '../models/EmailDelivery.model';
 import { createInvitation, createInvitations, inviteLink, findInvitationByToken, invitationProblem, maskEmail } from '../lib/invitations';
 import { fetchMemberOpenItems } from '../platform/openItems';
 
@@ -2454,11 +2455,31 @@ export const resendInvite = asyncHandler(async (req: Request, res: Response) => 
   const company = await Company.findById(req.user.company_id);
   if (!company) throw new AppError('Company not found', 404, 'COMPANY_NOT_FOUND');
 
+  // ?copy=true: the admin hands the link over personally. A new invitation is issued (the old link stops working),
+  // no e-mail is sent, and the link is returned once in this response. The copy is audited.
+  const copy = req.query.copy === 'true';
+
   // Supersedes any pending invitation and issues a fresh one
   const { rawToken } = await runInTransaction((session) => createInvitation(session, {
     kind: 'member', company_id: company._id, user_id: user._id, email: user.email,
     created_by: { type: 'member', id: req.user.userId },
+    mark_sent: !copy,
   }));
+
+  if (copy) {
+    await auditLogger.log({
+      req,
+      action: 'user.invite_link_copied',
+      module: 'people',
+      object_type: 'User',
+      object_id: user._id.toString(),
+      object_label: user.full_name,
+      before_state: null,
+      after_state: { email: user.email },
+    });
+    res.json({ success: true, data: { invite_link: inviteLink(rawToken, user.email) } });
+    return;
+  }
 
   await sendWelcomeEmail({
     email: user.email,
@@ -2481,6 +2502,80 @@ export const resendInvite = asyncHandler(async (req: Request, res: Response) => 
   });
 
   res.json({ success: true, message: 'Invitation resent successfully' });
+});
+
+/**
+ * GET /people/:id/invitation
+ * The member's latest invitation (state, sent, expires) and the latest delivery of its e-mail (status, last error).
+ * Tenant-scoped; same permission gate as resend-invite. Never returns a token.
+ */
+export const getUserInvitation = asyncHandler(async (req: Request, res: Response) => {
+  const user = await User.findOne({ _id: getRouteId(req.params.id), company_id: req.user.company_id }).select('_id lifecycle_state');
+  if (!user) throw new AppError('User not found', 404, 'NOT_FOUND');
+
+  const inv = await Invitation.findOne({ user_id: user._id, company_id: req.user.company_id, kind: { $ne: 'operator' } }).sort({ createdAt: -1 });
+  if (!inv) {
+    res.json({ success: true, data: { invitation: null, delivery: null } });
+    return;
+  }
+
+  const delivery = await EmailDelivery.findOne({
+    company_id: req.user.company_id,
+    'related.type': 'user',
+    'related.id': String(user._id),
+    created_at: { $gte: inv.createdAt },
+  }).sort({ created_at: -1 }).select('status attempts last_error sent_at created_at').lean();
+
+  const expired = inv.state === 'pending' && inv.expires_at.getTime() <= Date.now();
+  res.json({
+    success: true,
+    data: {
+      invitation: {
+        id: inv._id,
+        kind: inv.kind,
+        state: expired ? 'expired' : inv.state,
+        created_at: inv.createdAt,
+        last_sent_at: inv.last_sent_at ?? null,
+        sent_count: inv.sent_count,
+        expires_at: inv.expires_at,
+        accepted_at: inv.accepted_at ?? null,
+        revoked_at: inv.revoked_at ?? null,
+      },
+      delivery: delivery
+        ? { status: delivery.status, attempts: delivery.attempts, last_error: delivery.last_error ?? null, sent_at: delivery.sent_at ?? null, queued_at: delivery.created_at }
+        : null,
+    },
+  });
+});
+
+/**
+ * POST /people/:id/invitation/revoke
+ * Cancels the member's pending invitation. 409 when nothing is pending. Audited.
+ */
+export const revokeUserInvitation = asyncHandler(async (req: Request, res: Response) => {
+  const user = await User.findOne({ _id: getRouteId(req.params.id), company_id: req.user.company_id }).select('_id full_name email');
+  if (!user) throw new AppError('User not found', 404, 'NOT_FOUND');
+
+  const now = new Date();
+  const revoked = await Invitation.findOneAndUpdate(
+    { user_id: user._id, company_id: req.user.company_id, kind: { $ne: 'operator' }, state: 'pending' },
+    { $set: { state: 'revoked', revoked_at: now, revoked_by: new Types.ObjectId(String(req.user.userId)) } },
+    { returnDocument: 'after' },
+  );
+  if (!revoked) throw new AppError('There is no pending invitation to revoke', 409, 'NO_PENDING_INVITATION');
+
+  await auditLogger.log({
+    req,
+    action: 'user.invite_revoked',
+    module: 'people',
+    object_type: 'User',
+    object_id: user._id.toString(),
+    object_label: user.full_name,
+    before_state: { invitation_state: 'pending' },
+    after_state: { invitation_state: 'revoked' },
+  });
+
+  res.json({ success: true, message: 'Invitation revoked' });
 });
 
 /**

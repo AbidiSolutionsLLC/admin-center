@@ -5,6 +5,7 @@ Format: [Keep a Changelog](https://keepachangelog.com/en/1.1.0/). Each entry lis
 ## [Unreleased]: elevation, branch `feat/elevation`
 
 ### Changed
+- 2.4: member detail shows an Invitation panel for invited members (state, last sent, expiry, e-mail delivery status and last error) with Resend, Copy link (new link, no e-mail, shown once, audited) and Revoke. New `GET /people/:id/invitation`, `POST /people/:id/invitation/revoke`; `resend-invite` accepts `?copy=true`.
 - 2.3: the activation page verifies the link on load and shows the form, or an expired / superseded / already-used / revoked / not-valid notice with its action (`Send me a new link`, `Sign in`); the e-mail field is read-only. Forgot and reset password use the same `AuthNotice`.
 - 2.2: `POST /people/verify-invite` answers six outcomes with codes (`INVITE_EXPIRED`, `INVITE_SUPERSEDED`, `INVITE_ALREADY_USED`, `INVITE_REVOKED`, `INVITE_NOT_FOUND`); new public `POST /people/renew-invite` (always 202, 3 per invitation per day); `POST /auth/setup-password` runs in one transaction with an atomic consume, `email` is optional, and a reused or expired link now answers the same codes instead of `INVALID_TOKEN` (400).
 - 2.1: `InviteToken` becomes `Invitation` (kind, state, no TTL index) and every invitation is made by `lib/invitations.ts`; a new invitation supersedes the user's pending one. The `invite_tokens` collection is not migrated (fresh start); `lib/lifecycleAutomations.ts` (dead code with a placeholder link) is removed.
