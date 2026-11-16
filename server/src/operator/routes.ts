@@ -259,11 +259,14 @@ router.post('/orgs', asyncHandler(async (req: Request, res: Response) => {
     });
 
     // Side effects after commit.
+    // `invite_email_sent` means "accepted for delivery" (queued in the e-mail outbox); `invite_delivery_id` is its EmailDelivery id.
     let emailSent = true;
+    let deliveryId: string | undefined;
     try {
-      await sendWelcomeEmail({
+      deliveryId = await sendWelcomeEmail({
         email: user.email, full_name: user.full_name, employee_id: user.employee_id, company_name: company.name,
         invite_link: `${process.env.CLIENT_URL}/onboarding?token=${rawToken}&email=${encodeURIComponent(user.email)}`,
+        meta: { company_id: company._id, related: { type: 'user', id: String(user._id) } },
       });
     } catch (e) {
       emailSent = false;
@@ -271,7 +274,7 @@ router.post('/orgs', asyncHandler(async (req: Request, res: Response) => {
     }
 
     const detail = await orgDetail(company._id.toString());
-    ok(res, { ...detail, invite_email_sent: emailSent, ...(!isProd() && process.env.EXPOSE_INVITE_TOKEN === 'true' ? { invite_token: rawToken } : {}) }, 201);
+    ok(res, { ...detail, invite_email_sent: emailSent, invite_delivery_id: deliveryId ?? null, ...(!isProd() && process.env.EXPOSE_INVITE_TOKEN === 'true' ? { invite_token: rawToken } : {}) }, 201);
   } catch (err) {
     // The txn rolled back; undo the pre-txn company + seeded roles/policy so the slug is free for a clean retry.
     console.error('[operator] provisioning failed for', slug, err);

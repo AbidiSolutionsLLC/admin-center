@@ -7,7 +7,10 @@
 
 import nodemailer, { type Transporter } from 'nodemailer';
 import { EmailClient } from '@azure/communication-email';
+import mongoose, { Types } from 'mongoose';
 import { escapeHtml } from '../identity/html';
+import { EmailDelivery, EmailRelatedType } from '../models/EmailDelivery.model';
+import { encrypt } from './cryptoService';
 
 interface WelcomeEmailParams {
   email: string;
@@ -15,6 +18,7 @@ interface WelcomeEmailParams {
   employee_id: string;
   company_name: string;
   invite_link?: string;
+  meta?: Pick<EmailMeta, 'company_id' | 'related'>;
 }
 
 interface BulkEmailResult {
@@ -89,24 +93,32 @@ export const getTransporter = async (): Promise<Transporter> => {
 
 // ── Unified Sending Logic ───────────────────────────────────────────────────
 
-interface SendEmailParams {
+/** Delivery-log context (Plan 0.6). All optional; stored on the EmailDelivery row. */
+export interface EmailMeta {
+  company_id?: Types.ObjectId | string;
+  template?: string;
+  related?: { type: EmailRelatedType; id: string };
+  /** Send in the request instead of queueing (codes that expire in minutes, DRD §5.3). The row is still logged. */
+  direct?: boolean;
+}
+
+export interface SendEmailParams {
   to: string;
   subject: string;
   html: string;
   text?: string;
+  meta?: EmailMeta;
 }
 
+const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+
 /**
- * Internal helper to send email using the best available service
+ * Sends one message through the best available service: Azure Communication Services first, Nodemailer second.
+ * Throws when both fail. Used by `sendEmailInternal` (inline mode) and by lib/emailSender.ts (queued rows).
  */
-const sendEmailInternal = async (params: SendEmailParams): Promise<void> => {
+export const deliverNow = async (params: Pick<SendEmailParams, 'to' | 'subject' | 'html' | 'text'>): Promise<{ provider_message_id?: string }> => {
   const { to, subject, html, text } = params;
-  
-  if (!to || typeof to !== 'string' || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(to)) {
-    console.warn(`[EmailService] Invalid or missing email address: "${to}". Skipping email delivery.`);
-    return;
-  }
-  
+
   const senderAddress = process.env.SENDER_EMAIL_ADDRESS;
 
   // 1. Try Azure Communication Services
@@ -125,9 +137,9 @@ const sendEmailInternal = async (params: SendEmailParams): Promise<void> => {
       };
 
       console.log(`📨 Queuing Azure email for ${to}...`);
-      await azureClient.beginSend(emailMessage);
+      const poller = await azureClient.beginSend(emailMessage);
       console.log(`✅ Azure email sent successfully to ${to}`);
-      return;
+      return { provider_message_id: (poller as { operationState?: { id?: string } }).operationState?.id };
     } catch (error) {
       console.error('❌ Azure email send failed, falling back to Nodemailer:', error instanceof Error ? error.message : 'Unknown error');
       // Fall through to Nodemailer
@@ -149,6 +161,67 @@ const sendEmailInternal = async (params: SendEmailParams): Promise<void> => {
   if (!process.env.SMTP_HOST) {
     console.log('📧 Ethereal Email preview URL: %s', nodemailer.getTestMessageUrl(info));
   }
+  return { provider_message_id: typeof info?.messageId === 'string' ? info.messageId : undefined };
+};
+
+const dbConnected = (): boolean => mongoose.connection.readyState === 1;
+
+/** Inline mode: tests and the mock-mail switch send in the request (the row is still written). */
+const inlineMode = (): boolean =>
+  process.env.NODE_ENV === 'test' || (process.env.MOCK_EMAIL === 'true' && process.env.NODE_ENV !== 'production');
+
+const errorText = (err: unknown): string => {
+  const e = err as { code?: unknown; name?: string; message?: string };
+  return `${typeof e?.code === 'string' ? e.code : e?.name || 'Error'}: ${String(e?.message ?? err).slice(0, 200)}`;
+};
+
+/**
+ * Accepts a message for delivery: validates the address, writes an EmailDelivery row (bodies encrypted) and returns its
+ * id. The sender loop (lib/emailSender.ts) delivers it. In inline mode, or with `meta.direct`, it delivers in the call
+ * and rethrows a delivery failure (as before the outbox). Without a database connection it just delivers.
+ */
+const sendEmailInternal = async (params: SendEmailParams): Promise<string | undefined> => {
+  const { to, subject, html, text, meta } = params;
+  const base = {
+    company_id: meta?.company_id,
+    to: typeof to === 'string' ? to : String(to),
+    template: meta?.template || 'custom',
+    subject,
+    related: meta?.related,
+  };
+
+  if (!to || typeof to !== 'string' || !EMAIL_RE.test(to)) {
+    console.warn(`[EmailService] Invalid or missing email address: "${to}". Skipping email delivery.`);
+    if (dbConnected()) {
+      const row = await EmailDelivery.create({ ...base, to: String(to ?? ''), status: 'failed', last_error: 'INVALID_ADDRESS: invalid or missing recipient' });
+      return String(row._id);
+    }
+    return undefined;
+  }
+
+  if (!dbConnected()) {
+    await deliverNow({ to, subject, html, text });
+    return undefined;
+  }
+
+  const direct = inlineMode() || meta?.direct === true;
+  const row = await EmailDelivery.create({
+    ...base,
+    status: direct ? 'sending' : 'queued',
+    attempts: direct ? 1 : 0,
+    html_enc: encrypt(html),
+    ...(text ? { text_enc: encrypt(text) } : {}),
+  });
+  if (!direct) return String(row._id);
+
+  try {
+    const result = await deliverNow({ to, subject, html, text });
+    await EmailDelivery.updateOne({ _id: row._id }, { $set: { status: 'sent', sent_at: new Date(), provider_message_id: result.provider_message_id }, $unset: { html_enc: 1, text_enc: 1 } });
+  } catch (err) {
+    await EmailDelivery.updateOne({ _id: row._id }, { $set: { status: 'failed', last_error: errorText(err) }, $unset: { html_enc: 1, text_enc: 1 } });
+    throw err;
+  }
+  return String(row._id);
 };
 
 // ── Public API ─────────────────────────────────────────────────────────────
@@ -156,17 +229,15 @@ const sendEmailInternal = async (params: SendEmailParams): Promise<void> => {
 /**
  * Sends a raw email message.
  */
-export const sendEmail = async (params: SendEmailParams): Promise<void> => {
-  await sendEmailInternal(params);
-};
+export const sendEmail = async (params: SendEmailParams): Promise<string | undefined> => sendEmailInternal(params);
 
 /**
  * Sends a welcome email to a newly invited user
  * @param params - Email parameters including recipient info and invite link
  * @returns Promise that resolves when email is sent
  */
-export const sendWelcomeEmail = async (params: WelcomeEmailParams): Promise<void> => {
-  const { email, full_name, employee_id, company_name, invite_link } = params;
+export const sendWelcomeEmail = async (params: WelcomeEmailParams): Promise<string | undefined> => {
+  const { email, full_name, employee_id, company_name, invite_link, meta } = params;
 
   const html = `
     <!DOCTYPE html>
@@ -241,7 +312,7 @@ ${company_name} Team
 This is an automated message from Admin Center. Please do not reply to this email.
   `.trim();
 
-  await sendEmailInternal({ to: email, subject: `Welcome to ${company_name} — Complete Your Profile`, html, text });
+  return sendEmailInternal({ to: email, subject: `Welcome to ${company_name} — Complete Your Profile`, html, text, meta: { ...meta, template: 'welcome' } });
 };
 
 /**
@@ -294,6 +365,7 @@ export const sendClaimEmail = async (params: {
     subject: `Claim your Karbexa account for ${company_name}`,
     html,
     text,
+    meta: { template: 'claim', direct: true }, // scripts/send-claim-emails.ts exits right after sending: no sender loop runs there
   });
 };
 
@@ -366,7 +438,7 @@ export const sendPasswordResetEmail = async (
     </html>
   `;
 
-  await sendEmailInternal({ to: email, subject: 'Password Reset Request', html });
+  await sendEmailInternal({ to: email, subject: 'Password Reset Request', html, meta: { template: 'password_reset' } });
 };
 
 export interface PolicyEmailParams {
@@ -424,7 +496,7 @@ Best regards,
 ${company_name} Team
   `.trim();
 
-  await sendEmailInternal({ to: email, subject: `Action Required: New Policy Published - ${policy_title}`, html, text });
+  await sendEmailInternal({ to: email, subject: `Action Required: New Policy Published - ${policy_title}`, html, text, meta: { template: 'policy' } });
 };
 
 export interface MfaOtpEmailParams {
@@ -479,7 +551,7 @@ This code will expire in 10 minutes.
 If you didn't request this code, please ignore this email.
   `.trim();
 
-  await sendEmailInternal({ to: email, subject: 'Your Verification Code', html, text });
+  await sendEmailInternal({ to: email, subject: 'Your Verification Code', html, text, meta: { template: 'mfa_otp', direct: true } });
 };
 
 export const sendMfaResetEmail = async (params: {
@@ -534,6 +606,7 @@ If you did not request this reset or speak with your administrator, please conta
     subject: `Two-Factor Authentication Reset — ${company_name}`,
     html,
     text,
+    meta: { template: 'mfa_reset' },
   });
 };
 

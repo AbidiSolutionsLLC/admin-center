@@ -74,6 +74,7 @@ export * from './OrganizationEntitlement.model';
 export * from './OperatorAccount.model';
 export * from './OperatorSession.model';
 export * from './RateLimitWindow.model';
+export * from './EmailDelivery.model';
 export * from './OperatorAuditEvent.model';
 export * from './PlatformEvent.model';
 export * from './OrgEventCounter.model';

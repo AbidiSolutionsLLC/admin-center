@@ -57,7 +57,7 @@ The global per-IP rate limiter in `app.ts` also applies. Envelope: `{ success: t
 |---|---|---|---|
 | GET | `/orgs` | `limit` (1–100, default 25), `cursor` (last `_id`), `status`, `search` (name/slug regex) | Org summaries newest first; `meta: { total, limit, next_cursor }` |
 | GET | `/orgs/:id` | | Summary + `first_admin` (oldest user with legacy `role: 'Super Admin'`) |
-| POST | `/orgs` | `{ name, slug?, plan_key, first_admin: { email, full_name } }` | Provision (see below). Idempotent by slug: an existing slug returns 200 with `already_existed: true`. New org returns 201 with `invite_email_sent`, and `invite_token` only when `NODE_ENV !== 'production'` and `EXPOSE_INVITE_TOKEN === 'true'` |
+| POST | `/orgs` | `{ name, slug?, plan_key, first_admin: { email, full_name } }` | Provision (see below). Idempotent by slug: an existing slug returns 200 with `already_existed: true`. New org returns 201 with `invite_email_sent` (now "accepted for delivery") and `invite_delivery_id` (the `EmailDelivery` id), and `invite_token` only when `NODE_ENV !== 'production'` and `EXPOSE_INVITE_TOKEN === 'true'` |
 | POST | `/orgs/:id/suspend` | `{ reason? }` | Status `suspended`, revoke all org sessions |
 | POST | `/orgs/:id/reactivate` | `{ reason? }` | Status `active` (refused with 409 `ORG_CLOSED` if closed) |
 | POST | `/orgs/:id/close` | `{ reason? }` | Status `closed`, revoke all org sessions |
@@ -78,7 +78,7 @@ The global per-IP rate limiter in `app.ts` also applies. Envelope: `{ success: t
 2. `Company.create` with `status: 'provisioning'`, `is_active: false` (outside the transaction).
 3. `seedDatabase(companyId)`: permissions, system roles, default security policy (outside the transaction).
 4. In one transaction: entitlements for every plan product (`source: 'plan'`), first admin `User` (`lifecycle_state: 'invited'`, legacy `role: 'Super Admin'`, pre-set `employee_id`), `UserRole` Super Admin, `InviteToken` (sha256 of a random token, 72 h), default access rules (section 4), company set `active`, platform events, operator audit + mirrored tenant `AuditEvent`.
-5. After commit: welcome e-mail with `${CLIENT_URL}/onboarding?token=...&email=...`. A send failure is logged and reported as `invite_email_sent: false`; it does not fail the request.
+5. After commit: welcome e-mail with `${CLIENT_URL}/onboarding?token=...&email=...`, accepted into the e-mail outbox (`EmailDelivery`, Plan 0.6, built, tests not yet run) and sent by the sender loop; its fate is in `EmailDelivery.status`. A failure to accept is logged and reported as `invite_email_sent: false`; it does not fail the request.
 6. On any failure the roles, role permissions, security policy and the `provisioning` company are deleted so the slug can be retried.
 
 **Status changes** (`setOrgStatus`, `routes.ts:291-322`): in one transaction set `status`/`is_active`, bump every member's `authz_ver`, mark legacy `RefreshToken`s revoked, revoke live `Session` rows (`revokeSessionsTx`, reason `org_suspended` / `org_closed`), emit the org event, write audit. After commit: tear down provider sessions, then fan out per-member `app_access.changed` in batches of 200.

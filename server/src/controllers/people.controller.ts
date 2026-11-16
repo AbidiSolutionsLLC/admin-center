@@ -569,6 +569,7 @@ async function runLifecycleAutomations(
       employee_id: user.employee_id,
       company_name: company.name,
       invite_link: `${process.env.CLIENT_URL}/onboarding?token=${rawToken}&email=${encodeURIComponent(user.email)}`,
+      meta: { company_id: company._id, related: { type: 'user', id: String(user._id) } },
     });
 
     await auditLogger.log({
@@ -1164,6 +1165,7 @@ export const inviteUser = asyncHandler(async (req: Request, res: Response) => {
       employee_id: user.employee_id,
       company_name: company.name,
       invite_link: `${process.env.CLIENT_URL}/onboarding?token=${rawToken}&email=${encodeURIComponent(user.email)}`,
+      meta: { company_id: company._id, related: { type: 'user', id: String(user._id) } },
     });
   } catch (error) {
     console.error('Failed to send welcome email:', error);
@@ -2429,6 +2431,7 @@ export const resendInvite = asyncHandler(async (req: Request, res: Response) => 
     employee_id: user.employee_id,
     company_name: company.name,
     invite_link: `${process.env.CLIENT_URL}/onboarding?token=${rawToken}&email=${encodeURIComponent(user.email)}`,
+    meta: { company_id: company._id, related: { type: 'user', id: String(user._id) } },
   });
 
   await auditLogger.log({

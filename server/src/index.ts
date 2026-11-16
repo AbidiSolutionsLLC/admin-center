@@ -7,6 +7,7 @@ import { processEscalations } from './lib/escalationEngine';
 import { processAuditRetention } from './lib/auditRetention';
 import { runIntelligenceRulesForAllCompanies } from './lib/intelligence';
 import { startPlatformDispatcher, stopPlatformDispatcher } from './lib/platformDispatcher';
+import { startEmailSender, stopEmailSender } from './lib/emailSender';
 
 export { createServer };
 
@@ -38,8 +39,11 @@ connectDB().then(async () => {
     console.log('[IntelligenceEngine] Automated misconfiguration and health detection started.');
 
     startPlatformDispatcher();
+    startEmailSender();
     process.once('SIGTERM', stopPlatformDispatcher);
     process.once('SIGINT', stopPlatformDispatcher);
+    process.once('SIGTERM', stopEmailSender);
+    process.once('SIGINT', stopEmailSender);
 
     // Run initial scans on startup
     processAuditRetention().catch(console.error);
