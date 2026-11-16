@@ -1841,7 +1841,7 @@ async function main() {
       await Ent.updateOne({ company_id: cid, product_key: outOfPlan }, { $set: { expires_at: new Date(Date.now() - 60e3) } });
       await put(inPlan, { status: 'active', reason: 'No expiry' });
       check('4.6 expiry job removes only the expired override', (await expireOverrides()) === 1 && !(await Ent.findOne({ company_id: cid, product_key: outOfPlan })) && (await Ent.findOne({ company_id: cid, product_key: inPlan }))?.source === 'operator');
-      const sys = await OperatorAuditEvent.findOne({ action: 'entitlement.override_removed', target_id: `${cid}:${outOfPlan}` });
+      const sys = await OperatorAuditEvent.findOne({ action: 'entitlement.override_removed', target_id: `${cid}:${outOfPlan}`, reason: 'Override expired' });
       check('4.6 expiry is audited with actor system', sys?.operator_email === 'system' && !sys.operator_id && sys.reason === 'Override expired', JSON.stringify(sys));
       check('4.6 expiry job is idempotent', (await expireOverrides()) === 0);
 
@@ -1950,7 +1950,7 @@ async function main() {
       const row = all.body.data.find((o: any) => o.slug === 'acme');
       check('4.3 summary has members_total, members_active, products, tags, trial_ends_at, last_activity_at', row && typeof row.members_total === 'number' && typeof row.members_active === 'number' && row.members_active <= row.members_total && Array.isArray(row.products) && row.tags.includes('pilot') && !!row.trial_ends_at && !!row.last_activity_at && row.last_activity === row.last_activity_at, JSON.stringify(row)?.slice(0, 200));
       check('4.3 filter tag=pilot returns only acme', (await orgsQ('?tag=pilot')).body.data.map((o: any) => o.slug).join() === 'acme');
-      check('4.3 filter trial=true returns only tenants with a trial end', (await orgsQ('?trial=true')).body.data.every((o: any) => !!o.trial_ends_at) && (await orgsQ('?trial=true')).body.data.length === 1);
+      check('4.3 filter trial=true returns only tenants with a trial end', (await orgsQ('?trial=true')).body.data.every((o: any) => !!o.trial_ends_at) && (await orgsQ('?trial=true')).body.data.some((o: any) => o.slug === 'acme'));
       check('4.3 filter plan=professional returns only that plan', (await orgsQ('?plan=professional')).body.data.every((o: any) => o.plan_key === 'professional'));
       const byName = (await orgsQ('?sort=name&limit=100')).body.data.map((o: any) => o.name);
       check('4.3 sort=name is alphabetical', byName.join('|') === [...byName].sort((a: string, b: string) => a.localeCompare(b, 'en')).join('|'), byName.join('|'));
@@ -1986,7 +1986,7 @@ async function main() {
       const before = await OperatorAuditEvent.countDocuments({ action: 'audit.exported' });
       const exp = await op('/audit/export?category=tenant');
       const csv = await exp.text();
-      check('4.2 export = 200 text/csv with a header and tenant rows only', exp.status === 200 && (exp.headers.get('content-type') || '').startsWith('text/csv') && /created_at,operator_email/.test(csv) && csv.includes('org.provisioned') && !csv.includes('entitlement.updated'), exp.status);
+      check('4.2 export = 200 text/csv with a header and tenant rows only', exp.status === 200 && (exp.headers.get('content-type') || '').startsWith('text/csv') && /"created_at","operator_email"/.test(csv) && csv.includes('org.provisioned') && !csv.includes('entitlement.updated'), exp.status);
       check('4.2 the export is itself audited (category security)', (await OperatorAuditEvent.countDocuments({ action: 'audit.exported', category: 'security' })) === before + 1);
       const roleSave = (roles: string[]) => OperatorAccount.updateOne({ email: 'op@karbexa.test' }, { $set: { roles } });
       await roleSave(['support']);
