@@ -1,7 +1,15 @@
 import React from 'react';
 import { cn } from '@/utils/cn';
 
-type BadgeVariant = 'success' | 'warning' | 'error' | 'info' | 'neutral' | 'primary' | 'accent';
+type BadgeVariant =
+  | 'success'
+  | 'warning'
+  | 'error'
+  | 'info'
+  | 'neutral'
+  | 'primary'
+  | 'accent'
+  | 'action-needed';
 
 interface StatusBadgeProps {
   children: React.ReactNode;
@@ -9,19 +17,19 @@ interface StatusBadgeProps {
   className?: string;
 }
 
-const variantStyles: Record<BadgeVariant, string> = {
-  success: 'bg-success/10 text-success border-success/20',
-  warning: 'bg-warning/10 text-warning border-warning/20',
-  error: 'bg-error/10 text-error border-error/20',
-  info: 'bg-info/10 text-info border-info/20',
-  neutral: 'bg-surface-alt text-ink-secondary border-line',
-  primary: 'bg-primary/10 text-primary border-primary/20',
-  accent: 'bg-accent/10 text-accent border-accent/20',
+const dotStyles: Record<Exclude<BadgeVariant, 'action-needed'>, { dot: string; text: string }> = {
+  success: { dot: 'bg-success', text: 'text-success' },
+  warning: { dot: 'bg-warning', text: 'text-warning' },
+  error: { dot: 'bg-error', text: 'text-error' },
+  info: { dot: 'bg-info', text: 'text-info' },
+  neutral: { dot: 'bg-ink-muted', text: 'text-ink-secondary' },
+  primary: { dot: 'bg-primary', text: 'text-primary' },
+  accent: { dot: 'bg-accent', text: 'text-accent' },
 };
 
 /**
  * StatusBadge Component
- * Displays a standardized status pill with variant-based colors.
+ * Dot plus word (DRD 9.2). The filled pill is reserved for `action-needed`.
  * Used for lifecycle states, department types, etc.
  */
 export const StatusBadge: React.FC<StatusBadgeProps> = ({
@@ -29,14 +37,23 @@ export const StatusBadge: React.FC<StatusBadgeProps> = ({
   variant = 'neutral',
   className,
 }) => {
+  if (variant === 'action-needed') {
+    return (
+      <span
+        className={cn(
+          'inline-flex items-center text-table font-medium rounded-full px-2.5 py-0.5 border',
+          'bg-warning/10 text-warning border-warning/30',
+          className
+        )}
+      >
+        {children}
+      </span>
+    );
+  }
+  const s = dotStyles[variant];
   return (
-    <span
-      className={cn(
-        'inline-flex items-center text-[11px] font-semibold tracking-wide rounded-full px-2.5 py-0.5 border',
-        variantStyles[variant],
-        className
-      )}
-    >
+    <span className={cn('inline-flex items-center gap-2 text-table font-medium', s.text, className)}>
+      <span className={cn('h-dot w-dot rounded-full shrink-0', s.dot)} aria-hidden />
       {children}
     </span>
   );
