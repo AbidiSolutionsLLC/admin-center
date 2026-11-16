@@ -43,4 +43,5 @@ export const ROUTES = {
   OPERATOR_ONBOARDING: '/operator/onboarding',
   OPERATOR_OPERATORS: '/operator/operators',
   OPERATOR_AUDIT: '/operator/audit',
+  OPERATOR_SECURITY: '/operator/security',
 } as const;

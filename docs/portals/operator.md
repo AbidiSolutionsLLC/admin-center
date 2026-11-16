@@ -33,7 +33,7 @@ Related: [identity.md](identity.md) (realm internals, tokens), [admin.md](admin.
 
 ### 3.1 Client routes
 
-All pages except the callback are inside `OperatorGuard` (no token in memory → refresh if a refresh token exists, else redirect to the operator realm) and the shared `AppShell` with the `operator` config (nav: Overview, Organizations, Onboarding, Plans, Products, Platform health, Operators, Audit; each item shown only with its permission from `GET /me`).
+All pages except the callback are inside `OperatorGuard` (no token in memory → refresh if a refresh token exists, else redirect to the operator realm) and the shared `AppShell` with the `operator` config (nav: Overview, Organizations, Onboarding, Plans, Products, Platform health, Operators, Audit, Security; each item shown only with its permission from `GET /me`).
 
 | Route | Component | Uses |
 |---|---|---|
@@ -47,6 +47,7 @@ All pages except the callback are inside `OperatorGuard` (no token in memory →
 | `/operator/overview` (home) | `pages/operator/OperatorOverviewPage.tsx` | `DashboardPage`: tiles (organizations, trial, onboarding, active members), Attention required (top 10 with link), platform health, recent operator activity; each section fails on its own |
 | `/operator/plans` | `pages/operator/OperatorPlansPage.tsx` | list (organizations on each, trial, version), create, edit (description, products, default seats, trial days), apply to organizations with a dry-run preview |
 | `/operator/operators` | `pages/operator/OperatorOperatorsPage.tsx` | list, create, edit operators |
+| `/operator/security` | `pages/operator/OperatorSecurityPage.tsx` | `DashboardPage`: counts, operators without MFA, locked accounts, active sessions with Revoke, failed sign-ins, role changes, organizations whose admins have no MFA |
 | `/operator/audit` | `pages/operator/OperatorAuditPage.tsx` | audit log with category, operator, date and action filters, detail drawer (before/after/reason), cursor paging, Export CSV |
 
 Client config: `VITE_ID_ISSUER_ORIGIN` (authority = `${VITE_ID_ISSUER_ORIGIN}/realms/operator`), `VITE_OPERATOR_API_URL` (default `http://<host>:5000/operator/v1`). Client id `karbexa-operator-spa` and resource `urn:karbexa:operator` are hard-coded in `operatorAuth.ts`. Logout goes to `/realms/operator/oauth/end_session` with `id_token_hint` and `post_logout_redirect_uri = <origin>/operator`.
@@ -93,6 +94,10 @@ The global per-IP rate limiter in `app.ts` also applies. Envelope: `{ success: t
 | GET | `/audit` | `limit`, `cursor`, `company_id`, `operator_id`, `category`, `action` (exact), `from`, `to` (ISO dates) | `OperatorAuditEvent` newest first with `category`, `result`, `reason`, `before`, `after`; `meta: { limit, next_cursor }`; 400 on a bad category, id or date. Permission `audit.read` |
 | GET | `/audit/export` | same filters | CSV stream (newest first, at most 50,000 rows, formula-safe cells), permission `audit.export`; the export is itself audited as `audit.exported` (category `security`) |
 | GET | `/operators` | | All operator accounts (never the hash or secret) |
+| POST | `/operators/invite` | `{ email, full_name, roles[] }` | `operators.write`. Creates an `invited` operator (`invited_by`, unusable random password hash) and a `kind: 'operator'` invitation (72 h, `company_id: null`), queues the e-mail, audits `operator.invited`. 409 `DUPLICATE`. **There is no accept page yet**: `findInvitationByToken` ignores operator invitations and `findOperatorAccount` needs `status: 'active'` (see plan section 14) |
+| GET | `/operators/:id/sessions` | | `operators.read`. The operator's 20 latest sessions with `active` |
+| DELETE | `/operators/:id/sessions/:sid` | | `operators.write`. Revokes (`revoked_by_operator`), audits `operator.session_revoked` (category `security`); 404 when the session is not that operator's |
+| GET | `/security` | | `security.read`. `{ operators_without_mfa, failed_sign_ins { count, recent[20] } (24 h, operator realm), locked_accounts, active_sessions, tenants_without_mfa (open `admins_without_mfa` items), recent_role_changes }`; each block is `{ error: true }` when it fails |
 | POST | `/operators` | `{ email, full_name, password (≥12), roles? }` | Create (bcrypt cost 12, default roles `['platform_admin']`; roles from the four operator roles) |
 | PATCH | `/operators/:id` | partial `{ full_name, status ('active'\|'suspended'), roles, password, reset_mfa }` | Update; 409 `SELF_SUSPEND` when suspending yourself. `reset_mfa: true` sets `mfa = { enabled: false }` so the next login re-enrols |
 
@@ -118,7 +123,7 @@ The global per-IP rate limiter in `app.ts` also applies. Envelope: `{ success: t
 
 | Model (file) | Key fields | Notes |
 |---|---|---|
-| `OperatorAccount` (`server/src/models/OperatorAccount.model.ts`) | `email`, `full_name`, `password_hash`, `mfa.{enabled, secret_enc, verified_at}`, `roles[]`, `status` (`active`/`suspended`/`invited`), `last_login_at`, `failed_attempts`, `locked_until` | `secret_enc` encrypted with `ENCRYPTION_KEY` (`lib/cryptoService.ts`) |
+| `OperatorAccount` (`server/src/models/OperatorAccount.model.ts`) | `email`, `full_name`, `password_hash`, `mfa.{enabled, secret_enc, verified_at}`, `roles[]`, `status` (`active`/`suspended`/`invited`), `last_login_at`, `failed_attempts`, `locked_until`, `invited_by` | `secret_enc` encrypted with `ENCRYPTION_KEY` (`lib/cryptoService.ts`) |
 | `OperatorAuditEvent` (`OperatorAuditEvent.model.ts`) | `operator_id`, `operator_email`, `action`, `target_type`, `target_id`, `company_id`, `details`, `category`, `before`, `after`, `reason`, `result`, `correlation_id`, `created_at` | Every operator write. When a company is involved, a tenant `AuditEvent` is also written with `source: 'operator'`, `module: 'operator'`, `actor_email: 'operator:<email>'` |
 | `Plan` (`Plan.model.ts`) | `key`, `name`, `products[]`, `status` (`active`/`archived`) | Default plans seeded by `seedProductRegistry` |
 | `OrganizationEntitlement` | `company_id`, `product_key`, `status`, `seats_limit`, `source`, `plan_key`, `updated_by_operator_id` | Unique per (company, product) |

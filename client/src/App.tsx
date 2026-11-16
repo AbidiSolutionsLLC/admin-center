@@ -18,6 +18,7 @@ import OperatorHealthPage from './pages/operator/OperatorHealthPage';
 import OperatorPlansPage from './pages/operator/OperatorPlansPage';
 import OperatorOperatorsPage from './pages/operator/OperatorOperatorsPage';
 import OperatorAuditPage from './pages/operator/OperatorAuditPage';
+import OperatorSecurityPage from './pages/operator/OperatorSecurityPage';
 
 // Pages
 import LoginPage from './pages/auth/LoginPage';
@@ -66,6 +67,7 @@ function App() {
               <Route path="plans" element={<OperatorPlansPage />} />
               <Route path="operators" element={<OperatorOperatorsPage />} />
               <Route path="audit" element={<OperatorAuditPage />} />
+              <Route path="security" element={<OperatorSecurityPage />} />
             </Route>
           </Route>
           <Route element={<GuestGuard />}>

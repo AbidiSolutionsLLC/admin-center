@@ -36,6 +36,7 @@ import { tenantRoutes } from './tenants';
 import { overrideRoutes } from './overrides';
 import { healthRoutes } from './health';
 import { overviewRoutes } from './overview';
+import { securityRoutes } from './security';
 import { planRoutes, applyPlanToOrg, ensureDefaultAccess, bumpOrgAuthz, dryRunSummary } from './plans';
 
 const router = Router();
@@ -520,5 +521,6 @@ router.use(planRoutes({ ok, audit, corrOf })); // Plan 4.5
 router.use(overrideRoutes({ ok, oid, audit, actorOf, corrOf })); // Plan 4.6
 router.use(healthRoutes({ ok })); // Plan 4.9
 router.use(overviewRoutes({ ok })); // Plan 4.10
+router.use(securityRoutes({ ok, oid, audit })); // Plan 4.11
 
 export default router;

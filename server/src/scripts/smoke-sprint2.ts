@@ -1630,6 +1630,39 @@ async function main() {
       await OperatorAccount.updateOne({ email: 'op@karbexa.test' }, { $set: { roles: ['platform_admin'] } });
     }
 
+    // ── Plan 4.11: security page, operator sessions, operator invite ──
+    {
+      const { OperatorSession, Invitation, OperatorAuditEvent } = await import('../models');
+      const json = async (r: any) => (await r.json()) as any;
+      const me = await OperatorAccount.findOne({ email: 'op@karbexa.test' });
+      const sec = await op('/security');
+      const secj = await json(sec);
+      check('4.11 GET /security returns the six blocks', sec.status === 200 && ['operators_without_mfa', 'failed_sign_ins', 'locked_accounts', 'active_sessions', 'tenants_without_mfa', 'recent_role_changes'].every((k) => k in secj.data), Object.keys(secj.data ?? {}).join());
+      check('4.11 the signed-in operator has a listed active session', Array.isArray(secj.data.active_sessions) && secj.data.active_sessions.some((s: any) => s.operator_email === 'op@karbexa.test'));
+
+      const inv = await op('/operators/invite', 'POST', { email: 'newop@karbexa.test', full_name: 'New Op', roles: ['support'] });
+      const invj = await json(inv);
+      const created = await OperatorAccount.findOne({ email: 'newop@karbexa.test' });
+      check('4.11 invite creates an invited operator with the chosen role', inv.status === 201 && created?.status === 'invited' && created.roles.join() === 'support' && String(created.invited_by) === String(me!._id), JSON.stringify(invj).slice(0, 160));
+      check('4.11 invite stores an operator invitation with no company and no token in the response', !!(await Invitation.findOne({ kind: 'operator', user_id: created!._id, company_id: null, state: 'pending' })) && !JSON.stringify(invj).includes('token'));
+      check('4.11 an invited operator cannot be a duplicate (409)', (await op('/operators/invite', 'POST', { email: 'newop@karbexa.test', full_name: 'Again', roles: ['support'] })).status === 409);
+      check('4.11 invite is audited in the operator category', !!(await OperatorAuditEvent.findOne({ action: 'operator.invited', target_id: String(created!._id), category: 'operator' })));
+
+      const target = await OperatorSession.create({ _id: 'smoke-4-11-sid', operator_id: created!._id, idle_expires_at: new Date(Date.now() + 600_000) });
+      const list = await json(await op(`/operators/${created!._id}/sessions`));
+      check('4.11 GET /operators/:id/sessions lists the session as active', list.data.some((s: any) => s.id === target._id && s.active === true), JSON.stringify(list).slice(0, 160));
+      check('4.11 revoking a session of another operator id is 404', (await op(`/operators/${me!._id}/sessions/${target._id}`, 'DELETE')).status === 404);
+      const del = await op(`/operators/${created!._id}/sessions/${target._id}`, 'DELETE');
+      check('4.11 DELETE session revokes it and audits it', del.status === 200 && !!(await OperatorSession.findById(target._id))?.revoked_at && !!(await OperatorAuditEvent.findOne({ action: 'operator.session_revoked', category: 'security' })));
+
+      await OperatorAccount.updateOne({ email: 'op@karbexa.test' }, { $set: { roles: ['support'] } });
+      check('4.11 support cannot read /security (403) or invite (403)', (await op('/security')).status === 403 && (await op('/operators/invite', 'POST', { email: 'z@karbexa.test', full_name: 'Z', roles: ['support'] })).status === 403);
+      await OperatorAccount.updateOne({ email: 'op@karbexa.test' }, { $set: { roles: ['auditor'] } });
+      check('4.11 auditor reads /security (200) and sessions (200) but cannot revoke (403)', (await op('/security')).status === 200 && (await op(`/operators/${created!._id}/sessions`)).status === 200 && (await op(`/operators/${created!._id}/sessions/x`, 'DELETE')).status === 403);
+      await OperatorAccount.updateOne({ email: 'op@karbexa.test' }, { $set: { roles: ['platform_admin'] } });
+      await OperatorAccount.deleteOne({ _id: created!._id });
+    }
+
     // ── Plan 4.13: products catalogue (read-only) ─────────────────────────────────────────
     {
       const { OrganizationEntitlement: Ent } = await import('../models');

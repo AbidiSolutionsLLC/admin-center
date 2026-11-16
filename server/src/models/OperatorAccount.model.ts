@@ -1,5 +1,5 @@
 // server/src/models/OperatorAccount.model.ts — 09 §2
-import { Schema, model, Document } from 'mongoose';
+import { Schema, model, Document, Types } from 'mongoose';
 
 export interface IOperatorAccount extends Document {
   email: string;
@@ -11,6 +11,8 @@ export interface IOperatorAccount extends Document {
   last_login_at?: Date;
   failed_attempts: number;
   locked_until?: Date;
+  /** Set when the account was created through `POST /operators/invite` (Plan 4.11). */
+  invited_by?: Types.ObjectId;
 }
 
 const OperatorAccountSchema = new Schema<IOperatorAccount>({
@@ -27,6 +29,7 @@ const OperatorAccountSchema = new Schema<IOperatorAccount>({
   last_login_at: Date,
   failed_attempts: { type: Number, default: 0 },
   locked_until: Date,
+  invited_by: { type: Schema.Types.ObjectId, ref: 'OperatorAccount' },
 }, { timestamps: { createdAt: 'created_at', updatedAt: 'updated_at' } });
 
 export const OperatorAccount = model<IOperatorAccount>('OperatorAccount', OperatorAccountSchema);

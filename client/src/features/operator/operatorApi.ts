@@ -328,3 +328,37 @@ export interface Overview {
 }
 export const useOverview = () =>
   useQuery({ queryKey: ['operator', 'overview'], refetchInterval: 60_000, queryFn: async () => (await operatorApi.get('/overview')).data.data as Overview });
+
+// ── Security, operator sessions, operator invite (Plan 4.11) ─────────────────────────────────
+export const OPERATOR_ROLE_OPTIONS = ['platform_admin', 'operations', 'support', 'auditor'] as const;
+export interface SecuritySnapshot {
+  operators_without_mfa: OverviewBlock<{ id: string; email: string; full_name: string; roles: string[] }[]>;
+  failed_sign_ins: OverviewBlock<{ count: number; recent: { email: string | null; event_type: string; ip: string | null; at: string }[] }>;
+  locked_accounts: OverviewBlock<{ id: string; email: string; full_name: string; locked_until: string }[]>;
+  active_sessions: OverviewBlock<OperatorSessionRow[]>;
+  tenants_without_mfa: OverviewBlock<{ company_id: string | null; summary: string; link: string }[]>;
+  recent_role_changes: OverviewBlock<{ id: string; by: string; action: string; target_id: string | null; at: string }[]>;
+}
+export interface OperatorSessionRow { id: string; operator_id: string; operator_email: string | null; ip: string | null; user_agent: string | null; created_at: string; last_seen_at: string }
+export interface OperatorOwnSession { id: string; ip: string | null; user_agent: string | null; created_at: string; last_seen_at: string; active: boolean; revoked_at: string | null; revoked_reason: string | null }
+
+export const useSecurity = () =>
+  useQuery({ queryKey: ['operator', 'security'], refetchInterval: 60_000, queryFn: async () => (await operatorApi.get('/security')).data.data as SecuritySnapshot });
+export const useOperatorSessions = (id: string | null) =>
+  useQuery({ queryKey: ['operator', 'operator-sessions', id], enabled: !!id, queryFn: async () => (await operatorApi.get(`/operators/${id}/sessions`)).data.data as OperatorOwnSession[] });
+export const useRevokeOperatorSession = () => {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: async ({ operatorId, sid }: { operatorId: string; sid: string }) => (await operatorApi.delete(`/operators/${operatorId}/sessions/${sid}`)).data,
+    onSuccess: () => { qc.invalidateQueries({ queryKey: ['operator', 'operator-sessions'] }); qc.invalidateQueries({ queryKey: ['operator', 'security'] }); toast.success('Session revoked'); },
+    onError: (e) => toast.error(errMsg(e, 'Failed to revoke the session')),
+  });
+};
+export const useInviteOperator = () => {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: async (body: { email: string; full_name: string; roles: string[] }) => (await operatorApi.post('/operators/invite', body)).data,
+    onSuccess: () => { qc.invalidateQueries({ queryKey: ['operator', 'operators'] }); toast.success('Invitation sent'); },
+    onError: (e) => toast.error(errMsg(e, 'Failed to send the invitation')),
+  });
+};
