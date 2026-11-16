@@ -67,6 +67,13 @@ export async function logSecurityEvent(params: {
   }
 }
 
+/** Origin for links in e-mails to Admin web users. No localhost fallback: an unset origin fails loudly (Plan 0.7d). */
+export function resolveSpaOrigin(env: NodeJS.ProcessEnv = process.env): string {
+  const origin = env.ADMIN_SPA_ORIGIN || env.CLIENT_URL;
+  if (!origin) throw new Error('ADMIN_SPA_ORIGIN or CLIENT_URL must be set to build password-reset links');
+  return origin.replace(/\/+$/, '');
+}
+
 export interface LoginPolicyDenial {
   code: 'FORBIDDEN' | 'ACCOUNT_LOCKED' | 'PASSWORD_EXPIRED';
   message: string;
@@ -465,7 +472,7 @@ export const requestPasswordReset = asyncHandler(async (req: Request, res: Respo
       expires_at: new Date(Date.now() + 60 * 60 * 1000), // 1 hour
     });
 
-    const spaOrigin = process.env.ADMIN_SPA_ORIGIN || process.env.CLIENT_URL || 'http://localhost:3000';
+    const spaOrigin = resolveSpaOrigin();
     const resetLink = `${spaOrigin}/reset-password?token=${rawToken}&email=${encodeURIComponent(email)}`;
     // Run email sending in the background to prevent frontend timeout
     sendPasswordResetEmail(email, user.full_name || 'User', resetLink).catch((err) => {

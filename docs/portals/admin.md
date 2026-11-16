@@ -420,7 +420,6 @@ No platform events are emitted by: policies, workflows, data fields, integration
 - **UI role vs enforced role can differ.** The SPA takes `userRole` from `GET /auth/me`, which returns the legacy `User.role` field (`auth.controller.ts` `getMe`, `client/src/lib/session.ts` `loadProfile`). The server enforces the highest-ranked `UserRole` assignment. Menus can therefore show or hide items the server would treat differently.
 - Login-time IP restriction evaluation uses the member's first `UserRole` (`UserRole.findOne` in `auth.controller.ts` `evaluateLoginIpPolicy`), while `requireAuth` uses the highest-ranked role id.
 - Debug leftovers: `console.log('ROLES ROUTES LOADED')` (`server/src/routes/roles.routes.ts:23`), `GET /api/v1/protected-test` (`server/src/routes/index.ts:70`).
-- `requestPasswordReset` falls back to `http://localhost:3000` when neither `ADMIN_SPA_ORIGIN` nor `CLIENT_URL` is set (`auth.controller.ts:468`); every other fallback in the code uses port 5173.
 - `CastError` on `_id` is reported as `"User not found"` for every model (`server/src/middleware/errorHandler.ts`, branch 5).
 
 ## 8. Tests and how to run them

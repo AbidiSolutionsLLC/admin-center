@@ -35,7 +35,7 @@ Related: [ARCHITECTURE.md](ARCHITECTURE.md), [portals/identity.md](portals/ident
 | `AUTH_RATE_LIMIT` | no | dev `100`, else `20` per IP per 15 min | Limiter on password, TOTP, enrol, account-page and password-reset endpoints | empty | | `middleware/rateLimiter.ts:20` |
 | `APP_URL` | no | `http://localhost:5173` | Base URL used in policy notification links | `http://admin.karbexa.localhost:5173` | **missing from `.env.example`** | `server/src/controllers/policies.controller.ts:578` |
 
-Note: `requestPasswordReset` builds its link from `ADMIN_SPA_ORIGIN || CLIENT_URL || 'http://localhost:3000'` (`auth.controller.ts:468`); the `3000` fallback differs from every other default.
+Note: `requestPasswordReset` builds its link from `ADMIN_SPA_ORIGIN || CLIENT_URL` (`resolveSpaOrigin` in `auth.controller.ts`); if neither is set it throws (Plan 0.7d, built, tests not yet run). There is no localhost fallback.
 
 ## 3. Server: identity service
 
