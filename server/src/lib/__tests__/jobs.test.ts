@@ -22,7 +22,7 @@ beforeEach(async () => { await Job.deleteMany({}); });
 test('a queued job is claimed once and finishes as done', async () => {
   const seen: unknown[] = [];
   registerJobHandler('t.ok', async (p) => { seen.push(p.n); });
-  await enqueue('t.ok', { n: 1 });
+  await enqueue('t.ok', { n: 1 }, { runAt: now });
   const job = await claimJob(now);
   assert.equal(job?.status, 'running');
   assert.equal(job?.attempts, 1);
@@ -44,7 +44,7 @@ test('a job only runs when it is due and a handler exists for its type', async (
 
 test('a failing job is retried with a backoff, then fails for good after the last attempt', async () => {
   registerJobHandler('t.fail', async () => { throw new Error('boom'); });
-  await enqueue('t.fail', {});
+  await enqueue('t.fail', {}, { runAt: now });
   let job = await claimJob(now);
   await runJob(job!, () => now);
   let row = await Job.findById(job!._id);
@@ -63,7 +63,7 @@ test('a failing job is retried with a backoff, then fails for good after the las
 
 test('a running job whose lock expired is put back in the queue', async () => {
   registerJobHandler('t.stale', async () => undefined);
-  await enqueue('t.stale', {});
+  await enqueue('t.stale', {}, { runAt: now });
   const job = await claimJob(now);
   assert.equal(await reclaimStaleJobs(new Date(now.getTime() + 60_000)), 0, 'lock still valid');
   assert.equal(await reclaimStaleJobs(new Date(now.getTime() + 10 * 60_000)), 1);

@@ -25,7 +25,7 @@ before(async () => {
   await Identity.init();
 });
 after(async () => { await mongoose.disconnect(); await mongo.stop(); });
-beforeEach(async () => { await Identity.deleteMany({}); await User.deleteMany({}); await AuditEvent.deleteMany({}); });
+beforeEach(async () => { await Identity.deleteMany({}); await User.deleteMany({}); await AuditEvent.collection.deleteMany({}); });
 
 async function member(email: string, opts: { status?: 'active' | 'disabled'; company?: Types.ObjectId; state?: 'active' | 'terminated' } = {}) {
   const identity = await Identity.create({ email, full_name: 'M', status: opts.status ?? 'active' });

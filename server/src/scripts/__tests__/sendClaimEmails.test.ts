@@ -1,4 +1,5 @@
 // server/src/scripts/__tests__/sendClaimEmails.test.ts
+process.env.ALLOW_STANDALONE_MONGO = 'true'; // setupPassword runs in a transaction (plan 2.2); the in-memory server is standalone
 import { test, before, after, beforeEach } from 'node:test';
 import assert from 'node:assert/strict';
 import mongoose, { Types } from 'mongoose';

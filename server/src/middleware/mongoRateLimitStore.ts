@@ -40,7 +40,7 @@ export class MongoRateLimitStore implements Store {
         expires_at: { $cond: [{ $gt: ['$expires_at', now] }, '$expires_at', next] },
       },
     }];
-    const run = () => RateLimitWindow.findOneAndUpdate({ _id: this.id(key) }, update, { upsert: true, returnDocument: 'after' }).lean();
+    const run = () => RateLimitWindow.findOneAndUpdate({ _id: this.id(key) }, update, { upsert: true, returnDocument: 'after', updatePipeline: true }).lean();
     let doc;
     try {
       doc = await run();
