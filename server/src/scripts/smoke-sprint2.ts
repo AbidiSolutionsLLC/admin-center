@@ -2159,6 +2159,10 @@ async function main() {
       await SecPol.updateOne({ company_id: t.cid }, { $set: { updated_at: new Date(Date.now() + 60_000) } }, { timestamps: false });
       c = await get();
       check('5.7 department, second member and an edited security policy complete their steps', done(c, 'organization') && done(c, 'invite_people') && done(c, 'security_policy'), JSON.stringify(c));
+      const { AppAssignment: Asg, App: AppM } = await import('../models');
+      const anyApp = await AppM.findOne({ app_type: 'karbexa_product' });
+      await Asg.create({ company_id: t.cid, app_id: anyApp!._id, target_type: 'user', target_id: (await User.findOne({ email: 'second@check57.test' }))!._id, granted_by: t.admin._id, is_active: true } as never);
+      check('5.7 an assignment made by the admin completes the apps step', done(await get(), 'assign_apps') === true);
       const other = await tenantCtx('check57b');
       const oc = ((await (await other.call('/overview/setup-progress')).json()) as any).data.checklist as Array<{ key: string; done: boolean }>;
       check('5.7 another tenant is unaffected: its organization and invite steps stay open', done(oc, 'organization') === false && done(oc, 'invite_people') === false, JSON.stringify(oc));
