@@ -1,12 +1,14 @@
 // Plan 2.4: the invitation panel on the member detail page. Written now, run in Phase 7.
 // Needs the Playwright setup and the tenant sign-in helper from task 3.8. The member and invitation endpoints are mocked.
 import { test, expect } from '@playwright/test';
+import { signInTenant } from './helpers/auth';
 
 const USER_ID = '64b000000000000000000001';
 
 const json = (body: unknown, status = 200) => ({ status, contentType: 'application/json', body: JSON.stringify(body) });
 
 test.beforeEach(async ({ page }) => {
+  await signInTenant(page, { permissions: ['people:read:all'] });
   await page.route(`**/api/v1/people/${USER_ID}`, (route) => route.fulfill(json({
     success: true,
     data: { _id: USER_ID, full_name: 'Panel Member', email: 'panel@acme.test', lifecycle_state: 'invited', employment_type: 'full_time' },

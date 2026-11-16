@@ -1,8 +1,7 @@
 // src/pages/people/UserDetailPage.tsx
-import { useParams, useNavigate, useSearchParams } from 'react-router-dom';
+import { useParams, useNavigate } from 'react-router-dom';
 import { UserHistoryPanel } from '@/features/people/components/UserHistoryPanel';
-import { TableSkeleton } from '@/components/ui/TableSkeleton';
-import { History, ArrowLeft, Users, Edit2, Mail, RefreshCw, Monitor, PlaneTakeoff, Clock, CalendarDays, FileText, Briefcase, MapPin, ShieldAlert, Lock, Unlock, ArrowRight, WifiOff, ShieldCheck, Shield, UserX } from 'lucide-react';
+import { History, Users, Edit2, RefreshCw, PlaneTakeoff, Clock, CalendarDays, FileText, Briefcase, MapPin, ShieldAlert, Lock, ArrowRight, WifiOff } from 'lucide-react';
 import { useUserDetail } from '@/features/people/hooks/useUserDetail';
 import { useUnlockUser } from '@/features/people/hooks/useUnlockUser';
 import { useResendInvite } from '@/features/people/hooks/useResendInvite';
@@ -27,7 +26,7 @@ import { Modal } from '@/components/ui/Modal';
 import type { UserRole } from '@/types';
 
 import { ErrorState } from '@/components/ui/ErrorState';
-import { EmptyState } from '@/components/ui/EmptyState';
+import { ObjectPage } from '@/components/templates/ObjectPage';
 import { ROUTES } from '@/constants/routes';
 import { cn } from '@/utils/cn';
 
@@ -41,17 +40,10 @@ import { cn } from '@/utils/cn';
 export default function UserDetailPage() {
   const { id } = useParams<{ id: string }>();
   const navigate = useNavigate();
-  const [searchParams, setSearchParams] = useSearchParams();
   const { data: user, isLoading, isError, refetch } = useUserDetail(id!);
   const { data: effectiveSettings } = useUserEffectiveSettings(id!);
   const resendInvite = useResendInvite();
   const unlockUser = useUnlockUser(id!);
-
-  type DetailTab = 'profile' | 'org_placement' | 'product_access' | 'roles' | 'security' | 'activity';
-  const activeTab = (searchParams.get('tab') as DetailTab) || 'profile';
-  const setActiveTab = (tab: DetailTab) => {
-    setSearchParams({ tab });
-  };
 
   const [isEditModalOpen, setIsEditModalOpen] = useState(false);
   const [isLocationModalOpen, setIsLocationModalOpen] = useState(false);
@@ -100,197 +92,9 @@ export default function UserDetailPage() {
     );
   }
 
-  if (isLoading) {
-    return (
-      <div className="space-y-5">
-        <div className="flex items-center gap-3">
-          <button
-            onClick={() => navigate(ROUTES.PEOPLE)}
-            className="h-9 w-9 flex items-center justify-center rounded-md hover:bg-surface-alt transition-colors"
-          >
-            <ArrowLeft className="w-5 h-5 text-ink-secondary" />
-          </button>
-          <div>
-            <div className="h-6 bg-surface-alt rounded animate-pulse w-48 mb-2" />
-            <div className="h-3 bg-surface-alt rounded animate-pulse w-32" />
-          </div>
-        </div>
-        <TableSkeleton rows={3} columns={1} />
-      </div>
-    );
-  }
-
-  if (isError || !user) {
-    return (
-      <div className="space-y-5">
-        <div className="flex items-center gap-3">
-          <button
-            onClick={() => navigate(ROUTES.PEOPLE)}
-            className="h-9 w-9 flex items-center justify-center rounded-md hover:bg-surface-alt transition-colors"
-          >
-            <ArrowLeft className="w-5 h-5 text-ink-secondary" />
-          </button>
-          <h1 className="text-[22px] font-semibold tracking-tight text-ink">User Details</h1>
-        </div>
-        {!user ? (
-          <EmptyState
-            icon={Users}
-            title="User not found"
-            description="This user may have been archived or does not exist."
-            action={{ label: 'Back to People', onClick: () => navigate(ROUTES.PEOPLE) }}
-          />
-        ) : (
-          <ErrorState
-            title="Failed to load user details"
-            description="Something went wrong fetching user data. Please try again."
-            onRetry={refetch}
-          />
-        )}
-      </div>
-    );
-  }
-
-  return (
-    <div className="space-y-5">
-      {/* ── Page Header ── */}
-      <div className="flex items-start justify-between gap-4">
-        <div className="flex items-start gap-3">
-          <button
-            onClick={() => navigate(ROUTES.PEOPLE)}
-            className="h-9 w-9 flex items-center justify-center rounded-md hover:bg-surface-alt transition-colors flex-shrink-0"
-          >
-            <ArrowLeft className="w-5 h-5 text-ink-secondary" />
-          </button>
-          <div>
-            <div className="flex items-center gap-3">
-              <h1 className="text-[22px] font-semibold tracking-tight text-ink">
-                {user.full_name}
-              </h1>
-              <LifecycleStateBadge state={user.lifecycle_state} />
-              <RiskLevelBadge level={user.risk_level || 'none'} score={user.risk_score} />
-              {user.locked_until && new Date(user.locked_until) > new Date() && (
-                <div className="flex items-center gap-1.5 px-2 py-0.5 rounded-full bg-red-50 border border-red-200 text-red-700 text-xs font-medium">
-                  <Lock className="w-3 h-3" />
-                  Locked
-                </div>
-              )}
-            </div>
-            <div className="flex items-center gap-3 mt-1">
-              <p className="text-sm text-ink-secondary">{user.email}</p>
-              {user.employee_id && (
-                <>
-                  <span className="text-ink-muted">·</span>
-                  <span className="text-sm text-ink-muted">{user.employee_id}</span>
-                </>
-              )}
-            </div>
-          </div>
-        </div>
-        <div className="flex items-center gap-2">
-          {user.locked_until && new Date(user.locked_until) > new Date() && (
-            <button
-              onClick={() => unlockUser.mutate()}
-              disabled={unlockUser.isPending}
-              className="h-9 px-4 text-sm font-medium rounded-md border border-red-200 bg-red-50 text-red-700 hover:bg-red-100 transition-colors flex items-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed"
-            >
-              <Unlock className="w-4 h-4" />
-              Unlock
-            </button>
-          )}
-          {user.lifecycle_state === 'invited' && (
-            <button
-              onClick={handleResendInvite}
-              disabled={resendInvite.isPending}
-              className="h-9 px-4 text-sm font-medium rounded-md border border-line bg-white text-ink hover:bg-surface-alt transition-colors flex items-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed"
-            >
-              <Mail className="w-4 h-4" />
-              Resend Invite
-            </button>
-          )}
-          {user.lifecycle_state !== 'terminated' && user.lifecycle_state !== 'archived' && (
-            <button
-              onClick={() => setIsOffboardingModalOpen(true)}
-              className="h-9 px-4 text-sm font-medium rounded-md border border-line bg-white text-red-600 hover:bg-red-50 hover:border-red-200 transition-colors flex items-center gap-2"
-            >
-              <UserX className="w-4 h-4" />
-              Offboard
-            </button>
-          )}
-          <button
-            onClick={() => setIsEditModalOpen(true)}
-            className="h-9 px-4 text-sm font-medium rounded-md border border-line bg-white text-ink hover:bg-surface-alt transition-colors flex items-center gap-2"
-          >
-            <Edit2 className="w-4 h-4" />
-            Edit User
-          </button>
-        </div>
-      </div>
-
-      {/* ── Navigation Tabs (08 §2 IA) ── */}
-      <div className="flex items-center gap-2 border-b border-line pb-0">
-        {[
-          { id: 'profile', label: 'Profile', icon: Briefcase },
-          { id: 'org_placement', label: 'Org placement', icon: Users },
-          { id: 'product_access', label: 'Product access', icon: Monitor },
-          { id: 'roles', label: 'Roles', icon: ShieldCheck },
-          { id: 'security', label: 'Security', icon: Shield },
-          { id: 'activity', label: 'Activity', icon: History },
-        ].map((tab) => {
-          const isActive = activeTab === tab.id;
-          const Icon = tab.icon;
-          return (
-            <button
-              key={tab.id}
-              onClick={() => setActiveTab(tab.id as DetailTab)}
-              className={cn(
-                'flex items-center gap-2 px-4 py-2.5 text-sm font-medium border-b-2 transition-all -mb-[1px]',
-                isActive
-                  ? 'border-primary text-primary font-semibold'
-                  : 'border-transparent text-ink-secondary hover:text-ink hover:border-line'
-              )}
-            >
-              <Icon className="w-4 h-4" />
-              {tab.label}
-              {tab.id === 'product_access' && (
-                <span className="w-1.5 h-1.5 rounded-full bg-primary" />
-              )}
-            </button>
-          );
-        })}
-      </div>
-
-      {/* ── Tab Content: Profile ── */}
-      {activeTab === 'profile' && (
+  const profileTab = user && (
         <div className="space-y-5">
           {user.lifecycle_state === 'invited' && <InvitationPanel userId={user._id} />}
-
-          {/* User Info Cards */}
-          <div className="grid grid-cols-4 gap-4">
-            <InfoCard label="Department" value={user.department?.name || 'Not assigned'} />
-            <InfoCard label="Employment Type" value={formatEmploymentType(user.employment_type)} />
-            <div className="bg-white rounded-lg border border-line shadow-card p-4 relative">
-              <p className="text-xs font-medium text-ink-secondary mb-1">Location</p>
-              <p className="text-sm font-semibold text-ink">
-                {user.location ? user.location.name : 'Not assigned'}
-              </p>
-              {user.location?.timezone && (
-                <p className="text-xs font-mono text-ink-muted mt-0.5">
-                  {user.location.timezone} ({getTimezoneOffset(user.location.timezone)})
-                </p>
-              )}
-              <button
-                onClick={() => setIsLocationModalOpen(true)}
-                className="absolute top-2 right-2 h-7 w-7 flex items-center justify-center rounded-md text-ink-muted hover:text-ink hover:bg-surface-alt transition-colors"
-                title="Change Location"
-              >
-                <MapPin className="w-3.5 h-3.5" />
-              </button>
-            </div>
-            <InfoCard
-              label="Hire Date"
-              value={user.hire_date ? formatDate(user.hire_date) : 'Not set'}
-            />
-          </div>
 
           {/* Timezone Info */}
           {user.location?.timezone && (
@@ -380,10 +184,9 @@ export default function UserDetailPage() {
             <UserDelegatesPanel userId={user._id} />
           </div>
         </div>
-      )}
+  );
 
-      {/* ── Tab Content: Org placement ── */}
-      {activeTab === 'org_placement' && (
+  const orgTab = user && (
         <div className="space-y-4">
           <div className="flex items-center gap-2 mb-2">
             <Users className="w-5 h-5 text-ink-secondary" />
@@ -391,27 +194,23 @@ export default function UserDetailPage() {
           </div>
           <ReportingLinesPanel userId={user._id} />
         </div>
-      )}
+  );
 
-      {/* ── Tab Content: Product access (08 §3.2) ── */}
-      {activeTab === 'product_access' && (
+  const productTab = user && (
         <UserProductAccessTab userId={user._id} userName={user.full_name} />
-      )}
+  );
 
-      {/* ── Tab Content: Roles ── */}
-      {activeTab === 'roles' && (
+  const rolesTab = user && (
         <div className="space-y-4">
           <EffectivePermissionsPanel userId={user._id} />
         </div>
-      )}
+  );
 
-      {/* ── Tab Content: Security (03 §4.4, A2-6) ── */}
-      {activeTab === 'security' && (
+  const securityTab = user && (
         <UserSecurityPanel user={user} />
-      )}
+  );
 
-      {/* ── Tab Content: Activity ── */}
-      {activeTab === 'activity' && (
+  const activityTab = user && (
         <div className="space-y-4">
           <div className="flex items-center gap-2 mb-2">
             <History className="w-5 h-5 text-ink-secondary" />
@@ -419,90 +218,171 @@ export default function UserDetailPage() {
           </div>
           <UserHistoryPanel userId={user._id} />
         </div>
-      )}
+  );
 
-      {/* ── Location Assignment Modal ── */}
-      <UserLocationAssignmentModal
-        user={user}
-        isOpen={isLocationModalOpen}
-        onClose={() => setIsLocationModalOpen(false)}
-        requiredFields={formMetadata?.required_fields || ['email', 'full_name']}
+  const lockedNow = !!user?.locked_until && new Date(user.locked_until) > new Date();
+  const overflow = user
+    ? [
+        ...(lockedNow ? [{ label: 'Unlock', onSelect: () => unlockUser.mutate(), disabled: unlockUser.isPending }] : []),
+        ...(user.lifecycle_state === 'invited' ? [{ label: 'Resend invite', onSelect: handleResendInvite, disabled: resendInvite.isPending }] : []),
+        ...(user.lifecycle_state !== 'terminated' && user.lifecycle_state !== 'archived'
+          ? [{ label: 'Offboard', onSelect: () => setIsOffboardingModalOpen(true), danger: true }]
+          : []),
+      ]
+    : [];
+
+  return (
+    <>
+      <ObjectPage
+        title={user?.full_name ?? ''}
+        subtitle={user ? [user.email, user.employee_id].filter(Boolean).join(' · ') : undefined}
+        breadcrumbs={[{ label: 'People', href: ROUTES.PEOPLE }, { label: user?.full_name ?? '' }]}
+        isLoading={isLoading}
+        isError={isError && !user}
+        onRetry={refetch}
+        notFound={!isLoading && !isError && !user}
+        status={
+          user ? (
+            <span className="flex items-center gap-2">
+              <LifecycleStateBadge state={user.lifecycle_state} />
+              <RiskLevelBadge level={user.risk_level || 'none'} score={user.risk_score} />
+              {lockedNow && (
+                <span className="inline-flex items-center gap-1 text-table text-error">
+                  <Lock className="w-3 h-3" aria-hidden />
+                  Locked
+                </span>
+              )}
+            </span>
+          ) : undefined
+        }
+        primaryAction={
+          user ? (
+            <button
+              onClick={() => setIsEditModalOpen(true)}
+              className="h-9 px-4 text-sm font-medium rounded-md border border-line bg-surface text-ink hover:bg-surface-hover transition-colors flex items-center gap-2"
+            >
+              <Edit2 className="w-4 h-4" />
+              Edit User
+            </button>
+          ) : undefined
+        }
+        overflow={overflow}
+        facts={
+          user
+            ? [
+                { label: 'Department', value: user.department?.name || 'Not assigned' },
+                { label: 'Employment type', value: formatEmploymentType(user.employment_type) },
+                {
+                  label: 'Location',
+                  value: (
+                    <span className="flex items-center gap-2">
+                      <span>
+                        {user.location ? user.location.name : 'Not assigned'}
+                        {user.location?.timezone && (
+                          <span className="block font-mono text-table text-ink-muted">
+                            {user.location.timezone} ({getTimezoneOffset(user.location.timezone)})
+                          </span>
+                        )}
+                      </span>
+                      <button
+                        onClick={() => setIsLocationModalOpen(true)}
+                        className="h-7 w-7 flex items-center justify-center rounded-md text-ink-muted hover:text-ink hover:bg-surface-hover transition-colors"
+                        title="Change Location"
+                        aria-label="Change location"
+                      >
+                        <MapPin className="w-3.5 h-3.5" />
+                      </button>
+                    </span>
+                  ),
+                },
+                { label: 'Hire date', value: user.hire_date ? formatDate(user.hire_date) : 'Not set' },
+              ]
+            : undefined
+        }
+        tabs={[
+          { value: 'profile', label: 'Profile', content: profileTab },
+          { value: 'org_placement', label: 'Org placement', content: orgTab },
+          { value: 'product_access', label: 'Product access', content: productTab },
+          { value: 'roles', label: 'Roles', content: rolesTab },
+          { value: 'security', label: 'Security', content: securityTab },
+          { value: 'activity', label: 'Activity', content: activityTab },
+        ]}
       />
 
-      {/* ── Edit Modal ── */}
-      {isEditModalOpen && (
-        <Modal
-          isOpen={isEditModalOpen}
-          onClose={() => setIsEditModalOpen(false)}
-          title="Edit User"
-          description={`Update profile for ${user.full_name}`}
-          size="md"
-          footer={
-            <>
-              <button
-                onClick={() => setIsEditModalOpen(false)}
-                disabled={updateUser.isPending}
-                className="h-9 px-4 text-sm font-medium rounded-md border border-line bg-white text-ink hover:bg-surface-alt transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
-              >
-                Cancel
-              </button>
-              <button
-                form="user-form"
-                type="submit"
-                disabled={updateUser.isPending}
-                className="h-9 px-4 text-sm font-medium rounded-md bg-primary hover:bg-primary-hover text-white transition-colors disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2"
-              >
-                {updateUser.isPending ? (
-                  <>
-                    <RefreshCw className="w-4 h-4 animate-spin" />
-                    Saving...
-                  </>
-                ) : (
-                  'Save Changes'
-                )}
-              </button>
-            </>
-          }
-        >
-          <UserForm
-            initialData={user}
-            onSubmit={handleEditSubmit}
-            departments={departments}
-            locations={locations}
-            requiredFields={formMetadata?.required_fields || ['email', 'full_name']}
-          />
-        </Modal>
-      )}
-
-      {/* ── Offboarding Modal (08 §3.3, A2-5) ── */}
-      {isOffboardingModalOpen && (
-        <OffboardingModal
+      {user && (
+        <>
+        {/* ── Location Assignment Modal ── */}
+        <UserLocationAssignmentModal
           user={user}
-          isOpen={isOffboardingModalOpen}
-          onClose={() => setIsOffboardingModalOpen(false)}
-          onSuccess={() => {
-            refetch();
-          }}
+          isOpen={isLocationModalOpen}
+          onClose={() => setIsLocationModalOpen(false)}
+          requiredFields={formMetadata?.required_fields || ['email', 'full_name']}
         />
+
+        {/* ── Edit Modal ── */}
+        {isEditModalOpen && (
+          <Modal
+            isOpen={isEditModalOpen}
+            onClose={() => setIsEditModalOpen(false)}
+            title="Edit User"
+            description={`Update profile for ${user.full_name}`}
+            size="md"
+            footer={
+              <>
+                <button
+                  onClick={() => setIsEditModalOpen(false)}
+                  disabled={updateUser.isPending}
+                  className="h-9 px-4 text-sm font-medium rounded-md border border-line bg-white text-ink hover:bg-surface-alt transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                >
+                  Cancel
+                </button>
+                <button
+                  form="user-form"
+                  type="submit"
+                  disabled={updateUser.isPending}
+                  className="h-9 px-4 text-sm font-medium rounded-md bg-primary hover:bg-primary-hover text-white transition-colors disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2"
+                >
+                  {updateUser.isPending ? (
+                    <>
+                      <RefreshCw className="w-4 h-4 animate-spin" />
+                      Saving...
+                    </>
+                  ) : (
+                    'Save Changes'
+                  )}
+                </button>
+              </>
+            }
+          >
+            <UserForm
+              initialData={user}
+              onSubmit={handleEditSubmit}
+              departments={departments}
+              locations={locations}
+              requiredFields={formMetadata?.required_fields || ['email', 'full_name']}
+            />
+          </Modal>
+        )}
+
+        {/* ── Offboarding Modal (08 §3.3, A2-5) ── */}
+        {isOffboardingModalOpen && (
+          <OffboardingModal
+            user={user}
+            isOpen={isOffboardingModalOpen}
+            onClose={() => setIsOffboardingModalOpen(false)}
+            onSuccess={() => {
+              refetch();
+            }}
+          />
+        )}
+        </>
       )}
-    </div>
+    </>
   );
 }
 
 
 // ── Sub-components ─────────────────────────────────────────────────────────
-
-function InfoCard({ label, value, subValue }: { label: string; value: string; subValue?: string }) {
-  return (
-    <div className="bg-white rounded-lg border border-line shadow-card p-4">
-      <p className="text-xs font-medium text-ink-secondary mb-1">{label}</p>
-      <p className="text-sm font-semibold text-ink">{value}</p>
-      {subValue && (
-        <p className="text-xs font-mono text-ink-muted mt-0.5">{subValue}</p>
-      )}
-    </div>
-  );
-}
 
 function LifecycleStateBadge({ state }: { state: string }) {
   const config: Record<string, { bg: string; text: string; label: string }> = {

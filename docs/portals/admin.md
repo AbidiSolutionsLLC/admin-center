@@ -51,7 +51,7 @@ Guards: `GuestGuard` redirects to `/overview` when a token is in memory. `AuthGu
 | `/company/settings` | Auth | `pages/company/CompanySettingsPage.tsx` |
 | `/teams` | Auth | `pages/teams/TeamsPage.tsx` |
 | `/people` | Auth | `pages/people/PeoplePage.tsx` |
-| `/people/:id` | Auth | `pages/people/UserDetailPage.tsx` (includes product access tab, effective access, security panel with MFA reset, product open items) |
+| `/people/:id` | Auth | `pages/people/UserDetailPage.tsx` (elevation 5.6: on the `ObjectPage` template, header with state badges, Edit action and overflow (Unlock, Resend invite, Offboard), key facts, URL-synced tabs; the Invitation panel shows on Profile for invited members; the Product access tab shows the assignments behind each role from `reasons`; includes product access tab, effective access, security panel with MFA reset, product open items) |
 | `/roles`, `/roles/:id` | Auth | `pages/roles/RolesPage.tsx` |
 | `/groups` | Auth | `pages/groups/GroupsPage.tsx` |
 | `/apps` | Auth | `pages/apps/AppsPage.tsx` (App Access) |  <!-- 5.4: product cards show a seat meter, default role, or a locked state with the plan that includes it; the selected product has a "Why does this person have this role?" section (`features/apps/EffectiveAccessPanel.tsx`). Buttons on this page still use the legacy role checks. -->

@@ -168,7 +168,10 @@ export function UserProductAccessTab({ userId, userName }: UserProductAccessTabP
               const app = apps.find((a) => (a.product_key || a.slug) === prod.key || a.product_key === prod.key);
               const entitled = isEntitled(subscription?.entitlements, prod.key);
 
-              // Find matching assignments from user history for chips
+              // Server-explained provenance (elevation 5.6): the assignments that give the role
+              const reasons = effectiveAccess.reasons?.[prod.key] ?? [];
+
+              // Fallback for older payloads: match assignments from user history
               const matchingAssignments = history.filter(
                 (h) => h.is_active && (h.app_id === app?._id || h.app_info?.slug?.includes(prod.key) || h.app_info?.name?.toLowerCase().includes(prod.name.toLowerCase()))
               );
@@ -226,7 +229,18 @@ export function UserProductAccessTab({ userId, userName }: UserProductAccessTabP
                   <td className="py-3.5 px-4">
                     {isGranted ? (
                       <div className="flex flex-wrap gap-1.5">
-                        {matchingAssignments.length > 0 ? (
+                        {reasons.length > 0 ? (
+                          reasons.map((r) => (
+                            <span
+                              key={r.assignment_id}
+                              data-testid="granted-via"
+                              className="inline-flex items-center px-2 py-0.5 rounded-md text-[11px] font-medium bg-sky-50 text-sky-700 border border-sky-200"
+                              title={`${r.product_role_key ? `Role ${r.product_role_key}` : 'Default role'}${r.include_descendants ? ', including sub-units' : ''}`}
+                            >
+                              {r.target_type === 'user' ? 'Direct User' : `${r.target_type}: ${r.target_name}`}
+                            </span>
+                          ))
+                        ) : matchingAssignments.length > 0 ? (
                           matchingAssignments.map((a) => (
                             <span
                               key={a._id}
