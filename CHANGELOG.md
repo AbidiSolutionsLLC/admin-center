@@ -2,6 +2,11 @@
 
 Format: [Keep a Changelog](https://keepachangelog.com/en/1.1.0/). Each entry lists the change and its user-visible or deploy-visible effect. Commit details: `../docs/wrapup/CHANGE-LEDGER.md`.
 
+## [Unreleased]: elevation, branch `feat/elevation`
+
+### Changed
+- 2.1: `InviteToken` becomes `Invitation` (kind, state, no TTL index) and every invitation is made by `lib/invitations.ts`; a new invitation supersedes the user's pending one. The `invite_tokens` collection is not migrated (fresh start); `lib/lifecycleAutomations.ts` (dead code with a placeholder link) is removed.
+
 ## [Unreleased]: wrap-up clean-up (2026-11-13), branch `chore/wrapup`
 
 ### Added

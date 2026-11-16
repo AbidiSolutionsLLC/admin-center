@@ -374,7 +374,7 @@ All models are Mongoose models in `server/src/models/`. Collection names are Mon
 | `Session` | `_id` = OIDC `sid`, `member_id`, `identity_id`, `company_id`, `realm`, `idle_expires_at`, `absolute_expires_at`, `revoked_at`, `revoked_reason`, `amr` | Revocation source of truth for `requireAuth` |
 | `StreamTicket` | `ticketHash`, `member`, `company`, `sid`, `expiresAt` (TTL index) | SSE tickets |
 | `RefreshToken` | legacy | Not written anywhere in `server/src` (see Known issues) |
-| Others | `HolidayCalendar`, `Holiday`, `HolidayAssignment`, `WorkSchedule`, `WorkScheduleAssignment`, `PolicyVersion`, `PolicyAssignment`, `PolicyAcknowledgment`, `PolicyTemplate`, `AccessControlPolicy`, `DataGovernancePolicy`, `Workflow`, `WorkflowStep`, `WorkflowRun`, `WorkflowTemplate`, `ApprovalRequest`, `CustomField`, `CustomFieldVersion`, `ProfileLayout`, `FieldPermission`, `Integration`, `IntegrationSyncLog`, `NotificationTemplate`, `NotificationEvent`, `InAppNotification`, `Insight`, `InviteToken`, `PasswordResetToken` | Feature-specific |
+| Others | `HolidayCalendar`, `Holiday`, `HolidayAssignment`, `WorkSchedule`, `WorkScheduleAssignment`, `PolicyVersion`, `PolicyAssignment`, `PolicyAcknowledgment`, `PolicyTemplate`, `AccessControlPolicy`, `DataGovernancePolicy`, `Workflow`, `WorkflowStep`, `WorkflowRun`, `WorkflowTemplate`, `ApprovalRequest`, `CustomField`, `CustomFieldVersion`, `ProfileLayout`, `FieldPermission`, `Integration`, `IntegrationSyncLog`, `NotificationTemplate`, `NotificationEvent`, `InAppNotification`, `Insight`, `Invitation`, `PasswordResetToken` | Feature-specific |
 
 ## 6. Platform events emitted
 

@@ -14,7 +14,7 @@ import {
 import { User } from '../../models/User.model';
 import { Identity } from '../../models/Identity.model';
 import { Company } from '../../models/Company.model';
-import { InviteToken } from '../../models/InviteToken.model';
+import { Invitation } from '../../models/Invitation.model';
 import { createServer } from '../../app';
 import { getIdentityConfig } from '../../identity/config';
 import http from 'http';
@@ -61,7 +61,7 @@ beforeEach(async () => {
   sentWelcomes = [];
   await User.deleteMany({});
   await Identity.deleteMany({});
-  await InviteToken.deleteMany({});
+  await Invitation.deleteMany({});
 });
 
 const mockClaimSender = async (params: any) => {
@@ -205,7 +205,7 @@ test('Target selection: active placeholder vs invited vs federated vs real passw
   assert.equal(dryStats.skippedHasPassword, 1);
   assert.equal(dryStats.skippedInactive, 1);
   assert.equal(dryStats.emailsSent, 0);
-  assert.equal(await InviteToken.countDocuments({}), 0);
+  assert.equal(await Invitation.countDocuments({}), 0);
   assert.equal(sentClaims.length, 0);
   assert.equal(sentWelcomes.length, 0);
 
@@ -218,7 +218,7 @@ test('Target selection: active placeholder vs invited vs federated vs real passw
   });
 
   assert.equal(realStats.emailsSent, 2);
-  assert.equal(await InviteToken.countDocuments({}), 2);
+  assert.equal(await Invitation.countDocuments({}), 2);
   assert.equal(sentClaims.length, 1);
   assert.equal(sentClaims[0].email, 'claim.target@test.com');
   assert.match(sentClaims[0].claim_link, /\/onboarding\?token=[0-9a-f]{64}&email=claim\.target%40test\.com/);
@@ -238,7 +238,7 @@ test('Target selection: active placeholder vs invited vs federated vs real passw
   });
   assert.equal(secondStats.emailsSent, 0);
   assert.equal(secondStats.skippedHasActiveToken, 2);
-  assert.equal(await InviteToken.countDocuments({}), 2);
+  assert.equal(await Invitation.countDocuments({}), 2);
   assert.equal(sentClaims.length, 0);
   assert.equal(sentWelcomes.length, 0);
 

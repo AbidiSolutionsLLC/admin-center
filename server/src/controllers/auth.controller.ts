@@ -5,7 +5,7 @@ import { Request, Response } from 'express';
 import bcrypt from 'bcryptjs';
 import crypto from 'crypto';
 import { asyncHandler } from '../utils/asyncHandler';
-import { User, IUser, UserRole, SecurityEvent, InviteToken, PasswordResetToken, Company, GroupMember, IpRestriction, Identity, IIdentity } from '../models';
+import { User, IUser, UserRole, SecurityEvent, Invitation, PasswordResetToken, Company, GroupMember, IpRestriction, Identity, IIdentity } from '../models';
 import { sendPasswordResetEmail } from '../lib/emailService';
 import { validatePasswordAgainstPolicy } from '../utils/passwordPolicy';
 import { AppError } from '../utils/AppError';
@@ -358,9 +358,9 @@ export const setupPassword = asyncHandler(async (req: Request, res: Response) =>
   const { email, token, newPassword } = result.data;
 
   const tokenHash = crypto.createHash('sha256').update(token).digest('hex');
-  const inviteRecord = await InviteToken.findOne({
+  const inviteRecord = await Invitation.findOne({
     token_hash: tokenHash,
-    is_used: false,
+    state: 'pending',
     expires_at: { $gt: new Date() },
   });
 
@@ -406,8 +406,8 @@ export const setupPassword = asyncHandler(async (req: Request, res: Response) =>
   user.password_changed_at = identity.password_changed_at;
   await user.save();
 
-  inviteRecord.is_used = true;
-  inviteRecord.used_at = new Date();
+  inviteRecord.state = 'accepted';
+  inviteRecord.accepted_at = new Date();
   await inviteRecord.save();
 
   // Log Security Event

@@ -77,7 +77,7 @@ The global per-IP rate limiter in `app.ts` also applies. Envelope: `{ success: t
 1. Plan must exist with `status: 'active'` (404 `PLAN_NOT_FOUND`).
 2. `Company.create` with `status: 'provisioning'`, `is_active: false` (outside the transaction).
 3. `seedDatabase(companyId)`: permissions, system roles, default security policy (outside the transaction).
-4. In one transaction: entitlements for every plan product (`source: 'plan'`), first admin `User` (`lifecycle_state: 'invited'`, legacy `role: 'Super Admin'`, pre-set `employee_id`), `UserRole` Super Admin, `InviteToken` (sha256 of a random token, 72 h), default access rules (section 4), company set `active`, platform events, operator audit + mirrored tenant `AuditEvent`.
+4. In one transaction: entitlements for every plan product (`source: 'plan'`), first admin `User` (`lifecycle_state: 'invited'`, legacy `role: 'Super Admin'`, pre-set `employee_id`), `UserRole` Super Admin, `Invitation` (`kind: 'first_admin'`, sha256 of a random token, 72 h, made by `lib/invitations.createInvitation`), default access rules (section 4), company set `active`, platform events, operator audit + mirrored tenant `AuditEvent`.
 5. After commit: welcome e-mail with `${CLIENT_URL}/onboarding?token=...&email=...`, accepted into the e-mail outbox (`EmailDelivery`, Plan 0.6, built, tests not yet run) and sent by the sender loop; its fate is in `EmailDelivery.status`. A failure to accept is logged and reported as `invite_email_sent: false`; it does not fail the request.
 6. On any failure the roles, role permissions, security policy and the `provisioning` company are deleted so the slug can be retried.
 

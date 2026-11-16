@@ -197,7 +197,7 @@ Every page sets a per-response nonce CSP: `default-src 'none'`, nonce'd style an
 | `OperatorAccount` (`operatoraccounts`) | `email`, `password_hash`, `mfa.{enabled, secret_enc, verified_at}`, `roles`, `status` | `server/src/models/OperatorAccount.model.ts` |
 | `IdentityProviderConnection` | `company_id`, `type`, `status`, `config.tenant_id`, `domains[{domain, verification_token, verified_at}]`, `verified_domains`, `tenant_approval`, `jit_provisioning`, `enforce_sso` | `server/src/models/IdentityProviderConnection.model.ts` |
 | `SecurityEvent` | login / MFA / logout events | `server/src/models/SecurityEvent.model.ts` |
-| `InviteToken`, `PasswordResetToken` | sha256 `token_hash`, `expires_at` | `server/src/models/` |
+| `Invitation` (kind, state `pending/accepted/revoked/superseded`, no TTL index; replaces `InviteToken`), `PasswordResetToken` | sha256 `token_hash`, `expires_at` | `server/src/models/` |
 | `oidc_<realm>_<Model>` | `{ _id, payload, expiresAt }` with TTL index on `expiresAt`, indexes on `payload.grantId`, `payload.uid` (+ `payload.sessionUid` for RefreshToken). Tenant and operator: Session, Interaction, Grant, AuthorizationCode, RefreshToken, AccessToken, ReplayDetection. Services: ClientCredentials, ReplayDetection | `server/src/identity/mongoAdapter.ts` |
 
 ## 6. Platform events emitted

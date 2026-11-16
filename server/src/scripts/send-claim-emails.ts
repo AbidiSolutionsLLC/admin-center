@@ -14,7 +14,8 @@ import mongoose, { Types } from 'mongoose';
 import { User, IUser } from '../models/User.model';
 import { Identity, IIdentity } from '../models/Identity.model';
 import { Company, ICompany } from '../models/Company.model';
-import { InviteToken } from '../models/InviteToken.model';
+import { Invitation } from '../models/Invitation.model';
+import { createInvitation, inviteLink } from '../lib/invitations';
 import { sendClaimEmail, sendWelcomeEmail } from '../lib/emailService';
 
 export const PLACEHOLDER_PASSWORD_HASH = '$2b$12$unmigrated_seeded_password_placeholder';
@@ -138,9 +139,9 @@ export async function runSendClaimEmails(options: SendClaimEmailsOptions = {}): 
 
     // 3. Idempotency check: see if user already has an unused, unexpired token
     const now = new Date();
-    const existingToken = await InviteToken.findOne({
+    const existingToken = await Invitation.findOne({
       user_id: user._id,
-      is_used: false,
+      state: 'pending',
       expires_at: { $gt: now },
     });
 
@@ -151,26 +152,12 @@ export async function runSendClaimEmails(options: SendClaimEmailsOptions = {}): 
 
     // 4. Create token and dispatch email if not dry-run
     if (!dryRun) {
-      if (existingToken && resend) {
-        // Expire previous token
-        await InviteToken.updateOne(
-          { _id: existingToken._id },
-          { $set: { is_used: true, used_at: now } }
-        );
-      }
-
-      const rawToken = crypto.randomBytes(32).toString('hex');
-      const tokenHash = crypto.createHash('sha256').update(rawToken).digest('hex');
-      const expiresAt = new Date(Date.now() + 72 * 3600 * 1000); // 72 hours
-
-      await InviteToken.create({
-        user_id: user._id,
-        token_hash: tokenHash,
-        expires_at: expiresAt,
-        is_used: false,
+      // createInvitation supersedes the previous pending invitation, so --resend needs no separate expiry step.
+      const { rawToken } = await createInvitation(null, {
+        kind: 'member', company_id: company?._id ?? null, user_id: user._id, email: user.email,
+        created_by: { type: 'system' },
       });
-
-      const setupLink = `${clientUrl}/onboarding?token=${rawToken}&email=${encodeURIComponent(user.email)}`;
+      const setupLink = inviteLink(rawToken, user.email, clientUrl);
 
       if (targetType === 'claim') {
         await sendClaim({

@@ -58,7 +58,8 @@ const getRouteId = (param: string | string[]): string =>
   Array.isArray(param) ? param[0] : param;
 
 import crypto from 'crypto';
-import { InviteToken } from '../models/InviteToken.model';
+import { Invitation } from '../models/Invitation.model';
+import { createInvitation, createInvitations, inviteLink } from '../lib/invitations';
 import { fetchMemberOpenItems } from '../platform/openItems';
 
 /** Admin-owned member fields carried on member.provisioned / member.updated (07 §1.2). */
@@ -554,21 +555,17 @@ async function runLifecycleAutomations(
   const originalManagerId = original.manager_id;
 
   if (transitionKey === 'invited_to_onboarding') {
-    const rawToken = crypto.randomBytes(32).toString('hex');
-    const tokenHash = crypto.createHash('sha256').update(rawToken).digest('hex');
-
-    await InviteToken.create({
-      user_id: user._id,
-      token_hash: tokenHash,
-      expires_at: new Date(Date.now() + 72 * 60 * 60 * 1000),
-    });
+    const { rawToken } = await runInTransaction((session) => createInvitation(session, {
+      kind: 'member', company_id: company._id, user_id: user._id, email: user.email,
+      created_by: { type: 'member', id: req.user.userId },
+    }));
 
     await sendWelcomeEmail({
       email: user.email,
       full_name: user.full_name,
       employee_id: user.employee_id,
       company_name: company.name,
-      invite_link: `${process.env.CLIENT_URL}/onboarding?token=${rawToken}&email=${encodeURIComponent(user.email)}`,
+      invite_link: inviteLink(rawToken, user.email),
       meta: { company_id: company._id, related: { type: 'user', id: String(user._id) } },
     });
 
@@ -1086,8 +1083,7 @@ export const inviteUser = asyncHandler(async (req: Request, res: Response) => {
     rolesToAssign = roles;
   }
 
-  const rawToken = crypto.randomBytes(32).toString('hex');
-  const tokenHash = crypto.createHash('sha256').update(rawToken).digest('hex');
+  let rawToken = '';
   const correlationId = correlationIdFor(req);
   const actor = { type: 'member' as const, id: req.user.userId };
 
@@ -1120,11 +1116,10 @@ export const inviteUser = asyncHandler(async (req: Request, res: Response) => {
       })), { session });
     }
 
-    await InviteToken.create([{
-      user_id: created._id,
-      token_hash: tokenHash,
-      expires_at: new Date(Date.now() + 72 * 60 * 60 * 1000), // 72 hours
-    }], { session });
+    ({ rawToken } = await createInvitation(session, {
+      kind: 'member', company_id: req.user.company_id, user_id: created._id, email: created.email,
+      created_by: actor,
+    }));
 
     const afterState = created.toObject();
     // @ts-ignore
@@ -1164,7 +1159,7 @@ export const inviteUser = asyncHandler(async (req: Request, res: Response) => {
       full_name: user.full_name,
       employee_id: user.employee_id,
       company_name: company.name,
-      invite_link: `${process.env.CLIENT_URL}/onboarding?token=${rawToken}&email=${encodeURIComponent(user.email)}`,
+      invite_link: inviteLink(rawToken, user.email),
       meta: { company_id: company._id, related: { type: 'user', id: String(user._id) } },
     });
   } catch (error) {
@@ -1679,8 +1674,6 @@ export const bulkInviteUsers = asyncHandler(async (req: Request, res: Response) 
       
       const tempPassword = generateTemporaryPassword();
       const password_hash = await bcrypt.hash(tempPassword, 10);
-      const rawToken = crypto.randomBytes(32).toString('hex');
-      const tokenHash = crypto.createHash('sha256').update(rawToken).digest('hex');
 
       usersToCreate.push({
         ...row,
@@ -1691,8 +1684,6 @@ export const bulkInviteUsers = asyncHandler(async (req: Request, res: Response) 
         lifecycle_state: 'invited',
         is_active: false,
         hire_date: row.hire_date ? new Date(row.hire_date) : undefined,
-        _tokenHash: tokenHash, // Temporary storage for token creation
-        _rawToken: rawToken     // Temporary storage for email sending
       });
 
       // Placeholder result, will be updated after bulk create
@@ -1718,24 +1709,20 @@ export const bulkInviteUsers = asyncHandler(async (req: Request, res: Response) 
     const actor = { type: 'member' as const, id: req.user.userId };
     const createdUsers = await runInTransaction(async (session) => {
       createdUserInfos.length = 0;
-      const created = await User.create(usersToCreate.map(({ _tokenHash, _rawToken, ...u }) => u), { session, ordered: true });
+      const created = await User.create(usersToCreate, { session, ordered: true });
 
-      const tokensToCreate = [];
+      const invitations = await createInvitations(session, created.map((u) => ({
+        kind: 'member' as const, company_id: req.user.company_id, user_id: u._id, email: u.email, created_by: actor,
+      })));
+
       for (let i = 0; i < created.length; i++) {
         const user = created[i];
-        const sourceData = usersToCreate[i];
-
-        tokensToCreate.push({
-          user_id: user._id,
-          token_hash: sourceData._tokenHash,
-          expires_at: new Date(Date.now() + 72 * 60 * 60 * 1000),
-        });
 
         createdUserInfos.push({
           email: user.email,
           full_name: user.full_name,
           employee_id: user.employee_id,
-          token: sourceData._rawToken,
+          token: invitations[i].rawToken,
           userId: user._id.toString()
         });
 
@@ -1764,7 +1751,6 @@ export const bulkInviteUsers = asyncHandler(async (req: Request, res: Response) 
         });
       }
 
-      await InviteToken.insertMany(tokensToCreate, { session });
       await emitAppAccessChanged(session, req.user.company_id, created.map(u => u._id.toString()), { actor, correlation_id: correlationId });
       return created;
     });
@@ -1794,7 +1780,7 @@ export const bulkInviteUsers = asyncHandler(async (req: Request, res: Response) 
           full_name: u.full_name,
           employee_id: u.employee_id,
           company_name: company.name,
-          invite_link: `${process.env.CLIENT_URL}/onboarding?token=${u.token}&email=${encodeURIComponent(u.email)}`,
+          invite_link: inviteLink(u.token, u.email),
         }))
       );
 
@@ -2377,9 +2363,9 @@ export const verifyInviteToken = asyncHandler(async (req: Request, res: Response
   if (!token) throw new AppError('Token is required', 400, 'BAD_REQUEST');
 
   const tokenHash = crypto.createHash('sha256').update(token).digest('hex');
-  const record = await InviteToken.findOne({
+  const record = await Invitation.findOne({
     token_hash: tokenHash,
-    is_used: false,
+    state: 'pending',
     expires_at: { $gt: new Date() },
   });
 
@@ -2415,22 +2401,18 @@ export const resendInvite = asyncHandler(async (req: Request, res: Response) => 
   const company = await Company.findById(req.user.company_id);
   if (!company) throw new AppError('Company not found', 404, 'COMPANY_NOT_FOUND');
 
-  // Generate a new secure token
-  const rawToken = crypto.randomBytes(32).toString('hex');
-  const tokenHash = crypto.createHash('sha256').update(rawToken).digest('hex');
-
-  await InviteToken.create({
-    user_id: user._id,
-    token_hash: tokenHash,
-    expires_at: new Date(Date.now() + 72 * 60 * 60 * 1000),
-  });
+  // Supersedes any pending invitation and issues a fresh one
+  const { rawToken } = await runInTransaction((session) => createInvitation(session, {
+    kind: 'member', company_id: company._id, user_id: user._id, email: user.email,
+    created_by: { type: 'member', id: req.user.userId },
+  }));
 
   await sendWelcomeEmail({
     email: user.email,
     full_name: user.full_name,
     employee_id: user.employee_id,
     company_name: company.name,
-    invite_link: `${process.env.CLIENT_URL}/onboarding?token=${rawToken}&email=${encodeURIComponent(user.email)}`,
+    invite_link: inviteLink(rawToken, user.email),
     meta: { company_id: company._id, related: { type: 'user', id: String(user._id) } },
   });
 

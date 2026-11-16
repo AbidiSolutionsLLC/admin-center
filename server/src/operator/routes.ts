@@ -9,7 +9,7 @@ import { Company } from '../models/Company.model';
 import { User } from '../models/User.model';
 import { Role } from '../models/Role.model';
 import { UserRole } from '../models/UserRole.model';
-import { InviteToken } from '../models/InviteToken.model';
+import { createInvitation, inviteLink } from '../lib/invitations';
 import { AuditEvent } from '../models/AuditEvent.model';
 import { Plan } from '../models/Plan.model';
 import { OrganizationEntitlement } from '../models/OrganizationEntitlement.model';
@@ -194,7 +194,7 @@ router.post('/orgs', asyncHandler(async (req: Request, res: Response) => {
   if (!plan) throw new AppError('Plan not found or archived', 404, 'PLAN_NOT_FOUND');
 
   const company = await Company.create({ name: input.name, slug, status: 'provisioning', is_active: false, plan: plan.key });
-  const rawToken = crypto.randomBytes(32).toString('hex');
+  let rawToken = '';
   const passwordHash = await bcrypt.hash(crypto.randomBytes(24).toString('hex'), 10); // placeholder until invite acceptance
   try {
     // seedDatabase() takes no session: it runs before the txn and is undone in the catch below on failure.
@@ -226,7 +226,10 @@ router.post('/orgs', asyncHandler(async (req: Request, res: Response) => {
       }], opts);
       const superRole = await Role.findOne({ company_id: company._id, name: ROLES.SUPER_ADMIN }).session(session ?? null);
       if (superRole) await UserRole.create([{ user_id: user._id, role_id: superRole._id, company_id: company._id, assigned_by: user._id, assigned_at: new Date() }], opts);
-      await InviteToken.create([{ user_id: user._id, token_hash: crypto.createHash('sha256').update(rawToken).digest('hex'), expires_at: new Date(Date.now() + 72 * 3600 * 1000) }], opts);
+      ({ rawToken } = await createInvitation(session, {
+        kind: 'first_admin', company_id: company._id, user_id: user._id, email: user.email,
+        created_by: { type: 'operator', id: req.operator!._id },
+      }));
 
       await ensureDefaultAccess(company._id, user._id, session);
 
@@ -262,7 +265,7 @@ router.post('/orgs', asyncHandler(async (req: Request, res: Response) => {
     try {
       deliveryId = await sendWelcomeEmail({
         email: user.email, full_name: user.full_name, employee_id: user.employee_id, company_name: company.name,
-        invite_link: `${process.env.CLIENT_URL}/onboarding?token=${rawToken}&email=${encodeURIComponent(user.email)}`,
+        invite_link: inviteLink(rawToken, user.email),
         meta: { company_id: company._id, related: { type: 'user', id: String(user._id) } },
       });
     } catch (e) {
