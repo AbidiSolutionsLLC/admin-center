@@ -116,7 +116,7 @@ Tenant-API endpoints that belong to the identity flow (see admin.md): `POST /api
 - Authority `https://login.microsoftonline.com/organizations/oauth2/v2.0`, PKCE S256, `prompt=select_account`. State, nonce and verifier are kept in an encrypted cookie `tenant_entra` (10 min, path `/realms/tenant`).
 - id_token verified against `https://login.microsoftonline.com/common/discovery/v2.0/keys`, audience = client id, issuer `https://login.microsoftonline.com/<tid>/v2.0`, nonce and `oid` required.
 - Tenant mapping: an `IdentityProviderConnection` with `type: 'entra'`, `status: 'active'`, `config.tenant_id = <tid>`. Activating a connection (tenant API) requires a verified domain and an operator approval of that tenant id.
-- Account mapping: **only** by an existing `Identity.federated_links` entry with `{ issuer, subject: oid }` whose `connection_id` is that connection. No link → "No Karbexa account is linked...". JIT provisioning is not implemented in the login path (the `jit_provisioning` setting is stored only).
+- Account mapping (elevation 5.11, built, not yet run; `identity/federationLink.ts`): by an existing `Identity.federated_links` entry `{ issuer, subject: oid }` whose `connection_id` is that connection. With no link, a link is made on first sign-in only when the id_token e-mail (`email`, else `preferred_username`) has a domain in the connection's **verified** domains, an active Identity with that e-mail already exists, it has an access-state membership in the connection's company, and it has no link for this connection yet; the update is conditional (one link per connection) and audited as `identity.federation_linked`. Anything else gives "No Karbexa account is linked..." and a `login_failure` security event with the reason. JIT provisioning is still not implemented (the `jit_provisioning` setting is stored only).
 - MFA: if the Entra token's `amr` contains `mfa`, login completes with `['fed','mfa']`; otherwise the TOTP step / enrolment runs.
 
 ### 3.6 Logout and revocation
@@ -220,7 +220,7 @@ Login and MFA activity is written to `SecurityEvent`, not to platform events.
 - Services realm with `private_key_jwt` client credentials for the products backend and the admin backend.
 
 ### Not built or partial ✗
-- **Entra links cannot be created in the product.** The only code that writes `Identity.federated_links` is `server/src/scripts/seed-e11.ts` (marked not used for go-live). There is no admin or self-service path to link a Microsoft account and no JIT provisioning (`jit_provisioning` is stored by `identityProviders.controller.ts` but not read at login). With the fresh-start go-live, Microsoft sign-in therefore always ends in "No Karbexa account is linked".
+- ~~**Entra links cannot be created in the product.**~~ Fixed for existing members in elevation 5.11 (first-sign-in linking, above). JIT (`jit_provisioning: create_member`) is still not implemented.
 - `apps` claim is always `[]` (`providers.ts`, comment "effective-access projection is a later sprint").
 - E-mail OTP: `mfa.email_otp_enabled` exists on `Identity` but no login code uses it.
 - Operator realm: no `Session` rows, no lockout, no QR on enrolment (operator.md).

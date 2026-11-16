@@ -20,6 +20,7 @@ import {
 } from '../controllers/auth.controller';
 import { getIdentityConfig, ADMIN_AUDIENCE, ADMIN_SPA_CLIENT_ID, PRODUCTS_AUDIENCE, PRODUCTS_SPA_CLIENT_ID } from './config';
 import { loadAccessContext, pickMembership } from './accounts';
+import { resolveFederatedIdentity } from './federationLink';
 import { escapeHtml, newNonce, pageCsp, pageShell, shellForClient } from './html';
 import { consumeRecoveryCode } from './recoveryCodes';
 import type { OidcProvider } from './providers';
@@ -468,19 +469,23 @@ export function registerTenantInteractions(app: Express, provider: OidcProvider)
     const connection = await IdentityProviderConnection.findOne({ type: 'entra', status: 'active', 'config.tenant_id': tid.toLowerCase() });
     if (!connection) return deny('Your organisation is not set up for Microsoft sign-in with Karbexa.');
 
-    // 03 §4.2.3–5: identity resolved ONLY by (issuer, oid) link; no link → deny (JIT deferred).
-    const identity = await Identity.findOne({ federated_links: { $elemMatch: { issuer, subject: oid } } });
-    const link = identity?.federated_links.find((l) => l.issuer === issuer && l.subject === oid);
+    // 03 §4.2.3–5 as amended by elevation 5.11: identity resolved by the (issuer, oid) link; with no link, a first-sign-in
+    // link is made only for a verified domain and an existing active member (federationLink.ts). JIT stays deferred.
     const noAccount = 'No Karbexa account is linked to this Microsoft account. Ask your administrator for an invitation.';
+    const claimEmail = typeof claims.email === 'string' ? claims.email : typeof claims.preferred_username === 'string' ? claims.preferred_username : undefined;
     const fail = async (reason: string, msg: string) => {
       await logSecurityEvent({
-        company_id: connection.company_id, email: typeof claims.email === 'string' ? claims.email.toLowerCase() : undefined,
+        company_id: connection.company_id, email: claimEmail?.toLowerCase(),
         event_type: 'login_failure', ip_address: req.ip, user_agent: req.headers['user-agent'], req,
         metadata: { reason, method: 'entra', tid },
       });
       return deny(msg);
     };
-    if (!identity || !link || link.connection_id.toString() !== connection._id.toString()) return fail('federation_no_link', noAccount);
+    const resolved = await resolveFederatedIdentity({ connection, issuer, oid, email: claimEmail });
+    if (!resolved.ok) {
+      return fail(resolved.reason, resolved.reason === 'identity_inactive' ? 'Your account is not active. Contact your administrator.' : noAccount);
+    }
+    const identity = resolved.identity;
     if (identity.status !== 'active') return fail('identity_inactive', 'Your account is not active. Contact your administrator.');
 
     const user = await pickMembership(identity._id, connection.company_id);
