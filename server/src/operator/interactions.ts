@@ -13,6 +13,7 @@ import { escapeHtml, OPERATOR_SHELL } from '../identity/html';
 import { send, errBox, normaliseCode, totpValid, totpEnrolSection } from '../identity/interactions';
 import type { OidcProvider } from '../identity/providers';
 import { OPERATOR_ROLE } from './accounts';
+import { isOperatorLocked, recordOperatorFailure, recordOperatorSuccess } from './signInGuard';
 
 const BASE = '/realms/operator';
 const MAX_OTP_ATTEMPTS = 5;
@@ -118,7 +119,15 @@ export function registerOperatorInteractions(app: Express, provider: OidcProvide
 
     const acct = await OperatorAccount.findOne({ email });
     const ok = await bcrypt.compare(password, acct?.password_hash || DUMMY_HASH);
-    if (!acct || !ok || !eligible(acct)) return renderLogin(res, uid, { error: GENERIC_LOGIN_ERROR, email, status: 401 });
+    if (!acct || !ok || !eligible(acct)) {
+      // Counts toward the lockout only for a real, eligible, unlocked account; the browser never learns about it.
+      if (acct && eligible(acct) && !isOperatorLocked(acct)) await recordOperatorFailure(req, acct, 'invalid_password');
+      return renderLogin(res, uid, { error: GENERIC_LOGIN_ERROR, email, status: 401 });
+    }
+    if (isOperatorLocked(acct)) {
+      await recordOperatorFailure(req, acct, 'locked');
+      return renderLogin(res, uid, { error: GENERIC_LOGIN_ERROR, email, status: 401 });
+    }
 
     const enrolled = acct.mfa?.enabled && acct.mfa?.secret_enc;
     await savePending(req, res, {
@@ -136,7 +145,7 @@ export function registerOperatorInteractions(app: Express, provider: OidcProvide
     const pending = pendingOf(d);
     if (!pending) return res.redirect(303, `${BASE}/interaction/${uid}`);
     const acct = await OperatorAccount.findById(pending.operator_id);
-    if (!eligible(acct)) return denied(req, res, 'sign-in no longer possible');
+    if (!eligible(acct) || isOperatorLocked(acct)) return denied(req, res, 'sign-in no longer possible');
 
     const enrolling = pending.stage === 'enrol';
     let secret: string;
@@ -154,9 +163,11 @@ export function registerOperatorInteractions(app: Express, provider: OidcProvide
       }
       acct.last_login_at = new Date();
       await acct.save();
+      await recordOperatorSuccess(req, acct);
       return provider.interactionFinished(req, res, { login: { accountId: acct._id.toString(), amr: ['pwd', 'otp'] } }, { mergeWithLastSubmission: false });
     }
 
+    if (await recordOperatorFailure(req, acct, 'invalid_code')) return denied(req, res, 'sign-in no longer possible');
     pending.attempts += 1;
     if (pending.attempts >= MAX_OTP_ATTEMPTS) return denied(req, res, 'too many invalid verification codes');
     await savePending(req, res, pending);

@@ -50,6 +50,7 @@ async function main() {
 
   // Env BEFORE identity config loads (Node fetch cannot resolve *.localhost subdomains on Windows).
   const tenantKey = await jose.exportJWK((await jose.generateKeyPair('RS256', { extractable: true })).privateKey);
+  const operatorKey = await jose.exportJWK((await jose.generateKeyPair('RS256', { extractable: true })).privateKey);
   const servicesKey = await jose.exportJWK((await jose.generateKeyPair('RS256', { extractable: true })).privateKey);
   const backend = await jose.generateKeyPair('RS256', { extractable: true });
   const backendPublic = { ...(await jose.exportJWK(backend.publicKey)), kid: 'smoke-backend-1', alg: 'RS256', use: 'sig' };
@@ -68,6 +69,8 @@ async function main() {
     OIDC_COOKIE_KEYS: crypto.randomBytes(32).toString('base64url'),
     IDENTITY_TENANT_KEY: JSON.stringify({ ...tenantKey, kid: 'tenant-smoke' }),
     IDENTITY_SERVICES_KEY: JSON.stringify({ ...servicesKey, kid: 'services-smoke' }),
+    OPERATOR_SPA_ORIGIN: ORIGIN,
+    IDENTITY_OPERATOR_KEY: JSON.stringify({ ...operatorKey, kid: 'operator-smoke' }),
     SERVICES_PRODUCTS_BACKEND_JWKS: JSON.stringify({ keys: [backendPublic] }),
   });
   delete process.env.ENTRA_CLIENT_ID;
@@ -314,6 +317,70 @@ async function main() {
     check('L3-9 the plain /login post_logout_redirect_uri stays registered (no error page)', res.status === 200 || (res.status === 303 && (res.headers.get('location') || '').startsWith(`${ORIGIN}/login`)), `${res.status} ${res.headers.get('location')}`);
     res = await me(t2.access_token || '');
     check('AT from logged-out session rejected (SESSION_REVOKED)', res.status === 401 && (await res.json() as { code?: string }).code === 'SESSION_REVOKED', res.status);
+
+    // ── Plan 0.4: operator sign-in lockout, OperatorSession, security events ───────────────────
+    {
+      const { OperatorAccount, OperatorSession, SecurityEvent } = await import('../models');
+      const { clearOperatorSessionCache } = await import('../operator/sessions');
+      const OP_EMAIL = 'lock.op@karbexa.test';
+      const OP_PASSWORD = 'Operator-Passw0rd!x';
+      const opSecret = generateSecret();
+      const opAcct = await OperatorAccount.create({
+        email: OP_EMAIL, full_name: 'Lock Op', password_hash: await bcrypt.hash(OP_PASSWORD, 12), roles: ['platform_admin'], status: 'active',
+        mfa: { enabled: true, secret_enc: encrypt(opSecret), verified_at: new Date() },
+      });
+      const OPREALM = `${ORIGIN}/realms/operator`;
+      const OPREDIRECT = `${ORIGIN}/operator/callback`;
+      const OPRESOURCE = 'urn:karbexa:operator';
+      const opVerifier = crypto.randomBytes(32).toString('base64url');
+      const opChallenge = crypto.createHash('sha256').update(opVerifier).digest('base64url');
+      jar.clear();
+      let r = await jarFetch(`${OPREALM}/oauth/authorize?${new URLSearchParams({
+        client_id: 'karbexa-operator-spa', response_type: 'code', redirect_uri: OPREDIRECT, scope: 'openid profile email',
+        code_challenge: opChallenge, code_challenge_method: 'S256', state: 's', resource: OPRESOURCE,
+      })}`);
+      const opUid = /\/interaction\/([^/?#]+)/.exec(r.headers.get('location') || '')?.[1];
+      const IX = `${OPREALM}/interaction/${opUid}`;
+      await jarFetch(IX);
+      let wrongStatuses: number[] = [];
+      for (let i = 0; i < 5; i++) wrongStatuses.push((await jarFetch(`${IX}/login`, form({ email: OP_EMAIL, password: 'wrong-password' }))).status);
+      check('0.4 five wrong operator passwords are all refused (401)', wrongStatuses.every((s) => s === 401), wrongStatuses);
+      let acctNow = await OperatorAccount.findById(opAcct._id);
+      check('0.4 the fifth failure locks the operator account for about 30 min', !!acctNow?.locked_until && acctNow.locked_until.getTime() - Date.now() > 25 * 60 * 1000, acctNow?.locked_until);
+      r = await jarFetch(`${IX}/login`, form({ email: OP_EMAIL, password: OP_PASSWORD }));
+      const lockedHtml = await r.text();
+      check('0.4 sixth attempt with the correct password still fails, with the generic error and no lock hint', r.status === 401 && /Incorrect email or password/.test(lockedHtml) && !/lock/i.test(lockedHtml), r.status);
+      check('0.4 SecurityEvent written for failures and the lock (realm operator, no company)',
+        (await SecurityEvent.countDocuments({ email: OP_EMAIL, event_type: 'login_failure' })) >= 5 && (await SecurityEvent.countDocuments({ email: OP_EMAIL, event_type: 'account_locked' })) === 1, 'events');
+
+      await OperatorAccount.updateOne({ _id: opAcct._id }, { $set: { locked_until: new Date(Date.now() - 1000) } });
+      r = await jarFetch(`${IX}/login`, form({ email: OP_EMAIL, password: OP_PASSWORD }));
+      check('0.4 after the lock expires the correct password is accepted', r.status === 303, r.status);
+      r = await jarFetch(`${IX}/mfa`, form({ code: '000000' }));
+      acctNow = await OperatorAccount.findById(opAcct._id);
+      check('0.4 a wrong TOTP code counts as a failed attempt', r.status === 200 && acctNow?.failed_attempts === 1, `${r.status} ${acctNow?.failed_attempts}`);
+      r = await jarFetch(`${IX}/mfa`, form({ code: await generateTotp({ secret: opSecret }) }));
+      let opCode: string | null = null;
+      for (let i = 0; i < 10 && r.status >= 300 && r.status < 400; i++) {
+        const loc = new URL(r.headers.get('location')!, ORIGIN);
+        if (loc.pathname === '/operator/callback') { opCode = loc.searchParams.get('code'); break; }
+        r = await jarFetch(loc.toString());
+      }
+      acctNow = await OperatorAccount.findById(opAcct._id);
+      check('0.4 successful sign-in resets the counter and records login_success', acctNow?.failed_attempts === 0 && !acctNow.locked_until && (await SecurityEvent.countDocuments({ email: OP_EMAIL, event_type: 'login_success' })) === 1, acctNow?.toObject());
+      const opTok = await (await fetch(`${OPREALM}/oauth/token`, form({
+        grant_type: 'authorization_code', code: opCode || '', redirect_uri: OPREDIRECT, client_id: 'karbexa-operator-spa', code_verifier: opVerifier, resource: OPRESOURCE,
+      }))).json() as Record<string, string>;
+      const opSid = opTok.access_token ? String(jose.decodeJwt(opTok.access_token).sid) : '';
+      const opSess = await OperatorSession.findById(opSid);
+      check('0.4 OperatorSession row upserted (_id = sid)', !!opSess && !opSess.revoked_at && String(opSess.operator_id) === String(opAcct._id), opSess?.toObject());
+      const callOp = () => fetch(`${ORIGIN}/operator/v1/orgs`, { headers: { authorization: `Bearer ${opTok.access_token}` } });
+      check('0.4 operator API accepts the token while the session is live', (await callOp()).status === 200, 'orgs');
+      await OperatorSession.updateOne({ _id: opSid }, { $set: { revoked_at: new Date(), revoked_reason: 'test' } });
+      clearOperatorSessionCache();
+      const afterRevoke = await callOp();
+      check('0.4 a revoked OperatorSession makes the next operator API call 401 INVALID_TOKEN', afterRevoke.status === 401 && (await afterRevoke.json() as { code?: string }).code === 'INVALID_TOKEN', afterRevoke.status);
+    }
   } finally {
     server.close();
     await mongoose.disconnect();

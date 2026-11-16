@@ -95,7 +95,7 @@ The global per-IP rate limiter in `app.ts` also applies. Envelope: `{ success: t
 
 | Model (file) | Key fields | Notes |
 |---|---|---|
-| `OperatorAccount` (`server/src/models/OperatorAccount.model.ts`) | `email`, `full_name`, `password_hash`, `mfa.{enabled, secret_enc, verified_at}`, `roles[]`, `status` (`active`/`suspended`/`invited`), `last_login_at` | `secret_enc` encrypted with `ENCRYPTION_KEY` (`lib/cryptoService.ts`) |
+| `OperatorAccount` (`server/src/models/OperatorAccount.model.ts`) | `email`, `full_name`, `password_hash`, `mfa.{enabled, secret_enc, verified_at}`, `roles[]`, `status` (`active`/`suspended`/`invited`), `last_login_at`, `failed_attempts`, `locked_until` | `secret_enc` encrypted with `ENCRYPTION_KEY` (`lib/cryptoService.ts`) |
 | `OperatorAuditEvent` (`OperatorAuditEvent.model.ts`) | `operator_id`, `operator_email`, `action`, `target_type`, `target_id`, `company_id`, `details`, `correlation_id`, `created_at` | Every operator write. When a company is involved, a tenant `AuditEvent` is also written with `source: 'operator'`, `module: 'operator'`, `actor_email: 'operator:<email>'` |
 | `Plan` (`Plan.model.ts`) | `key`, `name`, `products[]`, `status` (`active`/`archived`) | Default plans seeded by `seedProductRegistry` |
 | `OrganizationEntitlement` | `company_id`, `product_key`, `status`, `seats_limit`, `source`, `plan_key`, `updated_by_operator_id` | Unique per (company, product) |
@@ -132,8 +132,8 @@ No events for plan create/update, operator account changes, or IdP tenant approv
 
 ### Not built or partial ✗
 - **IdP tenant approval has no UI.** `GET /orgs/:id/identity-providers` and `POST .../approve-tenant` exist in the API only; `client/src/features/operator/operatorApi.ts` and the operator pages do not call them. An operator must call the API directly.
-- **No operator `Session` rows.** The operator realm does not call `ensureSessionForToken` (only the tenant realm does), so `GET /platform/v1/sessions/revocations?realm=operator` never returns anything. Suspending an operator takes effect on the next API call because `requireOperator` re-reads the account; outstanding refresh tokens fail at `extraTokenClaims`.
-- **No lockout or security events on operator login.** `server/src/operator/interactions.ts` only uses `authLimiter` (per-IP); there is no failed-attempt counter or `SecurityEvent` logging, unlike the tenant login.
+- **Operator sessions are in `OperatorSession`, not `Session`** (Plan 0.4). `GET /platform/v1/sessions/revocations?realm=operator` still returns nothing (that feed is tenant-only). Suspending an operator takes effect on the next API call because `requireOperator` re-reads the account; outstanding refresh tokens fail at `extraTokenClaims`.
+- **Operator sign-in lockout and sessions (Plan 0.4, built, tests not yet run).** 5 failed passwords or TOTP codes lock the account for 30 minutes (`OperatorAccount.failed_attempts`, `locked_until`; the browser always sees the generic error). Failed, locked and successful sign-ins write `SecurityEvent` rows (`company_id` null, `metadata.realm: 'operator'`). Each token issuance upserts an `OperatorSession` (`operator/sessions.ts`, idle 30 min); `requireOperator` returns 401 `INVALID_TOKEN` for a revoked session (15 s in-process cache). The counter resets on a full sign-in (password and code), not on the password step alone. Smoke cases: `smoke:login`, block "Plan 0.4".
 - **Operator TOTP enrolment shows only the setup key and an `otpauth://` link**, no QR code (`renderEnrol` in `server/src/operator/interactions.ts`; the tenant realm renders a QR).
 - **Plan edits do not propagate.** `PATCH /plans/:key` changes the plan only; orgs keep their entitlements until `PATCH /orgs/:id` is called again, and that call never removes products.
 - `seats_limit` is recorded, not enforced.

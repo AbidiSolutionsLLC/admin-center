@@ -9,6 +9,8 @@ export interface IOperatorAccount extends Document {
   roles: string[]; // launch: ['platform_admin']
   status: 'active' | 'suspended' | 'invited';
   last_login_at?: Date;
+  failed_attempts: number;
+  locked_until?: Date;
 }
 
 const OperatorAccountSchema = new Schema<IOperatorAccount>({
@@ -23,6 +25,8 @@ const OperatorAccountSchema = new Schema<IOperatorAccount>({
   roles: { type: [String], default: ['platform_admin'] },
   status: { type: String, enum: ['active', 'suspended', 'invited'], default: 'active' },
   last_login_at: Date,
+  failed_attempts: { type: Number, default: 0 },
+  locked_until: Date,
 }, { timestamps: { createdAt: 'created_at', updatedAt: 'updated_at' } });
 
 export const OperatorAccount = model<IOperatorAccount>('OperatorAccount', OperatorAccountSchema);

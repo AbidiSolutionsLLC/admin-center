@@ -13,6 +13,7 @@ import { makeAdapter, initAdapterIndexes, TENANT_MODELS, OPERATOR_MODELS, SERVIC
 import { findAccount, loadAccessContext } from './accounts';
 import { ensureSessionForToken, revokeSession, SessionDeniedError } from './sessions';
 import { findOperatorAccount } from '../operator/accounts';
+import { ensureOperatorSessionForToken, revokeOperatorSession, OperatorSessionDeniedError } from '../operator/sessions';
 import { escapeHtml, newNonce, pageCsp, pageShell, OPERATOR_SHELL } from './html';
 
 // ESM-only package loaded through require(esm) (03 §10.2); the library ships no TS types.
@@ -429,6 +430,15 @@ async function buildOperator(cookieKeys: string[]): Promise<OidcProvider> {
       if (!sid) throw new oidc.errors.InvalidGrant('token is not bound to a session');
       const acct = await findOperatorAccount(token.accountId);
       if (!acct) throw new oidc.errors.InvalidGrant('operator has no access');
+      try {
+        await ensureOperatorSessionForToken({ sid, operatorId: acct._id, ip: ctx?.ip, userAgent: ctx?.get?.('user-agent') || undefined });
+      } catch (err) {
+        if (err instanceof OperatorSessionDeniedError) {
+          await revokeOperatorSession(sid, err.reason === 'expired' ? 'expired' : 'denied');
+          throw new oidc.errors.InvalidGrant(`session ${err.reason}`);
+        }
+        throw err;
+      }
       return { email: acct.email, roles: acct.roles, sid, token_use: 'access', amr: amrFromContext(ctx) };
     },
   });

@@ -9,6 +9,7 @@ import { isIpInRange } from '../utils/ipUtils';
 import { asyncHandler } from '../utils/asyncHandler';
 import { IOperatorAccount } from '../models/OperatorAccount.model';
 import { findOperatorAccount } from './accounts';
+import { isOperatorSessionRevoked } from './sessions';
 
 declare global {
   namespace Express {
@@ -59,6 +60,8 @@ export const requireOperator = asyncHandler(async (req: Request, res: Response, 
     return res.status(401).json(INVALID);
   }
   if (claims.token_use !== 'access' || typeof claims.sub !== 'string') return res.status(401).json(INVALID);
+
+  if (typeof claims.sid === 'string' && (await isOperatorSessionRevoked(claims.sid))) return res.status(401).json(INVALID);
 
   const operator = await findOperatorAccount(claims.sub);
   if (!operator) return res.status(401).json(INVALID);
