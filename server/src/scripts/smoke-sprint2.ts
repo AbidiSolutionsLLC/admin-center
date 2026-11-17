@@ -1671,6 +1671,29 @@ async function main() {
       await OperatorAccount.updateOne({ email: 'op@karbexa.test' }, { $set: { roles: ['auditor'] } });
       check('4.11 auditor reads /security (200) and sessions (200) but cannot revoke (403)', (await op('/security')).status === 200 && (await op(`/operators/${created!._id}/sessions`)).status === 200 && (await op(`/operators/${created!._id}/sessions/x`, 'DELETE')).status === 403);
       await OperatorAccount.updateOne({ email: 'op@karbexa.test' }, { $set: { roles: ['platform_admin'] } });
+
+      // Plan 04 C7: session revocation on password change / MFA reset, and the last-platform_admin guard.
+      await OperatorSession.create({ _id: 'smoke-c7-a', operator_id: created!._id, idle_expires_at: new Date(Date.now() + 600_000) });
+      await OperatorSession.create({ _id: 'smoke-c7-b', operator_id: created!._id, idle_expires_at: new Date(Date.now() + 600_000) });
+      const pw = await op(`/operators/${created!._id}`, 'PATCH', { password: 'a-new-long-password-123' });
+      const pwAudit = await OperatorAuditEvent.findOne({ action: 'operator.updated', target_id: String(created!._id) }).sort({ created_at: -1 });
+      check('C7 a password change revokes every open session of that operator',
+        pw.status === 200 && !!(await OperatorSession.findById('smoke-c7-a'))?.revoked_at && !!(await OperatorSession.findById('smoke-c7-b'))?.revoked_at
+        && (pwAudit?.details as any)?.sessions_revoked === 2, JSON.stringify(pwAudit?.details ?? {}));
+      await OperatorSession.create({ _id: 'smoke-c7-c', operator_id: created!._id, idle_expires_at: new Date(Date.now() + 600_000) });
+      check('C7 an MFA reset revokes the open session', (await op(`/operators/${created!._id}`, 'PATCH', { reset_mfa: true })).status === 200 && !!(await OperatorSession.findById('smoke-c7-c'))?.revoked_at);
+      await OperatorSession.create({ _id: 'smoke-c7-d', operator_id: created!._id, idle_expires_at: new Date(Date.now() + 600_000) });
+      check('C7 a name change leaves sessions alone', (await op(`/operators/${created!._id}`, 'PATCH', { full_name: 'Renamed Op' })).status === 200 && !(await OperatorSession.findById('smoke-c7-d'))?.revoked_at);
+
+      const otherAdmins = await OperatorAccount.find({ _id: { $ne: me!._id }, status: 'active', roles: 'platform_admin' }).select('_id roles').lean();
+      await OperatorAccount.updateMany({ _id: { $in: otherAdmins.map((a) => a._id) } }, { $set: { roles: ['support'] } });
+      const demote = await op(`/operators/${me!._id}`, 'PATCH', { roles: ['support'] });
+      check('C7 demoting the last active platform_admin = 409 LAST_PLATFORM_ADMIN and nothing changes',
+        demote.status === 409 && (await json(demote)).code === 'LAST_PLATFORM_ADMIN' && (await OperatorAccount.findById(me!._id))!.roles.includes('platform_admin'));
+      await OperatorAccount.updateOne({ _id: created!._id }, { $set: { status: 'active', roles: ['platform_admin'] } });
+      const demoteOk = await op(`/operators/${created!._id}`, 'PATCH', { roles: ['support'] });
+      check('C7 demoting a platform_admin while another one is active = 200', demoteOk.status === 200);
+      for (const a of otherAdmins) await OperatorAccount.updateOne({ _id: a._id }, { $set: { roles: a.roles } });
       await OperatorAccount.deleteOne({ _id: created!._id });
     }
 

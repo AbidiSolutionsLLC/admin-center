@@ -29,6 +29,7 @@ import { generateEmployeeId } from '../services/employeeId';
 import { AppError } from '../utils/AppError';
 import { asyncHandler } from '../utils/asyncHandler';
 import { requireOperator } from './middleware';
+import { revokeAllOperatorSessions } from './sessions';
 import { buildAuditFilter, categoryOf, csvRow, CSV_COLUMNS, EXPORT_ROW_CAP, writeAudit, type AuditInput } from './audit';
 import { requirePermission, anyOperator, permissionsFor, operatorRolesSchema } from './permissions';
 import { findFirstAdmin, onboardingRoutes } from './onboarding';
@@ -508,13 +509,23 @@ router.patch('/operators/:id', requirePermission('operators.write'), asyncHandle
   const acct = await OperatorAccount.findById(oid(String(req.params.id)));
   if (!acct) throw new AppError('Operator not found', 404, 'NOT_FOUND');
   if (b.status === 'suspended' && acct._id.equals(req.operator!._id)) throw new AppError('You cannot suspend your own account', 409, 'SELF_SUSPEND');
+  // Plan 04 C7 (7.2 finding 4): never leave the platform without an active platform_admin.
+  const losesAdmin = acct.status === 'active' && acct.roles.includes('platform_admin')
+    && (b.status === 'suspended' || (b.roles !== undefined && !b.roles.includes('platform_admin')));
+  if (losesAdmin) {
+    const others = await OperatorAccount.countDocuments({ _id: { $ne: acct._id }, status: 'active', roles: 'platform_admin' });
+    if (others === 0) throw new AppError('This is the last active platform administrator', 409, 'LAST_PLATFORM_ADMIN');
+  }
   if (b.full_name !== undefined) acct.full_name = b.full_name;
   if (b.status !== undefined) acct.status = b.status;
   if (b.roles !== undefined) acct.roles = b.roles;
   if (b.password !== undefined) acct.password_hash = await bcrypt.hash(b.password, 12);
   if (b.reset_mfa) acct.mfa = { enabled: false };
   await acct.save();
-  await audit(req, { action: 'operator.updated', target_type: 'Operator', target_id: acct._id.toString(), details: { fields: Object.keys(b).filter((k) => k !== 'password') , password_changed: b.password !== undefined } });
+  // Plan 04 C7 (7.2 finding 4): a new password, an MFA reset or a suspension ends the operator's open sessions.
+  const revokeReason = b.password !== undefined ? 'password_changed' : b.reset_mfa ? 'mfa_reset' : b.status === 'suspended' ? 'suspended' : null;
+  const sessionsRevoked = revokeReason ? await revokeAllOperatorSessions(acct._id, revokeReason) : 0;
+  await audit(req, { action: 'operator.updated', target_type: 'Operator', target_id: acct._id.toString(), details: { fields: Object.keys(b).filter((k) => k !== 'password') , password_changed: b.password !== undefined, sessions_revoked: sessionsRevoked } });
   ok(res, opOut(acct));
 }));
 

@@ -23,6 +23,17 @@ export async function revokeOperatorSession(sid: string, reason: string): Promis
   revokedCache.delete(sid);
 }
 
+/** Revoke every open session of one operator (password change, MFA reset, suspension: plan 04 C7). Returns the count. */
+export async function revokeAllOperatorSessions(operatorId: Types.ObjectId | string, reason: string): Promise<number> {
+  const operator_id = typeof operatorId === 'string' ? new Types.ObjectId(operatorId) : operatorId;
+  // `as never`: the model types operator_id as Schema.Types.ObjectId (same cast as operator/security.ts).
+  const ids = (await OperatorSession.distinct('_id', { operator_id, revoked_at: { $exists: false } } as never)).map(String);
+  if (!ids.length) return 0;
+  await OperatorSession.updateMany({ _id: { $in: ids }, revoked_at: { $exists: false } }, { $set: { revoked_at: new Date(), revoked_reason: reason } });
+  for (const id of ids) revokedCache.delete(id);
+  return ids.length;
+}
+
 /** Upsert the OperatorSession on token issuance, refuse revoked/idle-expired ones, slide the idle expiry. */
 export async function ensureOperatorSessionForToken(p: { sid: string; operatorId: Types.ObjectId | string; ip?: string; userAgent?: string }): Promise<IOperatorSession> {
   const now = new Date();
