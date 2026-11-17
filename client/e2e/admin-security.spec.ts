@@ -6,6 +6,7 @@ test.beforeEach(async ({ page }) => { await signInTenant(page, { permissions: ['
 
 test('the five tabs are present and the active one is kept in the URL', async ({ page }) => {
   await page.route('**/api/v1/security/**', (route) => fulfillJson(route, { success: true, data: [] }));
+  await page.route('**/api/v1/security/events**', (route) => fulfillJson(route, { success: true, data: { events: [], pagination: { total: 0, page: 1, limit: 20, totalPages: 0 } } }));
   await page.goto('/security?tab=access-log');
   await expect(page.getByRole('heading', { name: 'Security', level: 1 })).toBeVisible();
   for (const name of ['Security policy', 'Identity providers', 'IP restrictions', 'Access log', 'Active sessions']) {

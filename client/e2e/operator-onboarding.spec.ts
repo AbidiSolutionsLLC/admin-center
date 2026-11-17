@@ -72,12 +72,12 @@ test('empty and error states', async ({ page }) => {
 
 test('tenant Onboarding tab: stage, invitation facts and resend for a pending first admin', async ({ page }) => {
   let posted = false;
+  await page.route('**/operator/v1/orgs/c1/**', (route) => fulfillJson(route, { success: true, data: [] }));
   await page.route('**/operator/v1/orgs/c1', (route) =>
     fulfillJson(route, { success: true, data: { id: 'c1', slug: 'acme', name: 'Acme', status: 'active', plan_key: 'pro', members_total: 1, members_active: 0, tags: [], first_admin: { email: 'admin@acme.test', full_name: 'Acme Admin', lifecycle_state: 'invited' } } })
   );
   await page.route('**/operator/v1/orgs/c1/onboarding', (route) => fulfillJson(route, { success: true, data: ROWS[0] }));
   await page.route('**/operator/v1/orgs/c1/onboarding/resend-invite', (route) => { posted = true; return fulfillJson(route, { success: true, data: {} }); });
-  await page.route('**/operator/v1/orgs/c1/**', (route) => fulfillJson(route, { success: true, data: [] }));
   await page.goto('/operator/organizations/c1?tab=onboarding');
   await expect(page.getByText('awaiting acceptance')).toBeVisible();
   await expect(page.getByText('Acme Admin (admin@acme.test)')).toBeVisible();

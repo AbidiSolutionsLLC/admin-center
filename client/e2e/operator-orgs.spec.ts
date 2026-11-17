@@ -32,9 +32,10 @@ test('filters and sort go to the API and the URL', async ({ page }) => {
   });
   await page.goto('/operator/organizations');
   await page.getByLabel('Plan').selectOption('professional');
-  await page.getByLabel('Sort').selectOption('members');
-  await page.getByRole('button', { name: 'In trial' }).click();
   await expect(page).toHaveURL(/plan=professional/);
+  await page.getByLabel('Sort').selectOption('members');
+  await expect(page).toHaveURL(/sort=members/);
+  await page.getByRole('button', { name: 'In trial' }).click();
   await expect(page).toHaveURL(/sort=members/);
   await expect(page).toHaveURL(/trial=true/);
   await expect.poll(() => seen.some((q) => q.get('plan') === 'professional' && q.get('sort') === 'members' && q.get('trial') === 'true')).toBe(true);

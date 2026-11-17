@@ -10,7 +10,8 @@ const progress = (done: boolean[]) => ({
 async function mock(page: Page, done: boolean[]) {
   await signInTenant(page);
   await page.route('**/api/v1/overview/setup-progress', (route) => fulfillJson(route, { success: true, data: progress(done) }));
-  await page.route('**/api/v1/overview/**', (route) => fulfillJson(route, { success: true, data: {} }));
+  await page.route('**/api/v1/overview/**', (route) => fulfillJson(route, { success: true, data: [] }));
+  await page.route('**/api/v1/overview/stats', (route) => fulfillJson(route, { success: true, data: { users: { total: 0, active: 0, invited: 0 }, departments: { total: 0, active: 0, invited: 0 }, apps: { total: 0, active: 0, invited: 0 }, roles: { total: 0, active: 0, invited: 0 } } }));
   await page.route('**/api/v1/overview/setup-progress', (route) => fulfillJson(route, { success: true, data: progress(done) }));
 }
 

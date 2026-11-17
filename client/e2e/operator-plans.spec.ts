@@ -31,15 +31,15 @@ test('empty: explains and offers Create plan', async ({ page }) => {
 });
 
 test('error: shows the error state and Retry loads the list', async ({ page }) => {
-  let calls = 0;
+  let failing = true; // the app retries a failed read itself, so keep failing until the error state shows
   await page.route(PLANS, (route) => {
-    calls += 1;
-    return calls === 1
+    return failing
       ? fulfillJson(route, { success: false, error: 'boom' }, 500)
       : fulfillJson(route, { success: true, data: plans });
   });
   await page.goto('/operator/plans');
   await expect(page.getByText('Failed to load data')).toBeVisible();
+  failing = false;
   await page.getByRole('button', { name: 'Retry' }).click();
   await expect(page.getByRole('row', { name: /starter/i })).toBeVisible();
 });

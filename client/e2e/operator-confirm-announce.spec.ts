@@ -38,7 +38,7 @@ test('create organization runs in three steps', async ({ page }) => {
   await page.getByRole('button', { name: /Create|New|Add/ }).first().click();
   await expect(page.getByText('step 1 of 3')).toBeVisible();
   await page.getByPlaceholder('Organization name').fill('Globex');
-  await page.getByLabel('Plan').selectOption('professional');
+  await page.getByRole('dialog').getByLabel('Plan').selectOption('professional');
   await page.getByRole('button', { name: 'Next' }).click();
   await expect(page.getByText('step 2 of 3')).toBeVisible();
   await page.getByPlaceholder('First admin full name').fill('Ada Admin');
