@@ -2168,6 +2168,55 @@ async function main() {
       check('5.7 another tenant is unaffected: its organization and invite steps stay open', done(oc, 'organization') === false && done(oc, 'invite_people') === false, JSON.stringify(oc));
     }
 
+    // ── Plan 7.3: tenant isolation for each new company_id collection (Invitation, EmailDelivery, SeatUsage, TenantNote, TenantDailyStat, AttentionItem) ──
+    {
+      const { Invitation: InvIso, SeatUsage: SeatIso, TenantNote: NoteIso, TenantDailyStat: StatIso, AttentionItem: AttIso, EmailDelivery: DelIso } = await import('../models');
+      const json = async (r: Response) => (await r.json()) as any;
+      const A = await tenantCtx('iso73a');
+      const B = await tenantCtx('iso73b');
+      await B.call('/people/invite', 'POST', { full_name: 'Iso Member', email: 'iso.member@iso73b.test' });
+      const bm = await User.findOne({ company_id: B.cid, email: 'iso.member@iso73b.test' });
+      const bInv = bm ? await InvIso.findOne({ company_id: B.cid, user_id: bm._id }) : null;
+      check('7.3 setup: tenant B has a pending invitation and a delivery row', !!bInv && bInv.state === 'pending' && (await DelIso.countDocuments({ company_id: B.cid })) > 0);
+      const invCountB = await InvIso.countDocuments({ company_id: B.cid });
+      const delCountB = await DelIso.countDocuments({ company_id: B.cid });
+
+      // Invitation + EmailDelivery: tenant A addresses B's member by id.
+      check('7.3 Invitation: A cannot read the invitation panel of B\'s member = 404', (await A.call(`/people/${bm?._id}/invitation`)).status === 404);
+      check('7.3 Invitation: A cannot revoke B\'s invitation = 404 and it stays pending', (await A.call(`/people/${bm?._id}/invitation/revoke`, 'POST')).status === 404 && (await InvIso.findById(bInv?._id))?.state === 'pending');
+      check('7.3 Invitation: A cannot resend B\'s invitation = 404; no row or delivery is added to B', (await A.call(`/people/${bm?._id}/resend-invite`, 'POST')).status === 404 && (await InvIso.countDocuments({ company_id: B.cid })) === invCountB && (await DelIso.countDocuments({ company_id: B.cid })) === delCountB);
+      check('7.3 Invitation: nothing was written to A by those calls', (await InvIso.countDocuments({ company_id: A.cid, user_id: bm?._id })) === 0);
+
+      // SeatUsage: each tenant sees only its own count.
+      await SeatIso.updateOne({ company_id: A.cid, product_key: 'people' }, { $set: { used: 2, computed_at: new Date() } }, { upsert: true });
+      await SeatIso.updateOne({ company_id: B.cid, product_key: 'people' }, { $set: { used: 7, computed_at: new Date() } }, { upsert: true });
+      const seatsOf = async (t: typeof A) => ((await (await t.call('/organization/subscription')).json()) as any).data.products.find((p: any) => p.product_key === 'people').seats_used;
+      // A fire-and-forget recompute (lib/seats.ts) can still be running after provisioning and overwrite the stored count, so wait for the counts to settle.
+      let sa = -1, sb = -1;
+      for (let n = 0; n < 10 && !(sa === 2 && sb === 7); n++) {
+        await SeatIso.updateOne({ company_id: A.cid, product_key: 'people' }, { $set: { used: 2, computed_at: new Date() } });
+        await SeatIso.updateOne({ company_id: B.cid, product_key: 'people' }, { $set: { used: 7, computed_at: new Date() } });
+        [sa, sb] = [await seatsOf(A), await seatsOf(B)];
+      }
+      check('7.3 SeatUsage: each subscription shows only its own seats_used (2 and 7)', sa === 2 && sb === 7, `A=${sa} B=${sb}`);
+
+      // Operator side: notes, products and seats are per organisation.
+      const nA = await op(`/orgs/${A.cid}/notes`, 'POST', { body: 'note for A' });
+      const nAj = await json(nA);
+      const listB = (await json(await op(`/orgs/${B.cid}/notes`))).data as any[];
+      check('7.3 TenantNote: a note on A is not in the list for B', nA.status === 201 && !listB.some((n) => n.id === nAj.data.id));
+      check('7.3 TenantNote: deleting A\'s note through B = 404 and the note stays', (await op(`/orgs/${B.cid}/notes/${nAj.data.id}`, 'DELETE')).status === 404 && !!(await NoteIso.findById(nAj.data.id)));
+      const prodB = ((await json(await op(`/orgs/${B.cid}/products`))).data as any[]).find((p) => p.product_key === 'people');
+      check('7.3 SeatUsage: operator products view of B shows B\'s seats (7), not A\'s', JSON.stringify(prodB).includes('7') && !JSON.stringify(prodB).includes('"used":2'), JSON.stringify(prodB));
+
+      // TenantDailyStat and AttentionItem have no tenant-facing reader: a tenant token must not reach the operator API.
+      await StatIso.updateOne({ company_id: B.cid, day: new Date(Date.UTC(2026, 0, 1)) }, { $set: { admins_without_mfa: 1 } }, { upsert: true });
+      await AttIso.updateOne({ kind: 'admins_without_mfa', company_id: B.cid, open: true }, { $set: { severity: 'warning', summary: 'iso', first_seen_at: new Date(), last_seen_at: new Date() } }, { upsert: true });
+      const tenantToOp = await op('/overview', 'GET', undefined, 'not-an-operator-token');
+      check('7.3 TenantDailyStat/AttentionItem: no tenant-facing route; a non-operator token gets 401 from /operator/v1', tenantToOp.status === 401, tenantToOp.status);
+      check('7.3 TenantDailyStat/AttentionItem: rows are keyed by company_id (A has none of B\'s)', (await StatIso.countDocuments({ company_id: A.cid, admins_without_mfa: { $gt: 0 } })) === 0 && (await AttIso.countDocuments({ company_id: A.cid, open: true })) === 0);
+    }
+
     // ── audit ─────────────────────────────────────────────────────────────────────────────
     const actions = (await OperatorAuditEvent.find()).map((e) => e.action);
     check('E10 operator audit recorded', ['org.provisioned', 'entitlement.updated', 'org.suspended', 'org.reactivated'].every((a) => actions.includes(a)), actions);
