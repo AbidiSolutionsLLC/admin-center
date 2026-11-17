@@ -20,8 +20,19 @@ export const useUserStats = () => {
   return useQuery<UserStats>({
     queryKey: QUERY_KEYS.USER_STATS,
     queryFn: async () => {
-      const { data } = await apiClient.get('/people');
-      const users = data.data;
+      // One row is enough: the first page's meta carries the counts for the whole company.
+      const { data } = await apiClient.get('/people', { params: { limit: 1 } });
+      const byState = data.meta?.counts_by_state as Record<string, number> | undefined;
+      if (byState) {
+        return {
+          total: Object.values(byState).reduce((a, b) => a + b, 0),
+          active: byState.active ?? 0,
+          invited: byState.invited ?? 0,
+          on_leave: byState.on_leave ?? 0,
+          terminated: byState.terminated ?? 0,
+        };
+      }
+      const users = data.data; // a server without paging returns every member
 
       const stats: UserStats = {
         total: users.length,

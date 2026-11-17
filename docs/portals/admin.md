@@ -110,7 +110,7 @@ The controller is in the file named after the mount unless the row says otherwis
 
 | Method | Path | Access | Handler |
 |---|---|---|---|
-| GET | `/people` | auth | `getUsers` |
+| GET | `/people` | auth | `getUsers`: newest first, paged. Query: `limit` (default 50, at most 200), `cursor` (the previous page's `meta.next_cursor`), plus the filters `lifecycle_state`, `department_id`, `employment_type`, `search`. `meta` = `{ limit, next_cursor }` and, on the first page only, `total` (rows matching the filters) and `counts_by_state` (the whole company). An invalid cursor is 400 |
 | GET | `/people/form-metadata` | PEOPLE_ADMINS | `getFormMetadata` |
 | GET | `/people/export` | PEOPLE_ADMINS (+ `people:export:all` permission inside) | `exportUsers` |
 | POST | `/people/invite` | PEOPLE_ADMINS | `inviteUser` |
@@ -437,7 +437,7 @@ No platform events are emitted by: policies, workflows, data fields, integration
 - 5.7 fix: the setup checklist's "assign apps" step counts only assignments whose target is not the default "All Members" group.
 
 ### Known issues
-- **`GET /people` has no paging** (found in Phase 7.4): it returns every member with six populates and a per-member data-integrity check, and ignores `limit` and `page`. At 5,000 members it returns 2.7 MB in 12 to 25 s; an organisation of about 10 members is fine. `?search=` is an unanchored regex (1.2 s at 5,000). Needs an additive `limit`/`cursor` and an owner decision (plan section 14, 7.4).
+- **`GET /people` is paged since Phase 7.4 (default 50), but the People page and the user pickers still load every member.** `useUsers` reads every page (200 at a time) and `useUserStats` reads `meta.counts_by_state`, so screens behave as before, and one request is now cheap (a page of 50: about 0.35 to 0.75 s and 28 KB at 5,000 members, was 12 to 25 s and 2.7 MB). Reading the whole list is still slow for a very large organisation, and each member on a page still costs about one extra query (the integrity check). Moving the People page to server-side paging and filters (its search, location and incomplete-data filters and select-all work on the loaded list) is a separate client task. `?search=` is an unanchored regex (about 1.3 s at 5,000 members).
 - `useUrlParam` builds each update from the router's render-time snapshot, so two filter changes in the same frame can drop the first.
 - The `App` slug index (`partialFilterExpression` with `$exists: false`) cannot be built by MongoDB, so uniqueness of system app slugs is not enforced by an index.
 - ~~**Security → Active sessions is dead.**~~ **Fixed in elevation 5.2** (built; run in Phase 7, 2026-11-17). `getActiveSessions` lists live tenant-realm `Session` rows of the company (not revoked, idle and absolute expiry in the future); `terminateSession` takes the session id (`sid`), looks it up by `company_id`, and revokes it with `revokeSessionsTx` (reason `admin_terminated`, `session.revoked` event, security event, audit `security.session_terminated`, then provider teardown), as `forceLogoutUser` does. The response keeps its old field names (`ip_address`, `user_agent`, `last_activity_at`).

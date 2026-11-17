@@ -52,6 +52,7 @@ interface UserFilter {
   employment_type?: EmploymentType;
   is_active?: boolean;
   $or?: Array<Record<string, unknown>>;
+  $and?: Array<Record<string, unknown>>;
 }
 
 const getRouteId = (param: string | string[]): string =>
@@ -745,10 +746,19 @@ export const getFormMetadata = asyncHandler(async (req: Request, res: Response) 
   });
 });
 
+const PEOPLE_DEFAULT_LIMIT = 50;
+const PEOPLE_MAX_LIMIT = 200;
+const encodePeopleCursor = (at: Date, id: Types.ObjectId): string => Buffer.from(`${at.getTime()}.${String(id)}`).toString('base64url');
+function decodePeopleCursor(raw: string): { at: Date; id: Types.ObjectId } | null {
+  const m = /^(\d{1,15})\.([0-9a-f]{24})$/.exec(Buffer.from(raw, 'base64url').toString('utf8'));
+  return m ? { at: new Date(Number(m[1])), id: new Types.ObjectId(m[2]) } : null;
+}
+
 /**
  * GET /people
- * Returns all users for the requesting company with optional filters.
- * Supports filtering by lifecycle_state, department_id, employment_type.
+ * Returns the requesting company's users, newest first, with optional filters (lifecycle_state, department_id,
+ * employment_type, search). Paged: `limit` (default 50, at most 200) and `cursor` (from `meta.next_cursor`).
+ * `meta` = { limit, next_cursor } plus, on the first page, { total, counts_by_state }.
  */
 export const getUsers = asyncHandler(async (req: Request, res: Response) => {
   const { lifecycle_state, department_id, employment_type, search } = req.query;
@@ -789,7 +799,18 @@ export const getUsers = asyncHandler(async (req: Request, res: Response) => {
     ];
   }
 
-  const users = await User.find(filter)
+  // Paging (Phase 7.4): newest first, `limit` (default 50, at most 200) and an opaque `cursor` from the previous page's
+  // `meta.next_cursor`. The first page (no cursor) also reports `meta.total` (rows matching the filters) and
+  // `meta.counts_by_state` (the whole company), so a stats row needs no second full read.
+  const rawLimit = Number(req.query.limit);
+  const limit = Number.isInteger(rawLimit) && rawLimit > 0 ? Math.min(rawLimit, PEOPLE_MAX_LIMIT) : PEOPLE_DEFAULT_LIMIT;
+  const cursor = typeof req.query.cursor === 'string' && req.query.cursor ? decodePeopleCursor(req.query.cursor) : null;
+  if (req.query.cursor && !cursor) throw new AppError('Invalid cursor', 400, 'BAD_REQUEST');
+  if (cursor) {
+    filter.$and = [{ $or: [{ created_at: { $lt: cursor.at } }, { created_at: cursor.at, _id: { $lt: cursor.id } }] }];
+  }
+
+  const rows = await User.find(filter)
     .select('-password_hash -refresh_token_hash')
     .populate('department_id', 'name slug')
     .populate('team_id', 'name slug')
@@ -797,15 +818,30 @@ export const getUsers = asyncHandler(async (req: Request, res: Response) => {
     .populate('secondary_manager_ids', 'full_name email avatar_url')
     .populate('location_id', 'name timezone')
     .populate('delegates.user_id', 'full_name email avatar_url')
-    .sort({ created_at: -1 })
+    .sort({ created_at: -1, _id: -1 })
+    .limit(limit + 1)
     .lean();
+  const users = rows.slice(0, limit);
+  const last = users[users.length - 1] as { created_at: Date; _id: Types.ObjectId } | undefined;
+  const next_cursor = rows.length > limit && last ? encodePeopleCursor(last.created_at, last._id) : null;
 
   // Check data integrity for each user (async, but don't await to avoid blocking)
   users.forEach(user => checkAndFlagUserDataIntegrity(user, req.user.company_id));
 
   const enriched = await enrichUsers(users, req.user.company_id);
   const safeData = await applyDataGovernanceRead(req.user, 'User', enriched);
-  res.status(200).json({ success: true, data: safeData });
+  const meta: Record<string, unknown> = { limit, next_cursor };
+  if (!cursor) {
+    const companyObjectId = new Types.ObjectId(String(req.user.company_id));
+    const { $and: _unused, ...countFilter } = filter;
+    const [total, byState] = await Promise.all([
+      User.countDocuments(countFilter as never),
+      User.aggregate<{ _id: string; n: number }>([{ $match: { company_id: companyObjectId } }, { $group: { _id: '$lifecycle_state', n: { $sum: 1 } } }]),
+    ]);
+    meta.total = total;
+    meta.counts_by_state = Object.fromEntries(byState.map((r) => [r._id, r.n]));
+  }
+  res.status(200).json({ success: true, data: safeData, meta });
 });
 
 /**

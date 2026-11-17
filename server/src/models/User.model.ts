@@ -106,6 +106,7 @@ UserSchema.index({ company_id: 1, email: 1 }, { unique: true });
 UserSchema.index({ company_id: 1, identity_id: 1 }, { unique: true, partialFilterExpression: { identity_id: { $exists: true } } });
 UserSchema.index({ company_id: 1, employee_id: 1 }, { unique: true });
 UserSchema.index({ company_id: 1, lifecycle_state: 1 });
+UserSchema.index({ company_id: 1, created_at: -1, _id: -1 }); // GET /people cursor paging (newest first)
 UserSchema.index({ company_id: 1, department_id: 1 });
 UserSchema.index({ last_login: 1 });
 UserSchema.index({ company_id: 1, manager_id: 1 });

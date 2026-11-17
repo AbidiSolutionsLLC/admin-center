@@ -6,14 +6,22 @@ import type { User, LifecycleState } from '@/types';
 
 /**
  * Fetches all users for the current company.
- * Used on: PeoplePage, UserTable.
+ * Used on: PeoplePage, UserTable, and the user pickers.
+ * GET /people is paged (default 50), so this reads every page (200 at a time) until `meta.next_cursor` is empty.
+ * A server without paging answers with no `meta`, which ends the loop after the first response.
  */
 export const useUsers = () => {
   return useQuery<User[]>({
     queryKey: QUERY_KEYS.USERS,
     queryFn: async () => {
-      const { data } = await apiClient.get('/people');
-      return data.data;
+      const all: User[] = [];
+      let cursor: string | undefined;
+      do {
+        const { data } = await apiClient.get('/people', { params: { limit: 200, cursor } });
+        all.push(...data.data);
+        cursor = data.meta?.next_cursor ?? undefined;
+      } while (cursor);
+      return all;
     },
     staleTime: 1000 * 60 * 2,
     retry: 2,

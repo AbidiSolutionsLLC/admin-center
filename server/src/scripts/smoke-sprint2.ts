@@ -2217,6 +2217,59 @@ async function main() {
       check('7.3 TenantDailyStat/AttentionItem: rows are keyed by company_id (A has none of B\'s)', (await StatIso.countDocuments({ company_id: A.cid, admins_without_mfa: { $gt: 0 } })) === 0 && (await AttIso.countDocuments({ company_id: A.cid, open: true })) === 0);
     }
 
+    // ── Phase 7.4 follow-up: GET /people is paged (default 50, cursor, first-page total and counts) ──
+    {
+      const json = async (r: Response) => (await r.json()) as any;
+      const A = await tenantCtx('page74a');
+      const B = await tenantCtx('page74b');
+      const base = Date.now() - 3_600_000;
+      const mk = (cid: any, i: number, tag: string) => ({
+        company_id: cid, full_name: `Pg74 ${tag} ${i}`, email: `pg74.${tag}.${i}@page74.test`, password_hash: 'x', employee_id: `PG74-${tag}-${i}`, role: 'Employee',
+        lifecycle_state: i % 2 ? 'invited' : 'active', is_active: i % 2 === 0, created_at: new Date(base + Math.floor(i / 3) * 1000), // three members share each timestamp: the id breaks the tie
+      });
+      await User.collection.insertMany([...Array.from({ length: 120 }, (_, i) => mk(A.cid, i, 'a')), ...Array.from({ length: 3 }, (_, i) => mk(B.cid, i, 'b'))].map((u) => ({ ...u, _id: new mongoose.Types.ObjectId(), company_id: new mongoose.Types.ObjectId(String(u.company_id)), updated_at: new Date() })));
+      const walk = async (t: typeof A, query: string, limit: number) => {
+        const ids: string[] = [];
+        let cursor = '';
+        let pages = 0;
+        do {
+          const r = await json(await t.call(`/people?limit=${limit}${query}${cursor ? `&cursor=${cursor}` : ''}`));
+          ids.push(...r.data.map((u: any) => String(u._id)));
+          cursor = r.meta?.next_cursor ?? '';
+          pages += 1;
+        } while (cursor && pages < 50);
+        return ids;
+      };
+
+      const d = await json(await A.call('/people'));
+      check('7.4 GET /people with no params returns the first 50 and a next cursor', d.data.length === 50 && typeof d.meta?.next_cursor === 'string' && d.meta.limit === 50, `${d.data.length} ${JSON.stringify(d.meta)?.slice(0, 120)}`);
+      check('7.4 first page reports total (121) and counts_by_state for the whole company', d.meta?.total === 121 && d.meta?.counts_by_state?.active === 61 && d.meta?.counts_by_state?.invited === 60, JSON.stringify(d.meta));
+      const all = await json(await A.call('/people?limit=200'));
+      check('7.4 limit=200 returns every member (121) and no next cursor', all.data.length === 121 && all.meta?.next_cursor === null, `${all.data.length} ${all.meta?.next_cursor}`);
+      check('7.4 limit above 200 is capped at 200', (await json(await A.call('/people?limit=1000'))).meta?.limit === 200);
+      const bad = await Promise.all(['abc', '0', '-5', '2.5'].map(async (l) => (await json(await A.call(`/people?limit=${l}`))).meta?.limit));
+      check('7.4 a missing, zero, negative, fractional or non-numeric limit falls back to 50', bad.every((l) => l === 50), bad);
+
+      const ids = await walk(A, '', 25);
+      const expected = (await User.find({ company_id: A.cid }).sort({ created_at: -1, _id: -1 }).select('_id').lean()).map((u) => String(u._id));
+      check('7.4 walking the cursor at limit 25 gives every member once, in created_at then _id order (ties included)', ids.length === 121 && new Set(ids).size === 121 && ids.join() === expected.join(), `${ids.length}/${new Set(ids).size}`);
+      const p2 = await json(await A.call(`/people?limit=25&cursor=${d.meta.next_cursor}`));
+      check('7.4 later pages omit total and counts (only the first page computes them)', p2.meta && !('total' in p2.meta) && !('counts_by_state' in p2.meta), JSON.stringify(p2.meta));
+      const badCursor = await A.call('/people?cursor=not-a-cursor');
+      check('7.4 an invalid cursor = 400', badCursor.status === 400, badCursor.status);
+
+      const inv = await json(await A.call('/people?lifecycle_state=invited&limit=25'));
+      check('7.4 a filter keeps working with paging: invited total is 60 and every row is invited', inv.meta?.total === 60 && inv.data.every((u: any) => u.lifecycle_state === 'invited'), inv.meta?.total);
+      check('7.4 filter + cursor walk returns all 60 invited once', (await walk(A, '&lifecycle_state=invited', 25)).length === 60);
+      const srch = await json(await A.call('/people?search=Pg74&limit=40'));
+      check('7.4 search works with paging: 120 matches, 40 returned', srch.meta?.total === 120 && srch.data.length === 40 && !!srch.meta?.next_cursor, srch.meta?.total);
+
+      const bAll = await walk(B, '', 50);
+      const aSet = new Set(ids);
+      check('7.4 tenant isolation: B sees only its own 4 members and none of A\'s', bAll.length === 4 && !bAll.some((i) => aSet.has(i)), bAll.length);
+      check('7.4 B\'s counts do not include A\'s members', (await json(await B.call('/people?limit=1'))).meta?.total === 4);
+    }
+
     // ── audit ─────────────────────────────────────────────────────────────────────────────
     const actions = (await OperatorAuditEvent.find()).map((e) => e.action);
     check('E10 operator audit recorded', ['org.provisioned', 'entitlement.updated', 'org.suspended', 'org.reactivated'].every((a) => actions.includes(a)), actions);

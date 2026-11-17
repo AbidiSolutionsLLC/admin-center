@@ -10,11 +10,11 @@ const retry = (page: Page) => expect(page.getByRole('button', { name: /retry|try
 test.beforeEach(async ({ page }) => { await signInTenant(page, { permissions: ['people:read:all', 'policies:read:all', 'workflows:read:all', 'locations:read:all', 'organization:update:all'] }); });
 
 test('People: header with Invite user, and the error state', async ({ page }) => {
-  await empty(page, '**/api/v1/people');
+  await empty(page, '**/api/v1/people**'); // the list is read with ?limit=200 (paged)
   await page.goto('/people');
   await expect(page.getByRole('heading', { name: 'People', level: 1 })).toBeVisible();
   await expect(page.getByRole('button', { name: 'Invite user', exact: true })).toBeVisible();
-  await failing(page, '**/api/v1/people');
+  await failing(page, '**/api/v1/people**');
   await page.reload();
   await retry(page);
 });
