@@ -23,6 +23,7 @@
     "smoke:login": "ts-node -T src/scripts/smoke-oidc-login.ts",
     "smoke:sprint2": "ts-node -T src/scripts/smoke-sprint2.ts",
     "perf:lists": "ts-node -T src/scripts/perf-lists.ts",
+    "walk:server": "ts-node -T src/scripts/walk-server.ts",
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {
