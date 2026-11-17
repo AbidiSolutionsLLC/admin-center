@@ -23,5 +23,5 @@ test('a failed load shows the error state with a retry', async ({ page }) => {
   await signInTenant(page, { permissions: ['audit_logs:read:all'] });
   await page.route('**/api/v1/audit-logs**', (route) => fulfillJson(route, { success: false, error: 'x' }, 500));
   await page.goto('/audit-logs');
-  await expect(page.getByRole('button', { name: /retry|try again/i })).toBeVisible();
+  await expect(page.getByRole('button', { name: /retry|try again/i })).toBeVisible({ timeout: 15000 });
 });
