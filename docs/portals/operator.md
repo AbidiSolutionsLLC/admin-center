@@ -103,7 +103,7 @@ The global per-IP rate limiter in `app.ts` also applies. Envelope: `{ success: t
 | POST | `/operators` | `{ email, full_name, password (≥12), roles? }` | Create (bcrypt cost 12, default roles `['platform_admin']`; roles from the four operator roles) |
 | PATCH | `/operators/:id` | partial `{ full_name, status ('active'\|'suspended'), roles, password, reset_mfa }` | Update; 409 `SELF_SUSPEND` when suspending yourself. `reset_mfa: true` sets `mfa = { enabled: false }` so the next login re-enrols |
 
-**Provisioning (`POST /orgs`) in order** (`routes.ts`, Plan 2.5, built, tests not yet run):
+**Provisioning (`POST /orgs`) in order** (`routes.ts`, Plan 2.5, built; run in Phase 7, 2026-11-17):
 1. Plan must exist with `status: 'active'` (404 `PLAN_NOT_FOUND`). An existing slug returns 200 `already_existed`.
 2. `seedPermissions()` (global, idempotent) runs before the transaction.
 3. In **one transaction**: `Company` (created already `active`), system roles and role permissions (`seedSystemRoles(id, session)`), default security policy (`seedSecurityPolicy(id, session)`), entitlements for every plan product (`source: 'plan'`), first admin `User` (`lifecycle_state: 'invited'`, legacy `role: 'Super Admin'`, pre-set `employee_id`), `UserRole` Super Admin, `Invitation` (`kind: 'first_admin'`, sha256 of a random token, 72 h, made by `lib/invitations.createInvitation`), default access rules (section 4), platform events, operator audit + mirrored tenant `AuditEvent`, and the welcome e-mail row in the outbox (`EmailDelivery`, written with the transaction's session).
@@ -169,10 +169,17 @@ No events for plan create/update, operator account changes, or IdP tenant approv
 ### Not built or partial ✗
 - **IdP tenant approval has no UI.** `GET /orgs/:id/identity-providers` and `POST .../approve-tenant` exist in the API only; `client/src/features/operator/operatorApi.ts` and the operator pages do not call them. An operator must call the API directly.
 - **Operator sessions are in `OperatorSession`, not `Session`** (Plan 0.4). `GET /platform/v1/sessions/revocations?realm=operator` still returns nothing (that feed is tenant-only). Suspending an operator takes effect on the next API call because `requireOperator` re-reads the account; outstanding refresh tokens fail at `extraTokenClaims`.
-- **Operator sign-in lockout and sessions (Plan 0.4, built, tests not yet run).** 5 failed passwords or TOTP codes lock the account for 30 minutes (`OperatorAccount.failed_attempts`, `locked_until`; the browser always sees the generic error). Failed, locked and successful sign-ins write `SecurityEvent` rows (`company_id` null, `metadata.realm: 'operator'`). Each token issuance upserts an `OperatorSession` (`operator/sessions.ts`, idle 30 min); `requireOperator` returns 401 `INVALID_TOKEN` for a revoked session (15 s in-process cache). The counter resets on a full sign-in (password and code), not on the password step alone. Smoke cases: `smoke:login`, block "Plan 0.4".
+- **Operator sign-in lockout and sessions (Plan 0.4, built; run in Phase 7, 2026-11-17).** 5 failed passwords or TOTP codes lock the account for 30 minutes (`OperatorAccount.failed_attempts`, `locked_until`; the browser always sees the generic error). Failed, locked and successful sign-ins write `SecurityEvent` rows (`company_id` null, `metadata.realm: 'operator'`). Each token issuance upserts an `OperatorSession` (`operator/sessions.ts`, idle 30 min); `requireOperator` returns 401 `INVALID_TOKEN` for a revoked session (15 s in-process cache). The counter resets on a full sign-in (password and code), not on the password step alone. Smoke cases: `smoke:login`, block "Plan 0.4".
 - **Operator TOTP enrolment shows only the setup key and an `otpauth://` link**, no QR code (`renderEnrol` in `server/src/operator/interactions.ts`; the tenant realm renders a QR).
 - **Plan edits do not propagate.** `PATCH /plans/:key` changes the plan only; orgs keep their entitlements until `PATCH /orgs/:id` is called again, and that call never removes products.
 - `seats_limit` is recorded, not enforced.
+
+### Verified in Phase 7 (2026-11-17)
+- `smoke:sprint2` 554/554, including the operator blocks for 4.1 to 4.13, the 5.x tenant blocks and the 7.3 isolation checks; `smoke:login` 68/68; Admin unit tests 199/199.
+- Playwright: one spec file per Command Center page (overview, organizations, tenant profile, onboarding, products, health, plans, operators, audit, security, confirm and announce); all pass.
+- Real-stack browser walk (`npm run walk:server` + `client/e2e-real/walk.mjs`): sign-in through the hosted pages with password and TOTP, then all 11 Command Center pages load their real data with no page error, console error, API error or error state.
+- Security review of every `/operator/v1` route: every route sits behind `requireOperator` and a permission mark. Five low findings (no session revoke on operator password change or MFA reset, no last-`platform_admin` guard, direct `POST /operators` still present, and two on the public invite routes) are in plan section 14, 7.2.
+- List endpoints at 5,000 organisations: all but `GET /orgs?sort=members` (loads and sorts every organisation, 0.65 to 1.5 s) answer in under 350 ms; `GET /security` reads the operator audit log by `created_at` only. Details: plan section 14, 7.4.
 
 ### Known issues
 - Operator tokens (including the refresh token) are held in memory only (`useOperatorAuthStore`, `operatorAuth.ts`), so a page reload always goes back through `/oauth/authorize` on the operator realm.
@@ -189,4 +196,11 @@ From `server/`:
 | `npm run smoke:sprint2` | E10 operator login (operator realm, PKCE, mandatory TOTP enrolment), provisioning from a plan, events in the same transaction with one correlation id, entitlement suspension → effective access denial, org suspend/reactivate events with `data.reason`, `OPERATOR_IP_ALLOWLIST` (read per request, `TRUST_PROXY=0`), plan assignment activates products, E4d O(1) org transaction + post-commit fan-out, L3-9 `invite_token` exposure rules, audit. Uses an in-memory replica set and runs the whole app in-process |
 | `npm run seed:operator` | Not a test: creates or resets an operator from `OPERATOR_SEED_EMAIL` / `OPERATOR_SEED_PASSWORD` (≥12 chars) / `OPERATOR_SEED_NAME`; refuses in production unless `OPERATOR_SEED_FORCE=true`. MFA state is left unchanged on reset |
 
-There are no `__tests__` unit tests specific to `server/src/operator/`. The client has no automated tests.
+Unit tests for the operator area live in `server/src/operator/__tests__/` (permission coverage: every route needs a permission mark) and `server/src/lib/__tests__/` (signals, health, invitations).
+
+| Command | Coverage |
+|---|---|
+| `npm run perf:lists` | Phase 7.4: seeds 5,000 tenants and 50,000 members in an in-memory database (`PERF_TENANTS`, `PERF_MEMBERS` change the size), calls every list endpoint with the Mongo profiler on, prints plan, documents examined and time per query, and runs `explain` on the flagged ones |
+| `npm run walk:server` | Phase 7.5: the full app on port 5000 with an operator and an organisation, both able to sign in with password and TOTP; used by `client/e2e-real/walk.mjs` |
+
+Client (`client/`): `npx playwright test` runs the mocked-API specs in `e2e/` (Vite on 127.0.0.1:4173; `e2e/helpers/auth.ts` signs in each realm with `page.route`; the most recently registered matching route wins). `node e2e-real/walk.mjs` is the real-stack walk (see above); set `WALK_ONLY=operator|admin` or `WALK_FILTER=<regex>` to run part of it on a machine with little memory.

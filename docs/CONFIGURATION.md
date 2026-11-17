@@ -35,7 +35,7 @@ Related: [ARCHITECTURE.md](ARCHITECTURE.md), [portals/identity.md](portals/ident
 | `AUTH_RATE_LIMIT` | no | dev `100`, else `20` per IP per 15 min | Limiter on password, TOTP, enrol, account-page and password-reset endpoints | empty | | `middleware/rateLimiter.ts:20` |
 | `APP_URL` | no | `http://localhost:5173` | Base URL used in policy notification links | `http://admin.karbexa.localhost:5173` | **missing from `.env.example`** | `server/src/controllers/policies.controller.ts:578` |
 
-Note: `requestPasswordReset` builds its link from `ADMIN_SPA_ORIGIN || CLIENT_URL` (`resolveSpaOrigin` in `auth.controller.ts`); if neither is set it throws (Plan 0.7d, built, tests not yet run). There is no localhost fallback.
+Note: `requestPasswordReset` builds its link from `ADMIN_SPA_ORIGIN || CLIENT_URL` (`resolveSpaOrigin` in `auth.controller.ts`); if neither is set it throws (Plan 0.7d, built; run in Phase 7, 2026-11-17). There is no localhost fallback.
 
 ## 3. Server: identity service
 
@@ -137,3 +137,17 @@ The resource indicators (`urn:karbexa:admin`, `urn:karbexa:operator`) and the op
 ## 10. Minimum production set
 
 From the checks in the code, a production server will not start or will refuse traffic without: `NODE_ENV=production`, `MONGODB_URI` (replica set), `TRUST_PROXY` (not `true`), `ID_ISSUER_ORIGIN` (https), `OIDC_COOKIE_KEYS`, `IDENTITY_TENANT_KEY`, `IDENTITY_SERVICES_KEY`, `IDENTITY_OPERATOR_KEY`, `ENCRYPTION_KEY` (first TOTP enrolment / login), `OPERATOR_IP_ALLOWLIST` (operator access). For a working platform: `ADMIN_SPA_ORIGIN`, `OPERATOR_SPA_ORIGIN`, `PRODUCTS_SPA_ORIGIN`, `CLIENT_URL`, `SERVICES_PRODUCTS_BACKEND_JWKS`, `SERVICES_ADMIN_BACKEND_JWKS` + `ADMIN_BACKEND_CLIENT_KEY`, `PLATFORM_SUBSCRIPTIONS` + its `PLATFORM_SUB_SECRET_*`, and an e-mail transport (Azure or SMTP). Never set `MOCK_EMAIL` or `EXPOSE_INVITE_TOKEN` in production (both are ignored there anyway).
+
+## Test and measurement scripts (Phase 7)
+
+No runtime variable was added in Phase 7. The test scripts read these (never set them in production):
+
+| Variable | Used by | Meaning |
+|---|---|---|
+| `SMTP_HOST=127.0.0.1`, `SMTP_PORT=1` | `smoke:login`, `smoke:sprint2` | Point mail at a closed port so no mail leaves the machine |
+| `ALLOW_STANDALONE_MONGO=true` | unit tests that start a standalone in-memory Mongo | Ignored in production |
+| `PERF_TENANTS`, `PERF_MEMBERS`, `PERF_OUT` | `npm run perf:lists` | Size of the seeded data (default 5,000 and 50,000) and the JSON output path |
+| `WALK_PORT`, `WALK_SPA_ORIGIN`, `WALK_CREDS` | `npm run walk:server` | Port (5000), SPA origin (`http://127.0.0.1:4173`) and where the sign-in details are written |
+| `WALK_BASE`, `WALK_CREDS`, `WALK_OUT`, `WALK_ONLY`, `WALK_FILTER` | `client/e2e-real/walk.mjs` | Client URL, credentials file, output folder, run only `operator` or `admin`, run only labels matching a regex |
+
+On Windows, point `TEMP`/`TMP` at a drive with free space; the in-memory databases and the Playwright browsers need it.

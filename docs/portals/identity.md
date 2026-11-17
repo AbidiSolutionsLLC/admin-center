@@ -116,7 +116,7 @@ Tenant-API endpoints that belong to the identity flow (see admin.md): `POST /api
 - Authority `https://login.microsoftonline.com/organizations/oauth2/v2.0`, PKCE S256, `prompt=select_account`. State, nonce and verifier are kept in an encrypted cookie `tenant_entra` (10 min, path `/realms/tenant`).
 - id_token verified against `https://login.microsoftonline.com/common/discovery/v2.0/keys`, audience = client id, issuer `https://login.microsoftonline.com/<tid>/v2.0`, nonce and `oid` required.
 - Tenant mapping: an `IdentityProviderConnection` with `type: 'entra'`, `status: 'active'`, `config.tenant_id = <tid>`. Activating a connection (tenant API) requires a verified domain and an operator approval of that tenant id.
-- Account mapping (elevation 5.11, built, not yet run; `identity/federationLink.ts`): by an existing `Identity.federated_links` entry `{ issuer, subject: oid }` whose `connection_id` is that connection. With no link, a link is made on first sign-in only when the id_token e-mail (`email`, else `preferred_username`) has a domain in the connection's **verified** domains, an active Identity with that e-mail already exists, it has an access-state membership in the connection's company, and it has no link for this connection yet; the update is conditional (one link per connection) and audited as `identity.federation_linked`. Anything else gives "No Karbexa account is linked..." and a `login_failure` security event with the reason. JIT provisioning is still not implemented (the `jit_provisioning` setting is stored only).
+- Account mapping (elevation 5.11, built; run in Phase 7, 2026-11-17; `identity/federationLink.ts`): by an existing `Identity.federated_links` entry `{ issuer, subject: oid }` whose `connection_id` is that connection. With no link, a link is made on first sign-in only when the id_token e-mail (`email`, else `preferred_username`) has a domain in the connection's **verified** domains, an active Identity with that e-mail already exists, it has an access-state membership in the connection's company, and it has no link for this connection yet; the update is conditional (one link per connection) and audited as `identity.federation_linked`. Anything else gives "No Karbexa account is linked..." and a `login_failure` security event with the reason. JIT provisioning is still not implemented (the `jit_provisioning` setting is stored only).
 - MFA: if the Entra token's `amr` contains `mfa`, login completes with `['fed','mfa']`; otherwise the TOTP step / enrolment runs.
 
 ### 3.6 Logout and revocation
@@ -223,11 +223,17 @@ Login and MFA activity is written to `SecurityEvent`, not to platform events.
 - ~~**Entra links cannot be created in the product.**~~ Fixed for existing members in elevation 5.11 (first-sign-in linking, above). JIT (`jit_provisioning: create_member`) is still not implemented.
 - `apps` claim is always `[]` (`providers.ts`, comment "effective-access projection is a later sprint").
 - E-mail OTP: `mfa.email_otp_enabled` exists on `Identity` but no login code uses it.
-- Operator realm: no `Session` rows, no lockout, no QR on enrolment (operator.md).
+- Operator realm: sessions are in `OperatorSession` (not `Session`) and sign-in lockout exists (Plan 0.4); the enrolment page shows the setup key (see operator.md for the QR note).
 - No token introspection endpoint.
 
+### Verified in Phase 7 (2026-11-17)
+- `smoke:login` 68/68 (includes the 2.2 invitation block: six verify outcomes, renew, rate limit); `smoke:sprint2` 554/554; Admin unit tests 199/199.
+- Real sign-in in a browser through the hosted pages (password, then TOTP) for both the tenant and operator realms, then the SPA callback, during the Phase 7.5 walk.
+- Fixed in Phase 7: the Mongo-backed rate-limit store (Plan 0.5) needed `updatePipeline: true` on its pipeline update and failed on every hit against a real database; the `smoke:login` lock-hint check no longer matches the CSS word `inline-block`.
+- Public invite routes reviewed (7.2): `verify-invite` has only the global limiter; `renew-invite` answers 202 whatever happened, but response time differs when a link is real; an old superseded link can supersede the current invitation (3 a day per link). All low; plan section 14, 7.2.
+
 ### Known issues
-- **Account page access states (Plan 0.7g, built, tests not yet run).** `resolveAccountSession` uses `hasAccessState` (`onboarding`, `active`, `probation`, `on_leave`), the same rule as sign-in (`server/src/identity/account.ts`).
+- **Account page access states (Plan 0.7g, built; run in Phase 7, 2026-11-17).** `resolveAccountSession` uses `hasAccessState` (`onboarding`, `active`, `probation`, `on_leave`), the same rule as sign-in (`server/src/identity/account.ts`).
 - The CSRF secret falls back to `ENCRYPTION_KEY` and then to the literal `'karbexa-account-csrf-secret'` (`account.ts:66`); in practice `loadCookieKeys()` always returns at least one key, so the literal is not reached.
 - `applyProxy` in `providers.ts` reads `TRUST_PROXY` with default `'1'` and only sets `maxIpsCount` for a number; a CIDR list makes the provider trust proxies without a hop limit, unlike Express (`lib/trustProxy.ts`).
 - After `POST /api/v1/auth/logout` the session is already destroyed, so the following `end_session` call finds no provider session; the redirect still lands on `/login?signed_out=1`.
