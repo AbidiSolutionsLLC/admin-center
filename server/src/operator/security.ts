@@ -14,7 +14,7 @@ import { OperatorSession } from '../models/OperatorSession.model';
 import { OperatorAuditEvent } from '../models/OperatorAuditEvent.model';
 import { SecurityEvent } from '../models/SecurityEvent.model';
 import { AttentionItem } from '../models/Signals.model';
-import { createInvitation, inviteLink } from '../lib/invitations';
+import { createInvitation, operatorInviteLink } from '../lib/invitations';
 import { sendEmail } from '../lib/emailService';
 import { runInTransaction } from '../lib/platformEvents';
 import { AppError } from '../utils/AppError';
@@ -120,7 +120,7 @@ export function securityRoutes(h: Helpers): Router {
         kind: 'operator', company_id: null, user_id: created._id, email: b.email,
         created_by: { type: 'operator', id: req.operator!._id }, ttl_hours: OPERATOR_INVITE_TTL_HOURS,
       });
-      const link = inviteLink(rawToken, b.email);
+      const link = operatorInviteLink(rawToken, b.email); // plan 04 C2: the Command Center accept page
       await sendEmail({
         to: b.email,
         subject: 'You have been invited to the Karbexa Command Center',

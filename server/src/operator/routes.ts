@@ -30,6 +30,7 @@ import { AppError } from '../utils/AppError';
 import { asyncHandler } from '../utils/asyncHandler';
 import { requireOperator } from './middleware';
 import { revokeAllOperatorSessions } from './sessions';
+import { operatorInviteRoutes } from './inviteAccept';
 import { buildAuditFilter, categoryOf, csvRow, CSV_COLUMNS, EXPORT_ROW_CAP, writeAudit, type AuditInput } from './audit';
 import { requirePermission, anyOperator, permissionsFor, operatorRolesSchema } from './permissions';
 import { findFirstAdmin, onboardingRoutes } from './onboarding';
@@ -59,6 +60,8 @@ router.use((req: Request, res: Response, next: NextFunction) => {
   (req as any).correlationId = id;
   next();
 });
+// Plan 04 C2: the invited operator's accept page calls these without a token, so they sit before requireOperator.
+router.use(operatorInviteRoutes());
 router.use(requireOperator);
 
 // The signed-in operator and their permission list; the SPA reads it for navigation and buttons (the API never trusts the SPA).

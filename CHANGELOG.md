@@ -2,6 +2,15 @@
 
 Format: [Keep a Changelog](https://keepachangelog.com/en/1.1.0/). Each entry lists the change and its user-visible or deploy-visible effect. Commit details: `../docs/wrapup/CHANGE-LEDGER.md`.
 
+## [Unreleased]: demo fixes, branch `feat/demo-fixes` (plan 04)
+
+### Added
+- C2: operator invitation accept. Public `POST /operator/v1/invite/verify` and `/invite/accept` (new `operator/inviteAccept.ts`, `publicRoute` mark, coverage test allow-list) and the client page `/operator/accept-invite`; the invite e-mail now links there instead of the member `/onboarding` page. The accepted operator enrols TOTP at first sign-in. Operator invitation links sent before this change point at `/onboarding` and do not work: re-invite those operators.
+
+### Changed
+- C7: `PATCH /operator/v1/operators/:id` revokes all of that operator's sessions on a password change, MFA reset or suspension (audit `details.sessions_revoked`), and answers 409 `LAST_PLATFORM_ADMIN` instead of suspending or demoting the last active `platform_admin`.
+- C1: the Admin menu's Audit log and Company items also require the role their server routers allow (`NavItem.roles`); the Apps page shows assign / role-change controls only to `IT_ADMINS`, as the server enforces. No server guard changed.
+
 ## [Unreleased]: elevation, branch `feat/elevation`
 
 ### Changed

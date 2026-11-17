@@ -138,6 +138,28 @@ export async function consumeInvitation(session: Session, rawToken: string, now:
   );
 }
 
+// ── Operator invitations (plan 04 C2) ────────────────────────────────────────
+// Kept apart from the member functions above, which exclude kind 'operator' on purpose: a member link can
+// never activate an operator account, and an operator link can never activate a member.
+
+/** The operator invitation URL: the Command Center accept page, not the member activation page. */
+export function operatorInviteLink(rawToken: string, email: string, origin: string = String(process.env.CLIENT_URL)): string {
+  return `${origin.replace(/\/+$/, '')}/operator/accept-invite?token=${rawToken}&email=${encodeURIComponent(email)}`;
+}
+
+export async function findOperatorInvitationByToken(rawToken: string): Promise<IInvitation | null> {
+  return Invitation.findOne({ token_hash: hashToken(rawToken), kind: 'operator' });
+}
+
+/** Atomic accept for an operator invitation; null when it is not (or no longer) usable. */
+export async function consumeOperatorInvitation(session: Session, rawToken: string, now: Date = new Date()): Promise<IInvitation | null> {
+  return Invitation.findOneAndUpdate(
+    { token_hash: hashToken(rawToken), kind: 'operator', state: 'pending', expires_at: { $gt: now } },
+    { $set: { state: 'accepted', accepted_at: now } },
+    { session: session ?? undefined, returnDocument: 'after' },
+  );
+}
+
 /** Hides the local part of an address for the external-invitation page: `jane.doe@x.com` becomes `j•••@x.com`. */
 export function maskEmail(email: string): string {
   const [local, domain] = email.split('@');

@@ -51,3 +51,10 @@ export function requirePermission(perm: OperatorPermission) {
 /** For routes any active operator may call (e.g. GET /me). Marked so the coverage test accepts it. */
 export function anyOperator(_req: Request, _res: Response, next: NextFunction) { next(); }
 (anyOperator as any)[PERMISSION_MARK] = '*';
+
+/**
+ * For the few routes that run before requireOperator (no operator token), e.g. the invitation accept page (plan 04 C2).
+ * The coverage test accepts this mark only for the routes on its PUBLIC_ROUTES list, so every new public route is reviewed.
+ */
+export function publicRoute(_req: Request, _res: Response, next: NextFunction) { next(); }
+(publicRoute as any)[PERMISSION_MARK] = 'public';

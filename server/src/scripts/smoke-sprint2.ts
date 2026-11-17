@@ -1659,6 +1659,46 @@ async function main() {
       check('4.11 an invited operator cannot be a duplicate (409)', (await op('/operators/invite', 'POST', { email: 'newop@karbexa.test', full_name: 'Again', roles: ['support'] })).status === 409);
       check('4.11 invite is audited in the operator category', !!(await OperatorAuditEvent.findOne({ action: 'operator.invited', target_id: String(created!._id), category: 'operator' })));
 
+      // Plan 04 C2: the invited operator accepts from the e-mail link (public endpoints, no operator token).
+      {
+        const { EmailDelivery } = await import('../models');
+        const { decrypt } = await import('../lib/cryptoService');
+        const { createInvitation } = await import('../lib/invitations');
+        const pub = (path: string, body: unknown) => fetch(`${OP}${path}`, { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify(body) });
+        const mail = await EmailDelivery.findOne({ 'related.type': 'operator', 'related.id': String(created!._id) }).sort({ created_at: -1 });
+        const mailText = mail?.text_enc ? decrypt(mail.text_enc) : '';
+        const opLink = mailText.match(/https?:\/\/\S+\/operator\/accept-invite\?token=([0-9a-f]{64})&email=\S+/);
+        check('C2 the invite e-mail links to /operator/accept-invite (not the member /onboarding page)', !!opLink && !/\/onboarding\?/.test(mailText), mailText.slice(0, 200));
+        const opToken = opLink?.[1] ?? '';
+
+        const badV = await pub('/invite/verify', { token: 'f'.repeat(64) });
+        check('C2 verify with an unknown token = 404 INVITE_NOT_FOUND', badV.status === 404 && ((await json(badV)) as any).code === 'INVITE_NOT_FOUND');
+        const v = await pub('/invite/verify', { token: opToken });
+        const vj = await json(v);
+        check('C2 verify answers the invited name, e-mail and roles without an operator token', v.status === 200 && vj.data?.email === 'newop@karbexa.test' && vj.data?.roles?.join() === 'support', JSON.stringify(vj).slice(0, 160));
+        const asMember = await fetch(`${ORIGIN}/api/v1/people/verify-invite`, { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ token: opToken }) });
+        check('C2 an operator link is not accepted by the member verify endpoint (404)', asMember.status === 404);
+
+        const weak = await pub('/invite/accept', { token: opToken, password: 'short' });
+        check('C2 a short password = 400 WEAK_PASSWORD and the account stays invited', weak.status === 400 && ((await json(weak)) as any).code === 'WEAK_PASSWORD' && (await OperatorAccount.findById(created!._id))?.status === 'invited');
+        const acc = await pub('/invite/accept', { token: opToken, password: 'Correct-Horse-Battery-9' });
+        const after = await OperatorAccount.findById(created!._id);
+        check('C2 accept activates the account with the new password and MFA still to enrol',
+          acc.status === 200 && after?.status === 'active' && !after.mfa?.enabled && (await bcrypt.compare('Correct-Horse-Battery-9', after.password_hash)), acc.status);
+        check('C2 accept consumes the invitation and is audited', (await Invitation.findOne({ kind: 'operator', user_id: created!._id }).sort({ created_at: -1 }))?.state === 'accepted'
+          && !!(await OperatorAuditEvent.findOne({ action: 'operator.invite_accepted', target_id: String(created!._id) })));
+        const again = await pub('/invite/accept', { token: opToken, password: 'Another-Long-Password-1' });
+        check('C2 the same link again = 409 INVITE_ALREADY_USED and the password is unchanged', again.status === 409 && ((await json(again)) as any).code === 'INVITE_ALREADY_USED'
+          && (await bcrypt.compare('Correct-Horse-Battery-9', (await OperatorAccount.findById(created!._id))!.password_hash)));
+
+        const memberUser = await User.findOne({ email: { $exists: true } }).select('_id email company_id');
+        const memberInv = await createInvitation(null, { kind: 'member', company_id: memberUser!.company_id as any, user_id: memberUser!._id as any, email: memberUser!.email, created_by: { type: 'system' } });
+        const crossAccept = await pub('/invite/accept', { token: memberInv.rawToken, password: 'Correct-Horse-Battery-9' });
+        check('C2 a member invitation cannot activate anything through the operator accept endpoint (404)', crossAccept.status === 404 && (await Invitation.findById(memberInv.invitation._id))?.state === 'pending');
+        await Invitation.updateOne({ _id: memberInv.invitation._id }, { $set: { state: 'revoked' } });
+        await OperatorAccount.updateOne({ _id: created!._id }, { $set: { status: 'invited' } }); // the 4.11 checks below expect the invited account
+      }
+
       const target = await OperatorSession.create({ _id: 'smoke-4-11-sid', operator_id: created!._id, idle_expires_at: new Date(Date.now() + 600_000) });
       const list = await json(await op(`/operators/${created!._id}/sessions`));
       check('4.11 GET /operators/:id/sessions lists the session as active', list.data.some((s: any) => s.id === target._id && s.active === true), JSON.stringify(list).slice(0, 160));

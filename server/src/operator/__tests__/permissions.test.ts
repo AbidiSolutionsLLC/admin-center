@@ -27,19 +27,26 @@ test('requirePermission: 403 without the permission, next() with it', () => {
   assert.deepEqual(run(['operations']), { status: 0, nexted: true });
 });
 
-test('every /operator/v1 route carries a permission', () => {
+// Routes that run without an operator token. Adding one here is a security decision: review it (plan 04 C2).
+const PUBLIC_ROUTES = ['POST /invite/verify', 'POST /invite/accept'];
+
+test('every /operator/v1 route carries a permission; only reviewed routes are public', () => {
   const missing: string[] = [];
+  const publicSeen: string[] = [];
   let seen = 0;
   const walk = (stack: any[], prefix: string) => {
     for (const layer of stack) {
       if (layer.route) {
         seen++;
-        const marked = layer.route.stack.some((l: any) => (l.handle as any)[PERMISSION_MARK]);
-        if (!marked) missing.push(`${Object.keys(layer.route.methods).join(',').toUpperCase()} ${prefix}${layer.route.path}`);
+        const name = `${Object.keys(layer.route.methods).join(',').toUpperCase()} ${prefix}${layer.route.path}`;
+        const marks = layer.route.stack.map((l: any) => (l.handle as any)[PERMISSION_MARK]).filter(Boolean);
+        if (!marks.length) missing.push(name);
+        if (marks.includes('public')) publicSeen.push(name);
       } else if (layer.handle?.stack) walk(layer.handle.stack, prefix);
     }
   };
   walk((router as any).stack, '');
   assert.ok(seen >= 25, `expected to see the operator routes, saw ${seen}`);
   assert.deepEqual(missing, []);
+  assert.deepEqual(publicSeen.sort(), [...PUBLIC_ROUTES].sort());
 });

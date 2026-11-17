@@ -9,6 +9,7 @@ import { ROUTES } from './constants/routes';
 import SubscriptionPage from './pages/subscription/SubscriptionPage';
 import { OperatorGuard } from './features/operator/OperatorGuard';
 import OperatorCallbackPage from './pages/operator/OperatorCallbackPage';
+import OperatorAcceptInvitePage from './pages/operator/OperatorAcceptInvitePage';
 import OperatorOverviewPage from './pages/operator/OperatorOverviewPage';
 import OperatorOrgsPage from './pages/operator/OperatorOrgsPage';
 import OperatorTenantPage from './pages/operator/OperatorTenantPage';
@@ -55,6 +56,8 @@ function App() {
         <Routes>
           <Route path={ROUTES.AUTH_CALLBACK} element={<CallbackPage />} />
           <Route path={ROUTES.OPERATOR_CALLBACK} element={<OperatorCallbackPage />} />
+          {/* Plan 04 C2: public, outside OperatorGuard (the invited operator has no session yet). */}
+          <Route path={ROUTES.OPERATOR_ACCEPT_INVITE} element={<OperatorAcceptInvitePage />} />
           <Route element={<OperatorGuard />}>
             <Route path={ROUTES.OPERATOR} element={<OperatorShell />}>
               <Route index element={<Navigate to={ROUTES.OPERATOR_OVERVIEW} replace />} />
