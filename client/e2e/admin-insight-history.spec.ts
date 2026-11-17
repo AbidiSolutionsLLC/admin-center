@@ -10,7 +10,7 @@ test('header, breadcrumb back to Overview, and an empty table', async ({ page })
   }));
   await page.goto('/overview/insight-history');
   await expect(page.getByRole('heading', { name: 'Insight history & trends', level: 1 })).toBeVisible();
-  await expect(page.getByRole('link', { name: 'Overview' })).toBeVisible();
+  await expect(page.getByLabel('Breadcrumb').getByRole('link', { name: 'Overview' })).toBeVisible();
   await expect(page.getByText('No historical insights')).toBeVisible();
 });
 

@@ -7,6 +7,7 @@ export default defineConfig({
   fullyParallel: false,
   workers: 1,
   timeout: 60000,
+  expect: { timeout: 15000 }, // Vite compiles each route on first visit; 5 s is too tight on a busy machine
   forbidOnly: !!process.env.CI,
   retries: process.env.CI ? 2 : 0,
   reporter: [['list'], ['html', { open: 'never' }]],

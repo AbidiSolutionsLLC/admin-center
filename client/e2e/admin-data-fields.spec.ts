@@ -12,7 +12,7 @@ test('shows the header, the object tabs and the Add field action', async ({ page
   await page.goto('/data-fields');
   await expect(page.getByRole('heading', { name: 'Data fields', level: 1 })).toBeVisible();
   await expect(page.getByRole('tab', { name: 'People' })).toBeVisible();
-  await expect(page.getByRole('button', { name: 'Add field' })).toBeVisible();
+  await expect(page.getByRole('button', { name: 'Add field' }).first()).toBeVisible();
   await expect(page.getByText('Shirt size')).toBeVisible();
 });
 
