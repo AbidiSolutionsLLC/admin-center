@@ -5,7 +5,7 @@ import { fulfillJson, signInTenant } from './helpers/auth';
 test.beforeEach(async ({ page }) => { await signInTenant(page); });
 
 test('header, breadcrumb back to Overview, and an empty table', async ({ page }) => {
-  await page.route('**/api/v1/overview/**', (route) => fulfillJson(route, {
+  await page.route('**/api/v1/intelligence/**', (route) => fulfillJson(route, {
     success: true, data: [], pagination: { total: 0, page: 1, limit: 50, totalPages: 0 }, trends: [],
   }));
   await page.goto('/overview/insight-history');
@@ -15,7 +15,7 @@ test('header, breadcrumb back to Overview, and an empty table', async ({ page })
 });
 
 test('a failed load shows the error state', async ({ page }) => {
-  await page.route('**/api/v1/overview/**', (route) => fulfillJson(route, { success: false, error: 'x' }, 500));
+  await page.route('**/api/v1/intelligence/**', (route) => fulfillJson(route, { success: false, error: 'x' }, 500));
   await page.goto('/overview/insight-history');
   await expect(page.getByText('Failed to load history')).toBeVisible();
 });
