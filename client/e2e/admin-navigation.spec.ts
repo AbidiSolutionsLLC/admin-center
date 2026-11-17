@@ -21,8 +21,18 @@ test('the legacy role no longer grants items: a super_admin role with no permiss
   await expect(nav(page).getByRole('link', { name: 'Users' })).toHaveCount(0);
 });
 
+// Plan 04 C1: Audit log and Company sit on routers still guarded by role names, so the menu needs the role too.
+test('Audit log and Company need the role their server routers allow, not only the permission', async ({ page }) => {
+  await signInTenant(page, { role: 'HR Admin', permissions: ['people:read:all', 'organization:read:all', 'organization:update:all', 'audit_logs:read:all'] });
+  await page.goto('/overview');
+  await expect(nav(page).getByRole('link', { name: 'Structure', exact: true })).toBeVisible();
+  for (const name of ['Audit log', 'Company']) {
+    await expect(nav(page).getByRole('link', { name, exact: true })).toHaveCount(0);
+  }
+});
+
 test('permissions open their groups', async ({ page }) => {
-  await signInTenant(page, { permissions: ['people:read:all', 'organization:read:all', 'locations:read:all', 'apps:read:all', 'roles:read:all', 'audit_logs:read:all', 'workflows:read:all'] });
+  await signInTenant(page, { role: 'Super Admin', permissions: ['people:read:all', 'organization:read:all', 'locations:read:all', 'apps:read:all', 'roles:read:all', 'audit_logs:read:all', 'workflows:read:all'] });
   await page.goto('/overview');
   for (const name of ['Users', 'Structure', 'Teams', 'Locations', 'Calendars & schedules', 'Apps & Access', 'Subscription', 'Admin roles', 'Audit log', 'Workflows', 'Approvals']) {
     await expect(nav(page).getByRole('link', { name, exact: true })).toBeVisible();

@@ -30,8 +30,9 @@ import type { App } from '@/types';
 export default function AppsPage() {
   // ── States ────────────────────────────────────────────────────────────
   const { userRole } = useAuthStore();
+  // Assign, revoke, role change and enable/disable all hit routes guarded by IT_ADMINS (apps.routes.ts);
+  // the buttons follow the same group so no one sees a control the server refuses (plan 04 C1).
   const isItAdmin = userRole && PERMISSION_GROUPS.IT_ADMINS.includes(userRole as any);
-  const isOpsAdmin = userRole && PERMISSION_GROUPS.OPS_ADMINS.includes(userRole as any);
 
   const [search, setSearch] = useState('');
   const [statusFilter, setStatusFilter] = useState('');
@@ -231,7 +232,7 @@ export default function AppsPage() {
         title="Apps & Access"
         subtitle="Products and apps, who has them, and why"
         primaryAction={
-          selectedApp && isOpsAdmin ? (
+          selectedApp && isItAdmin ? (
             <div className="flex items-center gap-2">
               <button
                 onClick={handleOpenTimelineModal}
@@ -429,7 +430,7 @@ export default function AppsPage() {
             )}
           </div>
 
-          {isOpsAdmin && (
+          {isItAdmin && (
             <div className="lg:col-span-2 bg-surface border border-line rounded-lg shadow-card p-6">
               <h3 className="text-sm font-semibold text-ink mb-4 flex items-center gap-2">
                 <Shield className="h-4 w-4 text-primary" />

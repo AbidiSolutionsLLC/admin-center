@@ -20,6 +20,7 @@ import {
 } from 'lucide-react';
 import type { LucideIcon } from 'lucide-react';
 import { ROUTES } from '@/constants/routes';
+import { ROLES } from '@/constants/roles';
 
 /**
  * Navigation config for AppShell (DRD 9.2: one shell, two configs).
@@ -28,6 +29,8 @@ import { ROUTES } from '@/constants/routes';
  * A permission of the form `module:action:scope` must match exactly; `module:action`
  * matches that action in any scope. An item that names no permission is open to everyone,
  * unless its group names `roles` (legacy role names; no tenant group uses it any more).
+ * An item may also name `roles`: then the user's role must be listed too. It mirrors a server router that is
+ * still guarded by role names (`requireRole`), so the menu never offers a page the server refuses (plan 04 C1).
  * Navigation is a convenience: the server route guards remain the enforcement.
  */
 export interface NavItem {
@@ -35,6 +38,8 @@ export interface NavItem {
   href: string;
   icon: LucideIcon;
   permission?: string;
+  /** Roles the server router allows (mirror of its `requireRole` list). Checked in addition to `permission`. */
+  roles?: readonly string[];
 }
 
 export interface NavGroup {
@@ -60,6 +65,7 @@ function holdsPermission(permissions: readonly string[], key: string): boolean {
 }
 
 export function isNavItemVisible(item: NavItem, group: NavGroup, ctx: NavContext): boolean {
+  if (item.roles && !(ctx.role && item.roles.includes(ctx.role))) return false;
   if (item.permission) return holdsPermission(ctx.permissions, item.permission);
   if (!group.roles) return true;
   return !!ctx.role && group.roles.includes(ctx.role);
@@ -103,13 +109,13 @@ export const ADMIN_SHELL: ShellConfig = {
         { label: 'Admin roles', href: ROUTES.ROLES, icon: Shield, permission: 'roles:read:all' },
         { label: 'Security', href: ROUTES.SECURITY, icon: Shield, permission: 'security:read:all' },
         { label: 'Policies', href: ROUTES.POLICIES, icon: FileText, permission: 'policies:read:all' },
-        { label: 'Audit log', href: ROUTES.AUDIT_LOGS, icon: ClipboardList, permission: 'audit_logs:read:all' },
+        { label: 'Audit log', href: ROUTES.AUDIT_LOGS, icon: ClipboardList, permission: 'audit_logs:read:all', roles: [ROLES.SUPER_ADMIN, ROLES.IT_ADMIN] }, // server: auditLogs.routes.ts
       ],
     },
     {
       label: 'Settings',
       items: [
-        { label: 'Company', href: ROUTES.COMPANY_SETTINGS, icon: Settings, permission: 'organization:update:all' },
+        { label: 'Company', href: ROUTES.COMPANY_SETTINGS, icon: Settings, permission: 'organization:update:all', roles: [ROLES.SUPER_ADMIN, ROLES.ADMIN] }, // server: company.routes.ts
         { label: 'Data fields', href: ROUTES.DATA_FIELDS, icon: Database, permission: 'data_fields:read:all' },
         { label: 'Workflows', href: ROUTES.WORKFLOWS, icon: GitBranch, permission: 'workflows:read:all' },
         { label: 'Approvals', href: ROUTES.APPROVALS, icon: CheckSquare, permission: 'workflows:read:all' },
