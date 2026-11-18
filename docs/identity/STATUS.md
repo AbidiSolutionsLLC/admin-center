@@ -35,7 +35,6 @@ Last verified: 2026-11-18 against `main` of `karbexa-admin` after the Wave 2 mer
 | Back-channel logout retries follow the shared job runner (5 attempts, backoff 1, 5, 30, 120 min), not the 3 retries of the DRD | `lib/jobs.ts` | Slightly longer retry window |
 | `member_type` is always `workforce` (`User` has no member type yet) | `lib/standalonePortals.ts` | None until external members exist |
 | Behind Azure App Service, `X-Forwarded-For` carries `ip:port`, so `req.ip` is `ip:port`: `isIpInRange` rejects it (operator IP allow-list fails closed for listed IPs) and per-IP rate-limit keys become per connection | `server/src/utils/ipUtils.ts` | Must be fixed before Wave 4 (meta STATUS → Next: Wave 3) |
-| `AUTH_RATE_LIMIT` defaults to 20 sign-in attempts per IP per 15 min in production; an office behind one NAT can hit it | `middleware/rateLimiter.ts` | Owner decision pending |
 | Operator tokens are held in memory, so a page reload goes back through the operator realm | `client/src/features/operator/operatorAuth.ts` | By design |
 
 ## Backlog (priority order)

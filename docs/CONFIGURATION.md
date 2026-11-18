@@ -32,7 +32,7 @@ Related: [ARCHITECTURE.md](ARCHITECTURE.md), [identity/README.md](identity/READM
 | `ADMIN_SPA_ORIGIN` | no | identity: `http://admin.karbexa.localhost:5173`; CORS: none | Admin SPA origin: OIDC redirect / post-logout URIs, CSP `form-action`, links on hosted pages, password-reset link; also appended to the CORS allow-list | `http://admin.karbexa.localhost:5173` | The CORS list only includes it when the variable is actually set (`app.ts:42` has no default) | `identity/config.ts:63`, `app.ts:42`, `controllers/auth.controller.ts:468` |
 | `ALLOW_ANY_ORIGIN` | no | unset = false | Reflect any CORS origin | `false` | Honoured only when `NODE_ENV === 'development'` | `server/src/app.ts:36` |
 | `GLOBAL_RATE_LIMIT` | no | dev `10000`, else `6000` per IP per 15 min | Global limiter (skips `OPTIONS` and `/platform/v1`) | empty | | `server/src/middleware/rateLimiter.ts:6` |
-| `AUTH_RATE_LIMIT` | no | dev `100`, else `20` per IP per 15 min | Limiter on password, TOTP, enrol, account-page and password-reset endpoints | empty | | `middleware/rateLimiter.ts:20` |
+| `AUTH_RATE_LIMIT` | no | `100` per IP per 15 min (decision W2-RATE; was `20` in production) | Limiter on password, TOTP, enrol, account-page and password-reset endpoints | empty | | `middleware/rateLimiter.ts:20` |
 | `APP_URL` | no | `http://localhost:5173` | Base URL used in policy notification links | `http://admin.karbexa.localhost:5173` | | `server/src/controllers/policies.controller.ts:578` |
 
 Note: `requestPasswordReset` builds its link from `ADMIN_SPA_ORIGIN || CLIENT_URL` (`resolveSpaOrigin` in `auth.controller.ts`); if neither is set it throws (Plan 0.7d, built; run in Phase 7, 2026-11-17). There is no localhost fallback.

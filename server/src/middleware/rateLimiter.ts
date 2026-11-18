@@ -17,11 +17,14 @@ export const globalLimiter = rateLimit({
   },
 });
 
+/** Sign-in attempts per IP per 15 minutes: `AUTH_RATE_LIMIT`, else 100 (W2-RATE; an office behind one NAT shares one IP). */
+export const authRateLimitMax = (env: NodeJS.ProcessEnv = process.env): number => Number(env.AUTH_RATE_LIMIT) || 100;
+
 // Stricter rate limiter for authentication routes
 export const authLimiter = rateLimit({
   store: new MongoRateLimitStore('auth'),
   windowMs: 15 * 60 * 1000, // 15 minutes
-  max: Number(process.env.AUTH_RATE_LIMIT) || (process.env.NODE_ENV === 'development' ? 100 : 20), // increased for dev
+  max: authRateLimitMax(),
   standardHeaders: true,
   legacyHeaders: false,
   skip: (req) => req.method === 'OPTIONS', // WI-07: re-enabled; only CORS preflight is skipped

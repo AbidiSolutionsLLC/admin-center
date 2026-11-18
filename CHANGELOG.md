@@ -4,6 +4,9 @@ Format: [Keep a Changelog](https://keepachangelog.com/en/1.1.0/). Each entry lis
 
 ## [Unreleased]: Wave 3 test and fix (2026-11-18)
 
+### Changed
+- W3-2b (decision W2-RATE): `AUTH_RATE_LIMIT` defaults to 100 sign-in attempts per IP per 15 minutes in production (was 20).
+
 ### Added
 - W3-2a (decision W2-LAUNCH, contract 1.1.0): Platform API `GET /platform/v1/orgs/:orgId/launchers` (scope `platform.org.read`; the standalone portals an organisation holds an active entitlement to, tenant launch URL first, no secrets). `GET /platform/v1/apps` reports the real, secret-free `hosting` block of a standalone product.
 
