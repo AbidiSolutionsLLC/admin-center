@@ -137,6 +137,25 @@ if(navigator.clipboard&&window.isSecureContext){navigator.clipboard.writeText(v)
 
 
 /** Staff-only operator realm pages. */
+/**
+ * Hosted page when the access gate stops a member from reaching a standalone portal (DRD §8.4). Two outcomes:
+ * the organisation does not have the product ('unavailable'), or the member has no role in it ('no_access').
+ */
+export function deniedPage(kind: 'unavailable' | 'no_access', productName: string, links: { abort: string; home: string }): { title: string; status: number; body: string } {
+  const name = escapeHtml(productName);
+  const heading = kind === 'unavailable' ? `${name} is not available for your organisation` : `You don\u2019t have access to ${name}`;
+  const detail = kind === 'unavailable'
+    ? 'Your organisation has not enabled this product, or its access is paused. Ask your administrator.'
+    : 'Ask your administrator.';
+  return {
+    title: kind === 'unavailable' ? 'Not available' : 'No access',
+    status: 403,
+    body: `<h1>${heading}</h1><p class="sub">${detail}</p>
+<a class="btn" href="${escapeHtml(links.home)}">Back to Karbexa</a>
+<p class="links"><a href="${escapeHtml(links.abort)}">Return to ${name}</a></p>`,
+  };
+}
+
 export const OPERATOR_SHELL: ShellOptions = { theme: 'dark', badge: 'Operator', app: 'Karbexa Operator console', operator: true };
 
 /** Skin per OIDC client: each app's sign-in matches that app (Admin is dark, Products are light). */

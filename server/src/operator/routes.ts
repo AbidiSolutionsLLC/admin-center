@@ -41,6 +41,7 @@ import { overviewRoutes } from './overview';
 import { securityRoutes } from './security';
 import { announcementRoutes } from './announcement';
 import { planRoutes, applyPlanToOrg, ensureDefaultAccess, bumpOrgAuthz, dryRunSummary } from './plans';
+import { standaloneRoutes } from './standalone';
 
 const router = Router();
 /** Shape only; membership in the registry is checked with assertProductKey(s) (lib/productRegistry). */
@@ -530,5 +531,6 @@ router.use(healthRoutes({ ok })); // Plan 4.9
 router.use(overviewRoutes({ ok })); // Plan 4.10
 router.use(securityRoutes({ ok, oid, audit })); // Plan 4.11
 router.use(announcementRoutes({ ok, audit })); // Plan 4.12
+router.use(standaloneRoutes({ ok, oid, audit, actorOf, corrOf })); // C-1: standalone portal registration (DRD 8.2)
 
 export default router;

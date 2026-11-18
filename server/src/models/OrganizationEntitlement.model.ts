@@ -18,6 +18,8 @@ export interface IOrganizationEntitlement extends Document {
   /** Overrides only: when it falls back to plan state (hourly job `lib/overrideJobs.ts`) */
   expires_at?: Date;
   updated_by_operator_id?: Types.ObjectId;
+  /** DRD §8.2: per-tenant settings of a standalone portal (used only when its `per_tenant_launch_url` is true). */
+  config?: { launch_url?: string };
 }
 
 const OrganizationEntitlementSchema = new Schema<IOrganizationEntitlement>({
@@ -31,6 +33,7 @@ const OrganizationEntitlementSchema = new Schema<IOrganizationEntitlement>({
   reason: { type: String, maxlength: 500 },
   expires_at: Date,
   updated_by_operator_id: { type: Schema.Types.ObjectId, ref: 'OperatorAccount' },
+  config: { launch_url: String },
 }, { timestamps: { createdAt: 'created_at', updatedAt: 'updated_at' } });
 
 OrganizationEntitlementSchema.index({ company_id: 1, product_key: 1 }, { unique: true });

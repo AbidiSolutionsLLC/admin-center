@@ -21,7 +21,8 @@ import {
 import { getIdentityConfig, ADMIN_AUDIENCE, ADMIN_SPA_CLIENT_ID, PRODUCTS_AUDIENCE, PRODUCTS_SPA_CLIENT_ID } from './config';
 import { loadAccessContext, pickMembership } from './accounts';
 import { resolveFederatedIdentity } from './federationLink';
-import { escapeHtml, newNonce, pageCsp, pageShell, shellForClient } from './html';
+import { deniedPage, escapeHtml, newNonce, pageCsp, pageShell, shellForClient } from './html';
+import { evaluateGate, keyFromClientId, resourceForStandaloneClient, STANDALONE_SCOPE } from '../lib/standalonePortals';
 import { consumeRecoveryCode } from './recoveryCodes';
 import type { OidcProvider } from './providers';
 
@@ -211,10 +212,22 @@ export function registerTenantInteractions(app: Express, provider: OidcProvider)
       // First-party clients never show consent (loadExistingGrant builds the grant); defensive fallback.
       const clientId = d.params.client_id as string;
       const grant = new provider.Grant({ accountId: d.session?.accountId, clientId });
-      grant.addOIDCScope('openid profile email');
-      if (RESOURCE_FOR_CLIENT[clientId]) grant.addResourceScope(RESOURCE_FOR_CLIENT[clientId], 'api');
+      const resource = RESOURCE_FOR_CLIENT[clientId] ?? resourceForStandaloneClient(clientId);
+      grant.addOIDCScope(resourceForStandaloneClient(clientId) ? STANDALONE_SCOPE : 'openid profile email');
+      if (resource) grant.addResourceScope(resource, 'api');
       const grantId = await grant.save();
       return provider.interactionFinished(req, res, { consent: { grantId } }, { mergeWithLastSubmission: true });
+    }
+    if (d.prompt?.name === 'product_access') {
+      // The access gate (providers.ts policy) stopped this request: say why, never issue a code (DRD §8.4).
+      const key = keyFromClientId(d.params.client_id);
+      const accountId = d.session?.accountId as string | undefined;
+      const gate = key && accountId ? await evaluateGate(key, accountId, d.params.redirect_uri as string | undefined) : undefined;
+      if (gate?.outcome.allowed) return provider.interactionFinished(req, res, {}, { mergeWithLastSubmission: true }); // access appeared meanwhile
+      const name = gate?.app?.name ?? 'this product';
+      res.locals.karbexaShell = { theme: 'auto', app: name };
+      const page = deniedPage(gate && !gate.outcome.allowed ? gate.outcome.page : 'unavailable', name, { abort: `${BASE}/interaction/${uid}/abort`, home: cfg.adminSpaOrigin });
+      return send(res, page.title, page.body, page.status);
     }
     const pending = pendingOf(d);
     if (pending?.stage === 'totp') return renderTotp(res, uid);

@@ -12,13 +12,19 @@ import { loadRealmKeys, loadCookieKeys } from './keys';
 import { makeAdapter, initAdapterIndexes, TENANT_MODELS, OPERATOR_MODELS, SERVICES_MODELS } from './mongoAdapter';
 import { findAccount, loadAccessContext } from './accounts';
 import { ensureSessionForToken, revokeSession, SessionDeniedError } from './sessions';
+import { queueBackchannelLogouts } from '../lib/backchannelLogout';
 import { findOperatorAccount } from '../operator/accounts';
 import { ensureOperatorSessionForToken, revokeOperatorSession, OperatorSessionDeniedError } from '../operator/sessions';
 import { escapeHtml, newNonce, pageCsp, pageShell, OPERATOR_SHELL } from './html';
+import {
+  EXTRA_CLIENT_METADATA, STANDALONE_SCOPE, findStandaloneClientMetadata, resourceForStandaloneClient, secretsEqual, keyFromClientId,
+  evaluateGate, logProductAccessDenied, buildStandaloneClaims, type GateResult,
+} from '../lib/standalonePortals';
+import { Company } from '../models/Company.model';
 
 // ESM-only package loaded through require(esm) (03 §10.2); the library ships no TS types.
 // eslint-disable-next-line @typescript-eslint/no-require-imports
-const oidc = require('oidc-provider') as { Provider: any; errors: Record<string, any> };
+const oidc = require('oidc-provider') as { Provider: any; errors: Record<string, any>; interactionPolicy: { base: () => any; Prompt: any; Check: any } };
 export const oidcErrors = oidc.errors;
 
 export type OidcProvider = any;
@@ -29,6 +35,59 @@ const CLIENT_RESOURCE: Record<string, string> = {
   [ADMIN_SPA_CLIENT_ID]: ADMIN_AUDIENCE,
   [PRODUCTS_SPA_CLIENT_ID]: PRODUCTS_AUDIENCE,
 };
+
+/** Audience of a tenant-realm client: the two first-party SPAs, or a registered standalone portal (DRD §8.3). */
+const resourceForClient = (clientId: unknown): string | undefined =>
+  (typeof clientId === 'string' ? CLIENT_RESOURCE[clientId] : undefined) ?? resourceForStandaloneClient(clientId);
+
+/** Scopes granted without a consent screen: standalone portals also get offline_access (refresh tokens). */
+const grantScopeFor = (clientId: unknown) => (resourceForStandaloneClient(clientId) ? STANDALONE_SCOPE : 'openid profile email');
+
+/** One access-gate evaluation per request and (member, product): a token request builds ID token, access token and claims. */
+const gateMemo = new WeakMap<object, Map<string, Promise<GateResult>>>();
+function gateOnce(ctx: any, key: string, memberId: string): Promise<GateResult> {
+  let m = gateMemo.get(ctx);
+  if (!m) gateMemo.set(ctx, (m = new Map()));
+  const k = `${key}:${memberId}`;
+  let p = m.get(k);
+  if (!p) m.set(k, (p = evaluateGate(key, memberId)));
+  return p;
+}
+
+/**
+ * Gate for a token or userinfo request of a standalone client (DRD §8.4: "the same check runs on every refresh-token
+ * exchange"). Denied: record the Security event and fail the request, so no token is issued.
+ */
+async function requireStandaloneAccess(ctx: any, key: string, memberId: string, stage: 'token' | 'userinfo', sid?: string): Promise<GateResult & { outcome: { allowed: true; role: string } }> {
+  const gate = await gateOnce(ctx, key, memberId);
+  if (gate.outcome.allowed) return gate as GateResult & { outcome: { allowed: true; role: string } };
+  // The portal's session is no longer backed by access: tell it (DRD §8.6, "assignment removed / entitlement suspended").
+  const ent = ctx?.oidc?.entities ?? {};
+  const endSid: string | undefined = sid ?? ent.RefreshToken?.sessionUid ?? ent.AuthorizationCode?.sessionUid;
+  if (stage === 'token' && endSid) await queueBackchannelLogouts({ sid: endSid, reason: 'access_removed', clientIds: [`karbexa-${key}`], productKey: key });
+  await logProductAccessDenied({
+    company_id: gate.company_id, member_id: memberId, key, reason: gate.outcome.reason, page: gate.outcome.page, stage,
+    ip: ctx?.ip, user_agent: ctx?.get?.('user-agent') || undefined,
+  });
+  throw stage === 'userinfo' ? new oidc.errors.InvalidToken('product access denied') : new oidc.errors.InvalidGrant('product access denied');
+}
+
+/** Profile of a signed-in member for a standalone portal (DRD §8.5). Throws when the gate denies. */
+async function standaloneClaimsFor(ctx: any, key: string, memberId: string, token?: { sid?: string }) {
+  const stage = ctx?.oidc?.route === 'userinfo' ? 'userinfo' : 'token';
+  const gate = await requireStandaloneAccess(ctx, key, memberId, stage, token?.sid);
+  const access = await loadAccessContext(memberId);
+  if (!access) throw new oidc.errors.InvalidGrant('membership has no access');
+  const { user, identity } = access;
+  const company: any = await Company.findById(user.company_id).select('name slug').lean();
+  const ent = ctx?.oidc?.entities ?? {};
+  const sid: string | undefined = token?.sid ?? ent.AuthorizationCode?.sessionUid ?? ent.RefreshToken?.sessionUid ?? ent.AccessToken?.sessionUid ?? ent.Session?.uid;
+  return buildStandaloneClaims({
+    memberId, authzVer: user.authz_ver, email: identity.email, emailVerified: !!identity.email_verified_at,
+    name: identity.full_name || user.full_name, avatarUrl: user.avatar_url, orgId: String(user.company_id),
+    orgSlug: company?.slug ?? '', orgName: company?.name ?? '', role: gate.outcome.role, sid,
+  });
+}
 
 let tenantProvider: OidcProvider | undefined;
 let servicesProvider: OidcProvider | undefined;
@@ -95,10 +154,45 @@ function amrFromContext(ctx: any): string[] {
   return Array.isArray(amr) ? amr : [];
 }
 
+/**
+ * Interaction policy of the tenant realm: the default login and consent prompts plus the access gate for standalone
+ * clients (DRD §8.4). The gate runs after login, on every authorization request including silent SSO ones, and asks for
+ * the 'product_access' interaction (a hosted denied page) instead of issuing a code.
+ */
+function tenantPolicy() {
+  const { base, Prompt, Check } = oidc.interactionPolicy;
+  const policy = base();
+  policy.add(new Prompt(
+    { name: 'product_access' },
+    new Check('product_access_denied', 'The member may not use this product', async (ctx: any) => {
+      const key = keyFromClientId(ctx.oidc.params?.client_id);
+      const accountId: string | undefined = ctx.oidc.session?.accountId;
+      if (!key || !accountId) return false; // not a standalone client, or login still pending
+      const gate = await evaluateGate(key, accountId, ctx.oidc.params?.redirect_uri);
+      if (gate.outcome.allowed) return false;
+      await logProductAccessDenied({
+        company_id: gate.company_id, member_id: accountId, key, reason: gate.outcome.reason, page: gate.outcome.page, stage: 'authorize',
+        ip: ctx?.ip, user_agent: ctx?.get?.('user-agent') || undefined,
+      });
+      return true;
+    }),
+  ));
+  return policy;
+}
+
 async function buildTenant(cookieKeys: string[]): Promise<OidcProvider> {
   const cfg = getIdentityConfig();
   const { privateJwks } = await loadRealmKeys('tenant');
-  const Adapter = makeAdapter('tenant');
+  const BaseAdapter = makeAdapter('tenant');
+  // Standalone portals are registry data (DRD §8.3): the provider asks the adapter for any client_id that is not one of
+  // the static SPA clients, and the 'Client' model is answered from the App registry instead of a collection.
+  class Adapter extends BaseAdapter {
+    private readonly isClientModel: boolean;
+    constructor(name: string) { super(name); this.isClientModel = name === 'Client'; }
+    async find(id: string) {
+      return this.isClientModel ? (await findStandaloneClientMetadata(id)) as any : super.find(id);
+    }
+  }
   await initAdapterIndexes('tenant', TENANT_MODELS);
 
   const devOrigins = (origin: string): string[] => {
@@ -138,8 +232,13 @@ async function buildTenant(cookieKeys: string[]): Promise<OidcProvider> {
     ],
     responseTypes: ['code'],
     pkce: { required: () => true },
-    scopes: ['openid', 'profile', 'email'],
-    claims: { openid: ['sub'], email: ['email', 'email_verified'], profile: ['name'] },
+    scopes: ['openid', 'profile', 'email', 'offline_access'],
+    // org..authz_ver (and sid, picture) are only ever returned for standalone clients (standaloneClaimsFor).
+    claims: {
+      openid: ['sub', 'sid'], email: ['email', 'email_verified'],
+      profile: ['name', 'picture', 'org', 'org_slug', 'org_name', 'product_role', 'member_type', 'authz_ver'],
+    },
+    extraClientMetadata: { properties: [...EXTRA_CLIENT_METADATA] },
     clientBasedCORS: (_ctx: unknown, origin: string, client: any) =>
       client.clientAuthMethod === 'none' && client.redirectUris.some((u: string) => new URL(u).origin === origin),
     ttl: {
@@ -174,19 +273,27 @@ async function buildTenant(cookieKeys: string[]): Promise<OidcProvider> {
       },
       resourceIndicators: {
         enabled: true,
-        defaultResource: (_ctx: unknown, client: any) => CLIENT_RESOURCE[client?.clientId] ?? ADMIN_AUDIENCE,
+        defaultResource: (_ctx: unknown, client: any) => resourceForClient(client?.clientId) ?? ADMIN_AUDIENCE,
         useGrantedResource: () => true,
         getResourceServerInfo: (_ctx: unknown, resource: string, client: any) => {
           // Each SPA client may obtain exactly one audience (contract "resource / aud").
-          if (!client || CLIENT_RESOURCE[client.clientId] !== resource) throw new oidc.errors.InvalidTarget();
+          if (!client || resourceForClient(client.clientId) !== resource) throw new oidc.errors.InvalidTarget();
           return { scope: 'api', audience: resource, accessTokenFormat: 'jwt', accessTokenTTL: ACCESS_TOKEN_TTL_S, jwt: { sign: { alg: 'RS256' } } };
         },
       },
     },
     issueRefreshToken: async (_ctx: unknown, client: any) => client.grantTypeAllowed('refresh_token'),
     rotateRefreshToken: true,
-    interactions: { url: (_ctx: unknown, interaction: any) => `/realms/tenant/interaction/${interaction.uid}` },
-    findAccount,
+    interactions: {
+      url: (_ctx: unknown, interaction: any) => `/realms/tenant/interaction/${interaction.uid}`,
+      policy: tenantPolicy(),
+    },
+    findAccount: async (ctx: any, id: string, token?: unknown) => {
+      const account = await findAccount(ctx, id);
+      const key = account ? keyFromClientId(ctx?.oidc?.client?.clientId) : null;
+      if (!account || !key) return account;
+      return { accountId: account.accountId, claims: () => standaloneClaimsFor(ctx, key, id) };
+    },
     // First-party clients: no consent screen — build the grant ourselves (03 §10.8).
     loadExistingGrant: async (ctx: any) => {
       const clientId = ctx.oidc.client.clientId;
@@ -196,8 +303,8 @@ async function buildTenant(cookieKeys: string[]): Promise<OidcProvider> {
         if (existing && existing.accountId === ctx.oidc.session.accountId) return existing;
       }
       const grant = new ctx.oidc.provider.Grant({ clientId, accountId: ctx.oidc.session.accountId });
-      grant.addOIDCScope('openid profile email');
-      grant.addResourceScope(CLIENT_RESOURCE[clientId], 'api');
+      grant.addOIDCScope(grantScopeFor(clientId));
+      grant.addResourceScope(resourceForClient(clientId) ?? ADMIN_AUDIENCE, 'api');
       await grant.save();
       return grant;
     },
@@ -212,6 +319,25 @@ async function buildTenant(cookieKeys: string[]): Promise<OidcProvider> {
       }
       const { user, identity, roles } = access;
       const amr = amrFromContext(ctx);
+      const standaloneKey = keyFromClientId(token.clientId);
+      if (standaloneKey) {
+        // Standalone portal (DRD §8.4, §8.5): gate on every issuance (code exchange and refresh), narrow claim set.
+        const claims = await standaloneClaimsFor(ctx, standaloneKey, token.accountId, { sid });
+        try {
+          await ensureSessionForToken({
+            sid, memberId: user._id, identityId: identity._id, companyId: user.company_id, amr, ip: ctx?.ip,
+            userAgent: ctx?.get?.('user-agent') || undefined,
+          });
+        } catch (err) {
+          if (err instanceof SessionDeniedError) {
+            await revokeSession(sid, err.reason === 'expired' ? 'expired' : 'denied');
+            throw new oidc.errors.InvalidGrant(`session ${err.reason}`);
+          }
+          throw err;
+        }
+        const { sub: _sub, ...rest } = claims;
+        return { ...rest, amr, token_use: 'access' };
+      }
       try {
         await ensureSessionForToken({
           sid,
@@ -243,10 +369,30 @@ async function buildTenant(cookieKeys: string[]): Promise<OidcProvider> {
     },
   });
 
+  // A rotated-out client secret stays valid until its expiry (DRD §8.2, 24 h): the provider itself only knows one secret.
+  const clientProto = provider.Client.prototype;
+  const compareSecret = clientProto.compareClientSecret;
+  clientProto.compareClientSecret = function (this: any, actual: string) {
+    if (compareSecret.call(this, actual)) return true;
+    return !!this.karbexaPreviousSecret && typeof actual === 'string' && typeof this.karbexaPreviousSecretExpiresAt === 'number'
+      && this.karbexaPreviousSecretExpiresAt * 1000 > Date.now() && secretsEqual(this.karbexaPreviousSecret, actual);
+  };
+
+  // `sid` of a standalone client is the Karbexa session id everywhere (ID token, access token, logout token), so the
+  // portal can match the back-channel logout it receives to the session it created (DRD §8.5, §8.6).
+  provider.on('authorization.accepted', (ctx: any) => {
+    const clientId = ctx?.oidc?.client?.clientId;
+    const session = ctx?.oidc?.session;
+    if (keyFromClientId(clientId) && session?.uid) session.sidFor(clientId, session.uid);
+  });
+
   applyProxy(provider);
   logProviderErrors('tenant', provider);
   provider.on('end_session.success', (ctx: any) => {
     const sid = ctx?.oidc?.session?.uid;
+    // Capture the portals that held a session before the provider forgets them (DRD §8.6: sign-out of Karbexa).
+    const clientIds = Object.keys(ctx?.oidc?.session?.authorizations ?? {});
+    if (sid && clientIds.length) queueBackchannelLogouts({ sid, reason: 'sign_out', clientIds }).catch(() => undefined);
     if (sid) revokeSession(sid, 'end_session').catch((e) => console.error('[identity] end_session revoke failed', e));
   });
   return provider;

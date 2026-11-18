@@ -73,7 +73,9 @@ export const AppLauncher = () => {
   const handleAppClick = (url: string) => {
     if (!url) return;
     if (url.startsWith('http://') || url.startsWith('https://')) {
-      window.open(url, '_blank');
+      // Absolute URL: a suite product or a standalone portal (DRD §8.7). Always a new tab; a delivered portal is a third-party
+      // page, so it gets no `window.opener` and no referrer.
+      window.open(url, '_blank', 'noopener,noreferrer');
     } else {
       window.location.assign(url);
     }
@@ -164,6 +166,7 @@ export const AppLauncher = () => {
                 <button
                   key={app.id || app.product_key}
                   onClick={() => handleAppClick(app.launch_url)}
+                  title={app.launch_url?.startsWith('http') ? `${app.name} opens in a new tab` : app.name}
                   className="flex flex-col items-start p-3 rounded-xl border border-white/10 bg-white/5 hover:bg-white/10 hover:border-white/20 transition-all text-left group relative"
                 >
                   <div className="flex items-center justify-between w-full mb-2">
