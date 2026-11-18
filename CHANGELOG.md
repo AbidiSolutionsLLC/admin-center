@@ -4,6 +4,9 @@ Format: [Keep a Changelog](https://keepachangelog.com/en/1.1.0/). Each entry lis
 
 ## [Unreleased]: Wave 3 test and fix (2026-11-18)
 
+### Tests
+- W3-2h: `smoke:sprint2` has the fake relying party cases of DRD 8.8 (a confidential portal registered through the operator API, real sign-ins through the tenant realm, logout tokens received and verified).
+
 ### Fixed
 - W3-2g: when access to one standalone portal ends (assignment removed, entitlement suspended or restricted, override removed, plan change), the portal gets a back-channel logout token for each live session that signed in to it, right after the change commits (`queueLogoutsForLostAccess`, called from `emitAppAccessChanged`). Before, the portal learned at its next token refresh (at most 10 minutes).
 - W3-2f: behind Azure App Service the client address arrives as `ip:port` in `X-Forwarded-For`. `stripPort` (`utils/ipUtils.ts`) removes the port before `isIpInRange` (operator allow-list, org IP restrictions) and before the per-IP rate-limit keys (global, sign-in, invite check, Platform API auth failures).

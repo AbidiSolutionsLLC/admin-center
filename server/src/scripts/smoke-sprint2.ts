@@ -2411,6 +2411,249 @@ async function main() {
       (await import('../lib/standalonePortals')).invalidateStandalonePortals();
     }
 
+    // ── W3-2h: fake relying party for a standalone portal (DRD 8.8) ────────────────────────────────────
+    // A registered portal "rpfake" (confidential client, back-channel logout on a local HTTP endpoint) and real sign-ins through the
+    // tenant realm: code and claims, no assignment, wrong redirect, entitlement suspended (with proactive logout), assignment removed
+    // (refresh denied, proactive logout), session revoked (logout token with the matching sid), registry change without a restart.
+    const rpHits: { path: string; body: string }[] = [];
+    const rpServer = http.createServer((req, res) => {
+      let b = '';
+      req.on('data', (c) => { b += c; });
+      req.on('end', () => { rpHits.push({ path: req.url || '', body: b }); res.writeHead(200); res.end('ok'); });
+    });
+    await new Promise<void>((r) => rpServer.listen(0, '127.0.0.1', () => r()));
+    try {
+      const { Identity, SecurityEvent, Job } = await import('../models');
+      const { generateSecret } = await import('otplib');
+      const { encrypt } = await import('../lib/cryptoService');
+      const { processDueJobs } = await import('../lib/jobs');
+      const { revokeSession } = await import('../identity/sessions');
+      const { LOGOUT_EVENT } = await import('../lib/backchannelLogout');
+      const RP = `http://127.0.0.1:${(rpServer.address() as { port: number }).port}`;
+      const REALM = `${ORIGIN}/realms/tenant`;
+      const CID = 'karbexa-rpfake';
+      const AUD = 'urn:karbexa:rpfake';
+      const PW = 'Rp-Passw0rd!x';
+
+      // 1. the portal, the organisation's entitlement, four members
+      const portal = (version: number, redirects: string[]) => ({
+        manifest_version: 1, key: 'rpfake', name: 'RP Fake', description: 'Fake relying party', icon: 'plug', category: 'it', status: 'active', version,
+        hosting: {
+          mode: 'standalone', launch_url: `${RP}/`, per_tenant_launch_url: false,
+          client: { type: 'confidential', token_endpoint_auth: 'client_secret_basic', redirect_uris: redirects, post_logout_redirect_uris: [`${RP}/`], backchannel_logout_uri: `${RP}/backchannel` },
+        },
+        roles: [{ key: 'rp_user', name: 'RP user', rank: 10, is_default: true }, { key: 'rp_admin', name: 'RP admin', rank: 40 }],
+      });
+      const reg = await op('/products/rpfake', 'PUT', portal(1, [`${RP}/callback`]));
+      const secret = ((await reg.json()) as { data?: { client_secret?: string } }).data?.client_secret || '';
+      check('8.8 setup: portal registered with a client secret', reg.status === 201 && secret.length > 20, reg.status);
+      check('8.8 setup: organisation entitled to the portal', (await op(`/orgs/${orgId}/entitlements/rpfake`, 'PUT', { status: 'active', reason: 'smoke rp' })).status === 200);
+      const rpApp: any = await App.findOne({ product_key: 'rpfake', app_type: 'karbexa_product' }).lean();
+
+      const mkMember = async (n: number) => {
+        const email = `rp${n}@rp.test`;
+        const totp = generateSecret();
+        const identity = await Identity.create({
+          email, full_name: `Rp Member ${n}`, password_hash: await bcrypt.hash(PW, 4), password_changed_at: new Date(), email_verified_at: new Date(),
+          mfa: { totp_secret_enc: encrypt(totp), totp_enabled: true, recovery_codes_hash: [], email_otp_enabled: false }, status: 'active',
+        });
+        const user = await User.create({ company_id: orgId, identity_id: identity._id, full_name: `Rp Member ${n}`, email, password_hash: 'legacy-unused', role: 'Employee', lifecycle_state: 'active', is_active: true });
+        return { n, email, totp, user };
+      };
+      const rp1 = await mkMember(1); // signs in and is later suspended with the entitlement
+      const rp2 = await mkMember(2); // never assigned
+      const rp3 = await mkMember(3); // assignment removed
+      const rp4 = await mkMember(4); // session revoked
+
+      // an Admin API session for the organisation's first admin: assigning and revoking go through the real routes
+      const adminSid = crypto.randomUUID();
+      await Session.create({ _id: adminSid, identity_id: new mongoose.Types.ObjectId(), member_id: me._id, company_id: orgId, realm: 'tenant', idle_expires_at: new Date(Date.now() + 3600e3), absolute_expires_at: new Date(Date.now() + 3600e3), amr: ['pwd'] });
+      const adminKey = await jose.importJWK(tenantPrivateJwk, 'RS256');
+      const adminAt = await new jose.SignJWT({ token_use: 'access', org: String(orgId), sid: adminSid, email: me.email })
+        .setProtectedHeader({ alg: 'RS256', kid: 'tenant-smoke', typ: 'at+jwt' })
+        .setIssuer(REALM).setAudience('urn:karbexa:admin').setSubject(String(me._id)).setIssuedAt().setExpirationTime('10m').sign(adminKey);
+      const tenantApi = (path: string, method: string, body?: unknown) => fetch(`${ORIGIN}/api/v1${path}`, {
+        method, headers: { authorization: `Bearer ${adminAt}`, 'content-type': 'application/json', 'x-correlation-id': `rp-${crypto.randomUUID()}` }, body: body ? JSON.stringify(body) : undefined,
+      });
+      const assign = async (m: { user: { _id: unknown } }, role = 'rp_admin') => {
+        const r = await tenantApi(`/apps/${rpApp._id}/assign`, 'POST', { target_type: 'user', target_id: String(m.user._id), product_role_key: role });
+        return r.status;
+      };
+      check('8.8 setup: App Access assigns rp1, rp3 and rp4 (rp2 stays unassigned)', [await assign(rp1), await assign(rp3), await assign(rp4)].every((s) => s === 200 || s === 201));
+
+      // 2. a browser: own cookie jar, PKCE, hosted pages
+      const mkJar = () => {
+        const m = new Map<string, string>();
+        return async (url: string, init: RequestInit = {}): Promise<Response> => {
+          const headers = new Headers(init.headers);
+          if (m.size) headers.set('cookie', [...m].map(([k, v]) => `${k}=${v}`).join('; '));
+          const r = await fetch(url, { ...init, headers, redirect: 'manual' });
+          for (const c of r.headers.getSetCookie()) {
+            const [kv] = c.split(';');
+            const i = kv.indexOf('=');
+            const v = kv.slice(i + 1).trim();
+            if (v) m.set(kv.slice(0, i).trim(), v); else m.delete(kv.slice(0, i).trim());
+          }
+          return r;
+        };
+      };
+      type Jar = ReturnType<typeof mkJar>;
+      const pkce = () => { const verifier = crypto.randomBytes(32).toString('base64url'); return { verifier, challenge: crypto.createHash('sha256').update(verifier).digest('base64url') }; };
+      const authorizeUrl = (challenge: string, extra: Record<string, string> = {}) => `${REALM}/oauth/authorize?${new URLSearchParams({
+        client_id: CID, response_type: 'code', redirect_uri: `${RP}/callback`, scope: 'openid profile email offline_access',
+        code_challenge: challenge, code_challenge_method: 'S256', state: 'rp-state', nonce: 'rp-nonce', resource: AUD, ...extra,
+      })}`;
+      /** Follow redirects until the portal's redirect URI (code or error) or a final page (denied page, error page). */
+      const follow = async (jf: Jar, first: Response) => {
+        let res = first;
+        for (let i = 0; i < 12 && res.status >= 300 && res.status < 400; i++) {
+          const loc = new URL(res.headers.get('location')!, ORIGIN);
+          if (loc.origin === RP) return { code: loc.searchParams.get('code'), error: loc.searchParams.get('error'), res };
+          res = await jf(loc.toString());
+        }
+        return { code: null as string | null, error: null as string | null, res };
+      };
+      /** First sign-in: password, TOTP, then follow to the code or the denied page. */
+      const signIn = async (jf: Jar, m: { email: string; totp: string }, challenge: string, extra: Record<string, string> = {}) => {
+        const r0 = await jf(authorizeUrl(challenge, extra));
+        const uid = /\/interaction\/([^/?#]+)/.exec(r0.headers.get('location') || '')?.[1];
+        if (!uid) return follow(jf, r0);
+        const IX = `${REALM}/interaction/${uid}`;
+        await jf(IX);
+        await jf(`${IX}/login`, form({ email: m.email, password: PW }));
+        await jf(IX);
+        const r1 = await jf(`${IX}/totp`, form({ code: await generateTotp({ secret: m.totp }) }));
+        return follow(jf, r1);
+      };
+      /** Signed in already (SSO): authorize again and follow. */
+      const sso = async (jf: Jar, challenge: string, extra: Record<string, string> = {}) => follow(jf, await jf(authorizeUrl(challenge, extra)));
+      const basic = `Basic ${Buffer.from(`${encodeURIComponent(CID)}:${encodeURIComponent(secret)}`).toString('base64')}`;
+      const tokenCall = (params: Record<string, string>) => fetch(`${REALM}/oauth/token`, {
+        method: 'POST', headers: { 'content-type': 'application/x-www-form-urlencoded', authorization: basic }, body: new URLSearchParams(params).toString(),
+      });
+      const exchange = async (code: string, verifier: string) => {
+        const r = await tokenCall({ grant_type: 'authorization_code', code, redirect_uri: `${RP}/callback`, code_verifier: verifier, resource: AUD });
+        return { status: r.status, json: (await r.json().catch(() => ({}))) as Record<string, string> };
+      };
+      const jwks = jose.createRemoteJWKSet(new URL(`${REALM}/oauth/jwks`));
+      const hitsSince = (n: number) => rpHits.slice(n).filter((h) => h.path === '/backchannel');
+      const logoutClaims = async (body: string) => {
+        const t = new URLSearchParams(body).get('logout_token') || '';
+        const { payload, protectedHeader } = await jose.jwtVerify(t, jwks, { issuer: REALM, audience: CID, algorithms: ['RS256'] });
+        return { payload, typ: protectedHeader.typ };
+      };
+
+      // 3. access -> code, claims (rp1)
+      const p1 = pkce();
+      const s1 = await signIn(mkJar(), rp1, p1.challenge);
+      check('8.8 access: authorize + sign-in ends at the portal redirect URI with a code', !!s1.code, `${s1.res.status} ${s1.error}`);
+      const jar1 = mkJar();
+      const p1b = pkce();
+      const s1b = await signIn(jar1, rp1, p1b.challenge); // jar1 keeps the SSO session of rp1 for the later cases
+      const t1 = s1b.code ? await exchange(s1b.code, p1b.verifier) : { status: 0, json: {} as Record<string, string> };
+      check('8.8 access: code exchange with client_secret_basic returns id, access and refresh tokens', t1.status === 200 && !!t1.json.id_token && !!t1.json.access_token && !!t1.json.refresh_token, JSON.stringify(t1).slice(0, 200));
+      let rp1Sid = '';
+      if (t1.json.id_token) {
+        const { payload: idt } = await jose.jwtVerify(t1.json.id_token, jwks, { issuer: REALM, audience: CID });
+        rp1Sid = String(idt.sid || '');
+        check('8.8 claims: ID token carries product_role, org, org_slug, org_name, email, member_type, sid, authz_ver and the member id as sub',
+          idt.product_role === 'rp_admin' && idt.org === String(orgId) && idt.org_slug === 'acme' && typeof idt.org_name === 'string' && idt.email === rp1.email
+          && idt.member_type === 'workforce' && !!idt.sid && typeof idt.authz_ver === 'number' && idt.sub === String(rp1.user._id), idt);
+        check('8.8 claims: no Admin-internal claim (org_roles, apps, idn, role) on the ID token', !['org_roles', 'apps', 'idn', 'role'].some((k) => k in idt), Object.keys(idt));
+        const { payload: at } = await jose.jwtVerify(t1.json.access_token, jwks, { issuer: REALM, audience: AUD });
+        check('8.8 claims: access token audience is urn:karbexa:rpfake and carries product_role, not Admin roles', at.product_role === 'rp_admin' && !('org_roles' in at) && !('apps' in at), at);
+        const ui = await fetch(`${REALM}/oauth/userinfo`, { headers: { authorization: `Bearer ${t1.json.access_token}` } });
+        const uij = (await ui.json().catch(() => ({}))) as Record<string, unknown>;
+        check('8.8 claims: userinfo answers 200 with product_role', ui.status === 200 && uij.product_role === 'rp_admin', JSON.stringify(uij).slice(0, 160));
+      }
+      const wrongSecret = await fetch(`${REALM}/oauth/token`, { method: 'POST', headers: { 'content-type': 'application/x-www-form-urlencoded', authorization: `Basic ${Buffer.from(`${CID}:not-the-secret`).toString('base64')}` }, body: new URLSearchParams({ grant_type: 'refresh_token', refresh_token: t1.json.refresh_token || 'x' }).toString() });
+      check('8.8 client authentication: a wrong client secret is refused (401)', wrongSecret.status === 401, wrongSecret.status);
+
+      // 4. no assignment -> denied page, no code (rp2)
+      const s2 = await signIn(mkJar(), rp2, pkce().challenge);
+      const s2html = await s2.res.text();
+      check('8.8 no assignment: a hosted "no access" page (403), no code', !s2.code && s2.res.status === 403 && /access to/i.test(s2html) && /RP Fake/.test(s2html), `${s2.res.status} ${s2html.slice(0, 120)}`);
+      check('8.8 no assignment: a product_access_denied security event names the portal and the reason',
+        (await SecurityEvent.countDocuments({ event_type: 'product_access_denied', user_id: rp2.user._id, 'metadata.product_key': 'rpfake', 'metadata.reason': 'NO_ASSIGNMENT' })) >= 1);
+
+      // 5. wrong redirect URI -> an error page, never a redirect to the portal
+      const wr = await fetch(authorizeUrl(pkce().challenge, { redirect_uri: `${RP}/evil` }), { redirect: 'manual' });
+      check('8.8 redirect URI: an unregistered redirect_uri gets an error page (4xx) and no redirect to it', wr.status >= 400 && !(wr.headers.get('location') || '').startsWith(RP), `${wr.status} ${wr.headers.get('location')}`);
+
+      // 6. entitlement suspended -> denied; the portal is told to end the session (proactive), SSO returns after reactivation (rp1)
+      const before1 = rpHits.length;
+      check('8.8 entitlement: operator suspends the portal for the organisation', (await op(`/orgs/${orgId}/entitlements/rpfake`, 'PUT', { status: 'suspended', reason: 'smoke rp suspend' })).status === 200);
+      const sDeny = await sso(jar1, pkce().challenge);
+      const sDenyHtml = await sDeny.res.text();
+      check('8.8 entitlement: with the entitlement suspended the next authorize shows "not available" (403), no code', !sDeny.code && sDeny.res.status === 403 && /not available/i.test(sDenyHtml), `${sDeny.res.status} ${sDenyHtml.slice(0, 100)}`);
+      await processDueJobs();
+      const l1 = hitsSince(before1);
+      let l1c: Awaited<ReturnType<typeof logoutClaims>> | undefined;
+      try { l1c = l1[0] ? await logoutClaims(l1[0].body) : undefined; } catch (e) { check('8.8 entitlement: the logout token verifies against the realm keys', false, (e as Error).message); }
+      check('8.8 entitlement: the suspension queued a back-channel logout and the portal received it (typ logout+jwt, logout event, matching sid and sub, no nonce)',
+        l1.length >= 1 && !!l1c && l1c.typ === 'logout+jwt' && !!(l1c.payload.events as Record<string, unknown>)?.[LOGOUT_EVENT] && l1c.payload.sid === rp1Sid && l1c.payload.sub === String(rp1.user._id) && !('nonce' in l1c.payload), JSON.stringify({ hits: l1.length, sid: l1c?.payload.sid, want: rp1Sid }));
+      check('8.8 entitlement: restored, the same browser session gets a code again', (await op(`/orgs/${orgId}/entitlements/rpfake`, 'PUT', { status: 'active', reason: 'smoke rp restore' })).status === 200 && !!(await sso(jar1, pkce().challenge)).code);
+
+      // 7. assignment removed -> proactive logout and refresh denied (rp3)
+      const p3 = pkce();
+      const s3 = await signIn(mkJar(), rp3, p3.challenge);
+      const t3 = s3.code ? await exchange(s3.code, p3.verifier) : { status: 0, json: {} as Record<string, string> };
+      check('8.8 assignment: rp3 signs in and holds a refresh token', t3.status === 200 && !!t3.json.refresh_token, JSON.stringify(t3).slice(0, 160));
+      const rp3Sid = t3.json.access_token ? String(jose.decodeJwt(t3.json.access_token).sid || '') : '';
+      const asg3: any = await AppAssignment.findOne({ app_id: rpApp._id, target_type: 'user', target_id: rp3.user._id, is_active: true }).lean();
+      const before3 = rpHits.length;
+      const rev = await tenantApi(`/apps/${rpApp._id}/revoke`, 'POST', { assignment_id: String(asg3?._id) });
+      check('8.8 assignment: App Access revokes rp3 (200)', rev.status === 200, rev.status);
+      await processDueJobs();
+      const l3 = hitsSince(before3);
+      let l3sid = '';
+      try { l3sid = l3[0] ? String((await logoutClaims(l3[0].body)).payload.sid) : ''; } catch { /* reported below */ }
+      check('8.8 assignment: removing the assignment sent the portal a back-channel logout for that session right away (proactive, W3-2g)', l3.length >= 1 && !!rp3Sid && l3sid === rp3Sid, JSON.stringify({ hits: l3.length, got: l3sid, want: rp3Sid }));
+      const refreshed = await tokenCall({ grant_type: 'refresh_token', refresh_token: t3.json.refresh_token || 'x' });
+      const refreshedJson = (await refreshed.json().catch(() => ({}))) as Record<string, string>;
+      check('8.8 assignment: refresh after the assignment was removed is denied (400 invalid_grant), no new token', refreshed.status === 400 && refreshedJson.error === 'invalid_grant' && !refreshedJson.access_token, `${refreshed.status} ${JSON.stringify(refreshedJson).slice(0, 120)}`);
+      check('8.8 assignment: the denial is recorded as a product_access_denied event at the token stage',
+        (await SecurityEvent.countDocuments({ event_type: 'product_access_denied', user_id: rp3.user._id, 'metadata.product_key': 'rpfake', 'metadata.stage': 'token' })) >= 1);
+      check('8.8 assignment: one logout job per session and portal (no duplicate from the refresh denial)', (await Job.countDocuments({ type: 'standalone.backchannel_logout', 'payload.sid': rp3Sid })) === 1);
+
+      // 8. session revoked -> back-channel logout with the matching sid (rp4)
+      const p4 = pkce();
+      const s4 = await signIn(mkJar(), rp4, p4.challenge);
+      const t4 = s4.code ? await exchange(s4.code, p4.verifier) : { status: 0, json: {} as Record<string, string> };
+      const rp4Sid = t4.json.access_token ? String(jose.decodeJwt(t4.json.access_token).sid || '') : '';
+      check('8.8 session: rp4 signs in (an access token with a sid)', t4.status === 200 && !!rp4Sid, JSON.stringify(t4).slice(0, 120));
+      const before4 = rpHits.length;
+      await revokeSession(rp4Sid, 'smoke_revoked');
+      await processDueJobs();
+      const l4 = hitsSince(before4);
+      let l4c: Awaited<ReturnType<typeof logoutClaims>> | undefined;
+      try { l4c = l4[0] ? await logoutClaims(l4[0].body) : undefined; } catch (e) { check('8.8 session: the logout token verifies against the realm keys', false, (e as Error).message); }
+      check('8.8 session: revoking the Karbexa session sent one logout token with that sid and the member as sub', l4.length === 1 && l4c?.payload.sid === rp4Sid && l4c?.payload.sub === String(rp4.user._id) && l4c?.payload.aud === CID, JSON.stringify({ hits: l4.length, sid: l4c?.payload.sid, want: rp4Sid }));
+
+      // 9. registry change without a restart: a new redirect URI is accepted at once
+      const p5 = pkce();
+      const beforeChange = await sso(jar1, p5.challenge, { redirect_uri: `${RP}/callback2` });
+      check('8.8 registry: before the change a second redirect URI is refused', !beforeChange.code && beforeChange.res.status >= 400, `${beforeChange.res.status}`);
+      const upd = await op('/products/rpfake', 'PUT', portal(2, [`${RP}/callback`, `${RP}/callback2`]));
+      check('8.8 registry: operator adds a redirect URI (version 2, 200)', upd.status === 200, upd.status);
+      const afterChange = await sso(jar1, pkce().challenge, { redirect_uri: `${RP}/callback2` });
+      check('8.8 registry: the new redirect URI works without restarting the server (code issued)', !!afterChange.code, `${afterChange.res.status} ${afterChange.error}`);
+      const dropped = await op('/products/rpfake', 'PUT', portal(3, [`${RP}/callback2`]));
+      const goneOld = await sso(jar1, pkce().challenge);
+      check('8.8 registry: after the old redirect URI is removed it is refused at once', dropped.status === 200 && !goneOld.code && goneOld.res.status >= 400, `${dropped.status} ${goneOld.res.status}`);
+    } catch (e) { check('8.8 fake relying party section did not crash', false, (e as Error).stack?.split(String.fromCharCode(10)).slice(0, 4).join(' | ')); }
+    finally {
+      await new Promise<void>((r) => rpServer.close(() => r()));
+      const { Job: JobM } = await import('../models');
+      await AppAssignment.deleteMany({ app_id: (await App.findOne({ product_key: 'rpfake' }).lean())?._id });
+      await OrganizationEntitlement.deleteMany({ product_key: 'rpfake' });
+      await ProductRole.deleteMany({ product_key: 'rpfake' });
+      await App.deleteMany({ product_key: 'rpfake', app_type: 'karbexa_product' });
+      await JobM.deleteMany({ type: 'standalone.backchannel_logout' });
+      (await import('../lib/productRegistry')).invalidateProductRegistry();
+      (await import('../lib/standalonePortals')).invalidateStandalonePortals();
+    }
+
     // ── audit ─────────────────────────────────────────────────────────────────────────────
     const actions = (await OperatorAuditEvent.find()).map((e) => e.action);
     check('E10 operator audit recorded', ['org.provisioned', 'entitlement.updated', 'org.suspended', 'org.reactivated'].every((a) => actions.includes(a)), actions);

@@ -19,7 +19,7 @@ Last verified: 2026-11-18 against `main` of `karbexa-admin` after the Wave 2 mer
 |---|---|
 | IDN-008 | Entra JIT member creation: setting stored, never read |
 | IDN-016 | `apps` claim is always `[]` |
-| IDN-017 | Built, not tested (WS-C C-2 to C-5): registry-driven clients, access gate, claims, back-channel logout. Unit tests written (`standalonePortals.test.ts`, `backchannelLogout.test.ts`); the provider-level fake relying party in `smoke-sprint2.ts` (DRD 8.8 cases) is **not written** (Wave 3). Proactive logout when access to one portal ends is wired in W3-2g (unit test `membersWithoutPortal`; the fake-relying-party smoke cases of W3-2h cover it end to end), not yet run |
+| IDN-017 | Built, not tested (WS-C C-2 to C-5): registry-driven clients, access gate, claims, back-channel logout. Unit tests written (`standalonePortals.test.ts`, `backchannelLogout.test.ts`); the provider-level fake relying party (DRD 8.8 cases: code and claims, no assignment, entitlement suspended, assignment removed, session revoked, wrong redirect URI, registry change without restart, back-channel logout tokens received by a local HTTP endpoint) is written in `smoke-sprint2.ts` (W3-2h, not yet run). Proactive logout when access to one portal ends is wired in W3-2g (unit test `membersWithoutPortal`; the fake-relying-party smoke cases of W3-2h cover it end to end), not yet run |
 | IDN-019, IDN-020, IDN-021 | E-mail OTP, introspection, operator sessions in the revocation feed: not built, no task id |
 
 ## Known issues
