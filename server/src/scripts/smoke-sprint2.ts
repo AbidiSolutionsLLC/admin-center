@@ -2070,7 +2070,7 @@ async function main() {
       check('4.1 support can read tenants = 200', (await op('/orgs')).status === 200);
       check('4.1 support cannot create a plan = 403', (await op('/plans', 'POST', { key: 'sup-plan', name: 'X', products: [] })).status === 403);
       check('4.1 support cannot read the audit log = 403', (await op('/audit')).status === 403);
-      check('4.1 support cannot create an operator = 403', (await op('/operators', 'POST', { email: 'x@karbexa.test', full_name: 'X', password: 'x'.repeat(14) })).status === 403);
+      check('4.1 support cannot invite an operator = 403', (await op('/operators/invite', 'POST', { email: 'x@karbexa.test', full_name: 'X', roles: ['support'] })).status === 403);
       await setRoles(['auditor']);
       check('4.1 auditor can read the audit log = 200', (await op('/audit')).status === 200);
       check('4.1 auditor can list operators = 200', (await op('/operators')).status === 200);
@@ -2082,6 +2082,9 @@ async function main() {
       check('4.1 an account with no operator role is rejected = 401', (await op('/me')).status === 401);
       await setRoles(['platform_admin']);
       check('4.1 platform_admin restored = 200', (await op('/audit')).status === 200);
+      // A-6 (7.2 finding 5): operators are only invited; the direct create route no longer exists, for any role.
+      const direct = await op('/operators', 'POST', { email: 'direct.op@karbexa.test', full_name: 'Direct Op', password: 'x'.repeat(14) });
+      check('A-6 direct POST /operators = 404 for platform_admin and creates nothing', direct.status === 404 && !(await OperatorAccount.exists({ email: 'direct.op@karbexa.test' })), direct.status);
     }
 
     // ── Plan 5.2: active sessions read Session and revoke through the session service, scoped by company ──
