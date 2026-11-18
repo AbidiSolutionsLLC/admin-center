@@ -1,6 +1,6 @@
 # Admin Center: product requirements
 
-Source of truth for tenant administration. State is read from the code and `STATUS.md` (2026-11-18), not from older plans. "Spec ref" is the numbering of the meta repo `docs/spec/01-MASTER-PRD.md` section 7 and 5.2 (history). Features are never deleted, only marked `dropped` with a date.
+Source of truth for tenant administration. State is read from the code and `STATUS.md` (2026-11-18), not from older plans. "Spec ref" is the numbering of the meta repo `docs/spec/01-MASTER-PRD.md` (meta repo tag `docs-before-standard`) section 7 and 5.2 (history). Features are never deleted, only marked `dropped` with a date.
 
 ## Personas
 

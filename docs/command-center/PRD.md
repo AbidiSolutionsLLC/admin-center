@@ -1,6 +1,6 @@
 # Command Center: product requirements
 
-Source of truth for the operator console. State is read from the code and `STATUS.md` (2026-11-18). "Spec ref" is the numbering of the meta repo `docs/spec/01-MASTER-PRD.md` section 6 and 5.2 and `02-MASTER-DRD.md` sections 3 to 5 and 7 (history). Principles: status first, drill down second; every number links to the list behind it; operators see tenant metadata, never tenant business data; every write is audited. Features are never deleted, only marked `dropped` with a date.
+Source of truth for the operator console. State is read from the code and `STATUS.md` (2026-11-18). "Spec ref" is the numbering of the meta repo `docs/spec/01-MASTER-PRD.md` (meta repo tag `docs-before-standard`) section 6 and 5.2 and `02-MASTER-DRD.md` sections 3 to 5 and 7 (history). Principles: status first, drill down second; every number links to the list behind it; operators see tenant metadata, never tenant business data; every write is audited. Features are never deleted, only marked `dropped` with a date.
 
 ## Personas
 

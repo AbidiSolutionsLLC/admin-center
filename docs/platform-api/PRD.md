@@ -1,6 +1,6 @@
 # Platform API: product requirements
 
-Source of truth for what products and portals can rely on. State is read from the code and `STATUS.md` (2026-11-18). Spec ref: meta repo `docs/spec/02-MASTER-DRD.md` sections 1, 2 and 8 and `docs/architecture/05`, `06`. Features are never deleted, only marked `dropped` with a date.
+Source of truth for what products and portals can rely on. State is read from the code and `STATUS.md` (2026-11-18). Spec ref: meta repo `docs/spec/02-MASTER-DRD.md` (meta repo tag `docs-before-standard`) sections 1, 2 and 8 and `docs/architecture/05`, `06`. Features are never deleted, only marked `dropped` with a date.
 
 ## Consumers
 

@@ -43,4 +43,4 @@ Source of truth for what sign-in must do. State is read from the code and `STATU
 - A consent screen (all clients are first party).
 - Passwordless or social sign-in other than Microsoft Entra.
 - Device flow, dynamic client registration.
-- Self-registration of members (invitation only until external members exist; meta `docs/spec/01-MASTER-PRD.md` section 4.3).
+- Self-registration of members (invitation only until external members exist; meta `docs/spec/01-MASTER-PRD.md` (meta repo tag `docs-before-standard`) section 4.3).
