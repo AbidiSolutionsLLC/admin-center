@@ -177,7 +177,8 @@ async function main() {
   await api('POST', `/groups/${groups.Managers}/users`, { userIds: ['eng_mgr', 'sales_mgr', 'support_lead', 'hr'].map((k) => ids[k]) });
 
   // ── App Access ──
-  const apps = (await api('GET', '/apps')).data as Array<{ _id: string; product_key?: string }>;
+  // GET /apps pages 12 at a time by default; ask for the product apps only, in one page.
+  const apps = (await api('GET', '/apps?type=karbexa_product&limit=100')).data as Array<{ _id: string; product_key?: string }>;
   const appOf = (key: string) => apps.find((a) => a.product_key === key)?._id;
   for (const a of ACCESS) {
     const appId = appOf(a.product);
