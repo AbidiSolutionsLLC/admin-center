@@ -14,6 +14,7 @@ test('default launch URLs are the products app origin plus each product entry pa
       projects: 'http://app.karbexa.localhost:5174/project/projectDashboard',
       sign: 'http://app.karbexa.localhost:5174/sign/dashboard',
       desk: 'http://app.karbexa.localhost:5174/desk/home',
+      kb: 'http://app.karbexa.localhost:5174/kb',
     });
   } finally {
     if (saved !== undefined) process.env.PRODUCTS_SPA_ORIGIN = saved;

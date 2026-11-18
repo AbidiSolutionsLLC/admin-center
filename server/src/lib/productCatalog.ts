@@ -57,6 +57,19 @@ export const PRODUCT_DEFS: ProductDef[] = [
       { key: 'read_only', name: 'Read Only', rank: 5 },
     ],
   },
+  {
+    // Knowledge Base (execution plan D-3, decision G4): a suite module of the products app. Roles from KB PRD v2.0 §5.2
+    // plus read_only. No automatic default rule and in no default plan: operators entitle a tenant by override.
+    product_key: 'kb', name: 'Knowledge Base', slug: 'karbexa-kb', description: 'Knowledge articles, manuals and learning', env: 'KB_LAUNCH_URL', port: 5174, path: '/kb',
+    icon: 'book-open', product_category: 'work', default_assignments: [],
+    roles: [
+      { key: 'kb_administrator', name: 'KB Administrator', rank: 40 },
+      { key: 'kb_reviewer', name: 'KB Reviewer', rank: 30 },
+      { key: 'kb_author', name: 'KB Author', rank: 20 },
+      { key: 'kb_reader', name: 'KB Reader', rank: 10, is_default: true },
+      { key: 'read_only', name: 'Read Only', rank: 5 },
+    ],
+  },
 ];
 
 export const DEFAULT_PLANS: { key: string; name: string; products: ProductKey[] }[] = [

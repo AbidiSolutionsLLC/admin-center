@@ -88,7 +88,8 @@ export function getClientAllowedProducts(clientId: string): string[] {
       }
     } catch { console.error('[identity] PLATFORM_CLIENT_PRODUCTS is not valid JSON; using defaults'); }
   }
-  return clientId === PRODUCTS_BACKEND_CLIENT_ID ? ['people', 'projects', 'sign', 'desk'] : [];
+  // 'kb': the Knowledge Base suite module is published by the products backend too (execution plan D-3).
+  return clientId === PRODUCTS_BACKEND_CLIENT_ID ? ['people', 'projects', 'sign', 'desk', 'kb'] : [];
 }
 
 /** 03 §10.2 — oidc-provider and jose are ESM-only; CommonJS loads them via require(esm). */
