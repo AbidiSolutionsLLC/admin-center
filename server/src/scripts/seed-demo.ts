@@ -19,7 +19,8 @@ import * as jose from 'jose';
 
 const MEMORY = process.argv.includes('--memory');
 const SLUG = 'acme-demo';
-const DEMO_PASSWORD = process.env.DEMO_PASSWORD || 'Karbexa-Demo-2026!';
+// No fixed default: this repo is public, so a committed password would be known to everyone. Random per run unless set.
+const DEMO_PASSWORD = process.env.DEMO_PASSWORD || `Demo-${crypto.randomBytes(9).toString('base64url')}9!`;
 const DOMAIN = 'acme-demo.test';
 const OUT = path.resolve(__dirname, '..', '..', '.local', 'demo-accounts.json');
 
