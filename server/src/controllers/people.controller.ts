@@ -2444,8 +2444,9 @@ export const verifyInviteToken: RequestHandler[] = [verifyInviteLimiter, verifyI
 /**
  * POST /api/v1/people/renew-invite { token }
  * Self-service "Send me a new link". Public; limited per IP (authLimiter) and per invitation (3 a day).
- * Allowed only for an expired or superseded invitation whose user is still `invited`; supersedes and re-sends to the
- * stored address. Always answers 202 with the same body, whatever happened.
+ * Allowed only for the user's newest invitation, once it has expired, while the user is still `invited`; supersedes it
+ * and re-sends to the stored address. Always answers 202 with the same body, whatever happened.
+ * 7.2 finding 3: an older (superseded) link renews nothing, so it can never supersede the invitation that is current.
  * 7.2 finding 2: the 202 goes out before any lookup or e-mail work, so a real token and an unknown one take the same
  * time. The renewal then runs on its own: the new invitation and its outbox row commit in one transaction and the
  * delivery happens after commit; nothing waits for it.
@@ -2460,11 +2461,13 @@ export const renewInvite = asyncHandler(async (req: Request, res: Response) => {
 async function renewInvitation(token: string): Promise<void> {
   const invitation = await findInvitationByToken(token);
   const problem = invitationProblem(invitation);
-  if (!invitation || (problem?.code !== 'INVITE_EXPIRED' && problem?.code !== 'INVITE_SUPERSEDED')) return;
+  if (!invitation || problem?.code !== 'INVITE_EXPIRED') return;
   await runInTransaction(async (session) => {
-    // Re-read inside the transaction: of two concurrent renewals of one link only the first renews.
-    const current = await Invitation.findOne({ _id: invitation._id, state: invitation.state }).session(session ?? null);
-    if (!current) return;
+    // Re-read inside the transaction: the link must still be pending (of two concurrent renewals only the first renews)
+    // and must be the user's newest invitation.
+    const [newest] = await Invitation.find({ user_id: invitation.user_id, kind: { $ne: 'operator' } })
+      .sort({ createdAt: -1, _id: -1 }).limit(1).select('_id state').session(session ?? null);
+    if (!newest || !newest._id.equals(invitation._id) || newest.state !== 'pending') return;
     const user = await User.findOne({ _id: invitation.user_id, company_id: invitation.company_id, lifecycle_state: 'invited' }).session(session ?? null);
     const company = user ? await Company.findById(invitation.company_id).select('name').session(session ?? null) : null;
     if (!user || !company) return;

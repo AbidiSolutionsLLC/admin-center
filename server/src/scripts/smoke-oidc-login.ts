@@ -466,6 +466,18 @@ async function main() {
       await quiet();
       check('2.2 renew a still-valid link = 202 and creates nothing', r.status === 202 && (await Invitation.countDocuments({ user_id: uOk._id })) === before, r.status);
 
+      // A-5 (7.2 finding 3): an old, superseded link renews nothing; the current invitation stays pending and usable.
+      const uOld = await mkUser('old');
+      const oldInv = await mkInv(uOld, -1); // expired, then superseded by the current link below
+      const curInv = await mkInv(uOld);
+      const oldCount = await Invitation.countDocuments({ user_id: uOld._id });
+      r = await post('/people/renew-invite', { token: oldInv.rawToken });
+      await quiet();
+      const cur = await Invitation.findById(curInv.invitation._id);
+      check('A-5 renew with an old superseded link = 202 and the current invitation stays pending', r.status === 202 && cur?.state === 'pending' && (await Invitation.countDocuments({ user_id: uOld._id })) === oldCount, { status: r.status, state: cur?.state });
+      check('A-5 renew with an old superseded link sends no e-mail', (await EmailDelivery.countDocuments({ 'related.id': String(uOld._id) })) === 0);
+      check('A-5 the current link still verifies after the old one was used', (await verify(curInv.rawToken)).status === 200);
+
       // renew limit: the 4th request for one invitation is still 202 and sends nothing
       const uLim = await mkUser('lim');
       const lim = await mkInv(uLim, -1);
