@@ -38,8 +38,8 @@ interface Helpers {
 export const PRODUCTS_WRITE = 'products.write';
 
 /**
- * DRD §4.5/§8.2: registration needs `products.write` (platform_admin only). operator/permissions.ts does not grant it
- * yet (it was left out until Phase 6), so until it does a platform_admin is accepted directly. Marked for the
+ * DRD §4.5/§8.2: registration needs `products.write` (platform_admin only; granted in operator/permissions.ts). The
+ * platform_admin role is also accepted directly (redundant now, kept as a fallback). Marked for the
  * route-coverage test like requirePermission.
  */
 export function requireProductsWrite(req: Request, res: Response, next: NextFunction) {

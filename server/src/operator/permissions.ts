@@ -1,6 +1,6 @@
 // server/src/operator/permissions.ts
 // Operator roles and permissions (DRD §4.5, Plan 4.1). A static map: roles are not stored per permission.
-// `products.write` (standalone portal registration) is left out until Phase 6.
+// `products.write` (standalone portal registration, WS-C) is platform_admin only.
 import { Request, Response, NextFunction } from 'express';
 import { z } from 'zod';
 
@@ -13,6 +13,7 @@ export const ROLE_PERMISSIONS: Record<OperatorRole, readonly string[]> = {
   platform_admin: [
     ...READ, 'notes.write', 'onboarding.write', 'tenants.write', 'tenants.close', 'entitlements.write', 'plans.write',
     'announcements.write', 'audit.read', 'security.read', 'audit.export', 'operators.read', 'operators.write',
+    'products.write',
   ],
   operations: [...READ, 'notes.write', 'onboarding.write', 'tenants.write', 'entitlements.write', 'announcements.write'],
   support: [...READ, 'notes.write', 'onboarding.write'],

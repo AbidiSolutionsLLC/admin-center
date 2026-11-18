@@ -12,7 +12,8 @@ test('role map follows DRD 4.5', () => {
   assert.ok(has('support', 'notes.write') && !has('auditor', 'notes.write'));
   assert.ok(has('auditor', 'audit.export') && !has('operations', 'audit.read'));
   assert.ok(has('auditor', 'operators.read') && !has('auditor', 'operators.write'));
-  assert.ok(!Object.values(ROLE_PERMISSIONS).some((l) => l.includes('products.write')));
+  // products.write (standalone portal registration) is platform_admin only.
+  assert.deepEqual(Object.entries(ROLE_PERMISSIONS).filter(([, l]) => l.includes('products.write')).map(([r]) => r), ['platform_admin']);
   assert.deepEqual(permissionsFor(['nonsense']), []);
 });
 

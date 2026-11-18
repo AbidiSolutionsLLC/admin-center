@@ -376,8 +376,8 @@ export async function evaluateGate(key: string, memberId: string, redirectUri?: 
 }
 
 /**
- * `product_access_denied` Security event. SecurityEvent's enum (models/SecurityEvent.model.ts, not owned by WS-C) does not
- * list the type yet, so the row is written to the collection directly; it reads back like any other event.
+ * `product_access_denied` Security event (in SecurityEvent's type and enum since W2-2). Still written to the collection
+ * directly, so the model's post-save hook does not run for it; it reads back like any other event.
  */
 export async function logProductAccessDenied(p: { company_id?: Types.ObjectId | string; member_id?: string; key: string; reason: string; page: GateDenial; ip?: string; user_agent?: string; stage: 'authorize' | 'token' | 'userinfo' }): Promise<void> {
   try {

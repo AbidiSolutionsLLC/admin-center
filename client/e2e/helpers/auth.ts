@@ -57,7 +57,7 @@ export async function signInTenant(page: Page, user: TenantUser = {}) {
 
 export const ALL_OPERATOR_PERMISSIONS = [
   'overview.read', 'tenants.read', 'products.read', 'health.read', 'notes.write', 'onboarding.write', 'tenants.write', 'tenants.close',
-  'entitlements.write', 'plans.write', 'announcements.write', 'audit.read', 'security.read', 'audit.export', 'operators.read', 'operators.write',
+  'entitlements.write', 'plans.write', 'announcements.write', 'audit.read', 'security.read', 'audit.export', 'operators.read', 'operators.write', 'products.write',
 ];
 
 /** Operator realm (Command Center): signs in as a platform operator. */

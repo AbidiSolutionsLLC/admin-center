@@ -18,7 +18,8 @@ export type SecurityEventType =
   | 'account_locked'
   | 'account_unlocked'
   | 'password_setup_success'
-  | 'password_setup_failure';
+  | 'password_setup_failure'
+  | 'product_access_denied';
 
 export interface ISecurityEvent extends Document {
   company_id?: Types.ObjectId;
@@ -56,6 +57,7 @@ const SecurityEventSchema = new Schema<ISecurityEvent>({
       'account_unlocked',
       'password_setup_success',
       'password_setup_failure',
+      'product_access_denied',
     ],
     required: true,
   },
