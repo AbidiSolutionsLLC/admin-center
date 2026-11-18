@@ -15,6 +15,7 @@ import { realmCollection } from '../identity/mongoAdapter';
 import { enqueue, registerJobHandler, type JobHandler } from './jobs';
 import { resolveSafeSubscriber, postPinned } from './ssrfGuard';
 import { keyFromClientId, systemProduct } from './standalonePortals';
+import { listProducts } from './productRegistry';
 
 export const BACKCHANNEL_JOB = 'standalone.backchannel_logout';
 export const LOGOUT_EVENT = 'http://schemas.openid.net/event/backchannel-logout';
@@ -103,6 +104,50 @@ export async function queueProductBackchannelLogouts(companyId: Types.ObjectId |
   let n = 0;
   for (const s of sessions) n += await queueBackchannelLogouts({ sid: String(s._id), reason, clientIds: [`karbexa-${productKey}`], productKey });
   return n;
+}
+
+/**
+ * Standalone portals among `productKeys` of `members` that no longer appear in a member's effective access: pure, for tests.
+ * `entries` is one `{ member_id, keys }` per member (keys = the product keys they hold now).
+ */
+export function membersWithoutPortal(entries: Array<{ member_id: string; keys: string[] }>, standaloneKeys: string[]): Record<string, string[]> {
+  const out: Record<string, string[]> = {};
+  for (const key of standaloneKeys) {
+    const lost = entries.filter((e) => !e.keys.includes(key)).map((e) => e.member_id);
+    if (lost.length) out[key] = lost;
+  }
+  return out;
+}
+
+/**
+ * Proactive back-channel logout after an access change committed (assignment removed, entitlement suspended or restricted,
+ * override removed, plan change): `entries` are the members just recomputed with the product keys they hold now. For every
+ * standalone portal a member no longer holds, each of their live Karbexa sessions that signed in to that portal (the
+ * provider session has an authorization for the client) gets a logout token. Without it the portal learns only at its
+ * next token refresh (the access gate refuses it then). Never throws; returns the number of jobs queued.
+ */
+export async function queueLogoutsForLostAccess(companyId: Types.ObjectId | string, entries: Array<{ member_id: string; keys: string[] }>): Promise<number> {
+  try {
+    if (!entries.length) return 0;
+    const standaloneKeys = (await listProducts()).filter((p) => p.hosting_mode === 'standalone').map((p) => p.product_key);
+    if (!standaloneKeys.length) return 0;
+    let queued = 0;
+    for (const [key, memberIds] of Object.entries(membersWithoutPortal(entries, standaloneKeys))) {
+      const sessions: any[] = await Session.find({ company_id: companyId, revoked_at: { $exists: false }, member_id: { $in: memberIds } }).select('_id').lean();
+      if (!sessions.length) continue;
+      const clientId = `karbexa-${key}`;
+      const holders = await realmCollection('tenant', 'Session').find({
+        'payload.uid': { $in: sessions.map((s) => String(s._id)) }, [`payload.authorizations.${clientId}`]: { $exists: true },
+      }).project({ 'payload.uid': 1 }).toArray();
+      for (const sid of new Set(holders.map((h) => String(h.payload?.uid)))) {
+        queued += await queueBackchannelLogouts({ sid, reason: 'access_removed', clientIds: [clientId], productKey: key });
+      }
+    }
+    return queued;
+  } catch (err) {
+    console.error('[backchannel] could not queue logouts for lost portal access', String(companyId), err);
+    return 0;
+  }
 }
 
 /** Job handler: deliver one logout token. Throws on any non-2xx so the runner retries. Skips quietly if the portal changed. */

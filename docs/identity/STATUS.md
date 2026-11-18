@@ -19,7 +19,7 @@ Last verified: 2026-11-18 against `main` of `karbexa-admin` after the Wave 2 mer
 |---|---|
 | IDN-008 | Entra JIT member creation: setting stored, never read |
 | IDN-016 | `apps` claim is always `[]` |
-| IDN-017 | Built, not tested (WS-C C-2 to C-5): registry-driven clients, access gate, claims, back-channel logout. Unit tests written (`standalonePortals.test.ts`, `backchannelLogout.test.ts`); the provider-level fake relying party in `smoke-sprint2.ts` (DRD 8.8 cases) is **not written** (Wave 3). Proactive logout when access to one portal ends is not wired (see known issues) |
+| IDN-017 | Built, not tested (WS-C C-2 to C-5): registry-driven clients, access gate, claims, back-channel logout. Unit tests written (`standalonePortals.test.ts`, `backchannelLogout.test.ts`); the provider-level fake relying party in `smoke-sprint2.ts` (DRD 8.8 cases) is **not written** (Wave 3). Proactive logout when access to one portal ends is wired in W3-2g (unit test `membersWithoutPortal`; the fake-relying-party smoke cases of W3-2h cover it end to end), not yet run |
 | IDN-019, IDN-020, IDN-021 | E-mail OTP, introspection, operator sessions in the revocation feed: not built, no task id |
 
 ## Known issues
@@ -30,7 +30,6 @@ Last verified: 2026-11-18 against `main` of `karbexa-admin` after the Wave 2 mer
 | `applyProxy` reads `TRUST_PROXY` with default `'1'` and sets `maxIpsCount` only for a number; a CIDR list makes the provider trust proxies without a hop limit, unlike Express (`lib/trustProxy.ts`) | `server/src/identity/providers.ts` | Low; only with a CIDR list |
 | After `POST /api/v1/auth/logout` the session is already destroyed, so the following `end_session` call finds no provider session; the redirect still lands on `/login?signed_out=1` | `auth.controller.ts`, `providers.ts` | None visible |
 | Operator enrolment page shows the setup key and an `otpauth://` link, no QR code (the tenant page has one) | `server/src/operator/interactions.ts` | Usability |
-| Access to one standalone portal ending (assignment removed, entitlement suspended) does not log the portal out at once: `queueProductBackchannelLogouts` in `lib/backchannelLogout.ts` is ready but not called from the assignment, override and plan code paths | `lib/backchannelLogout.ts` | The portal is logged out at its next refresh (at most 10 min) |
 | `logProductAccessDenied` writes to the `SecurityEvent` collection directly (the type is in the enum since Wave 2), so the model's post-save hook does not run for it | `lib/standalonePortals.ts` | Security policy hooks ignore these events |
 | Back-channel logout retries follow the shared job runner (5 attempts, backoff 1, 5, 30, 120 min), not the 3 retries of the DRD | `lib/jobs.ts` | Slightly longer retry window |
 | `member_type` is always `workforce` (`User` has no member type yet) | `lib/standalonePortals.ts` | None until external members exist |
@@ -42,7 +41,6 @@ Last verified: 2026-11-18 against `main` of `karbexa-admin` after the Wave 2 mer
 | Task | What |
 |---|---|
 | Wave 3 | Run the A-3 to A-5 smoke cases and the C-2 to C-5 unit tests; write and run the fake relying party cases in `smoke-sprint2.ts` |
-| Wave 3 | Strip the port in `ipUtils.ts` before comparing and keying (before Wave 4); call `queueProductBackchannelLogouts` from the access-removal paths |
 | none | Entra JIT creation (needs an owner decision on role, lifecycle and seats) |
 | none | E-mail OTP; introspection; operator sessions in the revocation feed |
 

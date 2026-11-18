@@ -99,10 +99,12 @@ export async function emitAppAccessChanged(
   const ids = Array.from(new Set(memberIds.map(String)));
   if (ids.length === 0) return;
   if (ctx.bump !== false) await bumpAuthzVer(ids, session);
+  const held: Array<{ member_id: string; keys: string[] }> = [];
   for (const id of ids) {
     const acc = await computeEffectiveAccess(companyId, id, { session });
     const products: Record<string, string> = {};
     for (const [pk, v] of Object.entries(acc.products)) products[pk] = v.role;
+    held.push({ member_id: acc.member_id, keys: Object.keys(products) });
     await emitPlatformEvent(session, {
       org_id: companyId,
       type: 'app_access.changed',
@@ -113,6 +115,8 @@ export async function emitAppAccessChanged(
     });
   }
   onCommit(session, () => scheduleSeatRecompute(companyId)); // Plan 4.7: seat counts follow access changes
+  // W3-2g: a standalone portal a member no longer holds is told to end their session there (after commit; never blocks).
+  onCommit(session, async () => { await (await import('./backchannelLogout')).queueLogoutsForLostAccess(companyId, held); });
 }
 
 /** Above this many affected members an app_access.changed fan-out leaves the originating transaction. */
