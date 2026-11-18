@@ -13,6 +13,7 @@
     "test-ip-restrictions": "ts-node -T src/scripts/test-ip-restrictions.ts",
     "seed:operator": "ts-node -T src/scripts/seed-operator.ts",
     "seed:first": "ts-node -T src/scripts/seed-first-user.ts",
+    "seed:demo": "ts-node -T src/scripts/seed-demo.ts",
     "seed:products": "ts-node -T src/scripts/seed-products.ts",
     "seed:e11": "ts-node -T src/scripts/seed-e11.ts",
     "send:claims": "ts-node -T src/scripts/send-claim-emails.ts",
