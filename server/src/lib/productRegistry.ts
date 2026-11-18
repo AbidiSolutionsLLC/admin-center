@@ -5,7 +5,8 @@ import { AppError } from '../utils/AppError';
 export const RESERVED_PRODUCT_KEY = 'admin';
 const TTL_MS = 60_000;
 
-export interface RegisteredProduct { product_key: string; name: string; app_id: string }
+/** `hosting_mode`: 'standalone' for a delivered portal registered in the Command Center (DRD §8), else 'suite'. */
+export interface RegisteredProduct { product_key: string; name: string; app_id: string; hosting_mode: 'suite' | 'standalone' }
 
 let cache: { at: number; rows: RegisteredProduct[] } | undefined;
 
@@ -17,8 +18,10 @@ export async function listProducts(): Promise<RegisteredProduct[]> {
   if (cache && Date.now() - cache.at < TTL_MS) return cache.rows;
   const apps = await App.find({
     app_type: 'karbexa_product', product_key: { $exists: true, $ne: RESERVED_PRODUCT_KEY }, company_id: { $exists: false },
-  }).select('name product_key').sort({ product_key: 1 }).lean();
-  const rows = apps.map(a => ({ product_key: a.product_key as string, name: a.name, app_id: String(a._id) }));
+  }).select('name product_key hosting_mode').sort({ product_key: 1 }).lean();
+  const rows = apps.map(a => ({
+    product_key: a.product_key as string, name: a.name, app_id: String(a._id), hosting_mode: a.hosting_mode === 'standalone' ? 'standalone' as const : 'suite' as const,
+  }));
   cache = { at: Date.now(), rows };
   return rows;
 }
