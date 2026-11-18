@@ -7,6 +7,7 @@ import { useHealth, useHealthSync, type HealthComponent } from '@/features/opera
 const LABELS: Record<string, string> = {
   admin_api: 'Admin API', database: 'Database', identity: 'Sign-in service', event_dispatcher: 'Event dispatcher',
   products_api: 'Products API', products_worker: 'Products worker', email: 'E-mail', jobs: 'Background jobs',
+  standalone_portals: 'Standalone portals',
 };
 const when = (v?: string | null) => (v ? new Date(v).toLocaleString() : 'never');
 
