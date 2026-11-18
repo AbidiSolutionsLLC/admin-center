@@ -28,7 +28,7 @@ export const PRODUCT_DEFS: ProductDef[] = [
     ],
   },
   {
-    product_key: 'projects', name: 'Dictate', slug: 'karbexa-projects', description: 'Projects and work management', env: 'PROJECTS_LAUNCH_URL', port: 5174, path: '/project/projectDashboard',
+    product_key: 'projects', name: 'Projects', slug: 'karbexa-projects', description: 'Projects and work management', env: 'PROJECTS_LAUNCH_URL', port: 5174, path: '/project/projectDashboard',
     icon: 'folder-kanban', product_category: 'work', default_assignments: [],
     roles: [
       { key: 'project_administrator', name: 'Project Administrator', rank: 30 },

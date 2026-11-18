@@ -38,7 +38,7 @@ const HUMAN_DENIED_REASONS: Record<string, string> = {
 
 const STANDARD_PRODUCTS = [
   { key: 'people', name: 'People', description: 'HR and people operations', icon: Users, color: 'text-sky-400' },
-  { key: 'projects', name: 'Dictate', description: 'Projects and work management', icon: CheckSquare, color: 'text-amber-400' },
+  { key: 'projects', name: 'Projects', description: 'Projects and work management', icon: CheckSquare, color: 'text-amber-400' },
   { key: 'sign', name: 'Sign', description: 'Document signing and workflows', icon: FileText, color: 'text-emerald-400' },
   { key: 'desk', name: 'Desk', description: 'Service desk and ticketing', icon: Headphones, color: 'text-violet-400' },
 ];
