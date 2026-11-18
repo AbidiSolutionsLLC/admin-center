@@ -1,8 +1,8 @@
 # Changelog
 
-Format: [Keep a Changelog](https://keepachangelog.com/en/1.1.0/). Each entry lists the change and its user-visible or deploy-visible effect. Commit details: `../docs/wrapup/CHANGE-LEDGER.md`.
+Format: [Keep a Changelog](https://keepachangelog.com/en/1.1.0/). Each entry lists the change and its user-visible or deploy-visible effect. Commit details: the meta repo `docs/wrapup/CHANGE-LEDGER.md` while it exists, otherwise git history.
 
-## [Unreleased]: demo fixes, branch `feat/demo-fixes` (plan 04)
+## [Unreleased]: demo fixes (plan 04)
 
 ### Added
 - C2: operator invitation accept. Public `POST /operator/v1/invite/verify` and `/invite/accept` (new `operator/inviteAccept.ts`, `publicRoute` mark, coverage test allow-list) and the client page `/operator/accept-invite`; the invite e-mail now links there instead of the member `/onboarding` page. The accepted operator enrols TOTP at first sign-in. Operator invitation links sent before this change point at `/onboarding` and do not work: re-invite those operators.
@@ -51,7 +51,7 @@ Format: [Keep a Changelog](https://keepachangelog.com/en/1.1.0/). Each entry lis
 - QR code on the MFA enrolment page, with a copy button for the setup key.
 - `AuthLayout` for the signed-out pages (login, onboarding, forgot and reset password).
 - `npm run typecheck` in server and client.
-- Repository docs: `README.md`, `AGENTS.md`, `DESIGN.md`, `docs/ARCHITECTURE.md`, `docs/CONFIGURATION.md`, `docs/portals/*`.
+- Repository docs: `README.md`, `AGENTS.md`, `DESIGN.md`, `docs/ARCHITECTURE.md`, `docs/CONFIGURATION.md`, per-portal references (now `docs/<key>/`).
 
 ### Changed
 - Hosted sign-in pages use the Karbexa brand and are skinned per app: Products light, Admin dark with an "Admin" badge, Operator dark with a red "Operator" badge.
@@ -67,4 +67,4 @@ Format: [Keep a Changelog](https://keepachangelog.com/en/1.1.0/). Each entry lis
 
 ### Removed
 - One-off scripts at the server and client roots; root `scripts/seed-e11.ts` forwarder. Untracked: `client/.env`, `*.tsbuildinfo`, `.omc/`.
-- Old planning documents moved to `docs/archive/` (they were previously not in git at all).
+- Old planning documents moved to `docs/archive/` (they were previously not in git at all); since removed, reachable through the git tag `docs-before-standard`.

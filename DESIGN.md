@@ -1,6 +1,43 @@
 # Karbexa Admin: design rules
 
-Shared tokens (brand amber, charcoal, text and surface colours) are defined once in `../docs/DESIGN.md`. This file covers how the **Admin** web app applies them. Admin uses a **dark glass** theme on purpose: it signals "admin mode" next to the light products app.
+The design language of this repo: the dark Admin Center and Command Center kit. It uses a **dark glass** theme on purpose, so it signals "admin mode" next to the light products app (the products app has its own `DESIGN.md` in `karbexa-products`). The token values below are the platform's shared brand tokens; if one changes, change it here and in the products repo's `DESIGN.md` in the same change, then in the files of "Where the theme lives".
+
+## Tokens
+
+| Token | Value | Use |
+|---|---|---|
+| Brand amber | `#f59e0b` | Primary buttons, active navigation, focus rings, brand mark |
+| Brand amber hover | `#d97706` | Hover and pressed state |
+| On-brand text | `#1c1d21` | Text on amber buttons (white on amber fails contrast) |
+| Focus ring | `rgba(245,158,11,.35)`, 3 px | Every focusable control |
+| Charcoal | `#1c1d21` | Brand panel on sign-in pages |
+| Light background | `#f1f2f5` | Light sign-in (products skin of the hosted pages) |
+| Light surface | `#ffffff` | Cards and panels on light pages |
+| Dark background | `#0b0f19` | Admin app background; dark sign-in |
+| Dark surface | `rgba(255,255,255,.03)` glass / `#111827` solid | Admin cards; dark sign-in card |
+| Text (light / dark) | `#0f172a` / `#f8fafc` | Body text |
+| Muted text (light / dark) | `#64748b` / `#94a3b8` | Secondary text, labels |
+| Danger | `#ef4444` | Errors, destructive actions, operator badge |
+| Success | `#10b981` | Success states |
+| Font | DM Sans then Inter (Admin); Inter (hosted sign-in) | |
+| Radius | 8 px controls, 12 px cards | |
+
+## Which theme where (surfaces in this repo)
+
+| Surface | Theme | Where it lives |
+|---|---|---|
+| Admin web app and operator console | Dark glass | `client/src/index.css`, `client/tailwind.config.ts`, `client/src/constants/theme.ts` |
+| Hosted sign-in (identity provider) | Charcoal brand panel and card, skinned per app: products light, Admin dark, operator dark with a red badge, unknown follows the browser | `server/src/identity/html.ts` (`shellForClient`) |
+| Admin signed-out pages (login, onboarding, forgot and reset password) | Same structure as the hosted sign-in, dark | `client/src/components/layout/AuthLayout.tsx` |
+
+## Rules for every page
+
+1. Colours come from tokens or theme classes, never from new hex values.
+2. One primary (amber) button per view.
+3. Every interactive element has a visible focus state and a hit target of at least 40 px.
+4. Text contrast is at least 4.5:1 against its background.
+5. Numbers and bars show real data or a documented empty state, never decorative placeholder values.
+6. New pages follow "Adding a page" below.
 
 ## Where the theme lives
 
@@ -31,7 +68,7 @@ Shared tokens (brand amber, charcoal, text and surface colours) are defined once
 3. Put data hooks in `features/<area>/hooks/` and components in `features/<area>/components/`.
 4. Use the shared components above. Check loading, empty, error and no-permission states.
 5. `npm run build` must stay green.
-6. Document the page in `docs/portals/admin.md` (or `operator.md`).
+6. Document the page in `docs/admin-center/UI.md` (or `docs/command-center/UI.md`) and its endpoints in the matching `API.md`.
 
 ## Shared kit (elevation Phase 3)
 
@@ -70,4 +107,4 @@ Same dark theme and the same colours; this adds structure only. The products app
 
 **A page is migrated when:** it uses a template, shows all five states (loading, error, empty, no access, populated), has one primary action, can be used from the keyboard, has no raw hex, and `npm run build` is green.
 
-Older design notes (blue palette, page-by-page audits) are in `docs/archive/design-system-2026-06/`. They are background only; this file and `../docs/DESIGN.md` win.
+Older design notes (blue palette, page-by-page audits) are reachable through the git tag `docs-before-standard`; this file wins.

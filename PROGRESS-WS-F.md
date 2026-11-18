@@ -1,0 +1,32 @@
+# PROGRESS-WS-F (documentation, Admin repo)
+
+Branch `ws/ws-f` of `karbexa-admin`. Tag `docs-before-standard` created locally on `main` (4435d81); not pushed.
+
+## Tasks
+
+| Task | State |
+|---|---|
+| F-1 docs/identity (9 files) | done |
+| F-2 docs/admin-center (9 files) | done |
+| F-3 docs/command-center (9 files) | done |
+| F-4 docs/platform-api (9 files) | done |
+| F-5 repo level: AGENTS.md, README.md, CHANGELOG.md format, DESIGN.md (tokens folded in, per WS-H request), docs/ARCHITECTURE.md, docs/CONFIGURATION.md, delete docs/archive, docs/portals (client/README.md kept: it is a short project note, not the stock Vite text) | done |
+
+## Needs from others
+
+- Meta repo (WS-H / integrator): `docs/STATUS.md`, `AGENTS.md` and other meta files link to `karbexa-admin/docs/portals/*.md`; those files are deleted here, the new homes are `docs/identity`, `docs/admin-center`, `docs/command-center`, `docs/platform-api`.
+- Meta repo (WS-H request done): the design-token table is in Admin `DESIGN.md` (F-1), links to `../docs/DESIGN.md` are gone, and the old Admin known issues are in `docs/admin-center/STATUS.md`, `identity/STATUS.md`, `command-center/STATUS.md`, `platform-api/STATUS.md`. Meta `docs/STATUS.md` still says "no UI for Entra tenant approval" and links `karbexa-admin/docs/portals/operator.md`; both are stale.
+- Meta repo: `docs/DESIGN.md` can be deleted in Wave 2; Admin `DESIGN.md` now holds the token table and no longer links to it.
+
+## Found while working
+
+- Old `docs/portals/admin.md` listed two routes as unreachable (`GET /work-schedules/assignments`, `DELETE /holidays/assignments/bulk`); the code on `main` registers the static routes first and `routes/__tests__/routeOrder.test.ts` covers it. Fixed in the new docs.
+- Old `docs/portals/operator.md` said the Entra tenant approval has no UI; the code has it (`useOrgIdps` and the approve mutation in `client/src/features/operator/operatorApi.ts`).
+- Old docs said a `companyName` is never set in the auth store; no such reference exists any more.
+
+- The old known issue "rate limiter uses an in-memory store" was stale: the shared MongoDB store (`middleware/mongoRateLimitStore.ts`) is used; recorded as resolved in `docs/platform-api/STATUS.md`.
+- README stack line said Express 4; `server/package.json` has Express 5; corrected.
+
+## Tests written, not run
+
+None (documentation only).

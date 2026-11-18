@@ -1,6 +1,6 @@
 # Architecture
 
-How the Admin repo is put together, read from the code on branch `chore/wrapup`. Paths are repo-relative. Portal-level detail: [portals/admin.md](portals/admin.md), [portals/operator.md](portals/operator.md), [portals/identity.md](portals/identity.md), [portals/platform-api.md](portals/platform-api.md). Environment: [CONFIGURATION.md](CONFIGURATION.md).
+How the Admin repo is put together, read from the code on `main`. Paths are repo-relative. This file covers the repo as a whole; product detail is in [identity](identity/README.md), [admin-center](admin-center/README.md), [command-center](command-center/README.md) and [platform-api](platform-api/README.md). Environment: [CONFIGURATION.md](CONFIGURATION.md).
 
 ---
 
@@ -121,7 +121,7 @@ Platform API handlers mostly answer errors themselves with `{ error, code }` (no
 ## 4. Auth flow: SPA → OIDC → token → `requireAuth`
 
 1. `AuthGuard` (`client/src/components/layout/AuthGuard.tsx`) finds no access token in memory. If a refresh token is in memory it refreshes, else `startLogin(returnTo)` (`client/src/lib/oidc.ts`) stores PKCE verifier / state / nonce / return path in `sessionStorage` and redirects to `${VITE_OIDC_ISSUER}/oauth/authorize` with `client_id=karbexa-admin-spa`, `resource=urn:karbexa:admin`, `code_challenge_method=S256`.
-2. The tenant realm runs the hosted login (password, then TOTP or enrolment, or Entra), see identity.md 3.4. On success the provider redirects to `/auth/callback?code=...`.
+2. The tenant realm runs the hosted login (password, then TOTP or enrolment, or Entra), see [identity/ARCHITECTURE.md](identity/ARCHITECTURE.md). On success the provider redirects to `/auth/callback?code=...`.
 3. `CallbackPage` calls `completeLogin` (checks state, posts the code + verifier + resource to `/oauth/token`). `storeTokens` keeps access and refresh tokens in `useAuthStore` (memory only) and schedules a refresh 60 s before expiry. `loadProfile` calls `GET /api/v1/auth/me`.
 4. While issuing the access token, `extraTokenClaims` (`server/src/identity/providers.ts`) re-checks access (`loadAccessContext`), upserts / slides the `Session` row (`_id = sid`), and adds `idn`, `org`, `sid`, `org_roles`, `authz_ver`, `amr`, `token_use`, `email`. Access tokens are RS256 JWTs with `typ: at+jwt`, valid 600 s.
 5. `apiClient` sends `Authorization: Bearer <token>`. On 401 it refreshes once (unless the code is `SESSION_REVOKED`) and retries, else clears the session and restarts login.
@@ -173,11 +173,11 @@ await runInTransaction(async (session) => {
 // provider-side cleanup (destroyProviderSession) and other non-transactional work after commit
 ```
 
-Delivery: `platformDispatcher` nudges subscribers with signed POSTs; they pull `/platform/v1/orgs/:orgId/events?after_seq=`. Events expire after 30 days (TTL). Details in platform-api.md.
+Delivery: `platformDispatcher` nudges subscribers with signed POSTs; they pull `/platform/v1/orgs/:orgId/events?after_seq=`. Events expire after 30 days (TTL). Details in [platform-api/ARCHITECTURE.md](platform-api/ARCHITECTURE.md).
 
 Session revocation follows the same split: `revokeSessionsTx` (mark `revoked_at`, emit `session.revoked`) runs in the transaction; `destroyProviderSession` (delete oidc-provider session, grants, tokens) runs after commit because the `oidc_*` collections are written outside Mongoose sessions.
 
-Areas not on this pattern (no `runInTransaction` call): policies, workflows, data fields, integrations, IP restrictions, identity providers. See admin.md section 7.
+Areas not on this pattern (no `runInTransaction` call): policies, workflows, data fields, integrations, IP restrictions, identity providers. See [admin-center/STATUS.md](admin-center/STATUS.md).
 
 ## 7. Data stores
 
