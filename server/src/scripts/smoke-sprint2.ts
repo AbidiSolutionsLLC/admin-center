@@ -1589,13 +1589,13 @@ async function main() {
       const { RouteMetric, HealthEvent, HealthCheck, Job } = await import('../models');
       const json = async (r: any) => (await r.json()) as any;
       const before = await json(await op('/health'));
-      check('4.9 before any run every component reads unknown and the page is stale', before.data.components.length === 8 && before.data.components.every((c: any) => c.state === 'unknown') && before.data.stale === true, JSON.stringify(before.data).slice(0, 160));
+      check('4.9 before any run every component reads unknown and the page is stale', before.data.components.length === 9 && before.data.components.every((c: any) => c.state === 'unknown') && before.data.stale === true, JSON.stringify(before.data).slice(0, 160));
 
       await flushRouteMetrics();
       check('4.9 route counters wrote a RouteMetric document with counts and no paths', (await RouteMetric.countDocuments()) >= 1 && !JSON.stringify(await RouteMetric.find().lean()).includes('/operator/v1/orgs'));
 
       const run = await runHealthChecks();
-      check('4.9 all eight components were evaluated', Object.keys(run).sort().join() === ['admin_api', 'database', 'email', 'event_dispatcher', 'identity', 'jobs', 'products_api', 'products_worker'].sort().join(), Object.keys(run).join());
+      check('4.9 all nine components were evaluated (standalone_portals joined with WS-C)', Object.keys(run).sort().join() === ['admin_api', 'database', 'email', 'event_dispatcher', 'identity', 'jobs', 'products_api', 'products_worker', 'standalone_portals'].sort().join(), Object.keys(run).join());
       check('4.9 database and identity are healthy in the smoke environment', run.database.state === 'healthy' && run.identity.state === 'healthy', JSON.stringify([run.database, run.identity]));
       const after = await json(await op('/health'));
       check('4.9 GET /health returns the stored state, overall state and is no longer stale', after.data.components.every((c: any) => !!c.checked_at) && ['healthy', 'degraded', 'critical'].includes(after.data.state) && after.data.stale === false, JSON.stringify(after.data.state));
