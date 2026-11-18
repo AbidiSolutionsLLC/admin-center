@@ -1,8 +1,9 @@
 // server/src/controllers/people.controller.ts
-import { Request, Response } from 'express';
+import { Request, Response, RequestHandler } from 'express';
 import { z } from 'zod';
 import bcrypt from 'bcryptjs';
 import { asyncHandler } from '../utils/asyncHandler';
+import { verifyInviteLimiter } from '../middleware/rateLimiter';
 import { User, IUser, EmploymentType } from '../models/User.model';
 import { Company } from '../models/Company.model';
 import { RefreshToken } from '../models/RefreshToken.model';
@@ -2401,8 +2402,9 @@ export const exportUsers = asyncHandler(async (req: Request, res: Response) => {
  * Looks the token up by hash and answers with one of six outcomes (DRD §5.2). Public (no authentication).
  * Knowing the reason requires holding a token that once existed, so a guesser learns nothing.
  * The invitation is not consumed here; that happens when the password is set.
+ * Exported as [limiter, handler] so the route always carries its own limiter (7.2 finding 1: 30 per 15 min per IP, 429).
  */
-export const verifyInviteToken = asyncHandler(async (req: Request, res: Response) => {
+const verifyInviteHandler = asyncHandler(async (req: Request, res: Response) => {
   const { token } = req.body ?? {};
   if (!token || typeof token !== 'string') throw new AppError('Token is required', 400, 'BAD_REQUEST');
 
@@ -2437,6 +2439,7 @@ export const verifyInviteToken = asyncHandler(async (req: Request, res: Response
     },
   });
 });
+export const verifyInviteToken: RequestHandler[] = [verifyInviteLimiter, verifyInviteHandler];
 
 /**
  * POST /api/v1/people/renew-invite { token }

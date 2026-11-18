@@ -420,6 +420,20 @@ async function main() {
       v = await verify('f'.repeat(64));
       check('2.2 verify unknown token = 404 INVITE_NOT_FOUND', v.status === 404 && v.body.code === 'INVITE_NOT_FOUND', v);
 
+      // A-3 (7.2 finding 1): verify-invite has its own limiter, 30 requests per 15 min per IP; the 31st is 429 RATE_LIMITED.
+      {
+        const { RateLimitWindow } = await import('../models/RateLimitWindow.model');
+        await RateLimitWindow.deleteMany({ _id: /^invite-verify:/ }); // start from an empty window (the checks above counted)
+        const statuses: number[] = [];
+        for (let i = 0; i < 31; i++) statuses.push((await post('/people/verify-invite', { token: 'd'.repeat(64) })).status);
+        const over = await post('/people/verify-invite', { token: ok.rawToken });
+        const overBody = await over.json() as { success?: boolean; code?: string };
+        check('A-3 verify-invite: 30 requests answered normally (404 for an unknown token)', statuses.slice(0, 30).every((s) => s === 404), statuses.join());
+        check('A-3 verify-invite: the 31st request = 429 RATE_LIMITED in the standard envelope', statuses[30] === 429, statuses[30]);
+        check('A-3 verify-invite: over the limit a real token is also 429 (no outcome leaks)', over.status === 429 && overBody.success === false && overBody.code === 'RATE_LIMITED', { status: over.status, overBody });
+        await RateLimitWindow.deleteMany({ _id: /^invite-verify:/ });
+      }
+
       // renew: expired -> 202 and a fresh pending row; valid or unknown tokens also 202 and change nothing
       const uRen = await mkUser('ren');
       const ren = await mkInv(uRen, -1);
