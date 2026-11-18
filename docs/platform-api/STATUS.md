@@ -1,6 +1,6 @@
 # Platform API: status
 
-Last verified: 2026-11-18 against `main` of `karbexa-admin` (4435d81). Results below are the last real runs (2026-11-17); nothing was run for this document. Platform roll-up: meta repo `docs/STATUS.md`.
+Last verified: 2026-11-18 against `main` of `karbexa-admin` after the Wave 2 merge. Results below are the last real runs (2026-11-17); Wave 1 work is typechecked only, its tests run in Wave 3. Platform roll-up: meta repo `docs/STATUS.md`.
 
 ## Built, by feature ID
 
@@ -8,7 +8,9 @@ Last verified: 2026-11-18 against `main` of `karbexa-admin` (4435d81). Results b
 |---|---|---|
 | PLT-001 to PLT-003, PLT-005 to PLT-011 | built | `smoke:sprint2` 554/554 (E3, E4, E4a, E4c, E4d, 1.3 blocks), Admin unit tests 199/199, products `test:e2e-platform` 19/19 (2026-11-17). Latency: Desk revocation p95 about 0.6 s (target 5 s), session revocation about 0.4 s (target 30 s), nudge path p95 about 0.6 s (target 5 s) |
 | PLT-004, PLT-012 | partial | See known issues |
-| PLT-013 to PLT-018 | planned | See backlog |
+| PLT-014 | built, not tested | `kb` seeded and allowed by default (D-3); tests `kbProduct.test.ts`, `productLaunchUrl.test.ts` written, not run |
+| PLT-013 | partial | Registration built (C-1); Platform API listings not (see known issues) |
+| PLT-015 to PLT-018 | planned | See backlog |
 
 ## Known issues
 
@@ -22,9 +24,11 @@ Last verified: 2026-11-18 against `main` of `karbexa-admin` (4435d81). Results b
 | Events older than 30 days are deleted by TTL; a subscriber further behind gets 410 `CURSOR_EXPIRED` and must resync | `PlatformEvent` TTL | By design |
 | Manifest `capabilities` is validated and not stored | `server/src/platform/manifest.ts` | None yet |
 | A manifest publish writes no operator audit entry (`OperatorAuditEvent.operator_id` is required and a service call has none) | `manifest.ts` | Decision 1.3 |
-| A product key is accepted only from a client whose `PLATFORM_CLIENT_PRODUCTS` allow-list names it; the default list holds the four built-ins | `requireServiceToken.ts` | A new product needs configuration in Admin |
+| A product key is accepted only from a client whose `PLATFORM_CLIENT_PRODUCTS` allow-list names it; the default list holds the five built-ins (`people`, `projects`, `sign`, `desk`, `kb`) | `requireServiceToken.ts` | A new product needs configuration in Admin |
 | No events for policies, workflows, data fields, integrations, notifications, IP restrictions, identity providers, security policies, teams, plan changes, operator accounts or IdP approval | emitters | Products are not told; none is consumed today |
-| Standalone portal registration, `standalone_portals` health, standalone listings | not built | WS-C C-1, C-6 |
+| `GET /platform/v1/apps` (`platform/manifest.ts` `view()`) reports `hosting: { mode: 'suite', launch_path }` for every app, also a standalone one | `server/src/platform/manifest.ts` | Products see wrong hosting data for standalone apps |
+| No Platform API listing of standalone launchers: the products `/me/apps` merge calls `platformApi.listLaunchers` only when present, so products show no standalone tiles. Wanted: `GET /platform/v1/orgs/:orgId/launchers` (scope `platform.org.read`) → `[{ product_key, name, launch_url (tenant first), roles }]` for active entitlements | `server/src/platform/`; products `backend/platform/platformApi.js` | Additive contract change: needs a recorded decision (meta STATUS → Next: Wave 3) |
+| `seed:e11` iterates `PRODUCT_DEFS`, so it now seeds `kb` too | `server/src/scripts/seed-e11.ts` | Harmless (`seed:e11` is never used for go-live) |
 
 Resolved (so nobody re-reports them): the per-client rate limiter used an in-memory store in an old note; it now uses the shared MongoDB store (`middleware/mongoRateLimitStore.ts`).
 
@@ -32,8 +36,7 @@ Resolved (so nobody re-reports them): the per-client rate limiter used an in-mem
 
 | Task | What |
 |---|---|
-| WS-C C-1, C-6 | Standalone registration, listings and health (PLT-013) |
-| WS-D (registry entry D-2) | Knowledge Base manifest (PLT-014) |
+| Decision, then Wave 3 | Launchers endpoint and standalone hosting block in `GET /apps` (PLT-013) |
 | none | Organisation-bound service tokens; paged `GET /orgs`; parent-location calendars; store manifest `capabilities`; `timezone` in the member payload |
 
 ## Test commands and last results

@@ -6,7 +6,7 @@ The machine-to-machine surface through which the products backend (People, Proje
 
 | Caller | What it may do |
 |---|---|
-| `karbexa-products-backend` (services realm client) | All `platform.*` scopes; may write the role catalog and manifest of the four built-in products |
+| `karbexa-products-backend` (services realm client) | All `platform.*` scopes; may write the role catalog and manifest of the five built-in products (including `kb`) |
 | Other service clients (later: standalone portals, Knowledge Base) | Only the scopes and products their `PLATFORM_CLIENT_PRODUCTS` entry allows |
 | `karbexa-admin-backend` (Admin calling out) | Not a caller of this API; it obtains a token for the products backend's internal API (`API.md`, outbound) |
 

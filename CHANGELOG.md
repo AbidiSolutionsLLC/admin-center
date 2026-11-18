@@ -1,6 +1,23 @@
 # Changelog
 
-Format: [Keep a Changelog](https://keepachangelog.com/en/1.1.0/). Each entry lists the change and its user-visible or deploy-visible effect. Commit details: the meta repo `docs/wrapup/CHANGE-LEDGER.md` while it exists, otherwise git history.
+Format: [Keep a Changelog](https://keepachangelog.com/en/1.1.0/). Each entry lists the change and its user-visible or deploy-visible effect. Commit details: git history (the old meta repo `docs/wrapup/CHANGE-LEDGER.md` is in its tag `docs-before-standard`).
+
+## [Unreleased]: execution plan Wave 1 and Wave 2 (2026-11-18)
+
+Typechecked and built; tests written, run in Wave 3.
+
+### Added
+- WS-C: standalone portals. Operator `PUT /operator/v1/products/:key` (`hosting.mode: 'standalone'`), `POST …/rotate-secret`, `PUT …/tenants/:orgId/launch-url`, `GET /products/standalone`; registry-driven OIDC clients `karbexa-<key>`; access gate with hosted denied pages and `product_access_denied` security events; standalone claim set (`product_role`, decision S-12); back-channel logout tokens sent as jobs; health component `standalone_portals`; Command Center "Register standalone portal" form; launcher tiles open standalone portals in a new tab. Operator permission `products.write` (platform_admin).
+- WS-D: `kb` (Knowledge Base) in the built-in product seed and the default `PLATFORM_CLIENT_PRODUCTS` allow-list; optional `KB_LAUNCH_URL`. Deploy note: re-run `seed:products` so existing deployments get the `kb` app.
+- WS-A: `npm run seed:demo` builds the "Acme Demo" organisation through the API (`--memory` self-check passed).
+
+### Changed
+- WS-A A-3 to A-5: `POST /people/verify-invite` has its own limiter (30 per 15 min per IP, 429 `RATE_LIMITED`); `renew-invite` answers 202 before any work and renews only the newest expired invitation.
+- Display name of `projects` is "Projects" (was "Dictate"); a `seed:products` run renames existing apps.
+- `GET /me/apps` returns the organisation's launch URL first for standalone portals.
+
+### Removed
+- WS-A A-6: direct `POST /operator/v1/operators` (operators are invited); the client's "Add with password" path.
 
 ## [Unreleased]: demo fixes (plan 04)
 

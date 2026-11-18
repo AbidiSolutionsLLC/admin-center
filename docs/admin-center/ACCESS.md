@@ -39,9 +39,10 @@ App Access grants a product role per member. Catalogs are seeded by `seedProduct
 | Product key | App name | Roles (key, rank) | Default |
 |---|---|---|---|
 | `people` | People | `people_administrator` 40, `hr` 30, `employee` 10, `read_only` 5 | `employee` |
-| `projects` | Dictate | `project_administrator` 30, `project_manager` 20, `team_member` 10, `read_only` 5 | `team_member` |
+| `projects` | Projects | `project_administrator` 30, `project_manager` 20, `team_member` 10, `read_only` 5 | `team_member` |
 | `sign` | Sign | `sign_administrator` 20, `sign_user` 10, `read_only` 5 | `sign_user` |
 | `desk` | Desk | `desk_admin` 40, `support_lead` 30, `technician` 20, `requester` 10, `read_only` 5 | `requester` |
+| `kb` | Knowledge Base | `kb_administrator` 40, `kb_reviewer` 30, `kb_author` 20, `kb_reader` 10, `read_only` 5 | `kb_reader` (no default assignment rule) |
 
 Effective access (`computeEffectiveAccess`, `server/src/lib/effectiveAccess.ts`):
 1. Deny all products if the org `status` is not `active` (`ORG_SUSPENDED`), the member's lifecycle is not one of `onboarding`, `active`, `probation`, `on_leave` or `is_active === false` (`MEMBER_NOT_ACTIVE`), or the linked identity is not active (`IDENTITY_NOT_ACTIVE`).
@@ -50,7 +51,7 @@ Effective access (`computeEffectiveAccess`, `server/src/lib/effectiveAccess.ts`)
 
 Defaults created at provisioning (operator API, `ensureDefaultAccess` in `server/src/operator/routes.ts`): an "All Members" dynamic group with rules `{}` gets each product's manifest `default_assignments` (built-in: `people → employee`, `desk → requester`), each only when the org has that entitlement active. Product keys are data: `lib/productRegistry.ts` (`listProducts`, `getProduct`, `assertProductKey`, 60-second cache) reads the `App` rows with `app_type: 'karbexa_product'`; `admin` is reserved and never assignable. Unknown keys fail with 400 `UNKNOWN_PRODUCT`. Manifest fields on `App`: `manifest_version`, `product_status`, `icon`, `product_category`, `default_assignments`; the seed writes them on first seed only (re-run `seed:products` on existing deployments).
 
-Default plans (`DEFAULT_PLANS`): `starter` = people; `professional` = people, projects, sign; `enterprise` = people, projects, sign, desk.
+Default plans (`DEFAULT_PLANS`): `starter` = people; `professional` = people, projects, sign; `enterprise` = people, projects, sign, desk. `kb` is in no default plan: an operator entitles a tenant by override, then it is assignable in App Access like any product (decision KB-1). The app name is set on every `seed:products` run, so a re-run renames "Dictate" to "Projects" on existing deployments (decision W1-NAME).
 
 ## Permission matrix (role x action, summary)
 

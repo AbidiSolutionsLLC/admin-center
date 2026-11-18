@@ -16,7 +16,7 @@ Issuer origin is `ID_ISSUER_ORIGIN` (default `http://id.karbexa.localhost:5000`,
 - A services client is registered only when its JWKS env var is set.
 - A client may obtain exactly one audience; any other `resource` gives `invalid_target` (`getResourceServerInfo`).
 - No consent screen (`loadExistingGrant`). CORS on provider endpoints is client-based: the origin must match a redirect URI origin of a public client.
-- Planned (WS-C C-2): clients `karbexa-<key>` for standalone portals, registry-driven. Not in the code yet.
+- Standalone portals (WS-C C-2): clients `karbexa-<key>` in the tenant realm, audience `urn:karbexa:<key>`, first-party (no consent). They are answered from the App registry by the provider adapter (`providers.ts` `Adapter.find` for `Client` → `lib/standalonePortals.ts` `findStandaloneClientMetadata`), so a registration or rotation takes effect on the next request. The previous secret of a rotation is accepted for 24 h.
 
 ## OIDC endpoints (under `/realms/<realm>`)
 
@@ -74,7 +74,7 @@ Operator invitation endpoints (`/operator/v1/invite/verify`, `/invite/accept`): 
 | operator | `sub` = `OperatorAccount._id`, `aud` `urn:karbexa:operator` | `email`, `roles`, `sid`, `token_use: 'access'`, `amr` |
 | services | `client_id`, `scope`, `aud` | `token_use: 'service'` |
 
-ID token claims: `sub`, `email`, `email_verified`, `name` (`conformIdTokenClaims: true`). Planned standalone-portal claims (`product_role`, `org_slug`, ...): WS-C C-4.
+ID token claims: `sub`, `email`, `email_verified`, `name` (`conformIdTokenClaims: true`). Standalone portal clients get exactly `sub`, `org`, `org_slug`, `org_name`, `email`, `email_verified`, `name`, `picture`, `product_role` (this product only), `member_type` (`workforce` for everyone today), `sid` (the Karbexa session id), `authz_ver` on the ID token, the access token for `urn:karbexa:<key>` and userinfo (`buildStandaloneClaims`; decision S-12; meta `contracts/standalone-claims.md`). Access gate (WS-C C-3): an interaction policy prompt `product_access` on every authorization request and a check on every code exchange and refresh; a denial shows a hosted page ("{Product} is not available for your organisation" or "You don't have access to {Product}. Ask your administrator."), records a `product_access_denied` security event and issues no code; the page's Cancel ends with `error=access_denied` on the portal's redirect URI. Back-channel logout (WS-C C-5): a signed logout token (`typ: logout+jwt`, `sub`, `sid`, `jti`, 2 min) per standalone client with a session, queued as a `Job` on sign-out, session revocation, suspension, termination, tenant suspension and refresh denial.
 
 ## Errors
 

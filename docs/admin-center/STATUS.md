@@ -1,6 +1,6 @@
 # Admin Center: status
 
-Last verified: 2026-11-18 against `main` of `karbexa-admin` (4435d81). Results below are the last real runs (Phase 7, 2026-11-17, on `feat/elevation`, and the demo-fixes runs of the same day); nothing was run for this document. Platform roll-up: meta repo `docs/STATUS.md`.
+Last verified: 2026-11-18 against `main` of `karbexa-admin` after the Wave 2 merge (WS-A, WS-C, WS-D, WS-F, WS-I, WS-J). Results below are the last real runs (Phase 7, 2026-11-17, on `feat/elevation`, and the demo-fixes runs of the same day); Wave 1 work is typechecked and built only, its tests run in Wave 3. Platform roll-up: meta repo `docs/STATUS.md`.
 
 ## Built, by feature ID
 
@@ -9,8 +9,10 @@ Last verified: 2026-11-18 against `main` of `karbexa-admin` (4435d81). Results b
 | ADM-001 to ADM-014, ADM-016 to ADM-019, ADM-021 | built | `smoke:sprint2` 554/554 (2026-11-17; 567 expected on `main` after the paging follow-up), Admin unit tests 199/199, Playwright specs for every page (all passed 2026-11-17 on `feat/elevation`), real-stack walk: all 23 Admin Center pages load clean |
 | ADM-015 | partial | Server stream built; no client consumer |
 | ADM-020 | partial | See known issues |
-| ADM-025 | partial | `seed:demo` written on `main`; never run (WS-A A-1) |
-| ADM-022, ADM-023, ADM-024, ADM-026, ADM-027, ADM-028 | planned | See backlog |
+| ADM-024 | built, not tested | Standalone tiles in the Admin launcher (WS-C C-6); `GET /me/apps` returns the organisation's launch URL first (W2-2). Tests written: `lib/__tests__/standaloneHealth.test.ts` (launch URL rule) |
+| ADM-025 | built | `seed:demo -- --memory` self-check passed 2026-11-18 (16 active members, 12 app assignments, 66 platform events). The run against the dev stack (`node scripts/dev.mjs --demo`) is Wave 3 |
+| ADM-026 | built, not tested | WS-A A-3 (`verifyInviteLimiter`), A-4 (202 before any work; outbox row in the transaction), A-5 (newest expired invitation only). Smoke cases written in `smoke-oidc-login.ts`, not run |
+| ADM-022, ADM-023, ADM-027, ADM-028 | planned | See backlog |
 
 ## Known issues
 
@@ -29,19 +31,20 @@ Last verified: 2026-11-18 against `main` of `karbexa-admin` (4435d81). Results b
 | Debug leftovers: `console.log('ROLES ROUTES LOADED')` and `GET /api/v1/protected-test` | `server/src/routes/roles.routes.ts`, `routes/index.ts` | Noise; the route returns `req.user` to any signed-in member |
 | `CastError` on `_id` is reported as "User not found" for every model | `server/src/middleware/errorHandler.ts` | Misleading message |
 | `/security/sessions` took 0.7 to 1.2 s with 101 sessions examined (Phase 7.4) | `security.controller.ts` | Slow at scale |
-| 7.2 low findings on the public invitation routes (verify limiter, renew timing, old link supersedes current) | `people.controller.ts` | Planned: WS-A A-3, A-4, A-5 |
+| A-3 changed the export of `verifyInviteToken` to `[limiter, handler]`; anything calling it directly as a function would break (none in `server/src`) | `people.controller.ts` | None today |
+| `seed:demo` warns `people/employee -> group:All Members` 409 `ASSIGNMENT_EXISTS` (the product default rule already assigns it) and logs `MongoClientClosedError` from background jobs at shutdown | `server/src/scripts/seed-demo.ts` | Harmless |
+| Access removal for one member is by assignment rule: removing a member's product access means revoking the rule that grants it (a department rule in the demo), which affects the whole department | App Access | Demo walk D5.1 restores the rule; if it dies half-way, re-create "Engineering → Projects, team_member" |
 | Entra JIT member creation is not built; first-sign-in linking works for existing members | `../identity/STATUS.md` | Unknown Microsoft users are denied |
 | Audit export: the routes require Super Admin or IT Admin and IT Admin holds audit read only, so in practice only Super Admin exports | `auditLogs.routes.ts`, `lib/seed.ts` | Narrower than the seeded permissions (decision G9) |
 
-Resolved since the old notes (kept so nobody re-reports them): Security active sessions (5.2), audit and holiday exports for built-in roles (5.3), `member.updated` for active, probation and on_leave (5.11), two unreachable routes (`GET /work-schedules/assignments`, `DELETE /holidays/assignments/bulk`, covered by `routeOrder.test.ts`), account page access states (0.7g), seat enforcement.
+Resolved since the old notes (kept so nobody re-reports them): 7.2 invitation findings 1, 2, 3 (A-3 to A-5, 2026-11-18, tests not run); Security active sessions (5.2), audit and holiday exports for built-in roles (5.3), `member.updated` for active, probation and on_leave (5.11), two unreachable routes (`GET /work-schedules/assignments`, `DELETE /holidays/assignments/bulk`, covered by `routeOrder.test.ts`), account page access states (0.7g), seat enforcement.
 
 ## Backlog (priority order)
 
 | Task | What |
 |---|---|
-| WS-A A-1 | Finish and run `seed:demo --memory` (ADM-025) |
-| WS-A A-3, A-4, A-5 | Invitation route hardening (ADM-026) |
-| WS-C C-6 | Standalone portals in the Admin launcher (ADM-024) |
+| Wave 3 | Run the Wave 1 tests (smoke A-3 to A-5, unit `kbProduct`, `standalonePortals`, `standaloneHealth`, `backchannelLogout`); `dev.mjs --demo` and the demo walk (meta `docs/STATUS.md` → Next: Wave 3) |
+| Wave 3 | Per-tenant launch URL screen (API `PUT /operator/v1/products/:key/tenants/:orgId/launch-url` exists, no screen) |
 | none | People page server-side paging (ADM-023); External members (ADM-022); feature components restyle; E8 event-driven calendars; E9 audit hash chain |
 
 ## Test commands and last results

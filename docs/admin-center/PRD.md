@@ -39,9 +39,9 @@ Source of truth for tenant administration. State is read from the code and `STAT
 | ADM-021 | Platform announcement banner (tenant side) | CC-AN-1 | Could | built | `GET /announcement`, `AnnouncementBanner`; the products app banner is not built |
 | ADM-022 | External members list and self-registration switch per product | AC-9 | Must for Zyntrus | planned (deferred by decision S-DEFER; no task id) | Not built |
 | ADM-023 | People page on server-side paging and filters | | Should | planned (no task id) | The API is paged; the page and pickers still read every page |
-| ADM-024 | Admin launcher lists standalone portals (absolute URL, per-tenant override first) | | Must for Assets and Zyntrus | planned: WS-C C-6 | Tiles open in a new tab |
-| ADM-025 | Demo organisation "Acme Demo" created through the real API (`npm run seed:demo`) | | Should | partial: WS-A A-1 (written on `main`, never run) | `--memory` self-check prints 16 active members and exits 0 |
-| ADM-026 | Public invitation routes hardened: dedicated limiter on verify (30 per 15 min per IP), renew answers before any e-mail work, renew only for the newest expired invitation | | Should | planned: WS-A A-3, A-4, A-5 | Smoke cases listed in the plan |
+| ADM-024 | Admin launcher lists standalone portals (absolute URL, per-tenant override first) | | Must for Assets and Zyntrus | built (WS-C C-6; `GET /me/apps` tenant URL first since W2-2), tests not run | Tiles open in a new tab |
+| ADM-025 | Demo organisation "Acme Demo" created through the real API (`npm run seed:demo`) | | Should | built (WS-A A-1): `--memory` self-check passed 2026-11-18 (16 active members, 12 app assignments, 66 platform events); full run with `dev.mjs --demo` is Wave 3 | `--memory` self-check prints 16 active members and exits 0 |
+| ADM-026 | Public invitation routes hardened: dedicated limiter on verify (30 per 15 min per IP), renew answers before any e-mail work, renew only for the newest expired invitation | | Should | built (WS-A A-3, A-4, A-5), smoke cases written, not run | Smoke cases in `smoke-oidc-login.ts` |
 | ADM-027 | Entra JIT member creation | | Could | planned (no task id; see `../identity/PRD.md` IDN-008) | |
 | ADM-028 | Audit hash chain (E9) | | Could | planned (no task id; backlog after go-live) | |
 

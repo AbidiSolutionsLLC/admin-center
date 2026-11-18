@@ -29,11 +29,11 @@ Source of truth for the operator console. State is read from the code and `STATU
 | CMD-012 | Seats: limit per product per tenant, usage shown, warning at 90 percent; Admin Center blocks assignments beyond the limit | CC-PL-5 | Must | built | `smoke:sprint2` seat block |
 | CMD-013 | Trial end date per tenant, extendable; flagged in Attention required on expiry | CC-PL-6 | Should | built | `signals.test.ts` |
 | CMD-014 | Onboarding list with stage and the one action that moves it forward (resend invitation, change first-admin e-mail while not accepted) | CC-ON-1, ON-6 | Must | built | `onboarding.test.ts`; `operator-onboarding.spec.ts` (not run) |
-| CMD-015 | Platform health: eight components with last-checked time, three states with written thresholds, overall = worst, 7-day history of state changes | CC-PH-1, CC-PH-3, CC-PH-5 | Must | partial | Built; the `standalone_portals` component is planned (WS-C C-6) |
+| CMD-015 | Platform health: nine components with last-checked time, three states with written thresholds, overall = worst, 7-day history of state changes | CC-PH-1, CC-PH-3, CC-PH-5 | Must | built | Nine components since WS-C C-6 added `standalone_portals` (probe through the SSRF guard, 5 s, degraded after 3 failures, never critical; counts undelivered back-channel logouts); tests written, not run |
 | CMD-016 | Per-tenant products sync table (lag, parked events, last error) from the products internal health route | CC-PH-2 | Must | built | `GET /health/sync`; `operator-health.spec.ts` (not run) |
 | CMD-017 | Build version and start time of each service | CC-PH-4 | Should | planned (no task id) | Not in the health payload today |
 | CMD-018 | Operators list with role, status, MFA state, last sign-in, sessions; suspend, reset password, reset MFA, revoke sessions; last active `platform_admin` cannot be suspended or demoted | CC-OP-2 | Must | built | `smoke:sprint2` C7 cases (passed on `feat/demo-fixes`); `operator-operators.spec.ts` (not run) |
-| CMD-019 | Operators are invited and set their own password; direct create with a typed password is retired | CC-OP-3 | Should | partial | Invite built; direct `POST /operators` still exists: planned WS-A A-6 |
+| CMD-019 | Operators are invited and set their own password; direct create with a typed password is retired | CC-OP-3 | Should | built | Direct `POST /operators` removed (WS-A A-6; smoke case expects 404, not run) |
 | CMD-020 | Operator sign-in lockout and security events | CC-OP-4 | Must | built | `smoke:login` "Plan 0.4" block |
 | CMD-021 | Audit log: filters (tenant, operator, category, action, dates), detail with before, after, reason, correlation id; CSV export (audited, formula-safe) | CC-AU-1 to CC-AU-3 | Must | built | `audit.test.ts`; `operator-audit.spec.ts` (not run) |
 | CMD-022 | Security page: operators without MFA, failed sign-ins (24 h), locked accounts, active sessions with revoke, tenants whose admins have no MFA, recent role changes | CC-SE-1 | Must | built | `operator-security.spec.ts` (not run) |
@@ -41,7 +41,7 @@ Source of truth for the operator console. State is read from the code and `STATU
 | CMD-024 | Operator invitation accept page: set password, TOTP enrolled at first sign-in; verify and accept are public, behind the IP allow-list | plan 04 C2 | Should | built (smoke passed on `feat/demo-fixes`) | `operator-accept-invite.spec.ts` (not run, Wave 3) |
 | CMD-025 | One platform announcement shown as a banner in Admin Center and the products app | CC-AN-1 | Could | partial | Operator editor and Admin Center banner built; the products app banner and the Platform API proxy are not built |
 | CMD-026 | Entra tenant approval from the tenant profile | | Should | built | `useOrgIdps` and the approve mutation in `operatorApi.ts` |
-| CMD-027 | Register a standalone portal (form, secret shown once, rotate secret), per-tenant launch URL | PRD 4.4 SP-1 to SP-9 | Must for Assets and Zyntrus | planned: WS-C C-1, C-7 | Spec: meta `docs/spec/02-MASTER-DRD.md` section 8 |
+| CMD-027 | Register a standalone portal (form, secret shown once, rotate secret), per-tenant launch URL | PRD 4.4 SP-1 to SP-9 | Must for Assets and Zyntrus | partial: registration form, secret once and rotate built (WS-C C-1, C-7), tests not run; per-tenant launch URL has an API but no screen | Spec: DRD section 8 (meta tag `docs-before-standard`); `operator-standalone.spec.ts` |
 | CMD-028 | Operator audit unified with the tenant audit hash chain (E9) | | Could | planned (no task id; after go-live) | |
 
 ## Non-goals (decision S-9)

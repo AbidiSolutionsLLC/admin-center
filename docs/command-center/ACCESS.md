@@ -19,7 +19,7 @@ Four operator roles in a static map (`server/src/operator/permissions.ts`, `ROLE
 | `operators.read` | yes | no | no | yes | `GET /operators`, operator sessions list |
 | `operators.write` | yes | no | no | no | invite, create, update, session revoke |
 
-`products.write` (standalone portal registration) is not defined yet: planned WS-C C-1. `server/src/operator/__tests__/permissions.test.ts` walks the router and fails when a route has no permission mark.
+`products.write` (standalone portal registration) is granted to `platform_admin` only (Wave 2); `requireProductsWrite` in `operator/standalone.ts` also accepts the `platform_admin` role directly. `server/src/operator/__tests__/permissions.test.ts` walks the router and fails when a route has no permission mark.
 
 ## Rules beyond the role
 

@@ -4,7 +4,7 @@ Every environment variable read by the Admin server (`process.env` in `server/sr
 
 - Server: `server/src/index.ts` calls `dotenv.config()`, so `server/.env` is loaded at start. Template: `server/.env.example`.
 - Client: Vite exposes `VITE_*` variables at build time. Template: `client/.env.example`.
-- Variables marked **missing from `.env.example`** are read by the code but not listed in the template.
+- Variables marked **missing from `.env.example`** are read by the code but not listed in the template (since WS-I, 2026-11-18, only `KB_LAUNCH_URL` and script-only variables).
 
 Related: [ARCHITECTURE.md](ARCHITECTURE.md), [identity/README.md](identity/README.md), [platform-api/README.md](platform-api/README.md).
 
@@ -22,7 +22,7 @@ Related: [ARCHITECTURE.md](ARCHITECTURE.md), [identity/README.md](identity/READM
 | `TRUST_PROXY` | **yes in production** | dev: `1` | Express `trust proxy`: hop count, comma list of proxy IPs/CIDRs (or `loopback`/`linklocal`/`uniquelocal`), or `false`/`0`. `true` allowed only outside production | `1` | Startup fails if unset or `true` in production. Also read by `applyProxy` in `identity/providers.ts:82` (default `'1'`; sets `maxIpsCount` only for a number) | `server/src/lib/trustProxy.ts`, `identity/providers.ts:82` |
 | `ENCRYPTION_KEY` | **yes** when used | none (throws "ENCRYPTION_KEY environment variable is not set") | AES-256-GCM key material (SHA-256 of the value) for TOTP secrets, Entra and account-page cookies, integration credentials. Account-page CSRF fallback | 32+ random bytes | Rotating it makes every stored TOTP secret undecryptable | `server/src/lib/cryptoService.ts:14`, `identity/account.ts:66` |
 | `RBAC_CACHE_TTL_MS` | no | `30000` | TTL of the per-user role / group / permission cache | empty | Lower means faster role-change pickup, more DB reads | `server/src/lib/rbacCache.ts:47` |
-| `STREAM_RECHECK_MS` | no | `30000` (`RECHECK_MS`) | How often the audit SSE stream re-checks the session | empty | **missing from `.env.example`** | `server/src/controllers/auditLogs.controller.ts:122` |
+| `STREAM_RECHECK_MS` | no | `30000` (`RECHECK_MS`) | How often the audit SSE stream re-checks the session | empty | | `server/src/controllers/auditLogs.controller.ts:122` |
 
 ## 2. Server: HTTP, CORS, rate limits, links
 
@@ -33,7 +33,7 @@ Related: [ARCHITECTURE.md](ARCHITECTURE.md), [identity/README.md](identity/READM
 | `ALLOW_ANY_ORIGIN` | no | unset = false | Reflect any CORS origin | `false` | Honoured only when `NODE_ENV === 'development'` | `server/src/app.ts:36` |
 | `GLOBAL_RATE_LIMIT` | no | dev `10000`, else `6000` per IP per 15 min | Global limiter (skips `OPTIONS` and `/platform/v1`) | empty | | `server/src/middleware/rateLimiter.ts:6` |
 | `AUTH_RATE_LIMIT` | no | dev `100`, else `20` per IP per 15 min | Limiter on password, TOTP, enrol, account-page and password-reset endpoints | empty | | `middleware/rateLimiter.ts:20` |
-| `APP_URL` | no | `http://localhost:5173` | Base URL used in policy notification links | `http://admin.karbexa.localhost:5173` | **missing from `.env.example`** | `server/src/controllers/policies.controller.ts:578` |
+| `APP_URL` | no | `http://localhost:5173` | Base URL used in policy notification links | `http://admin.karbexa.localhost:5173` | | `server/src/controllers/policies.controller.ts:578` |
 
 Note: `requestPasswordReset` builds its link from `ADMIN_SPA_ORIGIN || CLIENT_URL` (`resolveSpaOrigin` in `auth.controller.ts`); if neither is set it throws (Plan 0.7d, built; run in Phase 7, 2026-11-17). There is no localhost fallback.
 
@@ -65,15 +65,15 @@ Note: `requestPasswordReset` builds its link from `ADMIN_SPA_ORIGIN || CLIENT_UR
 
 | Name | Required | Default (code) | Purpose | Dev value | Production notes | Read in |
 |---|---|---|---|---|---|---|
-| `PLATFORM_CLIENT_PRODUCTS` | no | `karbexa-products-backend` → `people, projects, sign, desk`; other clients → none | JSON `{"<clientId>":["people",...]}`: products each services client may write role catalogs for; also makes a client id "registered" for `/platform/v1` | empty | Invalid JSON logs an error and falls back to the default. **missing from `.env.example`** | `server/src/identity/config.ts:81` |
-| `PLATFORM_RATE_LIMIT_PER_MIN` | no | `1200` | Requests per minute per service client on `/platform/v1`; read per request | empty | Counted in MongoDB, shared across instances. **missing from `.env.example`** | `server/src/platform/rateLimit.ts:11` |
-| `PLATFORM_SUBSCRIPTIONS` | no | unset = no subscriptions seeded | JSON array `[{"name","url","secret_env"}]` upserted into `PlatformEventSubscription` at dispatcher start. The entry named `karbexa-products-backend` also gives the products base URL for open items | e.g. `[{"name":"karbexa-products-backend","url":"http://localhost:5001/...","secret_env":"PLATFORM_SUB_SECRET_PRODUCTS"}]` | URL must be https and resolve to a public address in production. **missing from `.env.example`** | `server/src/lib/platformDispatcher.ts:42`, `platform/openItems.ts:9` |
-| `PLATFORM_SUB_SECRET_<NAME>` | for each subscription | none (nudge fails with "Secret env var ... is not set") | HMAC secret for nudges; the name is whatever `secret_env` says and must match `^PLATFORM_SUB_SECRET_[A-Z0-9_]+$` | random string shared with the subscriber | **missing from `.env.example`** | `lib/platformDispatcher.ts:60` |
-| `PLATFORM_DISPATCHER` | no | on | `off` disables the nudge dispatcher | | **missing from `.env.example`** | `lib/platformDispatcher.ts:152` |
-| `PLATFORM_DISPATCH_INTERVAL_MS` | no | `2000` | Dispatcher tick interval | | **missing from `.env.example`** | `lib/platformDispatcher.ts:153` |
+| `PLATFORM_CLIENT_PRODUCTS` | no | `karbexa-products-backend` → `people, projects, sign, desk, kb`; other clients → none | JSON `{"<clientId>":["people",...]}`: products each services client may write role catalogs for; also makes a client id "registered" for `/platform/v1` | empty | Invalid JSON logs an error and falls back to the default. | `server/src/identity/config.ts:81` |
+| `PLATFORM_RATE_LIMIT_PER_MIN` | no | `1200` | Requests per minute per service client on `/platform/v1`; read per request | empty | Counted in MongoDB, shared across instances. | `server/src/platform/rateLimit.ts:11` |
+| `PLATFORM_SUBSCRIPTIONS` | no | unset = no subscriptions seeded | JSON array `[{"name","url","secret_env"}]` upserted into `PlatformEventSubscription` at dispatcher start. The entry named `karbexa-products-backend` also gives the products base URL for open items | e.g. `[{"name":"karbexa-products-backend","url":"http://localhost:5001/...","secret_env":"PLATFORM_SUB_SECRET_PRODUCTS"}]` | URL must be https and resolve to a public address in production. | `server/src/lib/platformDispatcher.ts:42`, `platform/openItems.ts:9` |
+| `PLATFORM_SUB_SECRET_<NAME>` | for each subscription | none (nudge fails with "Secret env var ... is not set") | HMAC secret for nudges; the name is whatever `secret_env` says and must match `^PLATFORM_SUB_SECRET_[A-Z0-9_]+$` | random string shared with the subscriber | | `lib/platformDispatcher.ts:60` |
+| `PLATFORM_DISPATCHER` | no | on | `off` disables the nudge dispatcher | | | `lib/platformDispatcher.ts:152` |
+| `PLATFORM_DISPATCH_INTERVAL_MS` | no | `2000` | Dispatcher tick interval | | | `lib/platformDispatcher.ts:153` |
 | `IDENTITY_KEY_ROTATE_BY` | no | unset | ISO date by which the signing keys should be replaced; within 7 days (or past) the platform health `identity` check reads degraded. Unset = no rotation warning | | | `lib/health/index.ts` |
-| `PRODUCTS_INTERNAL_URL` | no | falls back to `PLATFORM_SUBSCRIPTIONS` / DB subscription origin | Base URL of the products backend for `GET {base}/api/v1/internal/members/:id/open-items` | `http://localhost:<products port>` | **missing from `.env.example`** | `server/src/platform/openItems.ts:6` |
-| `PEOPLE_LAUNCH_URL`, `PROJECTS_LAUNCH_URL`, `SIGN_LAUNCH_URL`, `DESK_LAUNCH_URL` | no | `http://<product_key>.karbexa.localhost:5174` | `App.launch_url` of the system product apps, written whenever `seedProductRegistry()` runs (`npm run seed:products`, and from operator provisioning when a product app is missing) | defaults | Set before seeding in production; existing apps are overwritten on the next seed run. **missing from `.env.example`** | `server/src/lib/productCatalog.ts:71` (`process.env[def.env]`) |
+| `PRODUCTS_INTERNAL_URL` | no | falls back to `PLATFORM_SUBSCRIPTIONS` / DB subscription origin | Base URL of the products backend for `GET {base}/api/v1/internal/members/:id/open-items` | `http://localhost:<products port>` | | `server/src/platform/openItems.ts:6` |
+| `PEOPLE_LAUNCH_URL`, `PROJECTS_LAUNCH_URL`, `SIGN_LAUNCH_URL`, `DESK_LAUNCH_URL`, `KB_LAUNCH_URL` | no | `PRODUCTS_SPA_ORIGIN` (default `http://app.karbexa.localhost:5174`) + the product entry page (`/people/home`, `/project/projectDashboard`, `/sign/dashboard`, `/desk/home`, `/kb`; `productLaunchUrl`) | `App.launch_url` of the system product apps, written whenever `seedProductRegistry()` runs (`npm run seed:products`, and from operator provisioning when a product app is missing) | defaults | Set before seeding in production; existing apps are overwritten on the next seed run. | `server/src/lib/productCatalog.ts:71` (`process.env[def.env]`) |
 
 ## 6. Server: e-mail
 
@@ -84,14 +84,14 @@ Order of transports (`server/src/lib/emailService.ts`): Azure Communication Serv
 | `AZURE_COMMUNICATION_CONNECTION_STRING` | no | unset | Azure Communication Services e-mail client (created at module load) | empty | | `lib/emailService.ts:28` |
 | `SENDER_EMAIL_ADDRESS` | with Azure | unset | Azure sender; also a `from` fallback | empty | | `lib/emailService.ts:110` |
 | `EMAIL_FROM` | no | `SMTP_FROM_EMAIL` → `SENDER_EMAIL_ADDRESS` → `noreply@admin-center.com` | From address for nodemailer | empty | | `lib/emailService.ts:139`, `lib/notificationEngine.ts:96` |
-| `SMTP_HOST` | no | unset = ethereal fallback | SMTP server | empty | Set in production unless Azure is used. **missing from `.env.example`** | `lib/emailService.ts:55`, `lib/notificationEngine.ts:103` |
-| `SMTP_PORT` | no | `587` | | | **missing from `.env.example`** | `lib/emailService.ts:58` |
-| `SMTP_SECURE` | no | false | `true` for implicit TLS | | **missing from `.env.example`** | `lib/emailService.ts:59` |
-| `SMTP_USER`, `SMTP_PASS` | with SMTP | unset | SMTP auth | | **missing from `.env.example`** | `lib/emailService.ts:61-62` |
-| `SMTP_FROM_EMAIL` | no | unset | Second-choice from address | | **missing from `.env.example`** | `lib/emailService.ts:139`, `lib/notificationEngine.ts:96` |
-| `MOCK_EMAIL` | no | unset = false | `true` keeps all mail in-process (nodemailer JSON transport) | `true` for local test harnesses | Ignored in production. **missing from `.env.example`** | `lib/emailService.ts:50` |
+| `SMTP_HOST` | no | unset = ethereal fallback | SMTP server | empty | Set in production unless Azure is used. | `lib/emailService.ts:55`, `lib/notificationEngine.ts:103` |
+| `SMTP_PORT` | no | `587` | | | | `lib/emailService.ts:58` |
+| `SMTP_SECURE` | no | false | `true` for implicit TLS | | | `lib/emailService.ts:59` |
+| `SMTP_USER`, `SMTP_PASS` | with SMTP | unset | SMTP auth | | | `lib/emailService.ts:61-62` |
+| `SMTP_FROM_EMAIL` | no | unset | Second-choice from address | | | `lib/emailService.ts:139`, `lib/notificationEngine.ts:96` |
+| `MOCK_EMAIL` | no | unset = false | `true` keeps all mail in-process (nodemailer JSON transport) | `true` for local test harnesses | Ignored in production. | `lib/emailService.ts:50` |
 
-`SENDGRID_API_KEY` is listed in `server/.env.example` but **no code reads it**.
+`SENDGRID_API_KEY` is not read by any code (removed from `server/.env.example` by WS-I).
 
 ## 7. Server: scripts only
 
@@ -126,11 +126,7 @@ The resource indicators (`urn:karbexa:admin`, `urn:karbexa:operator`) and the op
 
 ## 9. `.env.example` findings
 
-**Read by the server but missing from `server/.env.example`:** `STREAM_RECHECK_MS`, `APP_URL`, `PLATFORM_CLIENT_PRODUCTS`, `PLATFORM_RATE_LIMIT_PER_MIN`, `PLATFORM_SUBSCRIPTIONS`, `PLATFORM_SUB_SECRET_*`, `PLATFORM_DISPATCHER`, `PLATFORM_DISPATCH_INTERVAL_MS`, `PRODUCTS_INTERNAL_URL`, `PEOPLE_LAUNCH_URL`, `PROJECTS_LAUNCH_URL`, `SIGN_LAUNCH_URL`, `DESK_LAUNCH_URL`, `SMTP_HOST`, `SMTP_PORT`, `SMTP_SECURE`, `SMTP_USER`, `SMTP_PASS`, `SMTP_FROM_EMAIL`, `MOCK_EMAIL`, `OPERATOR_SEED_FORCE` (comment only), and the script-only `ADMIN_MONGODB_URI`, `MONOLITH_MONGODB_URI`, `MONOLITH_URI`.
-
-**Listed but unused:** `SENDGRID_API_KEY`.
-
-**Formatting:** `server/.env.example:38` is a continuation of the comment on line 37 that lost its `#` (the text "escapes allowed), a private RSA JWK, ..."). It contains no `=`, so it is not parsed as a variable, but it should be a comment.
+Updated by WS-I (2026-11-18): `server/.env.example` now lists every variable the server reads except `KB_LAUNCH_URL` (optional; unset = `PRODUCTS_SPA_ORIGIN` + `/kb`) and the script-only `ADMIN_MONGODB_URI`, `MONOLITH_MONGODB_URI`, `MONOLITH_URI` (E11 migration, not for go-live). `SENDGRID_API_KEY` was removed (no code reads it); the stray comment continuation was fixed. Production notes per variable: meta `docs/DEPLOYMENT.md` section 2.
 
 `client/.env.example` lists all five `VITE_*` variables the client reads.
 

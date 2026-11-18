@@ -22,7 +22,7 @@ The services provider grants all `platform.*` scopes to `karbexa-products-backen
 |---|---|
 | Audience and realm | Only tokens from the `services` realm with audience `urn:karbexa:platform-api`, `token_use: service`, at most 15 minutes old, are accepted (`authenticateService`) |
 | Allowed client | `client_id` must be `karbexa-products-backend` or have products in `PLATFORM_CLIENT_PRODUCTS` |
-| Product allow-list | `PUT /apps/:productKey/role-catalog` and `/manifest` need the product in the client's allow-list (403 `PRODUCT_NOT_ALLOWED`). Without `PLATFORM_CLIENT_PRODUCTS`, `karbexa-products-backend` may write the four built-in products and any other client none. A new product key is accepted only from a client whose allow-list names it |
+| Product allow-list | `PUT /apps/:productKey/role-catalog` and `/manifest` need the product in the client's allow-list (403 `PRODUCT_NOT_ALLOWED`). Without `PLATFORM_CLIENT_PRODUCTS`, `karbexa-products-backend` may write the five built-in products (`people`, `projects`, `sign`, `desk`, `kb`) and any other client none. A new product key is accepted only from a client whose allow-list names it |
 | Organisation scope | Tokens are **not** bound to an organisation: any authenticated client holding the scope can read any organisation. This is accepted for the single products backend; revisit before a second client is added |
 | Reserved key | `admin` is never a product key |
 | `read_only` | Not applicable to service clients. A member's `read_only` product role is carried in `effective-access` and enforced by the product |
