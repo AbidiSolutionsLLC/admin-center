@@ -6,7 +6,7 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import {
   portalUrlProblem, standaloneManifestSchema, keyFromClientId, clientIdFor, audienceFor, authMethodOf, usesClientSecret,
-  generateClientSecret, storedClient, standaloneView, buildClientMetadata, withTenantOrigins, originsOf, resourceForStandaloneClient, secretsEqual,
+  generateClientSecret, storedClient, standaloneView, buildClientMetadata, withTenantOrigins, originsOf, resourceForStandaloneClient, secretsEqual, decideGate, buildStandaloneClaims,
 } from '../standalonePortals';
 
 const base = () => ({
@@ -139,4 +139,53 @@ test('resourceForStandaloneClient and secretsEqual', () => {
   assert.equal(resourceForStandaloneClient('karbexa-admin-spa'), undefined);
   assert.equal(secretsEqual('a', 'a'), true);
   assert.equal(secretsEqual('a', 'b'), false);
+});
+
+// ── C-3: access gate decision (DRD §8.4) ──
+const role = { key: 'asset_admin', name: 'Asset admin' };
+const facts = (over: Record<string, unknown> = {}) => ({ registered: true, productStatus: 'active', entitlement: 'active', role, ...over });
+
+test('decideGate: entitled and assigned -> allowed with the role', () => {
+  assert.deepEqual(decideGate(facts()), { allowed: true, role: 'asset_admin', role_name: 'Asset admin' });
+  assert.equal(decideGate(facts({ productStatus: 'beta' })).allowed, true);
+});
+
+test('decideGate: tenant not entitled, entitlement not active, or product retired -> "not available for your organisation"', () => {
+  const page = (o: any) => (o.allowed ? 'allowed' : o.page);
+  assert.equal(page(decideGate(facts({ entitlement: null }))), 'unavailable');
+  assert.equal(page(decideGate(facts({ entitlement: 'suspended' }))), 'unavailable');
+  assert.equal(page(decideGate(facts({ entitlement: 'restricted' }))), 'unavailable');
+  assert.equal(page(decideGate(facts({ productStatus: 'retired' }))), 'unavailable');
+  assert.equal(page(decideGate(facts({ registered: false }))), 'unavailable');
+  assert.equal(page(decideGate(facts({ role: undefined, denial: 'ORG_SUSPENDED' }))), 'unavailable');
+});
+
+test('decideGate: no role or member outside the access states -> "You do not have access"', () => {
+  const o: any = decideGate(facts({ role: undefined, denial: 'NO_ASSIGNMENT' }));
+  assert.equal(o.allowed, false); assert.equal(o.page, 'no_access'); assert.equal(o.reason, 'NO_ASSIGNMENT');
+  assert.equal((decideGate(facts({ role: undefined, denial: 'MEMBER_NOT_ACTIVE' })) as any).page, 'no_access');
+  assert.equal((decideGate(facts({ role: undefined })) as any).reason, 'NO_ASSIGNMENT');
+});
+
+test('decideGate: the organisation check outranks the member check; a foreign tenant redirect is refused', () => {
+  assert.equal((decideGate(facts({ entitlement: 'suspended', role: undefined, denial: 'NO_ASSIGNMENT' })) as any).page, 'unavailable');
+  const o: any = decideGate(facts({ redirectAllowed: false }));
+  assert.equal(o.allowed, false); assert.equal(o.reason, 'REDIRECT_NOT_ALLOWED');
+  assert.equal(decideGate(facts({ redirectAllowed: true })).allowed, true);
+});
+
+// ── C-4: claims (DRD §8.5) ──
+test('buildStandaloneClaims: exactly the DRD claim set, one product role, no Admin roles or identity id', () => {
+  const c = buildStandaloneClaims({
+    memberId: 'm1', authzVer: 7, email: 'a@acme.test', emailVerified: true, name: 'Ada', avatarUrl: 'https://cdn.example.com/a.png',
+    orgId: 'o1', orgSlug: 'acme', orgName: 'Acme', role: 'asset_admin', sid: 's1',
+  });
+  assert.deepEqual(Object.keys(c).sort(), ['authz_ver', 'email', 'email_verified', 'member_type', 'name', 'org', 'org_name', 'org_slug', 'picture', 'product_role', 'sid', 'sub'].sort());
+  assert.equal(c.product_role, 'asset_admin'); assert.equal(c.member_type, 'workforce'); assert.equal(c.authz_ver, 7);
+});
+
+test('buildStandaloneClaims: picture only when absolute; member_type external is kept; authz_ver defaults to 1', () => {
+  const c = buildStandaloneClaims({ memberId: 'm1', email: 'a@b.c', emailVerified: false, name: 'A', avatarUrl: '/uploads/a.png', memberType: 'external', orgId: 'o', orgSlug: 's', orgName: 'N', role: 'r' });
+  assert.equal('picture' in c, false); assert.equal('sid' in c, false);
+  assert.equal(c.member_type, 'external'); assert.equal(c.authz_ver, 1); assert.equal(c.email_verified, false);
 });

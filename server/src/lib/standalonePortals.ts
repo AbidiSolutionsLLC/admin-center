@@ -4,9 +4,13 @@
 // effective access treat it like a suite product; what differs is sign-in: it gets its own OIDC client in the tenant
 // realm (`karbexa-<key>`, audience `urn:karbexa:<key>`), an access gate and back-channel sign-out.
 import crypto from 'crypto';
+import { Types } from 'mongoose';
 import { z } from 'zod';
 import { App, IApp, IStandaloneClient } from '../models/App.model';
 import { OrganizationEntitlement } from '../models/OrganizationEntitlement.model';
+import { User } from '../models/User.model';
+import { SecurityEvent } from '../models/SecurityEvent.model';
+import { computeEffectiveAccess } from './effectiveAccess';
 import { decrypt } from './cryptoService';
 import { RESERVED_PRODUCT_KEY } from './productRegistry';
 
@@ -300,3 +304,131 @@ export async function findStandaloneClientMetadata(clientId: string): Promise<Re
 /** Constant-time string comparison (the provider's own check hashes too; this one serves the rotated-out secret). */
 export const secretsEqual = (a: string, b: string) =>
   crypto.timingSafeEqual(crypto.createHash('sha256').update(a).digest(), crypto.createHash('sha256').update(b).digest());
+
+// ── Access gate (DRD §8.4) ────────────────────────────────────────────────────────────────────
+
+export type GateDenial = 'unavailable' | 'no_access';
+export type GateOutcome =
+  | { allowed: true; role: string; role_name: string }
+  | { allowed: false; page: GateDenial; reason: string };
+
+export interface GateFacts {
+  /** The App row exists and is a registered standalone portal. */
+  registered: boolean;
+  productStatus?: string;
+  /** Status of the organisation's entitlement; null/undefined = none. */
+  entitlement?: string | null;
+  /** Effective role of the member for this product (lib/effectiveAccess), if any. */
+  role?: { key: string; name: string };
+  /** Effective-access denial reason when there is no role (NO_ASSIGNMENT, MEMBER_NOT_ACTIVE, ...). */
+  denial?: string;
+  /** false when the authorization request's redirect URI is not one this organisation may use (per-tenant portals). */
+  redirectAllowed?: boolean;
+}
+
+/**
+ * The decision table of DRD §8.4, as a pure function. Order matters: what the organisation has (entitlement) comes before
+ * what the member has (assignment), so a suspended entitlement reads "not available for your organisation" for everyone.
+ */
+export function decideGate(f: GateFacts): GateOutcome {
+  if (!f.registered) return { allowed: false, page: 'unavailable', reason: 'NOT_REGISTERED' };
+  if (f.productStatus === 'retired') return { allowed: false, page: 'unavailable', reason: 'PRODUCT_RETIRED' };
+  if (!f.entitlement) return { allowed: false, page: 'unavailable', reason: 'NOT_ENTITLED' };
+  if (f.entitlement !== 'active') return { allowed: false, page: 'unavailable', reason: `ENTITLEMENT_${f.entitlement.toUpperCase()}` };
+  if (f.denial === 'ORG_SUSPENDED') return { allowed: false, page: 'unavailable', reason: 'ORG_SUSPENDED' };
+  if (f.redirectAllowed === false) return { allowed: false, page: 'unavailable', reason: 'REDIRECT_NOT_ALLOWED' };
+  if (f.role) return { allowed: true, role: f.role.key, role_name: f.role.name };
+  return { allowed: false, page: 'no_access', reason: f.denial ?? 'NO_ASSIGNMENT' };
+}
+
+export interface GateResult {
+  outcome: GateOutcome;
+  app?: { product_key: string; name: string };
+  company_id?: Types.ObjectId;
+}
+
+/** Facts for `(member, product)` from the database, then `decideGate`. Always reads fresh (no cache): it is the control. */
+export async function evaluateGate(key: string, memberId: string, redirectUri?: string): Promise<GateResult> {
+  const app: any = await App.findOne({ ...systemProduct(key), hosting_mode: 'standalone' }).lean();
+  const user: any = Types.ObjectId.isValid(memberId) ? await User.findById(memberId).select('company_id').lean() : null;
+  if (!app || !user) return { outcome: decideGate({ registered: !!app && !!user }), app: app ? { product_key: key, name: app.name } : undefined };
+  const companyId = user.company_id as Types.ObjectId;
+  const [ent, access] = await Promise.all([
+    OrganizationEntitlement.findOne({ company_id: companyId, product_key: key }).select('status config').lean() as Promise<any>,
+    computeEffectiveAccess(companyId, memberId),
+  ]);
+  const role = access.products[key];
+  let redirectAllowed: boolean | undefined;
+  if (redirectUri && app.hosting?.per_tenant_launch_url) {
+    const allowed = new Set([...originsOf(app.hosting.client?.redirect_uris ?? []), ...originsOf(ent?.config?.launch_url ? [ent.config.launch_url] : [])]);
+    let origin = '';
+    try { origin = new URL(redirectUri).origin; } catch { /* not a URL: not allowed */ }
+    redirectAllowed = allowed.has(origin);
+  }
+  return {
+    app: { product_key: key, name: app.name },
+    company_id: companyId,
+    outcome: decideGate({
+      registered: true, productStatus: app.product_status, entitlement: ent?.status ?? null,
+      role: role ? { key: role.role, name: role.role_name } : undefined, denial: access.denials[key], redirectAllowed,
+    }),
+  };
+}
+
+/**
+ * `product_access_denied` Security event. SecurityEvent's enum (models/SecurityEvent.model.ts, not owned by WS-C) does not
+ * list the type yet, so the row is written to the collection directly; it reads back like any other event.
+ */
+export async function logProductAccessDenied(p: { company_id?: Types.ObjectId | string; member_id?: string; key: string; reason: string; page: GateDenial; ip?: string; user_agent?: string; stage: 'authorize' | 'token' | 'userinfo' }): Promise<void> {
+  try {
+    await SecurityEvent.collection.insertOne({
+      ...(p.company_id ? { company_id: new Types.ObjectId(String(p.company_id)) } : {}),
+      ...(p.member_id && Types.ObjectId.isValid(p.member_id) ? { user_id: new Types.ObjectId(p.member_id) } : {}),
+      event_type: 'product_access_denied', is_suspicious: false,
+      ip_address: p.ip, user_agent: p.user_agent,
+      metadata: { product_key: p.key, reason: p.reason, page: p.page, stage: p.stage },
+      created_at: new Date(),
+    } as never);
+  } catch (err) {
+    console.error('[standalone] could not record product_access_denied', err);
+  }
+}
+
+// ── Claims (DRD §8.5) ─────────────────────────────────────────────────────────────────────────
+
+export interface StandaloneClaimInput {
+  memberId: string;
+  authzVer?: number;
+  email: string;
+  emailVerified: boolean;
+  name: string;
+  avatarUrl?: string;
+  memberType?: string;
+  orgId: string;
+  orgSlug: string;
+  orgName: string;
+  role: string;
+  sid?: string;
+}
+
+/**
+ * Claims a standalone portal receives, on the ID token, the access token for `urn:karbexa:<key>` and userinfo. Exactly the
+ * set of DRD §8.5: no Admin roles, no identity id, no other product's role. `picture` only when it is an absolute URL.
+ */
+export function buildStandaloneClaims(i: StandaloneClaimInput): Record<string, unknown> {
+  const picture = i.avatarUrl && /^https?:\/\//i.test(i.avatarUrl) ? i.avatarUrl : undefined;
+  return {
+    sub: i.memberId,
+    org: i.orgId,
+    org_slug: i.orgSlug,
+    org_name: i.orgName,
+    email: i.email,
+    email_verified: i.emailVerified,
+    name: i.name,
+    ...(picture ? { picture } : {}),
+    product_role: i.role,
+    member_type: i.memberType === 'external' ? 'external' : 'workforce',
+    ...(i.sid ? { sid: i.sid } : {}),
+    authz_ver: i.authzVer ?? 1,
+  };
+}

@@ -9,17 +9,23 @@ Deleted in Wave 2 after the integrator folds it into the docs.
 |---|---|---|
 | C-1 | done | Routes in `operator/standalone.ts`: GET list, GET one, PUT register/update, POST rotate-secret, PUT per-tenant launch-url. Server typecheck clean. |
 | C-2 | done | Client lookup through the oidc-provider adapter (`Client` model answered from the App registry; no cache, so a registry change is effective on the next request). Server typecheck clean. |
-| C-3 | not started | |
-| C-4 | not started | |
+| C-3 | done | Gate as an oidc-provider interaction policy prompt `product_access` (runs on every authorization request, SSO included) plus a check in `extraTokenClaims`/claims on every code exchange and refresh. Hosted denied pages in `identity/html.ts` `deniedPage`. Committed together with C-4 (same files). Typecheck clean. |
+| C-4 | done | `buildStandaloneClaims` (lib/standalonePortals.ts); ID token and userinfo through a wrapped `findAccount`, access token through `extraTokenClaims`. Committed with C-3. |
 | C-5 | not started | |
 | C-6 | not started | |
 | C-7 | not started | |
 
 ## Needs from others
 
+- `models/SecurityEvent.model.ts`: add `product_access_denied` to `SecurityEventType` and the schema enum (additive).
 - `operator/permissions.ts` (not owned by WS-C) has no `products.write` permission. `requireProductsWrite` in `operator/standalone.ts` accepts the permission or the role `platform_admin`, so registration works now; whoever owns `permissions.ts` should add `products.write` to `ROLE_PERMISSIONS.platform_admin` (the fallback then becomes redundant, not wrong).
 
 ## Found while working
+
+- `SecurityEvent` has no `product_access_denied` type in its enum, and `models/SecurityEvent.model.ts` is not owned by WS-C, so `logProductAccessDenied` inserts through the collection (bypassing the enum). Works and reads back; should become `logSecurityEvent` once the enum has the type.
+- `User` has no member type field yet, so `member_type` is `workforce` for everyone (`external` only when a later model supplies it; the claim builder already honours it).
+- For a standalone client the access token carries only the DRD 8.5 claim set (no `org_roles`, `idn`, `apps`), so a third-party portal never sees Admin roles.
+- `sid` reaches the ID token through the `openid` claim list (value from the session uid), in addition to oidc-provider's own `sid` when a back-channel URI is registered.
 
 - The first registration of a confidential client returns `client_secret` once (HTTP 201, `Cache-Control: no-store`); later PUTs never return it. Rotation returns the new secret once.
 
@@ -30,4 +36,5 @@ Deleted in Wave 2 after the integrator folds it into the docs.
 
 ## Tests written, not run
 
+- C-3, C-4: same file: `decideGate` decision table, per-tenant redirect refusal, `buildStandaloneClaims` claim set. The provider-level cases (code + `product_role`, denied page, refresh denied after removal) are in the smoke script task below.
 - C-1, C-2: `server/src/lib/__tests__/standalonePortals.test.ts` (validation, client id, auth methods, secret generation, no secret in the view, client metadata, rotated secret window, per-tenant URIs).
