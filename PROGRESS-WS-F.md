@@ -8,7 +8,7 @@ Branch `ws/ws-f` of `karbexa-admin`. Tag `docs-before-standard` created locally 
 |---|---|
 | F-1 docs/identity (9 files) | done |
 | F-2 docs/admin-center (9 files) | done |
-| F-3 docs/command-center (9 files) | not started |
+| F-3 docs/command-center (9 files) | done |
 | F-4 docs/platform-api (9 files) | not started |
 | F-5 repo level: AGENTS.md, README.md, CHANGELOG.md format, DESIGN.md (tokens folded in, per WS-H request), docs/ARCHITECTURE.md, docs/CONFIGURATION.md, delete docs/archive, docs/portals, client/README.md | not started |
 

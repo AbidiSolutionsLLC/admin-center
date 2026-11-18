@@ -1,0 +1,16 @@
+# Command Center: decisions
+
+Append-only, newest last. Product-level decisions only; platform-wide decisions are in the meta repo `docs/DECISIONS.md`. Older reasoning: the git tag `docs-before-standard` of this repo, the meta repo `docs/spec/02-MASTER-DRD.md` and `docs/archive/command-center-brief.txt`.
+
+| Date | ID | Context | Decision | Consequence | Decided by |
+|---|---|---|---|---|---|
+| 2026-11-16 | S-7 | Operators need least privilege | Roles `platform_admin`, `operations`, `support`, `auditor` with a static permission map; every operator route declares a permission | `permissions.ts`, coverage test | Owner |
+| 2026-11-16 | S-2 | Plan changes silently kept or dropped products | Entitlement status gains `restricted`; overrides carry a reason and optional expiry; plan edits reach tenants only on explicit apply; stored `source` values stay `plan`, `operator`, `seed` | `entitlement.changed` gains optional fields | Owner |
+| 2026-11-16 | 2.5 | Provisioning could leave debris | Provisioning is one transaction including the outbox e-mail row; `invite_email_sent` means "accepted for delivery"; the in-memory forced-failure case uses a plan that lists a product twice | A failure leaves nothing for the slug and the request can be repeated | Plan |
+| 2026-11-16 | 2.6 | Onboarding routes before roles existed | `PATCH first-admin` also re-issues the invitation to the new address and emits `member.updated` | | Plan |
+| 2026-11-16 | 4.10 | The spec's `provisioning_failed` status does not exist in code | The signal fires for a tenant stuck in `provisioning` for over 15 minutes; `AttentionItem` gained `open` and `confirmed`; `TenantDailyStat` gained `admins_without_mfa`; daily stats run every 6 hours (idempotent upsert) | The retry step of the spec (ON-7) is not built | Plan |
+| 2026-11-16 | 4.11 | Operator invite had no accept page | Built later as plan 04 C2 (public verify and accept, TOTP at first sign-in) | Pre-C2 invitation links do not work | Owner |
+| 2026-11-16 | 4.12 | Status changes were one click | Suspend, reactivate and close require `reason`; suspend and close require `confirm_slug` (400 `CONFIRM_SLUG_MISMATCH`); the announcement editor is a dialog on Overview; the Platform API proxy of the announcement is not built | Existing smoke calls were updated | Plan |
+| 2026-11-16 | 1.3 (operator side) | Operator audit needs an operator | A manifest publish writes no operator audit entry (`OperatorAuditEvent.operator_id` is required and a service call has none) | See `../platform-api/DECISIONS.md` | Plan |
+| 2026-11-17 | 7.2 | Operator security review | Five low findings; two closed in plan 04 C7 (session revoke on password change or MFA reset; last `platform_admin` guard); direct `POST /operators` removal is WS-A A-6 | See `STATUS.md` | Owner |
+| 2026-11-17 | C7 (plan 04) | Operator credential changes left old sessions alive | `PATCH /operators/:id` revokes all of the operator's sessions on a password change, MFA reset or suspension and answers 409 `LAST_PLATFORM_ADMIN` rather than suspending or demoting the last one | Audit `details.sessions_revoked` | Owner |
