@@ -51,7 +51,7 @@ The controller is in the file named after the mount unless the row says otherwis
 | GET | `/people/:id/app-history` | PEOPLE_ADMINS | `getUserAppAccessHistory` |
 | GET | `/people/:id/effective-permissions` | PEOPLE_ADMINS | `getEffectivePermissions` |
 | GET | `/people/:id/effective-access` | PEOPLE_ADMINS | `appAccess.controller.getEffectiveAccess` (elevation 5.4 adds `reasons`: per granted product, the assignments that explain the role, looked up by `company_id`) |
-| GET | `/people/:id/product-open-items` | PEOPLE_ADMINS | `getProductOpenItems` (proxies the products backend, see platform-api.md) |
+| GET | `/people/:id/product-open-items` | PEOPLE_ADMINS | `getProductOpenItems` (proxies the products backend, see [../platform-api/README.md](../platform-api/README.md)) |
 | GET | `/people/:id/effective-settings` | auth | `getUserEffectiveSettings` |
 | POST | `/people/:id/resend-invite` | PEOPLE_ADMINS | `resendInvite`; `?copy=true` issues a new invitation without e-mail and returns `data.invite_link` once (audited `user.invite_link_copied`) |
 | GET | `/people/:id/invitation` | PEOPLE_ADMINS | `getUserInvitation`: latest invitation (state incl. derived `expired`, sent, expires) and latest `EmailDelivery` (status, last error); never a token |

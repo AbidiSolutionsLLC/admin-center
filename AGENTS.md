@@ -21,7 +21,20 @@ Read `../AGENTS.md` (platform rules) and `../docs/STATUS.md` first. This file co
 | API client, auth, session | `client/src/lib/apiClient.ts`, `client/src/lib/oidc.ts`, `client/src/lib/session.ts` |
 | Operator console | `client/src/features/operator/` |
 
-Full detail: `docs/ARCHITECTURE.md` and `docs/portals/*.md`.
+Full detail: `docs/ARCHITECTURE.md` (the repo as a whole) and the product folders below.
+
+## To change X, read
+
+| To change | Read first (in `docs/<key>/`) |
+|---|---|
+| Sign-in, tokens, realms, MFA, sessions, Entra, hosted pages | `identity/README.md`, then `ARCHITECTURE.md`, `ACCESS.md` |
+| Members, org structure, roles, App Access, security settings, audit, any tenant `/api/v1` page or endpoint | `admin-center/README.md`, `STATUS.md`, the PRD entry; `ACCESS.md` and `DATA-MODEL.md` before a query; `API.md` before an endpoint; `UI.md` before a page |
+| Operator console: organisations, plans, entitlements, onboarding, health, operators, audit | `command-center/README.md` and the same files |
+| `/platform/v1`, the event feed, manifests, role catalogs | `platform-api/README.md`; contract in the meta repo `docs/architecture/05`, `06` |
+| An environment variable | `docs/CONFIGURATION.md` |
+| The look of a page | `DESIGN.md` |
+
+The standard every folder follows: the meta repo `docs/DOC-STANDARD.md` (nine files per folder: README, PRD, ARCHITECTURE, DATA-MODEL, API, ACCESS, UI, STATUS, DECISIONS).
 
 ## Conventions (follow the existing code)
 
@@ -52,4 +65,4 @@ Expected results: `../docs/STATUS.md` → "Test baseline". Tests use in-memory M
 - Never use `seed:e11` / `send:claims` for go-live (fresh-start decision).
 
 ## After a change
-Update `docs/portals/<portal>.md`, `docs/CONFIGURATION.md` (if env vars changed), `../docs/STATUS.md` and `CHANGELOG.md` in the same commit.
+Update the matching files of the product folder (`PRD`, `API`, `DATA-MODEL`, `ACCESS`, `UI`, `STATUS`, and `DECISIONS` for a non-obvious choice), `docs/CONFIGURATION.md` (if env vars changed), `../docs/STATUS.md` and `CHANGELOG.md` in the same commit. A doc that disagrees with the code is reported in `STATUS.md` (Known issues), not silently fixed.

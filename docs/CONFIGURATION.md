@@ -1,12 +1,12 @@
 # Configuration
 
-Every environment variable read by the Admin server (`process.env` in `server/src`) and client (`import.meta.env` in `client/src`), taken from the code on branch `chore/wrapup`. Defaults are the literal fallbacks in the code. "Required" means the code fails (throws, exits, or refuses requests) without it in that environment.
+Every environment variable read by the Admin server (`process.env` in `server/src`) and client (`import.meta.env` in `client/src`), taken from the code on `main`. Defaults are the literal fallbacks in the code. "Required" means the code fails (throws, exits, or refuses requests) without it in that environment.
 
 - Server: `server/src/index.ts` calls `dotenv.config()`, so `server/.env` is loaded at start. Template: `server/.env.example`.
 - Client: Vite exposes `VITE_*` variables at build time. Template: `client/.env.example`.
 - Variables marked **missing from `.env.example`** are read by the code but not listed in the template.
 
-Related: [ARCHITECTURE.md](ARCHITECTURE.md), [portals/identity.md](portals/identity.md), [portals/platform-api.md](portals/platform-api.md).
+Related: [ARCHITECTURE.md](ARCHITECTURE.md), [identity/README.md](identity/README.md), [platform-api/README.md](platform-api/README.md).
 
 ---
 
