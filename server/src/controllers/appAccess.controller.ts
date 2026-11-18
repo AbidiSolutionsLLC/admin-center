@@ -20,6 +20,7 @@ import { SeatUsage } from '../models/SeatUsage.model';
 import { computeEffectiveAccess, resolveAssignmentMemberIds } from '../lib/effectiveAccess';
 import { runInTransaction, emitAppAccessChanged, correlationIdFor } from '../lib/platformEvents';
 import { assertSeatsAvailable } from '../lib/seats';
+import { launchUrlsFor } from '../lib/standalonePortals';
 
 const oid = (v: string, what = 'id') => {
   if (!Types.ObjectId.isValid(v)) throw new AppError(`Invalid ${what}`, 400, 'INVALID_ID');
@@ -191,10 +192,12 @@ export const getMyApps = asyncHandler(async (req: Request, res: Response) => {
   const apps = keys.length
     ? await App.find({ app_type: 'karbexa_product', product_key: { $in: keys }, is_active: true, company_id: { $exists: false } }).lean()
     : [];
+  // Standalone portals: the organisation's own launch URL first (WS-C C-6); suite products keep a.launch_url.
+  const urls = await launchUrlsFor(req.user!.company_id, apps.map(a => a.product_key!).filter(Boolean));
   res.status(200).json({
     success: true,
     data: apps.map(a => ({
-      id: a._id, name: a.name, slug: a.slug, product_key: a.product_key, launch_url: a.launch_url,
+      id: a._id, name: a.name, slug: a.slug, product_key: a.product_key, launch_url: urls[a.product_key!] ?? a.launch_url,
       icon_url: a.icon_url, description: a.description,
       role: access.products[a.product_key!].role, role_name: access.products[a.product_key!].role_name,
     })),
