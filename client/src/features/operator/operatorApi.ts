@@ -173,8 +173,9 @@ export const useOperators = (opts: { enabled?: boolean } = {}) =>
 export const useSaveOperator = () => {
   const qc = useQueryClient();
   return useMutation({
-    mutationFn: async ({ id, body }: { id?: string; body: Record<string, unknown> }) =>
-      id ? (await operatorApi.patch(`/operators/${id}`, body)).data : (await operatorApi.post('/operators', body)).data,
+    // Updates only: new operators are invited (useInviteOperator); there is no direct create (A-6).
+    mutationFn: async ({ id, body }: { id: string; body: Record<string, unknown> }) =>
+      (await operatorApi.patch(`/operators/${id}`, body)).data,
     onSuccess: () => { qc.invalidateQueries({ queryKey: ['operator', 'operators'] }); toast.success('Operator saved'); },
     onError: (e) => toast.error(errMsg(e, 'Failed to save operator')),
   });

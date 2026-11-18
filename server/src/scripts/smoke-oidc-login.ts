@@ -420,17 +420,63 @@ async function main() {
       v = await verify('f'.repeat(64));
       check('2.2 verify unknown token = 404 INVITE_NOT_FOUND', v.status === 404 && v.body.code === 'INVITE_NOT_FOUND', v);
 
-      // renew: expired -> 202 and a fresh pending row; valid or unknown tokens also 202 and change nothing
+      // A-3 (7.2 finding 1): verify-invite has its own limiter, 30 requests per 15 min per IP; the 31st is 429 RATE_LIMITED.
+      {
+        const { RateLimitWindow } = await import('../models/RateLimitWindow.model');
+        await RateLimitWindow.deleteMany({ _id: /^invite-verify:/ }); // start from an empty window (the checks above counted)
+        const statuses: number[] = [];
+        for (let i = 0; i < 31; i++) statuses.push((await post('/people/verify-invite', { token: 'd'.repeat(64) })).status);
+        const over = await post('/people/verify-invite', { token: ok.rawToken });
+        const overBody = await over.json() as { success?: boolean; code?: string };
+        check('A-3 verify-invite: 30 requests answered normally (404 for an unknown token)', statuses.slice(0, 30).every((s) => s === 404), statuses.join());
+        check('A-3 verify-invite: the 31st request = 429 RATE_LIMITED in the standard envelope', statuses[30] === 429, statuses[30]);
+        check('A-3 verify-invite: over the limit a real token is also 429 (no outcome leaks)', over.status === 429 && overBody.success === false && overBody.code === 'RATE_LIMITED', { status: over.status, overBody });
+        await RateLimitWindow.deleteMany({ _id: /^invite-verify:/ });
+      }
+
+      // renew: expired -> 202 and a fresh pending row; valid or unknown tokens also 202 and change nothing.
+      // A-4: the 202 is sent before any work, so the effects below appear shortly after the answer (polled, max 5 s).
+      const { EmailDelivery } = await import('../models');
+      const eventually = async (cond: () => Promise<boolean>, ms = 5000) => {
+        for (const end = Date.now() + ms; Date.now() < end; await new Promise((res) => setTimeout(res, 100))) if (await cond()) return true;
+        return cond();
+      };
+      const quiet = () => new Promise((res) => setTimeout(res, 1000)); // for "nothing happens": give background work time to run
       const uRen = await mkUser('ren');
       const ren = await mkInv(uRen, -1);
       let r = await post('/people/renew-invite', { token: ren.rawToken });
+      const renewed = await eventually(async () => (await Invitation.findById(ren.invitation._id))?.state === 'superseded');
       const pendingAfter = await Invitation.find({ user_id: uRen._id, state: 'pending' });
-      check('2.2 renew expired = 202, old row superseded, one new pending row', r.status === 202 && pendingAfter.length === 1 && String(pendingAfter[0]._id) !== String(ren.invitation._id) && (await Invitation.findById(ren.invitation._id))?.state === 'superseded', r.status);
+      check('2.2 renew expired = 202, old row superseded, one new pending row', r.status === 202 && renewed && pendingAfter.length === 1 && String(pendingAfter[0]._id) !== String(ren.invitation._id), r.status);
+      check('A-4 renew of a real expired link writes one e-mail outbox row for that member', await eventually(async () => (await EmailDelivery.countDocuments({ 'related.id': String(uRen._id) })) === 1));
+      const mailsBefore = await EmailDelivery.countDocuments({});
       r = await post('/people/renew-invite', { token: 'e'.repeat(64) });
+      const unknownBody = await r.json();
+      await quiet();
       check('2.2 renew unknown token = 202 (no disclosure)', r.status === 202, r.status);
+      check('A-4 renew of an unknown token: same 202 body, no e-mail row', JSON.stringify(unknownBody) === JSON.stringify({ success: true }) && (await EmailDelivery.countDocuments({})) === mailsBefore, unknownBody);
+      // A-4 timing: the answer does not wait for the renewal; real and unknown tokens are answered alike (loose bound, local run).
+      const uTim = await mkUser('tim');
+      const tim = await mkInv(uTim, -1);
+      const t0 = Date.now(); await post('/people/renew-invite', { token: tim.rawToken }); const realMs = Date.now() - t0;
+      const t1 = Date.now(); await post('/people/renew-invite', { token: 'c'.repeat(64) }); const unknownMs = Date.now() - t1;
+      check('A-4 renew answers a real token about as fast as an unknown one', realMs < unknownMs + 250, { realMs, unknownMs });
       const before = await Invitation.countDocuments({ user_id: uOk._id });
       r = await post('/people/renew-invite', { token: ok.rawToken });
+      await quiet();
       check('2.2 renew a still-valid link = 202 and creates nothing', r.status === 202 && (await Invitation.countDocuments({ user_id: uOk._id })) === before, r.status);
+
+      // A-5 (7.2 finding 3): an old, superseded link renews nothing; the current invitation stays pending and usable.
+      const uOld = await mkUser('old');
+      const oldInv = await mkInv(uOld, -1); // expired, then superseded by the current link below
+      const curInv = await mkInv(uOld);
+      const oldCount = await Invitation.countDocuments({ user_id: uOld._id });
+      r = await post('/people/renew-invite', { token: oldInv.rawToken });
+      await quiet();
+      const cur = await Invitation.findById(curInv.invitation._id);
+      check('A-5 renew with an old superseded link = 202 and the current invitation stays pending', r.status === 202 && cur?.state === 'pending' && (await Invitation.countDocuments({ user_id: uOld._id })) === oldCount, { status: r.status, state: cur?.state });
+      check('A-5 renew with an old superseded link sends no e-mail', (await EmailDelivery.countDocuments({ 'related.id': String(uOld._id) })) === 0);
+      check('A-5 the current link still verifies after the old one was used', (await verify(curInv.rawToken)).status === 200);
 
       // renew limit: the 4th request for one invitation is still 202 and sends nothing
       const uLim = await mkUser('lim');

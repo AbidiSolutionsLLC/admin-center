@@ -1,8 +1,9 @@
 // server/src/controllers/people.controller.ts
-import { Request, Response } from 'express';
+import { Request, Response, RequestHandler } from 'express';
 import { z } from 'zod';
 import bcrypt from 'bcryptjs';
 import { asyncHandler } from '../utils/asyncHandler';
+import { verifyInviteLimiter } from '../middleware/rateLimiter';
 import { User, IUser, EmploymentType } from '../models/User.model';
 import { Company } from '../models/Company.model';
 import { RefreshToken } from '../models/RefreshToken.model';
@@ -2401,8 +2402,9 @@ export const exportUsers = asyncHandler(async (req: Request, res: Response) => {
  * Looks the token up by hash and answers with one of six outcomes (DRD §5.2). Public (no authentication).
  * Knowing the reason requires holding a token that once existed, so a guesser learns nothing.
  * The invitation is not consumed here; that happens when the password is set.
+ * Exported as [limiter, handler] so the route always carries its own limiter (7.2 finding 1: 30 per 15 min per IP, 429).
  */
-export const verifyInviteToken = asyncHandler(async (req: Request, res: Response) => {
+const verifyInviteHandler = asyncHandler(async (req: Request, res: Response) => {
   const { token } = req.body ?? {};
   if (!token || typeof token !== 'string') throw new AppError('Token is required', 400, 'BAD_REQUEST');
 
@@ -2437,43 +2439,53 @@ export const verifyInviteToken = asyncHandler(async (req: Request, res: Response
     },
   });
 });
+export const verifyInviteToken: RequestHandler[] = [verifyInviteLimiter, verifyInviteHandler];
 
 /**
  * POST /api/v1/people/renew-invite { token }
  * Self-service "Send me a new link". Public; limited per IP (authLimiter) and per invitation (3 a day).
- * Allowed only for an expired or superseded invitation whose user is still `invited`; supersedes and re-sends to the
- * stored address. Always answers 202 with the same body, whatever happened.
+ * Allowed only for the user's newest invitation, once it has expired, while the user is still `invited`; supersedes it
+ * and re-sends to the stored address. Always answers 202 with the same body, whatever happened.
+ * 7.2 finding 3: an older (superseded) link renews nothing, so it can never supersede the invitation that is current.
+ * 7.2 finding 2: the 202 goes out before any lookup or e-mail work, so a real token and an unknown one take the same
+ * time. The renewal then runs on its own: the new invitation and its outbox row commit in one transaction and the
+ * delivery happens after commit; nothing waits for it.
  */
 export const renewInvite = asyncHandler(async (req: Request, res: Response) => {
   const { token } = req.body ?? {};
-  if (token && typeof token === 'string') {
-    try {
-      const invitation = await findInvitationByToken(token);
-      const problem = invitationProblem(invitation);
-      if (invitation && (problem?.code === 'INVITE_EXPIRED' || problem?.code === 'INVITE_SUPERSEDED')) {
-        const user = await User.findOne({ _id: invitation.user_id, company_id: invitation.company_id, lifecycle_state: 'invited' });
-        const company = user ? await Company.findById(invitation.company_id).select('name') : null;
-        if (user && company) {
-          const { rawToken } = await runInTransaction((session) => createInvitation(session, {
-            kind: invitation.kind, company_id: invitation.company_id, user_id: user._id, email: invitation.email,
-            created_by: { type: 'system' },
-          }));
-          await sendWelcomeEmail({
-            email: invitation.email,
-            full_name: user.full_name,
-            employee_id: user.employee_id,
-            company_name: company.name,
-            invite_link: inviteLink(rawToken, invitation.email),
-            meta: { company_id: company._id, related: { type: 'user', id: String(user._id) } },
-          });
-        }
-      }
-    } catch (err) {
-      console.error('[renewInvite] failed:', err); // never shown to the caller
-    }
-  }
   res.status(202).json({ success: true });
+  if (!token || typeof token !== 'string') return;
+  renewInvitation(token).catch((err) => console.error('[renewInvite] failed:', err)); // never shown to the caller
 });
+
+async function renewInvitation(token: string): Promise<void> {
+  const invitation = await findInvitationByToken(token);
+  const problem = invitationProblem(invitation);
+  if (!invitation || problem?.code !== 'INVITE_EXPIRED') return;
+  await runInTransaction(async (session) => {
+    // Re-read inside the transaction: the link must still be pending (of two concurrent renewals only the first renews)
+    // and must be the user's newest invitation.
+    const [newest] = await Invitation.find({ user_id: invitation.user_id, kind: { $ne: 'operator' } })
+      .sort({ createdAt: -1, _id: -1 }).limit(1).select('_id state').session(session ?? null);
+    if (!newest || !newest._id.equals(invitation._id) || newest.state !== 'pending') return;
+    const user = await User.findOne({ _id: invitation.user_id, company_id: invitation.company_id, lifecycle_state: 'invited' }).session(session ?? null);
+    const company = user ? await Company.findById(invitation.company_id).select('name').session(session ?? null) : null;
+    if (!user || !company) return;
+    const { rawToken } = await createInvitation(session, {
+      kind: invitation.kind, company_id: invitation.company_id, user_id: user._id, email: invitation.email,
+      created_by: { type: 'system' },
+    });
+    // The outbox row is written in this transaction; the e-mail is delivered after commit.
+    await sendWelcomeEmail({
+      email: invitation.email,
+      full_name: user.full_name,
+      employee_id: user.employee_id,
+      company_name: company.name,
+      invite_link: inviteLink(rawToken, invitation.email),
+      meta: { company_id: company._id, related: { type: 'user', id: String(user._id) }, session },
+    });
+  });
+}
 
 /**
  * POST /people/:id/resend-invite

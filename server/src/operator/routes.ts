@@ -492,18 +492,8 @@ const opOut = (o: any) => ({
 const operatorRoles = operatorRolesSchema;
 
 router.get('/operators', requirePermission('operators.read'), asyncHandler(async (_req: Request, res: Response) => ok(res, (await OperatorAccount.find().sort({ created_at: 1 })).map(opOut))));
-router.post('/operators', requirePermission('operators.write'), asyncHandler(async (req: Request, res: Response) => {
-  const b = z.object({
-    email: z.string().trim().email().toLowerCase(), full_name: z.string().trim().min(1).max(120),
-    password: z.string().min(12).max(200), roles: operatorRoles.optional(),
-  }).parse(req.body);
-  if (await OperatorAccount.exists({ email: b.email })) throw new AppError('An operator with this email already exists', 409, 'DUPLICATE');
-  const acct = await OperatorAccount.create({
-    email: b.email, full_name: b.full_name, password_hash: await bcrypt.hash(b.password, 12), roles: b.roles ?? ['platform_admin'], status: 'active',
-  });
-  await audit(req, { action: 'operator.created', target_type: 'Operator', target_id: acct._id.toString(), details: { email: acct.email } });
-  ok(res, opOut(acct), 201);
-}));
+// Plan A-6 (7.2 finding 5): there is no direct POST /operators. New operators are invited (POST /operators/invite,
+// onboarding.ts) and set their own password and authenticator app from the e-mail link (inviteAccept.ts).
 router.patch('/operators/:id', requirePermission('operators.write'), asyncHandler(async (req: Request, res: Response) => {
   const b = z.object({
     full_name: z.string().trim().min(1).max(120), status: z.enum(['active', 'suspended']),

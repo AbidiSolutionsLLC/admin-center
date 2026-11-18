@@ -10,10 +10,8 @@ export default function OperatorOperatorsPage() {
   const { data: operators, isLoading } = useOperators();
   const save = useSaveOperator();
   const canWrite = useOperatorCan('operators.write');
-  const [creating, setCreating] = useState(false);
   const [email, setEmail] = useState('');
   const [fullName, setFullName] = useState('');
-  const [password, setPassword] = useState(''); // POST /operators requires an initial password (12-200 chars)
   const invite = useInviteOperator();
   const [inviting, setInviting] = useState(false);
   const [inviteRole, setInviteRole] = useState<string>('support');
@@ -26,18 +24,12 @@ export default function OperatorOperatorsPage() {
     setInviting(false); setEmail(''); setFullName(''); setInviteRole('support');
   };
 
-  const create = async () => {
-    await save.mutateAsync({ body: { email, full_name: fullName, password } });
-    setCreating(false); setEmail(''); setFullName(''); setPassword('');
-  };
-
   return (
     <div className="space-y-4">
       <div className="flex items-center justify-between">
         <h1 className="text-xl font-semibold">Operators</h1>
         <div className="flex gap-2">
           {canWrite && <button onClick={() => setInviting(true)} className="h-9 px-4 bg-primary text-white text-sm rounded-md">Invite operator</button>}
-          {canWrite && <button onClick={() => setCreating(true)} className="h-9 px-4 border border-line text-sm rounded-md">Add with password</button>}
         </div>
       </div>
       <div className="bg-surface border border-line rounded-lg overflow-x-auto">
@@ -93,20 +85,6 @@ export default function OperatorOperatorsPage() {
               </li>
             ))}
           </ul>
-        </Modal>
-      )}
-      {creating && (
-        <Modal isOpen onClose={() => setCreating(false)} title="Add operator" size="sm">
-          <div className="space-y-3">
-            <input className={inputCls} placeholder="Full name" value={fullName} onChange={(e) => setFullName(e.target.value)} />
-            <input className={inputCls} type="email" placeholder="Email" value={email} onChange={(e) => setEmail(e.target.value)} />
-            <input className={inputCls} type="password" autoComplete="new-password" placeholder="Initial password (min 12 characters)" value={password} onChange={(e) => setPassword(e.target.value)} />
-            <p className="text-xs text-ink-muted">The operator enrols an authenticator app at first sign-in.</p>
-            <div className="flex justify-end gap-2 pt-2">
-              <button onClick={() => setCreating(false)} className="h-9 px-4 text-sm border border-line rounded-md">Cancel</button>
-              <button onClick={create} disabled={!email || !fullName || password.length < 12 || save.isPending} className="h-9 px-4 text-sm bg-primary text-white rounded-md disabled:opacity-50">Create</button>
-            </div>
-          </div>
         </Modal>
       )}
     </div>

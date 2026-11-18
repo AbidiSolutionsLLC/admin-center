@@ -31,6 +31,20 @@ export const authLimiter = rateLimit({
   },
 });
 
+// Public invitation check (POST /people/verify-invite, 7.2 finding 1): 30 requests per 15 minutes per IP. Over the
+// limit the answer is 429 with the standard error envelope; the outcomes of real and unknown tokens stay hidden behind it.
+export const verifyInviteLimiter = rateLimit({
+  store: new MongoRateLimitStore('invite-verify'),
+  windowMs: 15 * 60 * 1000,
+  limit: 30,
+  standardHeaders: true,
+  legacyHeaders: false,
+  skip: (req) => req.method === 'OPTIONS',
+  handler: (_req, res) => {
+    res.status(429).json({ success: false, error: 'Too many requests. Try again in 15 minutes.', code: 'RATE_LIMITED' });
+  },
+});
+
 // Self-service invitation renewal (Plan 2.2): 3 requests per invitation per day. The key is the hash of the submitted
 // token, so the count follows the link, not the caller. Over the limit the answer is still 202, so the response never
 // reveals whether a token exists or how often it was used (DRD §5.2).
