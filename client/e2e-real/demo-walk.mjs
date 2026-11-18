@@ -24,8 +24,9 @@
 // renewal and is ignored). A step with any of them fails. Expected refusals (a member without Sign opening Sign, a revoked
 // member) are muted for that page only while the step expects them.
 //
-// The leave approval is done by the People administrator (Hassan Ali), not by the manager: the manager's People role is
-// `employee`, so ViewLeaveModal offers no status control to him (see PROGRESS-WS-J.md, "Found while working").
+// The leave approval is done by the line manager (Omar Farooq, Bilal Ahmed's manager), as plan D4 says (decision W1-LEAVE,
+// W3-2d: ViewLeaveModal offers the status control to a People employee on a report's leave). A manager has no menu entry for
+// the leave page, so the walk opens /leave/leaveTrackerAdmin directly.
 // The access removal revokes the "Engineering" department rule of Projects through the Apps page and puts it back through
 // the API with the Admin page's own session at the end, so the walk can be run again.
 //
@@ -65,6 +66,7 @@ function member(name) {
 const CAST = {
   amira: () => member('Amira Khan'), // Super Admin; Projects and Sign administrator; all four products
   hassan: () => member('Hassan Ali'), // People administrator
+  omar: () => member('Omar Farooq'), // Engineering manager: approves his reports' leave
   bilal: () => member('Bilal Ahmed'), // Engineer: People, Projects, Desk requester; no Sign
   noah: () => member('Noah Wilson'), // Engineer: observes the access removal
   yusuf: () => member('Yusuf Rahman'), // Desk technician
@@ -359,9 +361,9 @@ await step('D4.2', 'a member sees only the assigned products (Bilal Ahmed: no Si
 });
 
 await step('D4.3', 'leave request: the pending demo request is approved', async (rec) => {
-  const s = await session('hassan', 'products');
+  const s = await session('omar', 'products');
   const { page } = s;
-  await page.goto(`${PRODUCTS}/admin/leaveTrackerAdmin`, { waitUntil: 'domcontentloaded' });
+  await page.goto(`${PRODUCTS}/leave/leaveTrackerAdmin`, { waitUntil: 'domcontentloaded' });
   await page.getByPlaceholder(/Search by employee name/).waitFor({ timeout: 30000 });
   await allTime(page);
   await page.getByPlaceholder(/Search by employee name/).fill('Family event');
