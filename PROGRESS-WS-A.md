@@ -4,7 +4,7 @@ Branch `ws/ws-a` (Admin and meta repo). Meta repo part: `scripts/dev.mjs` only.
 
 | Task | State | Commit | Notes |
 |---|---|---|---|
-| A-1 | in progress | df27483 | seed:demo reads product apps in one page (`GET /apps?type=karbexa_product&limit=100`). `--memory` self-check: see "A-1 seed run" below |
+| A-1 | done | df27483 and the launchTimeout commit | seed:demo reads product apps in one page (`GET /apps?type=karbexa_product&limit=100`); mongod launchTimeout 90 s in `--memory` mode. Self-check passed, see "A-1 seed run" below |
 | A-2 | done | 3b78fc4 (meta repo) | `node scripts/dev.mjs --demo`; `node --check` clean |
 | A-3 | done | 7d41881 | `verifyInviteLimiter` (30 per 15 min per IP, 429 `RATE_LIMITED`) in `middleware/rateLimiter.ts`; `verifyInviteToken` is now `[limiter, handler]` |
 | A-4 | done | 0bb2999 | `renew-invite` sends 202 first; renewal and outbox row commit in one transaction, delivery after commit |
@@ -12,7 +12,10 @@ Branch `ws/ws-a` (Admin and meta repo). Meta repo part: `scripts/dev.mjs` only.
 | A-6 | done | see git log | `POST /operator/v1/operators` removed; client "Add with password" button, modal and create path removed; `useSaveOperator` is update-only |
 
 ## A-1 seed run
-(pending)
+- Run 1 (2026-11-18, machine at 84% memory): failed before any seeding, `MongoMemoryReplSet` did not start within the default 10 s (`GenericMMSError`). Environment, not code.
+- Fix: `instanceOpts: [{ launchTimeout: 90000 }]` in `seed-demo.ts` (`--memory` branch only).
+- Run 2: exit 0. Output: `--memory check: 16 active members, 12 app assignments, 66 platform events`. One non-fatal warning: `people/employee -> group:All Members` answered 409 `ASSIGNMENT_EXISTS` (the product default rule already assigns it); the seed tolerates it. After the check, background jobs log `MongoClientClosedError` at shutdown; harmless.
+- `HEAVY-RUN.lock` was created before each run and removed after it.
 
 ## Needs from others
 - Docs (WS-F/H, integrator): `docs/spec/03-IMPLEMENTATION-PLAN.md` 7.2 findings 1, 2, 3 and 5 are now closed (A-3 to A-6); finding 4 was closed earlier (C7). Admin `docs/command-center` API list must drop `POST /operator/v1/operators`.

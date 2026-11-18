@@ -65,7 +65,8 @@ async function main() {
   let mongo: { stop: () => Promise<unknown>; getUri: () => string } | null = null;
   if (MEMORY) {
     const { MongoMemoryReplSet } = await import('mongodb-memory-server');
-    mongo = await MongoMemoryReplSet.create({ replSet: { count: 1 } });
+    // launchTimeout: on a loaded Windows machine mongod can need more than the default 10 s to start.
+    mongo = await MongoMemoryReplSet.create({ replSet: { count: 1 }, instanceOpts: [{ launchTimeout: 90000 }] });
     Object.assign(process.env, {
       NODE_ENV: 'development', MONGODB_URI: mongo.getUri(), DB_NAME: 'seed_demo_test', MOCK_EMAIL: 'true', TRUST_PROXY: '0',
       CLIENT_URL: 'http://admin.karbexa.localhost:5173', ADMIN_SPA_ORIGIN: 'http://admin.karbexa.localhost:5173',
