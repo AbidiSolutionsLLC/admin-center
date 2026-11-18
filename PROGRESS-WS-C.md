@@ -13,7 +13,7 @@ Deleted in Wave 2 after the integrator folds it into the docs.
 | C-4 | done | `buildStandaloneClaims` (lib/standalonePortals.ts); ID token and userinfo through a wrapped `findAccount`, access token through `extraTokenClaims`. Committed with C-3. |
 | C-5 | done (partial on one trigger, see Needs) | `lib/backchannelLogout.ts`: signed logout token (RS256, typ logout+jwt, tenant key), one `Job` per client, SSRF-guarded delivery. Queued from `destroyProviderSession` (revocation, suspension, termination, tenant suspension, admin revoke), from the end-session handler (sign-out) and on refresh denial (assignment removed or entitlement suspended). Typecheck clean. |
 | C-6 | partial | Done: health component `standalone_portals` (lib/health: probe through the SSRF guard, 5 s, degraded after 3 consecutive failures, never critical, counts undelivered back-channel logouts); `launchUrlFor` / `launchUrlsFor` (tenant override first); Admin launcher opens absolute URLs in a new tab with no opener; products `/me/apps` merge (`controllers/meController.js`, cache 60 s, branch ws/ws-c in karbexa-products). Open: the two server listings and the Platform API catalog are in files WS-C does not own (see Needs). Server typecheck and client `tsc -b` clean; products `node --check` and rbac gate clean. |
-| C-7 | not started | |
+| C-7 | done | Products page: "Register standalone portal" (all DRD 8.2 fields, client-side checks mirroring the server), Edit, Rotate secret (confirm, then the secret is shown once, with the 24 h overlap), Hosting column. Client `tsc -b` clean, `npm run build` clean. The register action shows for the platform_admin role or the `products.write` permission (the API accepts either). |
 
 ## Needs from others
 
@@ -29,6 +29,10 @@ Deleted in Wave 2 after the integrator folds it into the docs.
 - `operator/permissions.ts` (not owned by WS-C) has no `products.write` permission. `requireProductsWrite` in `operator/standalone.ts` accepts the permission or the role `platform_admin`, so registration works now; whoever owns `permissions.ts` should add `products.write` to `ROLE_PERMISSIONS.platform_admin` (the fallback then becomes redundant, not wrong).
 
 ## Found while working
+
+- C-7: `client/e2e/operator-products.spec.ts` asserted "no register action" for a platform admin; it now uses a read-only operator for that assertion (the register action is the new behaviour, covered by `operator-standalone.spec.ts`).
+- C-7: the per-tenant launch URL of an organisation (`PUT /operator/v1/products/:key/tenants/:orgId/launch-url`) has an API but no screen yet; the natural place is the organization entitlements view (not owned by WS-C).
+- `client` eslint reports one existing error in `AppLauncher.tsx` (`useAuthStore() as any`, line 24), not introduced by WS-C.
 
 - C-5 differs from the plan: the shared job runner (`lib/jobs.ts`, owned elsewhere) retries 4 times (5 attempts) with backoff 1, 5, 30, 120 minutes, not 3 retries. Changing it would affect every job type.
 
@@ -48,6 +52,8 @@ Deleted in Wave 2 after the integrator folds it into the docs.
 
 ## Tests written, not run
 
+- C-7: `client/e2e/operator-standalone.spec.ts` (visibility by role, form validation without an API call, register shows the secret once and sends the manifest, rotate with confirmation, server refusal keeps the form open).
+- Not written: the provider-level fake relying party (access -> code and `product_role`; no assignment -> denied page; entitlement suspended -> denied; assignment removed -> refresh denied; session revoked -> back-channel logout with matching `sid`; wrong redirect URI; registry change without restart). It needs the full stack and belongs in the Admin smoke suite (`server/src/scripts/smoke-sprint2.ts`, not owned by WS-C, WS-A territory). Cases are specified in DRD 8.8; the building blocks (`decideGate`, `buildStandaloneClaims`, `logoutTokenClaims`, `buildClientMetadata`) are unit-tested.
 - C-6: `server/src/lib/__tests__/standaloneHealth.test.ts` (health rules, probe status rule, launch URL rule); products `backend/tests/unit/controllers/meControllerStandalone.test.js` (tile merge, deny by default, URL scheme guard).
 - C-5: `server/src/lib/__tests__/backchannelLogout.test.ts` (logout token claims). Delivery, queueing on revoke and the matching `sid` are covered by the smoke additions listed under C-8 below.
 - C-3, C-4: same file: `decideGate` decision table, per-tenant redirect refusal, `buildStandaloneClaims` claim set. The provider-level cases (code + `product_role`, denied page, refresh denied after removal) are in the smoke script task below.

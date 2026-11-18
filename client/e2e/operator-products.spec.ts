@@ -7,8 +7,13 @@ const PRODUCTS = [
   { product_key: 'sign', name: 'Sign', status: 'beta', category: 'core', manifest_version: 3, icon: null, launch_url: null, roles: 4, tenants_active: 3, tenants_suspended: 0, tenants_restricted: 0 },
 ];
 
-test('catalogue: rows with status, manifest version and tenant counts; no create action', async ({ page }) => {
-  await signInOperator(page);
+test('catalogue: rows with status, manifest version and tenant counts; no create action for a read-only operator', async ({ page }) => {
+  await signInOperator(page, ['overview.read', 'tenants.read', 'products.read', 'health.read']);
+  // Read-only operator: not platform_admin, so the standalone registration action (WS-C C-7) is hidden.
+  await page.route('**/operator/v1/me', (route) =>
+    fulfillJson(route, { success: true, data: { id: 'o2', email: 'sup@karbexa.test', full_name: 'Support', roles: ['support'], status: 'active', permissions: ['products.read'] } })
+  );
+  await page.route('**/operator/v1/products/standalone', (route) => fulfillJson(route, { success: true, data: [] }));
   await page.route('**/operator/v1/products', (route) => fulfillJson(route, { success: true, data: PRODUCTS }));
   await page.goto('/operator/products');
   await expect(page.getByRole('heading', { name: 'Products', level: 1 })).toBeVisible();
@@ -22,6 +27,7 @@ test('catalogue: rows with status, manifest version and tenant counts; no create
 
 test('empty and error states', async ({ page }) => {
   await signInOperator(page);
+  await page.route('**/operator/v1/products/standalone', (route) => fulfillJson(route, { success: true, data: [] }));
   await page.route('**/operator/v1/products', (route) => fulfillJson(route, { success: true, data: [] }));
   await page.goto('/operator/products');
   await expect(page.getByText('No products registered')).toBeVisible();
