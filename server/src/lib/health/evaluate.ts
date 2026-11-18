@@ -107,3 +107,24 @@ export function overallState(states: HealthState[]): HealthState {
   const worst = states.reduce((a, b) => (RANK[b] > RANK[a] ? b : a));
   return worst === 'unknown' ? 'degraded' : worst;
 }
+
+/** A portal is degraded after this many failed checks in a row (DRD §8.7). */
+export const PORTAL_FAILURES_TO_DEGRADE = 3;
+
+export interface PortalCheck { key: string; ok: boolean; failures: number; error?: string }
+
+/**
+ * standalone_portals: reachability of the delivered portals (PRD SP-8) and undelivered back-channel logouts. Never
+ * critical: a third-party portal being down is not a Karbexa outage (DRD §8.7).
+ */
+export function evalStandalonePortals(m: { portals: PortalCheck[]; logoutFailed24h: number }): Evaluation {
+  const down = m.portals.filter((p) => p.failures >= PORTAL_FAILURES_TO_DEGRADE);
+  const metrics = {
+    portals: m.portals.length, unreachable: down.map((p) => p.key), failing: m.portals.filter((p) => !p.ok).map((p) => p.key),
+    logout_failed_24h: m.logoutFailed24h,
+  };
+  if (down.length) return degraded(`${down.map((p) => p.key).join(', ')} not answering (${PORTAL_FAILURES_TO_DEGRADE}+ checks in a row)`, metrics);
+  if (m.logoutFailed24h > 0) return degraded(`${m.logoutFailed24h} back-channel logout(s) could not be delivered in 24 hours`, metrics);
+  if (!m.portals.length) return ok('No standalone portals registered', metrics);
+  return ok(`${m.portals.length} portal(s) answering`, metrics);
+}

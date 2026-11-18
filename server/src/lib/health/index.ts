@@ -1,11 +1,12 @@
 // server/src/lib/health/index.ts
 // Platform health collection (DRD 7.1, Plan 4.9): once a minute, under a lease, every component is measured (each check
 // has 5 seconds), judged by ./evaluate.ts, stored in `HealthCheck`, and a state change adds a `HealthEvent`.
-// `standalone_portals` is not collected (Phase 6). `GET /operator/v1/health` only reads what this stores.
+// `standalone_portals` (DRD §8.7) probes each registered portal and is never critical. `GET /operator/v1/health` only reads what this stores.
 import mongoose from 'mongoose';
 import { HealthCheck, HealthEvent, type HealthState } from '../../models/Health.model';
 import { EmailDelivery } from '../../models/EmailDelivery.model';
 import { Job } from '../../models/Job.model';
+import { App } from '../../models/App.model';
 import { OrgEventCounter } from '../../models/OrgEventCounter.model';
 import { PlatformEventSubscription } from '../../models/PlatformEventSubscription.model';
 import { SubscriptionCursor } from '../../models/SubscriptionCursor.model';
@@ -14,17 +15,19 @@ import { getPublicJwks } from '../../identity/keys';
 import { DISPATCHER_LEASE_NAME, DISPATCHER_LEASE_TTL_MS } from '../platformDispatcher';
 import { every } from '../periodic';
 import { probeProducts } from './productsProbe';
+import { probePortal } from './standaloneProbe';
+import { BACKCHANNEL_JOB } from '../backchannelLogout';
 import { recentRouteStats } from './routeMetrics';
 import {
-  evalAdminApi, evalDatabase, evalDispatcher, evalEmail, evalIdentity, evalJobs, evalProductsApi, evalProductsWorker, unknownState,
-  type Evaluation,
+  evalAdminApi, evalDatabase, evalDispatcher, evalEmail, evalIdentity, evalJobs, evalProductsApi, evalProductsWorker, evalStandalonePortals, unknownState,
+  type Evaluation, type PortalCheck,
 } from './evaluate';
 
 export const HEALTH_EVERY_MS = 60_000;
 export const CHECK_TIMEOUT_MS = 5_000;
 const HOUR = 3600_000;
 
-export const COMPONENTS = ['admin_api', 'database', 'identity', 'event_dispatcher', 'products_api', 'products_worker', 'email', 'jobs'] as const;
+export const COMPONENTS = ['admin_api', 'database', 'identity', 'event_dispatcher', 'products_api', 'products_worker', 'email', 'jobs', 'standalone_portals'] as const;
 export type Component = (typeof COMPONENTS)[number];
 
 // ── Collectors: measure, then hand the numbers to the pure rules ─────────────────────────────
@@ -104,9 +107,29 @@ async function checkJobs(now: Date): Promise<Evaluation> {
   return evalJobs({ failedLastHour, overdueAgeMs: overdue ? now.getTime() - overdue.run_at.getTime() : null });
 }
 
+/**
+ * standalone_portals: probe every registered portal that is not retired. Consecutive failures are kept in the previous
+ * result's metrics (`failures` per key), so the count survives a change of the instance holding the health lease.
+ */
+async function checkStandalonePortals(now: Date): Promise<Evaluation> {
+  const apps: any[] = await App.find({ app_type: 'karbexa_product', company_id: { $exists: false }, hosting_mode: 'standalone', product_status: { $ne: 'retired' } })
+    .select('product_key hosting.launch_url hosting.health_url launch_url').lean();
+  const prior = await HealthCheck.findOne({ component: 'standalone_portals' }).select('metrics').lean();
+  const priorFailures = ((prior?.metrics as { failures?: Record<string, number> } | undefined)?.failures) ?? {};
+  const probes = await Promise.all(apps.map(async (a): Promise<PortalCheck> => {
+    const url: string | undefined = a.hosting?.health_url || a.hosting?.launch_url || a.launch_url;
+    if (!url) return { key: a.product_key, ok: true, failures: 0 };
+    const r = await probePortal(url);
+    return { key: a.product_key, ok: r.ok, failures: r.ok ? 0 : (priorFailures[a.product_key] ?? 0) + 1, error: r.error };
+  }));
+  const logoutFailed24h = await Job.countDocuments({ type: BACKCHANNEL_JOB, status: 'failed', finished_at: { $gte: new Date(now.getTime() - 24 * HOUR) } });
+  const ev = evalStandalonePortals({ portals: probes, logoutFailed24h });
+  return { ...ev, metrics: { ...ev.metrics, failures: Object.fromEntries(probes.map((p) => [p.key, p.failures])) } };
+}
+
 const CHECKS: Record<Component, (now: Date) => Promise<Evaluation>> = {
   admin_api: checkAdminApi, database: checkDatabase, identity: checkIdentity, event_dispatcher: checkDispatcher,
-  products_api: checkProductsApi, products_worker: checkProductsWorker, email: checkEmail, jobs: checkJobs,
+  products_api: checkProductsApi, products_worker: checkProductsWorker, email: checkEmail, jobs: checkJobs, standalone_portals: checkStandalonePortals,
 };
 
 /** Run one check with the 5 second limit. A check that throws or times out is `unknown`, never a crash. */

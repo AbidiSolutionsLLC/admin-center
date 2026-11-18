@@ -12,10 +12,16 @@ Deleted in Wave 2 after the integrator folds it into the docs.
 | C-3 | done | Gate as an oidc-provider interaction policy prompt `product_access` (runs on every authorization request, SSO included) plus a check in `extraTokenClaims`/claims on every code exchange and refresh. Hosted denied pages in `identity/html.ts` `deniedPage`. Committed together with C-4 (same files). Typecheck clean. |
 | C-4 | done | `buildStandaloneClaims` (lib/standalonePortals.ts); ID token and userinfo through a wrapped `findAccount`, access token through `extraTokenClaims`. Committed with C-3. |
 | C-5 | done (partial on one trigger, see Needs) | `lib/backchannelLogout.ts`: signed logout token (RS256, typ logout+jwt, tenant key), one `Job` per client, SSRF-guarded delivery. Queued from `destroyProviderSession` (revocation, suspension, termination, tenant suspension, admin revoke), from the end-session handler (sign-out) and on refresh denial (assignment removed or entitlement suspended). Typecheck clean. |
-| C-6 | not started | |
+| C-6 | partial | Done: health component `standalone_portals` (lib/health: probe through the SSRF guard, 5 s, degraded after 3 consecutive failures, never critical, counts undelivered back-channel logouts); `launchUrlFor` / `launchUrlsFor` (tenant override first); Admin launcher opens absolute URLs in a new tab with no opener; products `/me/apps` merge (`controllers/meController.js`, cache 60 s, branch ws/ws-c in karbexa-products). Open: the two server listings and the Platform API catalog are in files WS-C does not own (see Needs). Server typecheck and client `tsc -b` clean; products `node --check` and rbac gate clean. |
 | C-7 | not started | |
 
 ## Needs from others
+
+- C-6, Admin `/me/apps` tenant override: `controllers/appAccess.controller.ts` `getMyApps`: after loading `apps`, call `const urls = await launchUrlsFor(req.user!.company_id, keys)` (from `lib/standalonePortals`) and return `launch_url: urls[a.product_key] ?? a.launch_url`. Standalone apps already appear there with their absolute `launch_url` (the registration sets it).
+- C-6, Platform API listing: `platform/manifest.ts` `view()` still reports `hosting: { mode: 'suite', launch_path }` for every app; for a standalone app it should return the `standaloneView` hosting block (no secrets). Same file or a new `platform/` route is also needed for the products merge: `GET /platform/v1/orgs/:orgId/launchers` (scope `platform.org.read`) returning `[{ product_key, name, launch_url (tenant override first, via launchUrlsFor), roles: [{ key, name }] }]` for standalone products the organisation holds an active entitlement to. New endpoint = additive Platform API change: needs a recorded decision first.
+- C-6, products side of that: `backend/platform/platformApi.js` needs `listLaunchers(orgId)` (GET `/orgs/:id/launchers`). `controllers/meController.js` already calls it when present and shows no standalone tiles when absent. The products launcher frontend should open tiles with `external: true` in a new tab.
+- C-6, Command Center health page label: `client/src/pages/operator/OperatorHealthPage.tsx` has a label map without `standalone_portals` (shows the raw key).
+- Products `/me/apps` only sees a standalone key if the member's `req.access` projection contains it (event handlers / `MemberAccess`, WS-B and WS-D territory).
 
 - Proactive logout when access to one portal ends without a refresh (assignment removed, entitlement suspended): the code paths that do that (assignments, overrides, plans) are not owned by WS-C. `queueProductBackchannelLogouts(companyId, productKey, memberIds | undefined, reason)` in `lib/backchannelLogout.ts` is ready to be called from there (after commit). Until then the portal is logged out at its next refresh (at most 10 minutes), which is also when the refresh denial queues the logout.
 
@@ -42,6 +48,7 @@ Deleted in Wave 2 after the integrator folds it into the docs.
 
 ## Tests written, not run
 
+- C-6: `server/src/lib/__tests__/standaloneHealth.test.ts` (health rules, probe status rule, launch URL rule); products `backend/tests/unit/controllers/meControllerStandalone.test.js` (tile merge, deny by default, URL scheme guard).
 - C-5: `server/src/lib/__tests__/backchannelLogout.test.ts` (logout token claims). Delivery, queueing on revoke and the matching `sid` are covered by the smoke additions listed under C-8 below.
 - C-3, C-4: same file: `decideGate` decision table, per-tenant redirect refusal, `buildStandaloneClaims` claim set. The provider-level cases (code + `product_role`, denied page, refresh denied after removal) are in the smoke script task below.
 - C-1, C-2: `server/src/lib/__tests__/standalonePortals.test.ts` (validation, client id, auth methods, secret generation, no secret in the view, client metadata, rotated secret window, per-tenant URIs).

@@ -432,3 +432,27 @@ export function buildStandaloneClaims(i: StandaloneClaimInput): Record<string, u
     authz_ver: i.authzVer ?? 1,
   };
 }
+
+// ── Launcher (DRD §8.7) ───────────────────────────────────────────────────────────────────────
+
+/** Tile target of a standalone portal: the organisation's own URL first (per-tenant portals only), else the portal's. */
+export function launchUrlFor(app: { launch_url?: string; hosting?: { launch_url?: string; per_tenant_launch_url?: boolean } }, tenantUrl?: string | null): string {
+  if (app.hosting?.per_tenant_launch_url && tenantUrl) return tenantUrl;
+  return app.hosting?.launch_url ?? app.launch_url ?? '';
+}
+
+/**
+ * Launch URLs of the standalone portals among `productKeys` for one organisation (key -> absolute URL, tenant override
+ * first). Suite products are absent from the result. The listings that build launcher tiles call this
+ * (`/me/apps`, the Platform API launcher catalog); it is scoped by `company_id`.
+ */
+export async function launchUrlsFor(companyId: Types.ObjectId | string, productKeys: string[]): Promise<Record<string, string>> {
+  if (!productKeys.length) return {};
+  const [apps, ents] = await Promise.all([
+    App.find({ ...{ app_type: 'karbexa_product', company_id: { $exists: false } }, hosting_mode: 'standalone', product_key: { $in: productKeys } })
+      .select('product_key launch_url hosting.launch_url hosting.per_tenant_launch_url').lean() as Promise<any[]>,
+    OrganizationEntitlement.find({ company_id: companyId, product_key: { $in: productKeys } }).select('product_key config.launch_url').lean() as Promise<any[]>,
+  ]);
+  const tenant = new Map(ents.map((e) => [e.product_key as string, e.config?.launch_url as string | undefined]));
+  return Object.fromEntries(apps.map((a) => [a.product_key as string, launchUrlFor(a, tenant.get(a.product_key))]));
+}
