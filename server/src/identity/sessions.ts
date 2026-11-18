@@ -9,6 +9,7 @@ import { User } from '../models/User.model';
 import { realmCollection } from './mongoAdapter';
 import { runInTransaction, emitPlatformEvent, PlatformEventInput } from '../lib/platformEvents';
 import { SESSION_ABSOLUTE_MS, SESSION_IDLE_MS } from './config';
+import { queueBackchannelLogouts } from '../lib/backchannelLogout';
 
 export class SessionDeniedError extends Error {
   constructor(public reason: string) {
@@ -73,6 +74,8 @@ export async function findLiveSession(sid: string): Promise<ISession | null> {
 
 /** Delete the provider SSO session (by uid), every grant it authorized and their tokens. */
 export async function destroyProviderSession(sid: string): Promise<void> {
+  // Standalone portals holding a session for this sid are told first (DRD §8.6): the provider session names them.
+  await queueBackchannelLogouts({ sid, reason: 'session_ended' });
   const sessions = realmCollection('tenant', 'Session');
   const docs = await sessions.find({ 'payload.uid': sid }).toArray();
   const grantIds = new Set<string>();
