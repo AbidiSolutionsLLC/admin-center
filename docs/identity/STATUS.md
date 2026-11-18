@@ -26,6 +26,7 @@ Last verified: 2026-11-18 against `main` of `karbexa-admin` after the Wave 2 mer
 
 | Issue | Where | Impact |
 |---|---|---|
+| `GET /realms/tenant/oauth/userinfo` answers 401 `invalid_token` for the access token of a standalone portal (found by the W3-2h smoke): every access token of the tenant realm is a JWT bound to a resource (`defaultResource`, `useGrantedResource`), and oidc-provider does not accept resource-bound tokens at userinfo. `contracts/standalone-claims.md` lists userinfo as a place the claims arrive | `server/src/identity/providers.ts` (`resourceIndicators`), `contracts/standalone-claims.md` | A portal reads the claims from the ID token or the access token (both work, smoke-tested). Owner decision: change the contract text, or issue an opaque userinfo token (contract change, not done in Wave 3) |
 | The account-page CSRF secret falls back to `ENCRYPTION_KEY` and then to a literal string. `loadCookieKeys()` always returns at least one key, so the literal is not reached in practice | `server/src/identity/account.ts` | Low |
 | `applyProxy` reads `TRUST_PROXY` with default `'1'` and sets `maxIpsCount` only for a number; a CIDR list makes the provider trust proxies without a hop limit, unlike Express (`lib/trustProxy.ts`) | `server/src/identity/providers.ts` | Low; only with a CIDR list |
 | After `POST /api/v1/auth/logout` the session is already destroyed, so the following `end_session` call finds no provider session; the redirect still lands on `/login?signed_out=1` | `auth.controller.ts`, `providers.ts` | None visible |
