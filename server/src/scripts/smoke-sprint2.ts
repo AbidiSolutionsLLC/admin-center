@@ -79,7 +79,8 @@ async function main() {
     await seedProductRegistry();
     await seedProductRegistry(); // idempotent
     const apps = await App.find({ app_type: 'karbexa_product' });
-    check('E3 registry seeds people/projects/sign/desk', apps.map((a) => a.product_key).sort().join() === 'desk,people,projects,sign', apps.map((a) => a.product_key));
+    // kb (Knowledge Base) joins the built-in seed with WS-D (ws/ws-d, productCatalog.ts); this expectation is valid once that branch is merged.
+    check('E3 registry seeds people/projects/sign/desk/kb', apps.map((a) => a.product_key).sort().join() === 'desk,kb,people,projects,sign', apps.map((a) => a.product_key));
     {
       // 1.2: manifest fields are seeded; default rules come from default_assignments
       const byKey = Object.fromEntries(apps.map((a) => [a.product_key, a]));
@@ -90,7 +91,7 @@ async function main() {
     check('E3 desk catalog (5 roles, default requester)', deskRoles.length === 5 && deskRoles.find((r) => r.is_default)?.key === 'requester', deskRoles.map((r) => r.key));
     {
       // L3-1 (D5): read_only rank 5 in every product catalog; default roles unchanged after a second seed
-      const defaults: Record<string, string> = { people: 'employee', projects: 'team_member', sign: 'sign_user', desk: 'requester' };
+      const defaults: Record<string, string> = { people: 'employee', projects: 'team_member', sign: 'sign_user', desk: 'requester', kb: 'kb_reader' };
       for (const pk of Object.keys(defaults)) {
         const rows = await ProductRole.find({ product_key: pk }).lean();
         const ro = rows.filter((r) => r.key === 'read_only');

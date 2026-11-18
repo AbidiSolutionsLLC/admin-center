@@ -17,6 +17,8 @@ Branch `ws/ws-a` (Admin and meta repo). Meta repo part: `scripts/dev.mjs` only.
 ## Needs from others
 - Docs (WS-F/H, integrator): `docs/spec/03-IMPLEMENTATION-PLAN.md` 7.2 findings 1, 2, 3 and 5 are now closed (A-3 to A-6); finding 4 was closed earlier (C7). Admin `docs/command-center` API list must drop `POST /operator/v1/operators`.
 
+- WS-D coordination: smoke-sprint2 E3 registry check and the L3-1 loop now expect `kb` (`kb_reader`); valid only after ws/ws-d (productCatalog.ts, commit c8803b3) is merged. Until then that smoke case fails on this branch alone.
+
 ## Found while working
 - A-3 changes the export shape of `verifyInviteToken` (a handler array, mounted by `router.post(..., verifyInviteToken)`; Express accepts both). Anything that calls it directly as a function would break; none found in `server/src`.
 - Unmatched operator routes fall through to Express's default 404 (HTML "Cannot POST ..."), not the JSON envelope; the smoke case checks only the status.
