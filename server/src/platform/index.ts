@@ -7,6 +7,7 @@ import { platformReadRouter } from './readApi';
 import { OrganizationEntitlement } from '../models/OrganizationEntitlement.model';
 import { computeEffectiveAccess } from '../lib/effectiveAccess';
 import { requireServiceToken, authenticateService } from './requireServiceToken';
+import { listLaunchers } from '../lib/standalonePortals';
 import { platformAuthFailureLimiter, platformRateLimiter } from './rateLimit';
 
 export const platformRouter = Router();
@@ -40,6 +41,17 @@ platformRouter.get('/orgs/:orgId', requireServiceToken('platform.org.read'), asy
       branding: company.branding ?? {},
       entitlements: ents.map(e => ({ product_key: e.product_key, status: e.status })),
     });
+  } catch (err) { next(err); }
+});
+
+// W2-LAUNCH: standalone portals the organisation holds an active entitlement to (launcher tiles; no secrets).
+platformRouter.get('/orgs/:orgId/launchers', requireServiceToken('platform.org.read'), async (req, res, next) => {
+  try {
+    const orgId = req.params.orgId as string;
+    if (!Types.ObjectId.isValid(orgId)) return notFound(res);
+    if (!(await Company.exists({ _id: orgId }))) return notFound(res);
+    res.setHeader('Cache-Control', 'no-store');
+    res.json(await listLaunchers(orgId));
   } catch (err) { next(err); }
 });
 

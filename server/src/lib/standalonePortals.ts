@@ -7,6 +7,7 @@ import crypto from 'crypto';
 import { Types } from 'mongoose';
 import { z } from 'zod';
 import { App, IApp, IStandaloneClient } from '../models/App.model';
+import { ProductRole } from '../models/ProductRole.model';
 import { OrganizationEntitlement } from '../models/OrganizationEntitlement.model';
 import { User } from '../models/User.model';
 import { SecurityEvent } from '../models/SecurityEvent.model';
@@ -455,4 +456,37 @@ export async function launchUrlsFor(companyId: Types.ObjectId | string, productK
   ]);
   const tenant = new Map(ents.map((e) => [e.product_key as string, e.config?.launch_url as string | undefined]));
   return Object.fromEntries(apps.map((a) => [a.product_key as string, launchUrlFor(a, tenant.get(a.product_key))]));
+}
+
+export interface LauncherItem { product_key: string; name: string; launch_url: string; roles: Array<{ key: string; name: string }> }
+
+/** One launcher entry (Platform API `GET /orgs/:orgId/launchers`): no secrets, no client settings; roles by rank, highest first. */
+export function launcherItem(app: { product_key: string; name: string }, roles: Array<{ key: string; name: string; rank: number }>, url: string): LauncherItem {
+  return {
+    product_key: app.product_key,
+    name: app.name,
+    launch_url: url,
+    roles: [...roles].sort((a, b) => b.rank - a.rank).map((r) => ({ key: r.key, name: r.name })),
+  };
+}
+
+/**
+ * Standalone portals one organisation holds an ACTIVE entitlement to (W2-LAUNCH): retired products and portals without
+ * a usable launch URL are left out. `launch_url` is the tenant override first (`launchUrlsFor`). Scoped by `company_id`.
+ */
+export async function listLaunchers(companyId: Types.ObjectId | string): Promise<LauncherItem[]> {
+  const ents: any[] = await OrganizationEntitlement.find({ company_id: companyId, status: 'active' }).select('product_key').lean();
+  const keys = ents.map((e) => e.product_key as string);
+  if (!keys.length) return [];
+  const apps: any[] = await App.find({ app_type: 'karbexa_product', company_id: { $exists: false }, product_key: { $in: keys }, hosting_mode: 'standalone', product_status: { $ne: 'retired' } })
+    .select('product_key name').sort({ product_key: 1 }).lean();
+  if (!apps.length) return [];
+  const appKeys = apps.map((a) => a.product_key as string);
+  const [urls, roles] = await Promise.all([
+    launchUrlsFor(companyId, appKeys),
+    ProductRole.find({ product_key: { $in: appKeys } }).select('product_key key name rank').lean() as Promise<any[]>,
+  ]);
+  return apps
+    .filter((a) => !!urls[a.product_key])
+    .map((a) => launcherItem(a, roles.filter((r) => r.product_key === a.product_key), urls[a.product_key]));
 }

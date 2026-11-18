@@ -2337,6 +2337,80 @@ async function main() {
       check('7.4 B\'s counts do not include A\'s members', (await json(await B.call('/people?limit=1'))).meta?.total === 4);
     }
 
+    // ── W2-LAUNCH: Platform API launcher catalog and the real standalone `hosting` block ───────────────
+    try {
+      const SVC = `${ORIGIN}/realms/services`;
+      const svcToken = async (scope: string) => {
+        const a = await new jose.SignJWT({}).setProtectedHeader({ alg: 'RS256', kid: 'smoke-backend-1' })
+          .setIssuer('karbexa-products-backend').setSubject('karbexa-products-backend').setAudience(SVC)
+          .setJti(crypto.randomUUID()).setIssuedAt().setExpirationTime('2m').sign(backend.privateKey);
+        const t = await (await fetch(`${SVC}/oauth/token`, form({
+          grant_type: 'client_credentials', client_id: 'karbexa-products-backend',
+          client_assertion_type: 'urn:ietf:params:oauth:client-assertion-type:jwt-bearer', client_assertion: a, scope, resource: 'urn:karbexa:platform-api',
+        }))).json() as Record<string, string>;
+        return t.access_token;
+      };
+      const tkOrg = await svcToken('platform.org.read');
+      const tkCat = await svcToken('platform.role_catalog.write');
+      const launchers = async (id: string, token: string | undefined = tkOrg) => {
+        const x = await fetch(`${ORIGIN}/platform/v1/orgs/${id}/launchers`, { headers: token ? { authorization: `Bearer ${token}` } : {} });
+        return { status: x.status, text: await x.text(), cache: x.headers.get('cache-control') || '' };
+      };
+      const asJson = (r: { text: string }) => { try { return JSON.parse(r.text); } catch { return null; } };
+      const portal = {
+        manifest_version: 1, key: 'assets', name: 'Assets', description: 'Asset management', icon: 'package', category: 'it', status: 'active', version: 1,
+        hosting: { mode: 'standalone', launch_url: 'https://assets.smoke.test/', client: { type: 'confidential', redirect_uris: ['https://assets.smoke.test/callback'], post_logout_redirect_uris: ['https://assets.smoke.test/'] }, per_tenant_launch_url: true },
+        roles: [{ key: 'asset_viewer', name: 'Asset viewer', rank: 10, is_default: true }, { key: 'asset_admin', name: 'Asset admin', rank: 40 }],
+      };
+      const reg = await op('/products/assets', 'PUT', portal);
+      const regJson = await reg.json() as { data?: { client_secret?: string } };
+      const secretValue = regJson.data?.client_secret || '';
+      check('W2-LAUNCH setup: standalone portal registered (201, secret shown once)', reg.status === 201 && secretValue.length > 20, reg.status);
+
+      const noEnt = await launchers(orgId);
+      check('W2-LAUNCH launchers: no entitlement to the portal = empty array', noEnt.status === 200 && JSON.stringify(asJson(noEnt)) === '[]', noEnt.text);
+      const ent = await op(`/orgs/${orgId}/entitlements/assets`, 'PUT', { status: 'active', reason: 'smoke launchers' });
+      check('W2-LAUNCH setup: operator entitles the organisation (200)', ent.status === 200, ent.status);
+      const one = await launchers(orgId);
+      const items = asJson(one) as any[] | null;
+      check('W2-LAUNCH launchers: 200, no-store, one item with key, name, launch_url and roles by rank (highest first)',
+        one.status === 200 && /no-store/.test(one.cache) && items?.length === 1 && items[0].product_key === 'assets' && items[0].name === 'Assets'
+        && items[0].launch_url === 'https://assets.smoke.test/' && items[0].roles.map((r: any) => r.key).join() === 'asset_admin,asset_viewer' && Object.keys(items[0].roles[0]).sort().join() === 'key,name', one.text);
+      check('W2-LAUNCH launchers: only standalone portals (suite products are not listed)', !!items && items.every((i) => !['people', 'projects', 'sign', 'desk', 'kb'].includes(i.product_key)), one.text);
+      check('W2-LAUNCH launchers: no secret material in the body', !!secretValue && !one.text.includes(secretValue) && !/secret|redirect_uris|client_id/i.test(one.text), one.text);
+
+      const tenantUrl = await op(`/products/assets/tenants/${orgId}/launch-url`, 'PUT', { launch_url: 'https://acme.assets.smoke.test/' });
+      check('W2-LAUNCH setup: per-tenant launch URL accepted', tenantUrl.status === 200, tenantUrl.status);
+      check('W2-LAUNCH launchers: launch_url is the tenant override first', (asJson(await launchers(orgId)) as any[])?.[0]?.launch_url === 'https://acme.assets.smoke.test/');
+      const otherOrg = await Company.findOne({ slug: 'forced-fail' }).lean();
+      check('W2-LAUNCH launchers: another organisation without the entitlement sees nothing (tenant scope)', !!otherOrg && JSON.stringify(asJson(await launchers(String(otherOrg._id)))) === '[]');
+
+      const apps = await fetch(`${ORIGIN}/platform/v1/apps`, { headers: { authorization: `Bearer ${tkCat}` } });
+      const appsText = await apps.text();
+      const appRow = (JSON.parse(appsText) as any[]).find((a) => a.key === 'assets');
+      check('W2-LAUNCH GET /apps: a standalone product reports hosting.mode standalone, launch_url, client settings and the per-tenant flag',
+        apps.status === 200 && appRow?.hosting?.mode === 'standalone' && appRow.hosting.launch_url === 'https://assets.smoke.test/' && appRow.hosting.per_tenant_launch_url === true
+        && appRow.hosting.client?.type === 'confidential' && appRow.hosting.client.has_secret === true && !('launch_path' in appRow.hosting), appRow?.hosting);
+      check('W2-LAUNCH GET /apps: no secret value anywhere in the listing', !!secretValue && !appsText.includes(secretValue) && !/secret_enc/.test(appsText));
+      const suiteRow = (JSON.parse(appsText) as any[]).find((a) => a.key === 'people');
+      check('W2-LAUNCH GET /apps: suite products keep hosting.mode suite with launch_path', suiteRow?.hosting?.mode === 'suite' && typeof suiteRow.hosting.launch_path === 'string', suiteRow?.hosting);
+
+      check('W2-LAUNCH launchers: no token = 401', (await launchers(orgId, '')).status === 401);
+      check('W2-LAUNCH launchers: wrong scope (role_catalog.write only) = 403', (await launchers(orgId, tkCat)).status === 403);
+      check('W2-LAUNCH launchers: unknown organisation = 404', (await launchers(String(new mongoose.Types.ObjectId()))).status === 404);
+      check('W2-LAUNCH launchers: malformed organisation id = 404', (await launchers('not-an-id')).status === 404);
+
+      await op(`/orgs/${orgId}/entitlements/assets`, 'PUT', { status: 'suspended', reason: 'smoke launchers' });
+      check('W2-LAUNCH launchers: a suspended entitlement drops the portal', JSON.stringify(asJson(await launchers(orgId))) === '[]');
+    } catch (e) { check('W2-LAUNCH section did not crash', false, (e as Error).stack?.split(String.fromCharCode(10)).slice(0, 4).join(' | ')); }
+    finally {
+      await OrganizationEntitlement.deleteMany({ product_key: 'assets' });
+      await ProductRole.deleteMany({ product_key: 'assets' });
+      await App.deleteMany({ product_key: 'assets', app_type: 'karbexa_product' });
+      (await import('../lib/productRegistry')).invalidateProductRegistry();
+      (await import('../lib/standalonePortals')).invalidateStandalonePortals();
+    }
+
     // ── audit ─────────────────────────────────────────────────────────────────────────────
     const actions = (await OperatorAuditEvent.find()).map((e) => e.action);
     check('E10 operator audit recorded', ['org.provisioned', 'entitlement.updated', 'org.suspended', 'org.reactivated'].every((a) => actions.includes(a)), actions);

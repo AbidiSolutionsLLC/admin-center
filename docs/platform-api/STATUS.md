@@ -26,8 +26,6 @@ Last verified: 2026-11-18 against `main` of `karbexa-admin` after the Wave 2 mer
 | A manifest publish writes no operator audit entry (`OperatorAuditEvent.operator_id` is required and a service call has none) | `manifest.ts` | Decision 1.3 |
 | A product key is accepted only from a client whose `PLATFORM_CLIENT_PRODUCTS` allow-list names it; the default list holds the five built-ins (`people`, `projects`, `sign`, `desk`, `kb`) | `requireServiceToken.ts` | A new product needs configuration in Admin |
 | No events for policies, workflows, data fields, integrations, notifications, IP restrictions, identity providers, security policies, teams, plan changes, operator accounts or IdP approval | emitters | Products are not told; none is consumed today |
-| `GET /platform/v1/apps` (`platform/manifest.ts` `view()`) reports `hosting: { mode: 'suite', launch_path }` for every app, also a standalone one | `server/src/platform/manifest.ts` | Products see wrong hosting data for standalone apps |
-| No Platform API listing of standalone launchers: the products `/me/apps` merge calls `platformApi.listLaunchers` only when present, so products show no standalone tiles. Wanted: `GET /platform/v1/orgs/:orgId/launchers` (scope `platform.org.read`) → `[{ product_key, name, launch_url (tenant first), roles }]` for active entitlements | `server/src/platform/`; products `backend/platform/platformApi.js` | Additive contract change: needs a recorded decision (meta STATUS → Next: Wave 3) |
 | `seed:e11` iterates `PRODUCT_DEFS`, so it now seeds `kb` too | `server/src/scripts/seed-e11.ts` | Harmless (`seed:e11` is never used for go-live) |
 
 Resolved (so nobody re-reports them): the per-client rate limiter used an in-memory store in an old note; it now uses the shared MongoDB store (`middleware/mongoRateLimitStore.ts`).
@@ -36,7 +34,6 @@ Resolved (so nobody re-reports them): the per-client rate limiter used an in-mem
 
 | Task | What |
 |---|---|
-| Decision, then Wave 3 | Launchers endpoint and standalone hosting block in `GET /apps` (PLT-013) |
 | none | Organisation-bound service tokens; paged `GET /orgs`; parent-location calendars; store manifest `capabilities`; `timezone` in the member payload |
 
 ## Test commands and last results

@@ -2,6 +2,11 @@
 
 Format: [Keep a Changelog](https://keepachangelog.com/en/1.1.0/). Each entry lists the change and its user-visible or deploy-visible effect. Commit details: git history (the old meta repo `docs/wrapup/CHANGE-LEDGER.md` is in its tag `docs-before-standard`).
 
+## [Unreleased]: Wave 3 test and fix (2026-11-18)
+
+### Added
+- W3-2a (decision W2-LAUNCH, contract 1.1.0): Platform API `GET /platform/v1/orgs/:orgId/launchers` (scope `platform.org.read`; the standalone portals an organisation holds an active entitlement to, tenant launch URL first, no secrets). `GET /platform/v1/apps` reports the real, secret-free `hosting` block of a standalone product.
+
 ## [Unreleased]: execution plan Wave 1 and Wave 2 (2026-11-18)
 
 Typechecked and built; tests written, run in Wave 3.

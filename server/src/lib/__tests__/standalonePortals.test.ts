@@ -6,7 +6,7 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import {
   portalUrlProblem, standaloneManifestSchema, keyFromClientId, clientIdFor, audienceFor, authMethodOf, usesClientSecret,
-  generateClientSecret, storedClient, standaloneView, buildClientMetadata, withTenantOrigins, originsOf, resourceForStandaloneClient, secretsEqual, decideGate, buildStandaloneClaims,
+  generateClientSecret, storedClient, standaloneView, buildClientMetadata, withTenantOrigins, originsOf, resourceForStandaloneClient, secretsEqual, decideGate, buildStandaloneClaims, launcherItem,
 } from '../standalonePortals';
 
 const base = () => ({
@@ -188,4 +188,17 @@ test('buildStandaloneClaims: picture only when absolute; member_type external is
   const c = buildStandaloneClaims({ memberId: 'm1', email: 'a@b.c', emailVerified: false, name: 'A', avatarUrl: '/uploads/a.png', memberType: 'external', orgId: 'o', orgSlug: 's', orgName: 'N', role: 'r' });
   assert.equal('picture' in c, false); assert.equal('sid' in c, false);
   assert.equal(c.member_type, 'external'); assert.equal(c.authz_ver, 1); assert.equal(c.email_verified, false);
+});
+
+test('launcherItem: key, name, launch_url and roles by rank (highest first), nothing else', () => {
+  const item = launcherItem({ product_key: 'assets', name: 'Assets', hosting: { client: { secret_enc: 'x' } } } as never,
+    [{ key: 'viewer', name: 'Viewer', rank: 10, description: 'd' } as never, { key: 'admin', name: 'Admin', rank: 40 }], 'https://assets.example.com/');
+  assert.deepEqual(item, { product_key: 'assets', name: 'Assets', launch_url: 'https://assets.example.com/', roles: [{ key: 'admin', name: 'Admin' }, { key: 'viewer', name: 'Viewer' }] });
+});
+
+test('standaloneView hosting block (used by GET /platform/v1/apps) never carries a secret', () => {
+  const view = standaloneView({ product_key: 'assets', name: 'Assets', hosting: { launch_url: 'https://a.example.com/', client: { type: 'confidential', secret_enc: 'ENC', secret_set_at: new Date(), previous_secret_enc: 'OLD' } } }, []);
+  assert.equal(view.hosting.mode, 'standalone');
+  assert.equal(view.hosting.client.has_secret, true);
+  assert.ok(!/ENC|OLD|secret_enc/.test(JSON.stringify(view.hosting)));
 });

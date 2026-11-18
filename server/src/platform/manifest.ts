@@ -1,7 +1,7 @@
 // server/src/platform/manifest.ts — PUT /apps/:productKey/manifest, GET /apps (plan 1.3; DRD §2.2, §2.4)
 // Copied from roleCatalog.ts: same scope, allow-list, optimistic version lock, ROLE_IN_USE protection, transaction and fan-out.
-// Differences: it upserts the App and writes the descriptive fields. Standalone hosting, role audience, self_signup and
-// capabilities.external_users are deferred (plan §1) and not accepted.
+// Differences: it upserts the App and writes the descriptive fields. Only suite hosting is accepted on PUT (standalone portals are
+// registered in the Command Center); GET /apps reports the real, secret-free `hosting` block of a standalone product (W2-LAUNCH).
 import { Router } from 'express';
 import { z } from 'zod';
 import { App } from '../models/App.model';
@@ -9,6 +9,7 @@ import { AppAssignment } from '../models/AppAssignment.model';
 import { ProductRole } from '../models/ProductRole.model';
 import { runInTransaction, fanOutAppAccessChanged, correlationIdFor } from '../lib/platformEvents';
 import { productLaunchUrl } from '../lib/productCatalog';
+import { standaloneView } from '../lib/standalonePortals';
 import { invalidateProductRegistry, RESERVED_PRODUCT_KEY } from '../lib/productRegistry';
 import { requireServiceToken, serviceMayAccessProduct } from './requireServiceToken';
 
@@ -59,7 +60,7 @@ const view = (app: any, rows: any[]) => ({
   status: app.product_status ?? 'active',
   version: app.role_catalog_version ?? 1,
   role_catalog_version: app.role_catalog_version ?? 1,
-  hosting: { mode: 'suite', launch_path: app.launch_path ?? '' },
+  hosting: app.hosting_mode === 'standalone' ? standaloneView(app, []).hosting : { mode: 'suite', launch_path: app.launch_path ?? '' },
   roles: [...rows].sort((a, b) => b.rank - a.rank).map(r => ({
     key: r.key, name: r.name, description: r.description, rank: r.rank, is_default: !!r.is_default, assignable: r.assignable !== false,
   })),
