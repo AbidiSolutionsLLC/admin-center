@@ -4,6 +4,7 @@
 import rateLimit from 'express-rate-limit';
 import type { Request, Response } from 'express';
 import { MongoRateLimitStore } from '../middleware/mongoRateLimitStore';
+import { ipKey } from '../middleware/rateLimiter';
 
 const DEFAULT_PER_MIN = 1200;
 
@@ -32,6 +33,7 @@ export const platformRateLimiter = rateLimit({
  */
 export const platformAuthFailureLimiter = rateLimit({
   store: new MongoRateLimitStore('platform-auth-failure'),
+  keyGenerator: ipKey,
   windowMs: 15 * 60_000,
   limit: 300,
   standardHeaders: false,

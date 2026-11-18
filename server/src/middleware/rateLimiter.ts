@@ -1,10 +1,16 @@
 import crypto from 'crypto';
-import rateLimit from 'express-rate-limit';
+import rateLimit, { ipKeyGenerator } from 'express-rate-limit';
+import type { Request } from 'express';
+import { stripPort } from '../utils/ipUtils';
 import { MongoRateLimitStore } from './mongoRateLimitStore';
+
+/** Rate-limit key of the caller: the client address without a proxy-appended port (`1.2.3.4:5678`); IPv6 is grouped by subnet as express-rate-limit does. */
+export const ipKey = (req: Request): string => ipKeyGenerator(stripPort(req.ip || ''));
 
 // Global rate limiter for all API routes
 export const globalLimiter = rateLimit({
   store: new MongoRateLimitStore('global'),
+  keyGenerator: ipKey,
   windowMs: 15 * 60 * 1000, // 15 minutes
   max: Number(process.env.GLOBAL_RATE_LIMIT) || (process.env.NODE_ENV === 'development' ? 10000 : 6000), // WI-07: prod default sized for dashboard polling (~0.8 req/s per open tab)
   standardHeaders: true, 
@@ -23,6 +29,7 @@ export const authRateLimitMax = (env: NodeJS.ProcessEnv = process.env): number =
 // Stricter rate limiter for authentication routes
 export const authLimiter = rateLimit({
   store: new MongoRateLimitStore('auth'),
+  keyGenerator: ipKey,
   windowMs: 15 * 60 * 1000, // 15 minutes
   max: authRateLimitMax(),
   standardHeaders: true,
@@ -38,6 +45,7 @@ export const authLimiter = rateLimit({
 // limit the answer is 429 with the standard error envelope; the outcomes of real and unknown tokens stay hidden behind it.
 export const verifyInviteLimiter = rateLimit({
   store: new MongoRateLimitStore('invite-verify'),
+  keyGenerator: ipKey,
   windowMs: 15 * 60 * 1000,
   limit: 30,
   standardHeaders: true,

@@ -1,6 +1,20 @@
 ﻿import ipaddr from 'ipaddr.js';
 
-export function isIpInRange(ip: string, range: string): boolean {
+/**
+ * Azure App Service (and some other proxies) append the client port to X-Forwarded-For: `203.0.113.7:51234`, or
+ * `[2001:db8::1]:443` for IPv6. `req.ip` then carries the port, which breaks allow-list comparison and splits one client
+ * over many rate-limit keys. Returns the bare address; anything else (plain IPv4, plain IPv6, IPv4-mapped IPv6, empty) is unchanged.
+ */
+export function stripPort(ip: string): string {
+  if (!ip) return ip;
+  const bracketed = /^\[([0-9a-fA-F:.]+)\](?::\d{1,5})?$/.exec(ip);
+  if (bracketed) return bracketed[1];
+  const v4 = /^(\d{1,3}(?:\.\d{1,3}){3}):\d{1,5}$/.exec(ip);
+  return v4 ? v4[1] : ip;
+}
+
+export function isIpInRange(rawIp: string, range: string): boolean {
+  const ip = stripPort(rawIp);
   if (!ip || !range) return false;
 
   try {

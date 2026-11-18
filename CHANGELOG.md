@@ -4,6 +4,9 @@ Format: [Keep a Changelog](https://keepachangelog.com/en/1.1.0/). Each entry lis
 
 ## [Unreleased]: Wave 3 test and fix (2026-11-18)
 
+### Fixed
+- W3-2f: behind Azure App Service the client address arrives as `ip:port` in `X-Forwarded-For`. `stripPort` (`utils/ipUtils.ts`) removes the port before `isIpInRange` (operator allow-list, org IP restrictions) and before the per-IP rate-limit keys (global, sign-in, invite check, Platform API auth failures).
+
 ### Changed
 - W3-2b (decision W2-RATE): `AUTH_RATE_LIMIT` defaults to 100 sign-in attempts per IP per 15 minutes in production (was 20).
 
