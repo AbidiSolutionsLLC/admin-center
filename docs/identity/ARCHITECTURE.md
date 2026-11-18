@@ -41,6 +41,13 @@ Library: `oidc-provider` ~9.13 (ESM, loaded with `require(esm)`, so Node 22.12 o
 - `revokeSession` marks `Session.revoked_at` and the reason and emits `session.revoked` in a transaction, then deletes the provider session, its grants and their codes and tokens (`destroyProviderSession`, after commit, because `oidc_*` collections are written outside Mongoose sessions).
 - Other callers: admin force logout, member lifecycle changes, admin MFA reset, password reset (`revokeIdentitySessions`), account-page password change and session revoke, organisation suspend or close (operator), failed re-check at token issuance.
 - `requireAuth` calls `findLiveSession(sid)` on every Admin API request, so a revoked session stops working at once even with an unexpired access token.
+- Standalone portals (WS-C C-5): `destroyProviderSession`, the end-session handler and a refresh denial queue a back-channel logout (`lib/backchannelLogout.ts`): a logout token signed with the tenant key (`typ: logout+jwt`, `sub`, `sid` = the Karbexa session id, `jti`, 2 min) sent to each standalone client's back-channel URI through the SSRF guard, one `Job` per client. `queueProductBackchannelLogouts` (one product, some members) exists but is not yet called from the access-removal paths.
+
+## Standalone portals (WS-C)
+
+- Clients: `karbexa-<key>` are not in the static client list; `providers.ts` `Adapter.find` for the `Client` model asks `findStandaloneClientMetadata` (`lib/standalonePortals.ts`), which builds the metadata from the `App` registry. No cache of ours: a change applies on the next request (oidc-provider caches built clients by metadata hash).
+- Gate: interaction policy prompt `product_access` on every authorization request (SSO included), plus `evaluateGate` in the token and userinfo paths; denials render `identity/html.ts` `deniedPage` and call `logProductAccessDenied`.
+- Claims: `buildStandaloneClaims` through the wrapped `findAccount` (ID token, userinfo) and `extraTokenClaims` (access token). Decision S-12.
 
 ## How the three APIs verify tokens
 
