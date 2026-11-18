@@ -6,6 +6,8 @@
 import crypto from 'crypto';
 import { z } from 'zod';
 import { App, IApp, IStandaloneClient } from '../models/App.model';
+import { OrganizationEntitlement } from '../models/OrganizationEntitlement.model';
+import { decrypt } from './cryptoService';
 import { RESERVED_PRODUCT_KEY } from './productRegistry';
 
 export const PRODUCT_KEY_RE = /^[a-z][a-z0-9_]{1,30}$/;
@@ -15,6 +17,7 @@ export const CLIENT_ID_PREFIX = 'karbexa-';
 export const STANDALONE_SCOPE = 'openid profile email offline_access';
 /** A rotated secret stays valid this long (DRD §8.2). */
 export const PREVIOUS_SECRET_GRACE_MS = 24 * 60 * 60 * 1000;
+const SECRETS_SELECT = '+hosting.client.secret_enc +hosting.client.previous_secret_enc';
 
 export const clientIdFor = (key: string) => `${CLIENT_ID_PREFIX}${key}`;
 export const audienceFor = (key: string) => `urn:karbexa:${key}`;
@@ -216,3 +219,84 @@ export async function listStandaloneApps(): Promise<IApp[]> {
 export async function getStandaloneApp(key: string): Promise<IApp | undefined> {
   return (await listStandaloneApps()).find((a) => a.product_key === key);
 }
+
+// ── OIDC client (DRD §8.3) ────────────────────────────────────────────────────────────────────
+// Choice recorded in PROGRESS-WS-C.md: the tenant realm's oidc-provider reads standalone clients through its adapter
+// (`Client` model, see identity/providers.ts). Every lookup reads the App row, so a registration, rotation or retirement
+// is effective on the next request on every instance, with no restart and no cache to invalidate.
+
+/** Extra client metadata kept on the provider's Client (identity/providers.ts `extraClientMetadata.properties`). */
+export const EXTRA_CLIENT_METADATA = ['karbexa_product_key', 'karbexa_previous_secret', 'karbexa_previous_secret_expires_at'] as const;
+
+/** Resource (audience) a client may obtain: the standalone audience, or undefined when `clientId` is not standalone. */
+export const resourceForStandaloneClient = (clientId: unknown): string | undefined => {
+  const key = keyFromClientId(clientId);
+  return key ? audienceFor(key) : undefined;
+};
+
+/** `https://tenant.example.com` for each per-tenant launch URL, de-duplicated. */
+export function originsOf(urls: string[]): string[] {
+  const out = new Set<string>();
+  for (const u of urls) { try { out.add(new URL(u).origin); } catch { /* stored values are validated; ignore a bad one */ } }
+  return [...out];
+}
+
+/** The registered URIs plus, for each tenant origin, the same path on that origin (DRD §8.2 `per_tenant_launch_url`). */
+export function withTenantOrigins(uris: string[], origins: string[]): string[] {
+  const out = new Set(uris);
+  for (const origin of origins) {
+    for (const raw of uris) {
+      try { const u = new URL(raw); out.add(`${origin}${u.pathname}${u.search}`); } catch { /* ignore */ }
+    }
+  }
+  return [...out];
+}
+
+/**
+ * oidc-provider client metadata for a registered standalone portal. Secrets are decrypted here, never logged.
+ * `tenantOrigins` are the origins of the tenants' own launch URLs (only used when the portal is per-tenant).
+ */
+export function buildClientMetadata(app: any, tenantOrigins: string[] = []): Record<string, unknown> {
+  const key: string = app.product_key;
+  const c: Partial<IStandaloneClient> = app.hosting?.client ?? {};
+  const method = authMethodOf(c as ClientShape);
+  const perTenant = !!app.hosting?.per_tenant_launch_url;
+  const origins = perTenant ? tenantOrigins : [];
+  const md: Record<string, unknown> = {
+    client_id: clientIdFor(key),
+    application_type: 'web',
+    token_endpoint_auth_method: method,
+    redirect_uris: withTenantOrigins(c.redirect_uris ?? [], origins),
+    post_logout_redirect_uris: withTenantOrigins(c.post_logout_redirect_uris ?? [], origins),
+    grant_types: ['authorization_code', 'refresh_token'],
+    response_types: ['code'],
+    scope: STANDALONE_SCOPE,
+    client_name: app.name,
+    karbexa_product_key: key,
+  };
+  if (method === 'private_key_jwt' && c.jwks_uri) md.jwks_uri = c.jwks_uri;
+  if (method === 'client_secret_basic' || method === 'client_secret_post') {
+    if (c.secret_enc) md.client_secret = decrypt(c.secret_enc);
+    if (c.previous_secret_enc && c.previous_secret_expires_at && new Date(c.previous_secret_expires_at).getTime() > Date.now()) {
+      md.karbexa_previous_secret = decrypt(c.previous_secret_enc);
+      md.karbexa_previous_secret_expires_at = Math.floor(new Date(c.previous_secret_expires_at).getTime() / 1000);
+    }
+  }
+  return md;
+}
+
+/** Adapter `Client.find`: metadata of `clientId` from the registry, or undefined (not a standalone client, not registered). */
+export async function findStandaloneClientMetadata(clientId: string): Promise<Record<string, unknown> | undefined> {
+  const key = keyFromClientId(clientId);
+  if (!key) return undefined;
+  const app: any = await App.findOne({ ...systemProduct(key), hosting_mode: 'standalone' }).select(SECRETS_SELECT).lean();
+  if (!app?.hosting?.client) return undefined;
+  const origins = app.hosting.per_tenant_launch_url
+    ? originsOf(await OrganizationEntitlement.distinct('config.launch_url', { product_key: key, 'config.launch_url': { $type: 'string' } }) as string[])
+    : [];
+  return buildClientMetadata(app, origins);
+}
+
+/** Constant-time string comparison (the provider's own check hashes too; this one serves the rotated-out secret). */
+export const secretsEqual = (a: string, b: string) =>
+  crypto.timingSafeEqual(crypto.createHash('sha256').update(a).digest(), crypto.createHash('sha256').update(b).digest());

@@ -15,6 +15,7 @@ import { ensureSessionForToken, revokeSession, SessionDeniedError } from './sess
 import { findOperatorAccount } from '../operator/accounts';
 import { ensureOperatorSessionForToken, revokeOperatorSession, OperatorSessionDeniedError } from '../operator/sessions';
 import { escapeHtml, newNonce, pageCsp, pageShell, OPERATOR_SHELL } from './html';
+import { EXTRA_CLIENT_METADATA, STANDALONE_SCOPE, findStandaloneClientMetadata, resourceForStandaloneClient, secretsEqual } from '../lib/standalonePortals';
 
 // ESM-only package loaded through require(esm) (03 §10.2); the library ships no TS types.
 // eslint-disable-next-line @typescript-eslint/no-require-imports
@@ -29,6 +30,13 @@ const CLIENT_RESOURCE: Record<string, string> = {
   [ADMIN_SPA_CLIENT_ID]: ADMIN_AUDIENCE,
   [PRODUCTS_SPA_CLIENT_ID]: PRODUCTS_AUDIENCE,
 };
+
+/** Audience of a tenant-realm client: the two first-party SPAs, or a registered standalone portal (DRD §8.3). */
+const resourceForClient = (clientId: unknown): string | undefined =>
+  (typeof clientId === 'string' ? CLIENT_RESOURCE[clientId] : undefined) ?? resourceForStandaloneClient(clientId);
+
+/** Scopes granted without a consent screen: standalone portals also get offline_access (refresh tokens). */
+const grantScopeFor = (clientId: unknown) => (resourceForStandaloneClient(clientId) ? STANDALONE_SCOPE : 'openid profile email');
 
 let tenantProvider: OidcProvider | undefined;
 let servicesProvider: OidcProvider | undefined;
@@ -98,7 +106,16 @@ function amrFromContext(ctx: any): string[] {
 async function buildTenant(cookieKeys: string[]): Promise<OidcProvider> {
   const cfg = getIdentityConfig();
   const { privateJwks } = await loadRealmKeys('tenant');
-  const Adapter = makeAdapter('tenant');
+  const BaseAdapter = makeAdapter('tenant');
+  // Standalone portals are registry data (DRD §8.3): the provider asks the adapter for any client_id that is not one of
+  // the static SPA clients, and the 'Client' model is answered from the App registry instead of a collection.
+  class Adapter extends BaseAdapter {
+    private readonly isClientModel: boolean;
+    constructor(name: string) { super(name); this.isClientModel = name === 'Client'; }
+    async find(id: string) {
+      return this.isClientModel ? (await findStandaloneClientMetadata(id)) as any : super.find(id);
+    }
+  }
   await initAdapterIndexes('tenant', TENANT_MODELS);
 
   const devOrigins = (origin: string): string[] => {
@@ -138,8 +155,9 @@ async function buildTenant(cookieKeys: string[]): Promise<OidcProvider> {
     ],
     responseTypes: ['code'],
     pkce: { required: () => true },
-    scopes: ['openid', 'profile', 'email'],
+    scopes: ['openid', 'profile', 'email', 'offline_access'],
     claims: { openid: ['sub'], email: ['email', 'email_verified'], profile: ['name'] },
+    extraClientMetadata: { properties: [...EXTRA_CLIENT_METADATA] },
     clientBasedCORS: (_ctx: unknown, origin: string, client: any) =>
       client.clientAuthMethod === 'none' && client.redirectUris.some((u: string) => new URL(u).origin === origin),
     ttl: {
@@ -174,11 +192,11 @@ async function buildTenant(cookieKeys: string[]): Promise<OidcProvider> {
       },
       resourceIndicators: {
         enabled: true,
-        defaultResource: (_ctx: unknown, client: any) => CLIENT_RESOURCE[client?.clientId] ?? ADMIN_AUDIENCE,
+        defaultResource: (_ctx: unknown, client: any) => resourceForClient(client?.clientId) ?? ADMIN_AUDIENCE,
         useGrantedResource: () => true,
         getResourceServerInfo: (_ctx: unknown, resource: string, client: any) => {
           // Each SPA client may obtain exactly one audience (contract "resource / aud").
-          if (!client || CLIENT_RESOURCE[client.clientId] !== resource) throw new oidc.errors.InvalidTarget();
+          if (!client || resourceForClient(client.clientId) !== resource) throw new oidc.errors.InvalidTarget();
           return { scope: 'api', audience: resource, accessTokenFormat: 'jwt', accessTokenTTL: ACCESS_TOKEN_TTL_S, jwt: { sign: { alg: 'RS256' } } };
         },
       },
@@ -196,8 +214,8 @@ async function buildTenant(cookieKeys: string[]): Promise<OidcProvider> {
         if (existing && existing.accountId === ctx.oidc.session.accountId) return existing;
       }
       const grant = new ctx.oidc.provider.Grant({ clientId, accountId: ctx.oidc.session.accountId });
-      grant.addOIDCScope('openid profile email');
-      grant.addResourceScope(CLIENT_RESOURCE[clientId], 'api');
+      grant.addOIDCScope(grantScopeFor(clientId));
+      grant.addResourceScope(resourceForClient(clientId) ?? ADMIN_AUDIENCE, 'api');
       await grant.save();
       return grant;
     },
@@ -242,6 +260,15 @@ async function buildTenant(cookieKeys: string[]): Promise<OidcProvider> {
       };
     },
   });
+
+  // A rotated-out client secret stays valid until its expiry (DRD §8.2, 24 h): the provider itself only knows one secret.
+  const clientProto = provider.Client.prototype;
+  const compareSecret = clientProto.compareClientSecret;
+  clientProto.compareClientSecret = function (this: any, actual: string) {
+    if (compareSecret.call(this, actual)) return true;
+    return !!this.karbexaPreviousSecret && typeof actual === 'string' && typeof this.karbexaPreviousSecretExpiresAt === 'number'
+      && this.karbexaPreviousSecretExpiresAt * 1000 > Date.now() && secretsEqual(this.karbexaPreviousSecret, actual);
+  };
 
   applyProxy(provider);
   logProviderErrors('tenant', provider);

@@ -1,9 +1,12 @@
 // server/src/lib/__tests__/standalonePortals.test.ts — pure unit tests for standalone portal registration (DRD §8.2).
+import crypto from 'crypto';
+process.env.ENCRYPTION_KEY = process.env.ENCRYPTION_KEY || crypto.randomBytes(32).toString('hex');
+
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import {
   portalUrlProblem, standaloneManifestSchema, keyFromClientId, clientIdFor, audienceFor, authMethodOf, usesClientSecret,
-  generateClientSecret, storedClient, standaloneView,
+  generateClientSecret, storedClient, standaloneView, buildClientMetadata, withTenantOrigins, originsOf, resourceForStandaloneClient, secretsEqual,
 } from '../standalonePortals';
 
 const base = () => ({
@@ -84,4 +87,56 @@ test('storedClient de-duplicates URIs; standaloneView never exposes a secret', (
   const json = JSON.stringify(view);
   assert.ok(!json.includes('ENC') && !json.includes('OLD'));
   assert.equal(view.hosting.client.has_secret, true);
+});
+
+// ── C-2: registry-driven OIDC client ──
+import { encrypt } from '../cryptoService';
+
+const appRow = (over: Record<string, unknown> = {}, client: Record<string, unknown> = {}) => ({
+  product_key: 'assets', name: 'Assets',
+  hosting: {
+    launch_url: 'https://assets.example.com/', per_tenant_launch_url: false,
+    client: { type: 'confidential', token_endpoint_auth: 'client_secret_basic', redirect_uris: ['https://assets.example.com/callback'], post_logout_redirect_uris: ['https://assets.example.com/'], secret_enc: encrypt('s3cret'), ...client },
+  },
+  ...over,
+});
+
+test('buildClientMetadata: client id, audience-bound scopes, secret decrypted, code + refresh only', () => {
+  const md: any = buildClientMetadata(appRow());
+  assert.equal(md.client_id, 'karbexa-assets');
+  assert.equal(md.token_endpoint_auth_method, 'client_secret_basic');
+  assert.equal(md.client_secret, 's3cret');
+  assert.deepEqual(md.grant_types, ['authorization_code', 'refresh_token']);
+  assert.deepEqual(md.response_types, ['code']);
+  assert.equal(md.scope, 'openid profile email offline_access');
+  assert.deepEqual(md.redirect_uris, ['https://assets.example.com/callback']);
+  assert.equal(md.karbexa_previous_secret, undefined);
+});
+
+test('buildClientMetadata: public client has no secret; rotated secret is carried until it expires', () => {
+  const pub: any = buildClientMetadata(appRow({}, { type: 'public', token_endpoint_auth: undefined, secret_enc: undefined }));
+  assert.equal(pub.token_endpoint_auth_method, 'none');
+  assert.equal(pub.client_secret, undefined);
+  const live: any = buildClientMetadata(appRow({}, { previous_secret_enc: encrypt('old'), previous_secret_expires_at: new Date(Date.now() + 3_600_000) }));
+  assert.equal(live.karbexa_previous_secret, 'old');
+  assert.ok(live.karbexa_previous_secret_expires_at > Date.now() / 1000);
+  const dead: any = buildClientMetadata(appRow({}, { previous_secret_enc: encrypt('old'), previous_secret_expires_at: new Date(Date.now() - 1000) }));
+  assert.equal(dead.karbexa_previous_secret, undefined);
+});
+
+test('per-tenant portals accept the registered paths on each tenant origin, and only then', () => {
+  const uris = ['https://assets.example.com/callback'];
+  assert.deepEqual(withTenantOrigins(uris, ['https://acme.assets.example.com']).sort(), ['https://acme.assets.example.com/callback', 'https://assets.example.com/callback']);
+  assert.deepEqual(originsOf(['https://acme.example.com/app/', 'https://acme.example.com/x', 'bad']), ['https://acme.example.com']);
+  const fixed: any = buildClientMetadata(appRow(), ['https://acme.assets.example.com']);
+  assert.deepEqual(fixed.redirect_uris, uris);
+  const perTenant: any = buildClientMetadata(appRow({ hosting: { ...appRow().hosting, per_tenant_launch_url: true } }), ['https://acme.assets.example.com']);
+  assert.ok(perTenant.redirect_uris.includes('https://acme.assets.example.com/callback'));
+});
+
+test('resourceForStandaloneClient and secretsEqual', () => {
+  assert.equal(resourceForStandaloneClient('karbexa-assets'), 'urn:karbexa:assets');
+  assert.equal(resourceForStandaloneClient('karbexa-admin-spa'), undefined);
+  assert.equal(secretsEqual('a', 'a'), true);
+  assert.equal(secretsEqual('a', 'b'), false);
 });

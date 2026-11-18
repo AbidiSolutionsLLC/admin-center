@@ -8,7 +8,7 @@ Deleted in Wave 2 after the integrator folds it into the docs.
 | Id | State | Notes |
 |---|---|---|
 | C-1 | done | Routes in `operator/standalone.ts`: GET list, GET one, PUT register/update, POST rotate-secret, PUT per-tenant launch-url. Server typecheck clean. |
-| C-2 | not started | |
+| C-2 | done | Client lookup through the oidc-provider adapter (`Client` model answered from the App registry; no cache, so a registry change is effective on the next request). Server typecheck clean. |
 | C-3 | not started | |
 | C-4 | not started | |
 | C-5 | not started | |
@@ -25,6 +25,9 @@ Deleted in Wave 2 after the integrator folds it into the docs.
 
 ## Decisions to record
 
+- C-2: standalone clients are served by the adapter (`identity/providers.ts` `Adapter.find` for model `Client` -> `lib/standalonePortals.ts findStandaloneClientMetadata`), not by rebuilding a client list. oidc-provider 9.13.3 caches built clients by a hash of the metadata, so each rotation or URI change adds one cached entry (LRU-bounded). The previous secret of a rotation is accepted by wrapping `Client.prototype.compareClientSecret` on the tenant provider (extra client metadata `karbexa_previous_secret*`).
+- C-2: for a per-tenant portal, the tenants' launch-URL origins are added to the accepted redirect and post-logout URIs (same paths as registered). C-3 requires the member's own tenant origin.
+
 ## Tests written, not run
 
-- C-1: `server/src/lib/__tests__/standalonePortals.test.ts` (validation, client id, auth methods, secret generation, no secret in the view).
+- C-1, C-2: `server/src/lib/__tests__/standalonePortals.test.ts` (validation, client id, auth methods, secret generation, no secret in the view, client metadata, rotated secret window, per-tenant URIs).
