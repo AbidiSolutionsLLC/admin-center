@@ -6,7 +6,7 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import {
   portalUrlProblem, standaloneManifestSchema, keyFromClientId, clientIdFor, audienceFor, authMethodOf, usesClientSecret,
-  generateClientSecret, storedClient, standaloneView, buildClientMetadata, withTenantOrigins, originsOf, resourceForStandaloneClient, secretsEqual, decideGate, buildStandaloneClaims, launcherItem,
+  generateClientSecret, storedClient, standaloneView, buildClientMetadata, withTenantOrigins, originsOf, formOriginsOf, resourceForStandaloneClient, secretsEqual, decideGate, buildStandaloneClaims, launcherItem,
 } from '../standalonePortals';
 
 const base = () => ({
@@ -201,4 +201,26 @@ test('standaloneView hosting block (used by GET /platform/v1/apps) never carries
   assert.equal(view.hosting.mode, 'standalone');
   assert.equal(view.hosting.client.has_secret, true);
   assert.ok(!/ENC|OLD|secret_enc/.test(JSON.stringify(view.hosting)));
+});
+
+test('formOriginsOf: redirect, post-logout and launch origins of every portal plus tenant launch URLs, once each', () => {
+  const apps: any[] = [
+    { hosting: { launch_url: 'http://localhost:3000/api/auth/karbexa/login', client: { redirect_uris: ['http://localhost:3000/api/auth/karbexa/callback'], post_logout_redirect_uris: ['http://localhost:5175/login'] } } },
+    { hosting: { launch_url: 'https://assets.example.com/', client: { redirect_uris: ['https://assets.example.com/cb'], post_logout_redirect_uris: [] } } },
+    { hosting: undefined },
+  ];
+  assert.deepEqual(formOriginsOf(apps, ['https://acme.assets.example.com/']).sort(),
+    ['http://localhost:3000', 'http://localhost:5175', 'https://acme.assets.example.com', 'https://assets.example.com']);
+  assert.deepEqual(formOriginsOf([]), []);
+});
+
+test('pageCsp: form-action names the registered portals so the browser follows the redirect after the sign-in and sign-out forms', async () => {
+  const { pageCsp, setStandaloneFormOrigins } = await import('../../identity/html');
+  setStandaloneFormOrigins([]);
+  assert.ok(!pageCsp('n').includes('localhost:3000'));
+  setStandaloneFormOrigins(['http://localhost:3000', 'https://assets.example.com']);
+  const formAction = pageCsp('n').split(';').map((d) => d.trim()).find((d) => d.startsWith('form-action'))!;
+  assert.match(formAction, /^form-action 'self'/);
+  assert.ok(formAction.includes('http://localhost:3000') && formAction.includes('https://assets.example.com'));
+  setStandaloneFormOrigins([]);
 });

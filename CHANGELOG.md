@@ -8,6 +8,13 @@ Format: [Keep a Changelog](https://keepachangelog.com/en/1.1.0/). Each entry lis
 - W3-2h: `smoke:sprint2` has the fake relying party cases of DRD 8.8 (a confidential portal registered through the operator API, real sign-ins through the tenant realm, logout tokens received and verified).
 
 ### Fixed
+- W3-5: the hosted sign-in and sign-out pages' `form-action` CSP now lists the origins of the registered standalone portals (redirect, post-logout and launch URLs, and tenants' own launch URLs), filled from the registry cache (`setStandaloneFormOrigins`, refreshed every 10 s and on every registry change). Before, Chromium blocked the redirect to the portal after the sign-in form (a member with no Karbexa session opening a standalone portal stayed on the Karbexa page) and after the sign-out form ("Signing you out..." never finished). Found by the real-browser Zyntrus walk.
+- W3-5: the Command Center sidebar showed no items for every operator on committed code: `holdsPermission` (`client/src/components/layout/navigation.ts`) only matched tenant keys (`module:action:scope`), not operator keys (`overview.read`). The fix had sat uncommitted in the working tree since 2026-11-18. Also: the rail now says "Loading navigation..." or "The menu could not be loaded" with Retry while `GET /operator/v1/me` loads or fails (it stayed blank), and `index.css` no longer has an unlayered `button { display: inline-flex }` (it beat every Tailwind utility on a button, so `lg:hidden` never hid the hamburger on desktop; now in `@layer base`).
+
+### Tests
+- W3-5: `e2e-real/zyntrus-setup.mjs` and `e2e-real/zyntrus-sso-walk.mjs`: real-browser acceptance of Zyntrus staff sign-in through Karbexa (12 checks, about 4 minutes); `e2e-real/operator-sidebar.mjs`; `e2e/operator-navigation.spec.ts` (4 cases).
+
+### Fixed (earlier in Wave 3)
 - W3-2g: when access to one standalone portal ends (assignment removed, entitlement suspended or restricted, override removed, plan change), the portal gets a back-channel logout token for each live session that signed in to it, right after the change commits (`queueLogoutsForLostAccess`, called from `emitAppAccessChanged`). Before, the portal learned at its next token refresh (at most 10 minutes).
 - W3-2f: behind Azure App Service the client address arrives as `ip:port` in `X-Forwarded-For`. `stripPort` (`utils/ipUtils.ts`) removes the port before `isIpInRange` (operator allow-list, org IP restrictions) and before the per-IP rate-limit keys (global, sign-in, invite check, Platform API auth failures).
 

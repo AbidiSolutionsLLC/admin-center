@@ -6,12 +6,17 @@ import { initProviders, getTenantProvider, getServicesProvider, getOperatorProvi
 import { registerOperatorInteractions } from '../operator/interactions';
 import { registerTenantInteractions } from './interactions';
 import { registerAccountRoutes } from './account';
+import { listStandaloneApps } from '../lib/standalonePortals';
 
 /** Keys, adapter indexes and providers. Call after connectDB and before mountIdentity. */
 export async function initIdentity(): Promise<void> {
   assertRequireModule();
   getIdentityConfig();
   await initProviders();
+  // The hosted pages' form-action list needs the standalone portals' origins before the first page is rendered, and
+  // follows registry changes made on other instances (the registry cache is 10 s, so this is a cheap, bounded poll).
+  await listStandaloneApps().catch((e) => console.error('[identity] standalone registry not loaded', e));
+  setInterval(() => { void listStandaloneApps().catch(() => undefined); }, 10_000).unref();
 }
 
 /**

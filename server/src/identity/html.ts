@@ -8,13 +8,19 @@ export const escapeHtml = (s: string) =>
 
 export const newNonce = () => crypto.randomBytes(16).toString('base64');
 
+/** Origins of the registered standalone portals (redirect, post-logout and launch URLs); set by lib/standalonePortals. */
+let standaloneFormOrigins: readonly string[] = [];
+export function setStandaloneFormOrigins(origins: readonly string[]): void { standaloneFormOrigins = origins; }
+
 /**
  * Forms post only to our own origin; `form-action` also lists the SPA origins because browsers
  * apply it to the redirect chain that follows a submission (login → resume → SPA callback).
+ * Registered standalone portals (DRD §8) are part of that chain too: without their origins the browser blocks the
+ * redirect to the portal after the sign-in form and after the sign-out form (the user stays on the Karbexa page).
  */
 export function pageCsp(nonce: string): string {
   const { adminSpaOrigin, productsSpaOrigin, operatorSpaOrigin, isProduction } = getIdentityConfig();
-  const formActions = new Set<string>(['self', adminSpaOrigin, productsSpaOrigin, operatorSpaOrigin]);
+  const formActions = new Set<string>(['self', adminSpaOrigin, productsSpaOrigin, operatorSpaOrigin, ...standaloneFormOrigins]);
   if (!isProduction) {
     for (const origin of [adminSpaOrigin, productsSpaOrigin, operatorSpaOrigin]) {
       try {

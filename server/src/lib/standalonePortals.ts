@@ -14,6 +14,7 @@ import { SecurityEvent } from '../models/SecurityEvent.model';
 import { computeEffectiveAccess } from './effectiveAccess';
 import { decrypt } from './cryptoService';
 import { RESERVED_PRODUCT_KEY } from './productRegistry';
+import { setStandaloneFormOrigins } from '../identity/html';
 
 export const PRODUCT_KEY_RE = /^[a-z][a-z0-9_]{1,30}$/;
 const ROLE_KEY_RE = /^[a-z][a-z0-9_]{1,40}$/;
@@ -204,8 +205,26 @@ export function standaloneView(app: any, roles: any[]) {
 const TTL_MS = 10_000;
 let appCache: { at: number; apps: IApp[] } | undefined;
 
-/** Drop cached registrations (after a registration, rotation or tenant URL change on this process). */
-export function invalidateStandalonePortals(): void { appCache = undefined; }
+/** Drop cached registrations (after a registration, rotation or tenant URL change on this process) and refill at once. */
+export function invalidateStandalonePortals(): void {
+  appCache = undefined;
+  void listStandaloneApps().catch(() => undefined); // keeps the hosted pages' form-action list current (identity/html.ts)
+}
+
+/**
+ * Origins the hosted sign-in and sign-out pages may redirect to after a form: every registered portal's redirect,
+ * post-logout and launch URLs, plus the tenants' own launch URLs. Browsers check `form-action` along the redirect chain.
+ */
+export function formOriginsOf(apps: Array<Pick<IApp, 'hosting'>>, tenantLaunchUrls: string[] = []): string[] {
+  const urls: string[] = [...tenantLaunchUrls];
+  for (const a of apps) {
+    const h: any = (a as any).hosting;
+    if (!h) continue;
+    if (h.launch_url) urls.push(h.launch_url);
+    urls.push(...(h.client?.redirect_uris ?? []), ...(h.client?.post_logout_redirect_uris ?? []));
+  }
+  return originsOf(urls);
+}
 
 /**
  * Every standalone registration (lean, without secrets), cached 10 seconds. Other Admin instances pick up a change
@@ -217,6 +236,12 @@ export async function listStandaloneApps(): Promise<IApp[]> {
     app_type: 'karbexa_product', company_id: { $exists: false }, hosting_mode: 'standalone', product_key: { $exists: true, $ne: RESERVED_PRODUCT_KEY },
   }).sort({ product_key: 1 }).lean() as unknown as IApp[];
   appCache = { at: Date.now(), apps };
+  const perTenant = apps.filter((a: any) => a.hosting?.per_tenant_launch_url).map((a) => a.product_key).filter((k): k is string => !!k);
+  const tenantUrls: string[] = perTenant.length
+    ? (await OrganizationEntitlement.find({ product_key: { $in: perTenant }, 'config.launch_url': { $type: 'string' } }).select('config.launch_url').lean())
+        .map((e: any) => e.config?.launch_url as string).filter(Boolean)
+    : [];
+  setStandaloneFormOrigins(formOriginsOf(apps, tenantUrls));
   return apps;
 }
 

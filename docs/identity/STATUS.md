@@ -11,6 +11,7 @@ Last verified: 2026-11-18 against `main` of `karbexa-admin` after the Wave 2 mer
 | IDN-010 | Account page | `account.test.ts` |
 | IDN-011, IDN-012 | Operator realm and services realm | `smoke:sprint2` 554/554 (2026-11-17; 567 expected on `main` after the paging follow-up) |
 | IDN-013 to IDN-015 | Activation and reset flows, page skins, key rotation | `smoke:login` 2.2 block; real browser sign-in for both realms in the Phase 7.5 walk |
+| IDN-017 (browser proof) | Zyntrus (a real standalone portal, Zyntrus `main` 803d684) signed in through Karbexa in real Chromium on the local stack, 2026-11-24: access gate refusal page, `product_role` and `org` claims, account link, role change (next refresh), access removal, first-time sign-in with no Karbexa session, Karbexa sign-out reaching the portal by back-channel logout. 12/12 checks | `client/e2e-real/zyntrus-sso-walk.mjs` (needs `zyntrus-setup.mjs` once). Not yet part of `scripts/check.mjs` |
 | IDN-018 | Operator invitation accept | smoke C2 block passed on `feat/demo-fixes` (2026-11-17); Playwright `operator-accept-invite.spec.ts` not run |
 
 ## Partial or not built
@@ -26,6 +27,7 @@ Last verified: 2026-11-18 against `main` of `karbexa-admin` after the Wave 2 mer
 
 | Issue | Where | Impact |
 |---|---|---|
+| A second back-channel logout for the same (session, portal) within 10 minutes of an earlier one is dropped (`DEDUPE_MS`): access removed, regained, then Karbexa sign-out inside 10 minutes does not notify the portal; it ends at the portal's next refresh (at most 10 minutes). Found by the Zyntrus walk | `lib/backchannelLogout.ts` `queueBackchannelLogouts` | Low. Owner decision: dedupe only jobs still pending, not finished ones |
 | `GET /realms/tenant/oauth/userinfo` answers 401 `invalid_token` for the access token of a standalone portal (found by the W3-2h smoke): every access token of the tenant realm is a JWT bound to a resource (`defaultResource`, `useGrantedResource`), and oidc-provider does not accept resource-bound tokens at userinfo. `contracts/standalone-claims.md` lists userinfo as a place the claims arrive | `server/src/identity/providers.ts` (`resourceIndicators`), `contracts/standalone-claims.md` | A portal reads the claims from the ID token or the access token (both work, smoke-tested). Owner decision: change the contract text, or issue an opaque userinfo token (contract change, not done in Wave 3) |
 | The account-page CSRF secret falls back to `ENCRYPTION_KEY` and then to a literal string. `loadCookieKeys()` always returns at least one key, so the literal is not reached in practice | `server/src/identity/account.ts` | Low |
 | `applyProxy` reads `TRUST_PROXY` with default `'1'` and sets `maxIpsCount` only for a number; a CIDR list makes the provider trust proxies without a hop limit, unlike Express (`lib/trustProxy.ts`) | `server/src/identity/providers.ts` | Low; only with a CIDR list |
