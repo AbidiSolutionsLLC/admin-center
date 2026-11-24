@@ -155,10 +155,18 @@ async function main() {
   }
 
   // ── People: invite (managers first), then each accepts through the real set-password flow ──
+  // Admin Center roles are granted by `role_ids` (UserRole rows); the legacy `role` name alone grants nothing (plan 8b B-6).
+  const roleList = (await api('GET', '/roles')).data;
+  const roleIdByName = new Map<string, string>((Array.isArray(roleList) ? roleList : roleList?.roles ?? []).map((r: any) => [r.name, String(r._id)]));
+  const roleIdOf = (name: string) => {
+    const id = roleIdByName.get(name);
+    if (!id) throw new Error(`system role "${name}" not found in the demo organisation`);
+    return id;
+  };
   const ids: Record<string, string> = { admin: String(adminUser._id) };
   for (const p of [...PEOPLE.filter((x) => !x.manager), ...PEOPLE.filter((x) => x.manager)]) {
     const inv = await api('POST', '/people/invite', {
-      full_name: p.name, email: emailOf(p.name), department_id: deptIds[p.dept], role: p.role,
+      full_name: p.name, email: emailOf(p.name), department_id: deptIds[p.dept], role: p.role, role_ids: [roleIdOf(p.role)],
       ...(p.manager ? { manager_id: ids[p.manager] } : {}), employment_type: 'full_time',
     });
     const id = String(inv.data?._id ?? inv.data?.user?._id ?? inv.data?.id);
@@ -218,8 +226,11 @@ async function main() {
     const events = await M.PlatformEvent.countDocuments({ org_id: new Types.ObjectId(orgId) });
     const active = await M.User.countDocuments({ company_id: orgId, lifecycle_state: 'active' });
     const assignments = await M.AppAssignment.countDocuments({ company_id: orgId });
-    console.log(`[seed:demo] --memory check: ${active} active members, ${assignments} app assignments, ${events} platform events`);
-    if (active !== PEOPLE.length + 1 || events === 0) process.exitCode = 1;
+    // 8b B-6: every member holds an Admin Center role (UserRole), not only the legacy role name.
+    const memberIds = (await M.User.find({ company_id: orgId }).select('_id').lean()).map((u: any) => u._id);
+    const withRole = (await M.UserRole.distinct('user_id', { company_id: orgId, user_id: { $in: memberIds } })).length;
+    console.log(`[seed:demo] --memory check: ${active} active members, ${withRole} with an Admin role, ${assignments} app assignments, ${events} platform events`);
+    if (active !== PEOPLE.length + 1 || withRole !== PEOPLE.length + 1 || events === 0) process.exitCode = 1;
   }
   server.close();
   await mongoose.disconnect();

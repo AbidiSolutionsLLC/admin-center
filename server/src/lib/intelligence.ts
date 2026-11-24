@@ -190,7 +190,8 @@ export const runIntelligenceRules = async (companyId: string | Types.ObjectId): 
         severity: 'critical',
         affected_area: 'Identity',
         title: `${user.full_name} has no role assigned`,
-        description: 'Active users without a role cannot access any module. Assign a role to restore access.',
+        // Admin Center roles grant Karbexa Admin pages only; product access comes from App Access (8b B-6).
+        description: 'Without an Admin Center role this member cannot open Karbexa Admin pages, not even their own profile. Product access (App Access) is not affected. Assign a role such as Employee.',
         reasoning: `User "${user.full_name}" (${user.email}) is in 'active' lifecycle state but has 0 roles assigned.`,
         affected_object_type: 'User',
         affected_object_id: user._id.toString(),

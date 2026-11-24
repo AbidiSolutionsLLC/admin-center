@@ -5,6 +5,7 @@ import { AppError } from '../utils/AppError';
 import { User } from '../models/User.model';
 import { Department } from '../models/Department.model';
 import { App } from '../models/App.model';
+import { OrganizationEntitlement } from '../models/OrganizationEntitlement.model';
 import { Role } from '../models/Role.model';
 import { AuditEvent } from '../models/AuditEvent.model';
 import { Insight } from '../models/Insight.model';
@@ -63,8 +64,10 @@ export const getDashboardStats = asyncHandler(async (req: Request, res: Response
     activeUsers,
     invitedUsers,
     totalDepartments,
-    totalApps,
-    activeApps,
+    totalOwnApps,
+    activeOwnApps,
+    totalEntitlements,
+    activeEntitlements,
     totalRoles,
     customRoles,
     totalInsights,
@@ -79,6 +82,9 @@ export const getDashboardStats = asyncHandler(async (req: Request, res: Response
     Department.countDocuments({ company_id: companyId, is_active: true }),
     App.countDocuments({ company_id: companyId }),
     App.countDocuments({ company_id: companyId, is_active: true, status: 'active' }),
+    // Karbexa products are shared catalog apps (no company_id); the organisation has them through entitlements (8b B-6).
+    OrganizationEntitlement.countDocuments({ company_id: companyId }),
+    OrganizationEntitlement.countDocuments({ company_id: companyId, status: 'active' }),
     Role.countDocuments({ company_id: companyId }),
     Role.countDocuments({ company_id: companyId, type: 'custom' }),
     Insight.countDocuments({ company_id: companyId, is_resolved: false, is_dismissed: false }),
@@ -100,8 +106,8 @@ export const getDashboardStats = asyncHandler(async (req: Request, res: Response
         total: totalDepartments,
       },
       apps: {
-        total: totalApps,
-        active: activeApps,
+        total: totalOwnApps + totalEntitlements,
+        active: activeOwnApps + activeEntitlements,
       },
       roles: {
         total: totalRoles,
