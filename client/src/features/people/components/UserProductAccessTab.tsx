@@ -129,7 +129,7 @@ export function UserProductAccessTab({ userId, userName }: UserProductAccessTabP
         <div>
           <h2 className="text-base font-semibold text-ink">Product Access & Entitlements</h2>
           <p className="text-xs text-ink-muted mt-0.5">
-            08 §3.2 Effective product access, assigned roles, and rule provenance.
+            Which products this person can use, with which role, and which rule grants it.
           </p>
         </div>
         <div className="flex items-center gap-3">

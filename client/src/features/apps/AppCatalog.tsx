@@ -103,12 +103,13 @@ export const AppCatalog: React.FC<AppCatalogProps> = ({
                 </div>
               </div>
               <div className="flex flex-col items-end gap-1">
+                {/* A product outside the plan is not active for this organisation, whatever its catalog status (8b B-10). */}
                 <span
                   className={`text-xs px-2 py-0.5 rounded-full ${getStatusColor(
-                    app.status
+                    locked ? 'inactive' : app.status
                   )}`}
                 >
-                  {app.status}
+                  {locked ? 'not in plan' : app.status}
                 </span>
                 {app.is_active === false && (
                   <span className="text-[9px] font-bold tracking-wider px-1.5 py-0.5 bg-error/10 text-error rounded-full uppercase">

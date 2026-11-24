@@ -19,6 +19,7 @@ import { Modal } from '@/components/ui/Modal';
 import { TableSkeleton } from '@/components/ui/TableSkeleton';
 import { ErrorState } from '@/components/ui/ErrorState';
 import { EmptyState } from '@/components/ui/EmptyState';
+import { useHasPermission } from '@/hooks/useMyPermissions';
 import { useAuthStore } from '@/store/useAuthStore';
 import { PERMISSION_GROUPS } from '@/constants/roles';
 import type { App } from '@/types';
@@ -33,6 +34,7 @@ export default function AppsPage() {
   // Assign, revoke, role change and enable/disable all hit routes guarded by IT_ADMINS (apps.routes.ts);
   // the buttons follow the same group so no one sees a control the server refuses (plan 04 C1).
   const isItAdmin = userRole && PERMISSION_GROUPS.IT_ADMINS.includes(userRole as any);
+  const canManageApps = useHasPermission('apps', 'read');
 
   const [search, setSearch] = useState('');
   const [statusFilter, setStatusFilter] = useState('');
@@ -214,11 +216,19 @@ export default function AppsPage() {
   // Check if there are truly no apps in the database (vs empty search results)
   const isFiltering = !!(search || statusFilter || categoryFilter);
   if (!isFiltering && (!apps || apps.length === 0)) {
-    return (
+    // A member without apps:read:all lands here from a product's 403 page ("Open the app launcher"): tell them what
+    // to do, not how to manage apps (plan 8b B-9).
+    return canManageApps ? (
       <EmptyState
         icon={Package}
         title="No apps yet"
         description="Add apps to start managing access assignments."
+      />
+    ) : (
+      <EmptyState
+        icon={Package}
+        title="You have no apps yet"
+        description="No Karbexa product is assigned to you. Ask your administrator for access; your apps then appear in the app launcher (the grid button at the top)."
       />
     );
   }

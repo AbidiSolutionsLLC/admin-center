@@ -29,6 +29,16 @@ test('an entitled product shows its seat meter and default role', async ({ page 
 test('a product outside the plan is locked and names the plan that includes it', async ({ page }) => {
   await page.goto('/apps');
   await expect(page.getByTestId('product-locked')).toContainText('included in plan Professional');
+  // 8b B-10: the status badge of a locked product does not say "active".
+  await expect(page.getByTestId('product-card-desk').locator('xpath=ancestor::button[1]')).toContainText('not in plan');
+});
+
+test('8b B-9: a member who cannot manage apps and has none is told to ask an administrator', async ({ page }) => {
+  await signInTenant(page, { role: 'employee', permissions: ['people:read:own'] }); // later routes win
+  await page.route('**/api/v1/apps?**', (route) => fulfillJson(route, { success: true, data: [], pagination: { page: 1, pages: 0, total: 0 } }));
+  await page.goto('/apps');
+  await expect(page.getByText('You have no apps yet')).toBeVisible();
+  await expect(page.getByText('Add apps to start managing access assignments.')).toHaveCount(0);
 });
 
 test('why this role: picking a member lists the assignments behind the role', async ({ page }) => {
