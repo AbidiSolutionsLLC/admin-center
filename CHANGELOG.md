@@ -5,6 +5,9 @@ Format: [Keep a Changelog](https://keepachangelog.com/en/1.1.0/). Each entry lis
 ## [Unreleased]: Wave 3 test and fix (2026-11-18)
 
 ### Fixed
+- Onboarding walk: accepting an invitation now also emits `member.updated` (`changed.lifecycle_state: active`). The products app keeps a member as `invited` after the provisioning event and refuses it (403 `MEMBER_INACTIVE`) until a member event arrives, so a newly invited and activated member could not sign in to any product until something else touched them. Regression check in `smoke:login` (80/80). Members activated before this fix need one profile or lifecycle change to be re-sent.
+- Command Center: creating an organisation waits up to 120 s for the answer (it was the 15 s default). Provisioning is one large transaction; on a remote database the browser gave up while the organisation was still created, and the operator never saw the invite.
+- The App Launcher in the Admin Center header offers both choices for every portal: the tile opens it in this tab, a small arrow opens it in a new tab (it was always a new tab for a product or standalone portal).
 - 8b B-17: `POST /people/bulk-assign-role` failed validation on every call (the `UserRole` row had no `company_id`); the duplicate check is now scoped to the organisation too.
 - 8b B-15: a browser origin refused by CORS gets 403 `CORS_ORIGIN_DENIED` instead of a 500; Platform health no longer reports those refusals as an Admin API outage.
 - 8b B-6: the Overview "Apps" tile counts the organisation's product entitlements (it counted only the organisation's own apps and showed 0 with four products active). The "has no role assigned" insight no longer says the member "cannot access any module": an Admin Center role only opens Karbexa Admin pages, product access is separate. `seed:demo` gives each member the Admin role it names (`role_ids`; the role name alone granted nothing), and its `--memory` check verifies it.

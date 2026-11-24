@@ -16,7 +16,7 @@ import { resolveUserPermissions } from '../lib/rbac';
 import { sendSecurityAlert } from '../lib/notificationEngine';
 import { isIpInRange } from '../utils/ipUtils';
 import { getAggregatedSecurityPolicy } from '../utils/securityPolicyUtils';
-import { runInTransaction, emitAppAccessChanged, correlationIdFor } from '../lib/platformEvents';
+import { runInTransaction, emitAppAccessChanged, emitPlatformEvent, correlationIdFor } from '../lib/platformEvents';
 import { consumeInvitation, findInvitationByToken, invitationProblem } from '../lib/invitations';
 import { revokeSession, revokeIdentitySessions } from '../identity/sessions';
 import { getIdentityConfig, ADMIN_SPA_CLIENT_ID } from '../identity/config';
@@ -389,6 +389,19 @@ export const setupPassword = asyncHandler(async (req: Request, res: Response) =>
     user.is_active = true;
     user.password_changed_at = identity.password_changed_at;
     await user.save({ session });
+    // The products app stores the member as "invited" (provisioning event) and refuses it (MEMBER_INACTIVE) until a member.*
+    // event says otherwise; consumers refetch the projection on member.updated (same shape as a lifecycle change in
+    // people.controller). Without it a new member could not sign in to any product until something else touched them.
+    if (oldState !== 'active') {
+      await emitPlatformEvent(session, {
+        org_id: user.company_id.toString(),
+        type: 'member.updated',
+        subject: { type: 'member', id: user._id.toString() },
+        actor: { type: 'member', id: user._id.toString() },
+        correlation_id: correlationIdFor(req),
+        data: { changed: { lifecycle_state: 'active' } },
+      });
+    }
     // Access is computed only for active members, so the invite-time app_access.changed carried no products. Now that
     // the member is active, send their full access; otherwise grants that no later change touches (the "All Members"
     // group, a product's all-members default) never reach the products backend (plan 8b B-1).

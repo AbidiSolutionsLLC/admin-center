@@ -72,17 +72,31 @@ export const AppLauncher = () => {
     }
   };
 
-  const handleAppClick = (url: string) => {
-    if (!url) return;
-    if (url.startsWith('http://') || url.startsWith('https://')) {
-      // Absolute URL: a suite product or a standalone portal (DRD §8.7). Always a new tab; a delivered portal is a third-party
-      // page, so it gets no `window.opener` and no referrer.
-      window.open(url, '_blank', 'noopener,noreferrer');
+  // Every tile offers both choices: the tile opens the portal in this tab, the small arrow opens it in a new tab.
+  // A new tab gets no `window.opener` and no referrer (DRD §8.7: a delivered portal is a third-party page).
+  const handleAppClick = (url: string, target: 'same' | 'new' = 'same') => {
+    if (!url || !(/^https?:\/\//i.test(url) || /^\/(?!\/)/.test(url))) return;
+    if (target === 'new') {
+      const absolute = url.startsWith('/') ? `${window.location.origin}${url}` : url;
+      window.open(absolute, '_blank', 'noopener,noreferrer');
     } else {
       window.location.assign(url);
     }
     setIsOpen(false);
   };
+
+  const renderNewTabButton = (name: string, url: string, testId: string) => (
+    <button
+      type="button"
+      onClick={() => handleAppClick(url, 'new')}
+      title={`Open ${name} in a new tab`}
+      aria-label={`Open ${name} in a new tab`}
+      data-testid={testId}
+      className="absolute bottom-2 right-2 p-1 rounded-md text-slate-500 hover:text-[#f59e0b] hover:bg-white/10 transition-colors"
+    >
+      <ExternalLink size={12} />
+    </button>
+  );
 
   return (
     <div className="relative" ref={dropdownRef}>
@@ -132,26 +146,31 @@ export const AppLauncher = () => {
           <div className="p-3 grid grid-cols-2 gap-2 max-h-80 overflow-y-auto scrollbar-hide">
             {/* Karbexa Admin Tile (if org admin) */}
             {isOrgAdmin && (
-              <button
-                key="karbexa-admin"
-                onClick={() => handleAppClick('/')}
-                className="flex flex-col items-start p-3 rounded-xl border border-white/10 bg-white/5 hover:bg-white/10 hover:border-[#f59e0b]/40 transition-all text-left group"
-              >
-                <div className="flex items-center justify-between w-full mb-2">
-                  <div className="w-8 h-8 rounded-lg bg-[#f59e0b]/15 border border-[#f59e0b]/30 flex items-center justify-center">
-                    {getProductIcon('admin')}
+              <div key="karbexa-admin" className="relative">
+                <button
+                  type="button"
+                  onClick={() => handleAppClick('/', 'same')}
+                  title="Open Karbexa Admin in this tab"
+                  data-testid="launcher-same-admin"
+                  className="w-full h-full flex flex-col items-start p-3 rounded-xl border border-white/10 bg-white/5 hover:bg-white/10 hover:border-[#f59e0b]/40 transition-all text-left group"
+                >
+                  <div className="flex items-center justify-between w-full mb-2">
+                    <div className="w-8 h-8 rounded-lg bg-[#f59e0b]/15 border border-[#f59e0b]/30 flex items-center justify-center">
+                      {getProductIcon('admin')}
+                    </div>
+                    <span className="text-[10px] uppercase font-bold tracking-wider px-1.5 py-0.5 rounded bg-[#f59e0b]/20 text-[#f59e0b]">
+                      Active
+                    </span>
                   </div>
-                  <span className="text-[10px] uppercase font-bold tracking-wider px-1.5 py-0.5 rounded bg-[#f59e0b]/20 text-[#f59e0b]">
-                    Active
+                  <span className="text-sm font-semibold text-slate-100 group-hover:text-[#f59e0b] transition-colors">
+                    Karbexa Admin
                   </span>
-                </div>
-                <span className="text-sm font-semibold text-slate-100 group-hover:text-[#f59e0b] transition-colors">
-                  Karbexa Admin
-                </span>
-                <span className="text-[11px] text-slate-400 truncate w-full mt-0.5">
-                  Admin Console
-                </span>
-              </button>
+                  <span className="text-[11px] text-slate-400 truncate w-full mt-0.5">
+                    Admin Console
+                  </span>
+                </button>
+                {renderNewTabButton('Karbexa Admin', '/', 'launcher-new-admin')}
+              </div>
             )}
 
             {/* Products with effective access */}
@@ -165,25 +184,28 @@ export const AppLauncher = () => {
               </div>
             ) : (
               apps.map((app) => (
-                <button
-                  key={app.id || app.product_key}
-                  onClick={() => handleAppClick(app.launch_url)}
-                  title={app.launch_url?.startsWith('http') ? `${app.name} opens in a new tab` : app.name}
-                  className="flex flex-col items-start p-3 rounded-xl border border-white/10 bg-white/5 hover:bg-white/10 hover:border-white/20 transition-all text-left group relative"
-                >
-                  <div className="flex items-center justify-between w-full mb-2">
-                    <div className="w-8 h-8 rounded-lg bg-white/10 border border-white/10 flex items-center justify-center">
-                      {getProductIcon(app.product_key)}
+                <div key={app.id || app.product_key} className="relative">
+                  <button
+                    type="button"
+                    onClick={() => handleAppClick(app.launch_url, 'same')}
+                    title={`Open ${app.name} in this tab`}
+                    data-testid={`launcher-same-${app.product_key}`}
+                    className="w-full h-full flex flex-col items-start p-3 rounded-xl border border-white/10 bg-white/5 hover:bg-white/10 hover:border-white/20 transition-all text-left group"
+                  >
+                    <div className="flex items-center justify-between w-full mb-2">
+                      <div className="w-8 h-8 rounded-lg bg-white/10 border border-white/10 flex items-center justify-center">
+                        {getProductIcon(app.product_key)}
+                      </div>
                     </div>
-                    <ExternalLink size={12} className="text-slate-500 group-hover:text-slate-300 transition-colors" />
-                  </div>
-                  <span className="text-sm font-semibold text-slate-100 group-hover:text-primary transition-colors truncate w-full">
-                    {app.name}
-                  </span>
-                  <span className="text-[11px] text-slate-400 truncate w-full mt-0.5">
-                    {app.role_name || app.role || 'Member'}
-                  </span>
-                </button>
+                    <span className="text-sm font-semibold text-slate-100 group-hover:text-primary transition-colors truncate w-full">
+                      {app.name}
+                    </span>
+                    <span className="text-[11px] text-slate-400 truncate w-full mt-0.5">
+                      {app.role_name || app.role || 'Member'}
+                    </span>
+                  </button>
+                  {renderNewTabButton(app.name, app.launch_url, `launcher-new-${app.product_key}`)}
+                </div>
               ))
             )}
           </div>

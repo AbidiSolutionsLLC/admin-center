@@ -505,6 +505,9 @@ async function main() {
         // (this smoke member holds no product, and an empty `products` map is not stored, so only the version is compared)
         !!accEvt && (accEvt as any).data?.authz_ver === accUser?.authz_ver,
         accEvt ? { evt: (accEvt as any).data?.authz_ver, user: accUser?.authz_ver } : 'no event');
+      // Products keeps the member as "invited" (not an access state: MEMBER_INACTIVE) until a member.* event tells it otherwise.
+      const accState = await PlatformEvent.findOne({ type: 'member.updated', 'subject.id': String(uAcc._id), 'data.changed.lifecycle_state': 'active' }).lean();
+      check('accepting an invitation emits member.updated with lifecycle_state active (products would keep the member inactive)', !!accState, accState ? '' : 'no event');
       r = await post('/auth/setup-password', { token: acc.rawToken, newPassword: 'Smoke-Passw0rd!x2' });
       check('2.2 accept again = 409 INVITE_ALREADY_USED', r.status === 409 && ((await r.json()) as { code?: string }).code === 'INVITE_ALREADY_USED', r.status);
 

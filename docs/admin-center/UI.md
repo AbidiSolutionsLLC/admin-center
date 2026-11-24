@@ -74,7 +74,7 @@ Action visibility follows `PermissionGate` and the guard groups of `ACCESS.md`. 
 | Insight history | Past insights | `/intelligence/history` | read |
 | Setup, activation, reset | See `../identity/UI.md` | | |
 
-The shell also shows the platform announcement banner (`components/layout/AnnouncementBanner.tsx`, `GET /announcement`) and an app launcher (`components/layout/AppLauncher.tsx`, `GET /me/apps`). The top-bar search box has no handler yet.
+The shell also shows the platform announcement banner (`components/layout/AnnouncementBanner.tsx`, `GET /announcement`) and an app launcher (`components/layout/AppLauncher.tsx`, `GET /me/apps`): each tile opens its portal in this tab (`data-testid=launcher-same-<key>`) and a small arrow opens it in a new tab (`launcher-new-<key>`). The top-bar search box has no handler yet.
 
 ## Setup checklist and template roll-out
 

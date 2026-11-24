@@ -106,7 +106,9 @@ export const useCreateOrg = () => {
   const qc = useQueryClient();
   return useMutation({
     mutationFn: async (body: { name: string; slug?: string; plan_key: string; first_admin: { email: string; full_name: string } }) =>
-      (await operatorApi.post('/orgs', body)).data,
+      // Provisioning is one large transaction (company, roles, policy, invite, events). On a remote database it outlasts the
+      // default 15 s, and an aborted request left the operator without the invite while the organisation was created.
+      (await operatorApi.post('/orgs', body, { timeout: 120_000 })).data,
     onSuccess: () => { qc.invalidateQueries({ queryKey: ['operator', 'orgs'] }); toast.success('Organization created'); },
     onError: (e) => toast.error(errMsg(e, 'Failed to create organization')),
   });
