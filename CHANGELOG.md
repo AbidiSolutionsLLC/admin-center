@@ -4,7 +4,12 @@ Format: [Keep a Changelog](https://keepachangelog.com/en/1.1.0/). Each entry lis
 
 ## [Unreleased]: Wave 3 test and fix (2026-11-18)
 
+### Fixed
+- 8b B-1: accepting an invitation emits `app_access.changed` with the member's full access. Access is computed only for active members, so the event at invite time carries no products; grants that no later change touched (the "All Members" group, a product's all-members default role) never reached the products backend, and such members got 403 in every product. Members invited before this fix need one access change (any assignment) to be re-sent.
+
 ### Tests
+- 8b RW-1: `client/e2e-real/role-walk.mjs` (shared helpers in `e2e-real/lib.mjs`): every persona of the demo organisation signs in and clicks every item of its own menus in the Command Center, the Admin Center and the products app; report, JSON and screenshots. Meta gate `node scripts/check.mjs role-walk`.
+- 8b B-1: `smoke:login` checks that accepting an invitation emits `app_access.changed` with the member's current `authz_ver`.
 - W3-2h: `smoke:sprint2` has the fake relying party cases of DRD 8.8 (a confidential portal registered through the operator API, real sign-ins through the tenant realm, logout tokens received and verified).
 
 ### Fixed
