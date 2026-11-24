@@ -99,12 +99,15 @@ async function shot(page, name) {
 async function ensureSignedIn(page, startUrl, who, key) {
   const origin = new URL(startUrl).origin;
   await page.goto(startUrl, { waitUntil: 'domcontentloaded', timeout: 60000 });
-  // Either the hosted sign-in form appears, or single sign-on brings the browser straight back to the app.
-  await Promise.race([
-    page.waitForSelector('input[name=email]', { timeout: 60000 }),
-    page.waitForURL((u) => u.origin === origin && !/callback/.test(u.pathname), { timeout: 60000 }),
-  ]).catch(() => {});
-  if (await page.locator('input[name=email]').isVisible().catch(() => false)) await signIn(page, startUrl, who, key, store);
+  // The app's start page is on its own origin before it redirects to sign-in, so "on the origin" proves nothing: poll
+  // until either the hosted sign-in form shows (sign in) or the app's navigation is rendered (single sign-on worked).
+  const deadline = Date.now() + 60000;
+  while (Date.now() < deadline) {
+    if (await page.locator('input[name=email]').isVisible().catch(() => false)) { await signIn(page, startUrl, who, key, store); break; }
+    const u = new URL(page.url());
+    if (u.origin === origin && !/callback/.test(u.pathname) && await page.locator('nav, aside').first().isVisible().catch(() => false)) break;
+    await page.waitForTimeout(500);
+  }
   await settle(page);
 }
 

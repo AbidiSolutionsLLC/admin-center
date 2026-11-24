@@ -5,6 +5,11 @@ Format: [Keep a Changelog](https://keepachangelog.com/en/1.1.0/). Each entry lis
 ## [Unreleased]: Wave 3 test and fix (2026-11-18)
 
 ### Fixed
+- 8b B-17: `POST /people/bulk-assign-role` failed validation on every call (the `UserRole` row had no `company_id`); the duplicate check is now scoped to the organisation too.
+- 8b B-15: a browser origin refused by CORS gets 403 `CORS_ORIGIN_DENIED` instead of a 500; Platform health no longer reports those refusals as an Admin API outage.
+- 8b B-6: the Overview "Apps" tile counts the organisation's product entitlements (it counted only the organisation's own apps and showed 0 with four products active). The "has no role assigned" insight no longer says the member "cannot access any module": an Admin Center role only opens Karbexa Admin pages, product access is separate. `seed:demo` gives each member the Admin role it names (`role_ids`; the role name alone granted nothing), and its `--memory` check verifies it.
+- 8b B-9: Apps & Access tells a member who cannot manage apps and has none to ask an administrator, instead of "Add apps to start managing access assignments" (reached from a product's 403 page).
+- 8b B-10: a product outside the plan shows "not in plan" instead of the catalog status "active"; the Product access tab no longer shows the spec reference "08 §3.2".
 - 8b B-1: accepting an invitation emits `app_access.changed` with the member's full access. Access is computed only for active members, so the event at invite time carries no products; grants that no later change touched (the "All Members" group, a product's all-members default role) never reached the products backend, and such members got 403 in every product. Members invited before this fix need one access change (any assignment) to be re-sent.
 
 ### Tests
