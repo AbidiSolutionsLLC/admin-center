@@ -774,13 +774,17 @@ button[disabled]:hover {
   background: #9E9E9E;
 }
 
-/* 30. Normalize button text alignment */
-button {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  text-align: center;
-  line-height: 1;
+/* 30. Normalize button text alignment.
+   In @layer base on purpose: an unlayered `button { display }` beats every Tailwind utility (`hidden`, `lg:hidden`, `block`),
+   which kept the hamburger visible on desktop and hid nothing on buttons marked `hidden`. */
+@layer base {
+  button {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    text-align: center;
+    line-height: 1;
+  }
 }
 
 /* 31. Empty state illustration placeholder */

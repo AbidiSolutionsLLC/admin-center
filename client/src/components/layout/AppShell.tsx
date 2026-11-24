@@ -19,6 +19,12 @@ interface AppShellProps {
   topBarEnd?: React.ReactNode;
   /** Full-width strip between the top bar and the page (the platform announcement). */
   banner?: React.ReactNode;
+  /**
+   * Where the permission list comes from. While it loads, or when it failed, the rail says so instead of staying blank
+   * (an empty rail looked like "no sidebar"). Omit when the permissions are always known.
+   */
+  navStatus?: 'ready' | 'loading' | 'error';
+  onRetryNav?: () => void;
   children?: React.ReactNode;
 }
 
@@ -57,6 +63,8 @@ export const AppShell: React.FC<AppShellProps> = ({
   user,
   topBarEnd,
   banner,
+  navStatus = 'ready',
+  onRetryNav,
   children,
 }) => {
   const { isSidebarOpen, toggleSidebar, closeSidebar, isRailCollapsed, toggleRail } = useUIStore();
@@ -119,6 +127,22 @@ export const AppShell: React.FC<AppShellProps> = ({
         </div>
 
         <nav aria-label="Main" className="flex-1 overflow-y-auto scrollbar-hide px-3 py-2">
+          {visible.length === 0 && (
+            <div role={navStatus === 'error' ? 'alert' : 'status'} className={cn('px-3 py-4 text-table text-ink-secondary', hideLabel)}>
+              {navStatus === 'loading' && 'Loading navigation…'}
+              {navStatus === 'error' && (
+                <>
+                  <p>The menu could not be loaded.</p>
+                  {onRetryNav && (
+                    <button type="button" onClick={onRetryNav} className="mt-2 text-primary underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary">
+                      Retry
+                    </button>
+                  )}
+                </>
+              )}
+              {navStatus === 'ready' && 'No pages are available for your role.'}
+            </div>
+          )}
           {visible.map(({ group, items }) => (
             <div key={group.label} className="mb-2">
               <p className={cn('px-3 pb-1 pt-4 text-label uppercase text-ink-muted', hideLabel)}>{group.label}</p>

@@ -53,6 +53,15 @@ export const TenantShell = () => {
  * marker and no launcher. Navigation follows the permission list from GET /operator/v1/me.
  */
 export const OperatorShell = () => {
-  const { data: me } = useOperatorMe();
-  return <AppShell config={OPERATOR_SHELL} permissions={me?.permissions ?? []} user={{ name: me?.full_name || 'Operator', onSignOut: operatorLogout }} />;
+  const { data: me, isError, isPending, refetch } = useOperatorMe();
+  const navStatus = me ? 'ready' : isError ? 'error' : isPending ? 'loading' : 'ready';
+  return (
+    <AppShell
+      config={OPERATOR_SHELL}
+      permissions={me?.permissions ?? []}
+      user={{ name: me?.full_name || 'Operator', onSignOut: operatorLogout }}
+      navStatus={navStatus}
+      onRetryNav={() => { void refetch(); }}
+    />
+  );
 };

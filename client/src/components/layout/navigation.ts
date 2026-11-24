@@ -59,8 +59,11 @@ export interface NavContext {
   role?: string | null;
 }
 
+// Two key styles: tenant `module:action:scope` (a shorter key such as `people:read` matches any scope) and operator
+// `area.action` (`tenants.read`, GET /operator/v1/me), which is matched exactly.
 function holdsPermission(permissions: readonly string[], key: string): boolean {
-  if (key.split(':').length >= 3) return permissions.includes(key);
+  if (permissions.includes(key)) return true;
+  if (!key.includes(':') || key.split(':').length >= 3) return false;
   return permissions.some((p) => p.startsWith(`${key}:`));
 }
 
