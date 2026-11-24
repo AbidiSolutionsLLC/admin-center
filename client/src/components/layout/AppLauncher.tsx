@@ -1,7 +1,7 @@
 // client/src/components/layout/AppLauncher.tsx — 08 §4 App Launcher
 import { useState, useRef, useEffect } from 'react';
 import { useQuery } from '@tanstack/react-query';
-import { LayoutGrid, Users, CheckSquare, FileText, Headphones, Shield, ExternalLink, Package } from 'lucide-react';
+import { LayoutGrid, Users, CheckSquare, FileText, Headphones, Shield, ExternalLink, Package, Briefcase } from 'lucide-react';
 import { apiClient } from '@/lib/apiClient';
 import { useAuthStore } from '@/store/useAuthStore';
 import { PERMISSION_GROUPS } from '@/constants/roles';
@@ -65,6 +65,8 @@ export const AppLauncher = () => {
         return <Headphones className="w-5 h-5 text-violet-400" />;
       case 'admin':
         return <Shield className="w-5 h-5 text-[#f59e0b]" />;
+      case 'zyntrus':
+        return <Briefcase className="w-5 h-5 text-cyan-400" />; // hiring platform (standalone portal)
       default:
         return <Package className="w-5 h-5 text-slate-400" />;
     }
