@@ -3,6 +3,7 @@ import cors from 'cors';
 import helmet from 'helmet';
 import cookieParser from 'cookie-parser';
 import { errorHandler } from './middleware/errorHandler';
+import { AppError } from './utils/AppError';
 import { globalLimiter } from './middleware/rateLimiter';
 import './models';
 import routes from './routes';
@@ -46,7 +47,8 @@ export async function createServer(): Promise<Express> {
         if (!origin || allowedOrigins.includes(origin)) {
           callback(null, true);
         } else {
-          callback(new Error('Not allowed by CORS'));
+          // 403, not 500: a refused browser origin is the caller's problem, and Platform health counts 5xx as failures (8b B-15).
+          callback(new AppError('Origin not allowed', 403, 'CORS_ORIGIN_DENIED'));
         }
       }
     },

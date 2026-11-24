@@ -62,6 +62,7 @@ async function main() {
     ADMIN_SPA_ORIGIN: ORIGIN,
     PRODUCTS_SPA_ORIGIN: ORIGIN,
     CLIENT_URL: ORIGIN,
+    ALLOW_ANY_ORIGIN: 'false', // B-15 checks a refused origin; a local .env must not open CORS here
     TRUST_PROXY: '0',
     AUTH_RATE_LIMIT: '10000',
     GLOBAL_RATE_LIMIT: '10000',
@@ -506,6 +507,11 @@ async function main() {
         accEvt ? { evt: (accEvt as any).data?.authz_ver, user: accUser?.authz_ver } : 'no event');
       r = await post('/auth/setup-password', { token: acc.rawToken, newPassword: 'Smoke-Passw0rd!x2' });
       check('2.2 accept again = 409 INVITE_ALREADY_USED', r.status === 409 && ((await r.json()) as { code?: string }).code === 'INVITE_ALREADY_USED', r.status);
+
+      // 8b B-15: a browser origin that is not allowed is refused with 403, not a 500 that Platform health counts as a failure.
+      const corsRes = await fetch(`${API}/people/verify-invite`, { method: 'POST', headers: { 'content-type': 'application/json', origin: 'https://not-allowed.example' }, body: '{}' });
+      const corsBody = (await corsRes.json().catch(() => ({}))) as { code?: string };
+      check('B-15 a refused origin gets 403 CORS_ORIGIN_DENIED', corsRes.status === 403 && corsBody.code === 'CORS_ORIGIN_DENIED', { status: corsRes.status, code: corsBody.code });
     }
   } finally {
     server.close();
