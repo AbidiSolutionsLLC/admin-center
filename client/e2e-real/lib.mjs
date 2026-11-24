@@ -77,6 +77,7 @@ export async function signIn(page, startUrl, who, key, store) {
 export const API_RE = /:(5000|4000)\/(api|operator|platform)\//;
 const IGNORE_CONSOLE = /favicon|Failed to load resource|net::ERR_ABORTED|ResizeObserver|Download the React DevTools/i;
 const ROUTER_WARNING = /Matched leaf route|No routes matched location/i;
+const SLOW_API_MS = Number(process.env.ROLE_WALK_SLOW_API_MS || 5000);
 const strip = (u) => u.replace(/^https?:\/\/[^/]+/, '').slice(0, 120);
 
 /**
@@ -92,8 +93,15 @@ export function watch(page, sink) {
   });
   page.on('response', (r) => {
     const u = r.url();
+    if (process.env.ROLE_WALK_DEBUG && API_RE.test(u)) sink('info', `api ${r.status()} ${r.request().method()} ${strip(u)}`);
     if (!API_RE.test(u) || r.status() < 400 || r.status() === 401) return;
     sink(r.status() >= 500 ? 'fail' : 'warn', `HTTP ${r.status()} ${r.request().method()} ${strip(u)}`);
+  });
+  // A slow API answer is reported, so a page judged while still loading points at its cause.
+  page.on('requestfinished', (req) => {
+    if (!API_RE.test(req.url())) return;
+    const t = req.timing();
+    if (t && t.responseEnd > SLOW_API_MS) sink('warn', `slow API ${Math.round(t.responseEnd)} ms ${req.method()} ${strip(req.url())}`);
   });
 }
 
@@ -105,8 +113,17 @@ export async function settle(page, ms = 6000, maxWaitMs = 25000) {
   await page.waitForLoadState('networkidle', { timeout: ms }).catch(() => {});
   const deadline = Date.now() + maxWaitMs;
   while (Date.now() < deadline) {
-    const busy = await page.evaluate(() => /\/auth\/callback$/.test(location.pathname)
-      || /(^|\n)\s*Loading(\.\.\.|…)?\s*(\n|$)/i.test(document.body?.innerText || '')).catch(() => false);
+    const busy = await page.evaluate(() => {
+      if (/\/auth\/callback$/.test(location.pathname)) return true;
+      if (/(^|\n)\s*Loading(\.\.\.|…)?\s*(\n|$)/i.test(document.body?.innerText || '')) return true;
+      const inChrome = (el) => !!el.closest('nav, aside, header');
+      // skeleton placeholders (Tailwind animate-pulse) in the content area: data still on its way (the Admin app has no <main>)
+      if ([...document.querySelectorAll('.animate-pulse')].some((el) => !inChrome(el) && el.getBoundingClientRect().height > 0)) return true;
+      // nothing rendered yet (a lazy route still compiling on the dev server): same measure as verdict()
+      const clone = (document.querySelector('main') || document.body).cloneNode(true);
+      clone.querySelectorAll('nav, aside, header, script, style').forEach((n) => n.remove());
+      return (clone.textContent || '').replace(/\s+/g, ' ').trim().length < 40;
+    }).catch(() => false);
     if (!busy) break;
     await page.waitForTimeout(500);
   }
@@ -122,6 +139,17 @@ const COUNTER = /\b([1-9]\d*)\s+(Requests?|Tickets?|Projects?|Tasks?|Agreements?
  * a blank content area, error text, or an empty list next to a counter that says there is data.
  */
 export async function verdict(page) {
+  // A list may flash back to its skeleton during a background refetch: an empty content area counts only when it stays
+  // empty for 5 s.
+  for (let i = 0; i < 10; i += 1) {
+    const len = await page.evaluate(() => {
+      const clone = (document.querySelector('main') || document.body).cloneNode(true);
+      clone.querySelectorAll('nav, aside, header, script, style').forEach((n) => n.remove());
+      return (clone.textContent || '').replace(/\s+/g, ' ').trim().length;
+    }).catch(() => 0);
+    if (len >= 40) break;
+    await page.waitForTimeout(500);
+  }
   const url = new URL(page.url());
   const facts = await page.evaluate(() => {
     const root = document.querySelector('main') || document.body;

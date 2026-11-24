@@ -96,7 +96,7 @@ async function shot(page, name) {
 }
 
 /** Visits `startUrl`; when the hosted sign-in shows its form, signs in. Single sign-on covers the second app. */
-async function ensureSignedIn(page, startUrl, who, key) {
+async function ensureSignedIn(page, startUrl, who, key, readySelector) {
   const origin = new URL(startUrl).origin;
   await page.goto(startUrl, { waitUntil: 'domcontentloaded', timeout: 60000 });
   // The app's start page is on its own origin before it redirects to sign-in, so "on the origin" proves nothing: poll
@@ -105,7 +105,8 @@ async function ensureSignedIn(page, startUrl, who, key) {
   while (Date.now() < deadline) {
     if (await page.locator('input[name=email]').isVisible().catch(() => false)) { await signIn(page, startUrl, who, key, store); break; }
     const u = new URL(page.url());
-    if (u.origin === origin && !/callback/.test(u.pathname) && await page.locator('nav, aside').first().isVisible().catch(() => false)) break;
+    // The app's own menu links (not any nav: a page before the redirect can have one) prove the member is in.
+    if (u.origin === origin && !/callback|login/.test(u.pathname) && await page.locator(readySelector).first().isVisible().catch(() => false)) break;
     await page.waitForTimeout(500);
   }
   await settle(page);
@@ -140,21 +141,27 @@ async function walkLinks(page, persona, app, linkSelector, scope, seen) {
 
 /** Names of the apps in the products Settings & Portals switcher (opens it). */
 async function switcherApps(page) {
-  // The button toggles the flyout: click it only while the flyout is closed.
-  if (!(await page.getByText('Karbexa Applications').isVisible().catch(() => false))) {
-    await page.getByText('Settings & Portals').first().click();
-  }
-  const list = page.getByText('Karbexa Applications').locator('xpath=..');
-  await list.locator('button').first().waitFor({ timeout: 10000 }).catch(() => {});
-  const names = await list.locator('button .font-semibold').allInnerTexts().catch(() => []);
-  return names.map((n) => n.trim()).filter(Boolean);
+  // The button toggles the flyout, and the flyout may stay in the page while closed, so "visible" cannot tell open from
+  // closed: click, read the app list (it loads after opening), and click once more when it came back empty.
+  const read = async () => {
+    const list = page.getByText('Karbexa Applications').locator('xpath=..');
+    await list.locator('button .font-semibold').first().waitFor({ state: 'visible', timeout: 8000 }).catch(() => {});
+    return (await list.locator('button .font-semibold').allInnerTexts().catch(() => [])).map((n) => n.trim()).filter(Boolean);
+  };
+  // A fresh browser profile gets the "What's New" dialog on its first visit; its overlay swallows clicks.
+  const gotIt = page.getByRole('button', { name: 'Got It' });
+  if (await gotIt.isVisible().catch(() => false)) { await gotIt.click(); await page.waitForTimeout(500); }
+  await page.getByText('Settings & Portals').first().click();
+  let names = await read();
+  if (!names.length) { await page.getByText('Settings & Portals').first().click(); names = await read(); }
+  return names;
 }
 
 async function walkProducts(page, persona, who) {
   const seen = new Set();
   // Landing: everyone with a product must land on a usable page.
   const land = newRow(persona, 'products', 'landing (/)', '/');
-  await ensureSignedIn(page, `${PRODUCTS}/`, who, who.email);
+  await ensureSignedIn(page, `${PRODUCTS}/`, who, who.email, 'aside nav a');
   const lv = await verdict(page);
   if (persona.noAccess) lv.problems = lv.problems.filter(([, m]) => m !== 'opened the 403 page'); // expected for this persona
   closeRow(land, lv, await shot(page, `${persona.key}-products-landing`));
@@ -209,10 +216,10 @@ async function walkPersona(browser, persona) {
   try {
     for (const app of persona.apps) {
       if (app === 'operator') {
-        await ensureSignedIn(page, `${ADMIN}/operator/overview`, who, appKey);
+        await ensureSignedIn(page, `${ADMIN}/operator/overview`, who, appKey, 'nav[aria-label="Main"] a');
         await walkLinks(page, persona, 'operator', 'nav[aria-label="Main"] a', 'menu', new Set());
       } else if (app === 'admin') {
-        await ensureSignedIn(page, `${ADMIN}/overview`, who, appKey);
+        await ensureSignedIn(page, `${ADMIN}/overview`, who, appKey, 'nav[aria-label="Main"] a');
         await walkLinks(page, persona, 'admin', 'nav[aria-label="Main"] a', 'menu', new Set());
       } else {
         await walkProducts(page, persona, who);
