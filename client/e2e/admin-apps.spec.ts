@@ -61,3 +61,30 @@ test('why this role: picking a member lists the assignments behind the role', as
   await expect(page.getByTestId('access-people')).toContainText('Group: Everyone');
   await expect(page.getByTestId('access-people')).toContainText('gives the default role');
 });
+
+test('assigning Zyntrus: the target "Org role" lists organisation roles, and "Zyntrus role" is its own field with the Zyntrus roles', async ({ page }) => {
+  await signInTenant(page, { role: 'Super Admin', permissions: ['apps:read:all'] }); // the Assign App button is for IT admins (later routes win)
+  await page.route('**/api/v1/apps?**', (route) => fulfillJson(route, { success: true, data: [APP('zyntrus', 'Zyntrus')], pagination: { page: 1, pages: 1, total: 1 } }));
+  await page.route('**/api/v1/organization/subscription', (route) => fulfillJson(route, { success: true, data: { entitlements: [{ product_key: 'zyntrus', status: 'active', seats_limit: null, seats_used: 0 }] } }));
+  await page.route('**/api/v1/apps/app-zyntrus', (route) => fulfillJson(route, { success: true, data: { ...APP('zyntrus', 'Zyntrus'), assignments: [] } }));
+  await page.route('**/api/v1/apps/app-zyntrus/roles', (route) => fulfillJson(route, { success: true, data: [
+    { key: 'zyntrus_admin', name: 'Account Manager', rank: 40, is_default: false, assignable: true },
+    { key: 'recruiter', name: 'Recruiter', rank: 30, is_default: true, assignable: true },
+  ] }));
+  await page.route('**/api/v1/roles?**', (route) => fulfillJson(route, { success: true, data: [{ _id: 'r1', name: 'HR Admin', is_active: true }, { _id: 'r2', name: 'Employee', is_active: true }] }));
+  await page.route('**/api/v1/roles', (route) => fulfillJson(route, { success: true, data: [{ _id: 'r1', name: 'HR Admin', is_active: true }, { _id: 'r2', name: 'Employee', is_active: true }] }));
+  await page.goto('/apps');
+  await page.getByRole('button', { name: /Zyntrus/ }).first().click();
+  await page.getByRole('button', { name: 'Assign App' }).click();
+  const dialog = page.getByRole('dialog');
+  await expect(dialog).toContainText('Assign: Zyntrus');
+  // Who gets it: an organisation role, named as one.
+  await expect(dialog.getByRole('button', { name: 'Org role', exact: true })).toBeVisible();
+  await expect(dialog.getByText('Select org role')).toBeVisible();
+  await expect(dialog.getByRole('option', { name: 'HR Admin' })).toBeAttached();
+  // What they get: the Zyntrus role, its own field, with the Zyntrus roles (and none of the organisation roles).
+  const zyntrusRole = dialog.getByLabel('Zyntrus role');
+  await expect(zyntrusRole.getByRole('option', { name: 'Account Manager' })).toBeAttached();
+  await expect(zyntrusRole.getByRole('option', { name: 'Recruiter (default)' })).toBeAttached();
+  await expect(zyntrusRole.getByRole('option', { name: 'HR Admin' })).toHaveCount(0);
+});

@@ -28,6 +28,11 @@ import type { App } from '@/types';
  * AppsPage Component
  * Main page for managing app assignments.
  */
+/** Target types of an assignment as the admin reads them: `role` is an organisation role (Employee, HR Admin...), never the product's own role. */
+const TARGET_TYPE_LABEL = {
+  role: 'Org role', department: 'Department', group: 'Group', user: 'User', attribute: 'Attribute', location: 'Location',
+} as const;
+
 export default function AppsPage() {
   // ── States ────────────────────────────────────────────────────────────
   const { userRole } = useAuthStore();
@@ -580,7 +585,7 @@ export default function AppsPage() {
                         : 'bg-surface-alt text-ink-secondary hover:bg-surface-alt/80 border border-line'
                     }`}
                   >
-                    {type.charAt(0).toUpperCase() + type.slice(1)}
+                    {TARGET_TYPE_LABEL[type]}
                   </button>
                 ))}
               </div>
@@ -590,7 +595,7 @@ export default function AppsPage() {
             {assignTargetType !== 'attribute' ? (
               <div>
                 <label className="block text-xs font-bold text-ink-secondary uppercase tracking-wider mb-1.5">
-                  Select {assignTargetType.charAt(0).toUpperCase() + assignTargetType.slice(1)}{' '}
+                  Select {TARGET_TYPE_LABEL[assignTargetType].toLowerCase()}{' '}
                   <span className="text-error">*</span>
                 </label>
                 <select
@@ -663,6 +668,19 @@ export default function AppsPage() {
               </div>
             )}
 
+            {/* Which role the selected people get inside the product (not an organisation role) */}
+            {isProduct && (
+              <ProductRoleFields
+                appId={selectedApp._id}
+                appName={selectedApp.name}
+                roleKey={productRoleKey}
+                includeDescendants={includeDescendants}
+                onRoleChange={setProductRoleKey}
+                onIncludeDescendantsChange={setIncludeDescendants}
+                showDescendants={assignTargetType === 'department' || assignTargetType === 'group'}
+              />
+            )}
+
             {/* Reason (Optional) */}
             <div>
               <label className="block text-xs font-bold text-ink-secondary uppercase tracking-wider mb-1.5">
@@ -676,17 +694,6 @@ export default function AppsPage() {
                 placeholder="Why are you assigning this app?"
               />
             </div>
-
-            {isProduct && (
-              <ProductRoleFields
-                appId={selectedApp._id}
-                roleKey={productRoleKey}
-                includeDescendants={includeDescendants}
-                onRoleChange={setProductRoleKey}
-                onIncludeDescendantsChange={setIncludeDescendants}
-                showDescendants={assignTargetType === 'department' || assignTargetType === 'group'}
-              />
-            )}
 
             {/* Dependency Warning & Confirm */}
             {(assignTargetId || (assignTargetType === 'attribute' && assignAttributeName && assignAttributeValue)) && (
