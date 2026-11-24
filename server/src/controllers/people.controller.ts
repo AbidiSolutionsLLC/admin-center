@@ -2096,6 +2096,7 @@ export const bulkAssignRole = asyncHandler(async (req: Request, res: Response) =
     const existing = await UserRole.findOne({
       user_id: user._id,
       role_id: role._id,
+      company_id: req.user.company_id,
     });
 
     if (existing) {
@@ -2109,6 +2110,7 @@ export const bulkAssignRole = asyncHandler(async (req: Request, res: Response) =
       await UserRole.create([{
         user_id: user._id,
         role_id: role._id,
+        company_id: req.user.company_id, // required by the model: every bulk assignment failed without it (8b B-17)
         assigned_by: new Types.ObjectId(req.user.userId),
         assigned_at: new Date(),
       }], { session });

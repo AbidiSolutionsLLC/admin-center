@@ -1140,6 +1140,13 @@ async function main() {
       evs = await evsOf('e4b-role-unassign');
       check('E4b role unassign = 200 -> app_access.changed', r.status === 200 && ofType(evs, 'app_access.changed').some((e) => e.subject.id === memId), `${r.status} ${r.text.slice(0, 200)} ${evs.map((e) => e.type)}`);
 
+      // 8b B-17: bulk role assignment stores the UserRole with company_id (every call failed validation before).
+      const { UserRole: UserRoleM } = await import('../models');
+      r = await t('/people/bulk-assign-role', 'POST', { role_id: String(anyRole?._id), user_ids: [memId] }, 'b17-bulk-role');
+      const bulkRow = await UserRoleM.findOne({ company_id: orgId, user_id: memId, role_id: anyRole?._id }).lean();
+      check('B-17 bulk assign role = 200 and the UserRole carries company_id', r.status === 200 && !!bulkRow && (JSON.parse(r.text)?.data?.successful === 1), `${r.status} ${r.text.slice(0, 200)}`);
+      await t(`/roles/${anyRole?._id}/users/${memId}`, 'DELETE', undefined, 'b17-bulk-role-undo');
+
       const seqs = (await PlatformEvent.find({ org_id: orgId }).sort({ seq: 1 }).lean()).map((e) => e.seq);
       check('E4b org seq contiguous 1..N after all tenant mutations', seqs.every((v, i) => v === i + 1) && (await OrgEventCounter.findById(orgId))?.seq === seqs.length, { n: seqs.length });
 
