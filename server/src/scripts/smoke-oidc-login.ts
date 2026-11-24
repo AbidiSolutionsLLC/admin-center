@@ -496,6 +496,14 @@ async function main() {
       const codes = [r1.status, r2.status].sort();
       check('2.2 two concurrent accepts: exactly one 200, the other 409', codes[0] === 200 && codes[1] === 409, codes);
       check('2.2 accepted user is active, invitation accepted', (await User.findById(uAcc._id))?.lifecycle_state === 'active' && (await Invitation.findById(acc.invitation._id))?.state === 'accepted', '');
+      // 8b B-1: access is computed only for active members, so accepting must re-send it (else org-wide grants never reach products).
+      const { PlatformEvent } = await import('../models');
+      const accUser = await User.findById(uAcc._id).lean();
+      const accEvt = await PlatformEvent.findOne({ type: 'app_access.changed', 'subject.id': String(uAcc._id) }).sort({ seq: -1 }).lean();
+      check('B-1 accepting an invitation emits app_access.changed with the member\'s current authz_ver',
+        // (this smoke member holds no product, and an empty `products` map is not stored, so only the version is compared)
+        !!accEvt && (accEvt as any).data?.authz_ver === accUser?.authz_ver,
+        accEvt ? { evt: (accEvt as any).data?.authz_ver, user: accUser?.authz_ver } : 'no event');
       r = await post('/auth/setup-password', { token: acc.rawToken, newPassword: 'Smoke-Passw0rd!x2' });
       check('2.2 accept again = 409 INVITE_ALREADY_USED', r.status === 409 && ((await r.json()) as { code?: string }).code === 'INVITE_ALREADY_USED', r.status);
     }

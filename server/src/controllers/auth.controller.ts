@@ -16,7 +16,7 @@ import { resolveUserPermissions } from '../lib/rbac';
 import { sendSecurityAlert } from '../lib/notificationEngine';
 import { isIpInRange } from '../utils/ipUtils';
 import { getAggregatedSecurityPolicy } from '../utils/securityPolicyUtils';
-import { runInTransaction } from '../lib/platformEvents';
+import { runInTransaction, emitAppAccessChanged, correlationIdFor } from '../lib/platformEvents';
 import { consumeInvitation, findInvitationByToken, invitationProblem } from '../lib/invitations';
 import { revokeSession, revokeIdentitySessions } from '../identity/sessions';
 import { getIdentityConfig, ADMIN_SPA_CLIENT_ID } from '../identity/config';
@@ -389,6 +389,13 @@ export const setupPassword = asyncHandler(async (req: Request, res: Response) =>
     user.is_active = true;
     user.password_changed_at = identity.password_changed_at;
     await user.save({ session });
+    // Access is computed only for active members, so the invite-time app_access.changed carried no products. Now that
+    // the member is active, send their full access; otherwise grants that no later change touches (the "All Members"
+    // group, a product's all-members default) never reach the products backend (plan 8b B-1).
+    await emitAppAccessChanged(session, user.company_id, [user._id.toString()], {
+      actor: { type: 'member', id: user._id.toString() },
+      correlation_id: correlationIdFor(req),
+    });
     return { user, identity, oldState };
   });
 
