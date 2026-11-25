@@ -54,6 +54,10 @@ cd server && npm run typecheck && npm test        # every change
 cd server && SMTP_HOST=127.0.0.1 SMTP_PORT=1 npm run smoke:login     # identity changes
 cd server && SMTP_HOST=127.0.0.1 SMTP_PORT=1 npm run smoke:sprint2   # admin/operator/platform changes (10–15 min)
 cd client && npm run build                        # every web change
+
+# One test file (per-task Tier 1, decision D1); verified 2026-11-25 with errorHandlerBody.test.ts
+cd server && node --require ts-node/register/transpile-only --test src/middleware/__tests__/errorHandlerBody.test.ts
+cd client && npx playwright test e2e/admin-navigation.spec.ts   # one browser spec (PLAYWRIGHT_BROWSERS_PATH, see ../docs/STATUS.md)
 ```
 Expected results: `../docs/STATUS.md` → "Test baseline". Tests use in-memory MongoDB; if drive C: is low, set `TEMP`/`TMP` to another drive.
 
