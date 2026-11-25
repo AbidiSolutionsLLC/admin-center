@@ -45,6 +45,7 @@ export interface IUser extends Document {
   risk_score: number;
   risk_level: 'none' | 'low' | 'medium' | 'high';
   locked_until?: Date;
+  login_failures_reset_at?: Date; // failed sign-ins before this do not count towards a lock (set on success and unlock)
   is_active: boolean;
   created_at: Date;
   updated_at: Date;
@@ -98,6 +99,7 @@ const UserSchema = new Schema<IUser>({
   risk_score: { type: Number, default: 0 },
   risk_level: { type: String, enum: ['none', 'low', 'medium', 'high'], default: 'none' },
   locked_until: Date,
+  login_failures_reset_at: Date,
   is_active: { type: Boolean, default: false },
 }, { timestamps: { createdAt: 'created_at', updatedAt: 'updated_at' } });
 

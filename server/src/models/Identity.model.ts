@@ -14,6 +14,7 @@ export interface IFederatedLink {
 export interface IIdentityMfa {
   totp_secret_enc?: string; // encrypted with lib/cryptoService
   totp_enabled: boolean;
+  totp_last_step?: number; // last accepted TOTP time step: a code is accepted once (replay guard)
   recovery_codes_hash: string[]; // deferred (Sprint 2+): 10-pack recovery codes
   email_otp_enabled: boolean;
 }
@@ -53,6 +54,7 @@ const IdentitySchema = new Schema<IIdentity>({
   mfa: {
     totp_secret_enc: String,
     totp_enabled: { type: Boolean, default: false },
+    totp_last_step: Number,
     recovery_codes_hash: [{ type: String }],
     email_otp_enabled: { type: Boolean, default: false },
   },

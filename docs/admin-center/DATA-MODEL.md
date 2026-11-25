@@ -8,7 +8,8 @@ All models are Mongoose models in `server/src/models/`, exported from `server/sr
 |---|---|---|
 | `Company` (`Company.model.ts`) | `name`, `slug`, `plan`, `status` (`provisioning`/`active`/`suspended`/`closed`), `is_active`, `settings.*` (timezone, locale, allowed_domains, audit_log_retention_days, ip_restrictions_enabled, ...), `employee_id_format`, `employee_id_counter` | `status` is written by operators and seeds only |
 | `User` (`User.model.ts`) | `company_id`, `identity_id`, `authz_ver`, `email`, `full_name`, `employee_id`, `role` (legacy string), `lifecycle_state`, `department_id`, `location_id`, `manager_id`, `secondary_manager_ids`, `employment_type`, `custom_fields`, `locked_until`, `is_active` | A membership. Lifecycle: invited, onboarding, active, probation, on_leave, deactivated, terminated, archived |
-| `Identity` | `email` (unique), `password_hash`, `mfa.{totp_secret_enc,totp_enabled,recovery_codes_hash}`, `federated_links[]`, `status` | Global login identity, see [identity/DATA-MODEL.md](../identity/DATA-MODEL.md) |
+| `User` (lockout) | `locked_until`, `login_failures_reset_at` (failed sign-ins before it do not count towards a lock; set on success and admin unlock) | Lock rule in `controllers/auth.controller.ts` `recordPasswordFailure` |
+| `Identity` | `email` (unique), `password_hash`, `mfa.{totp_secret_enc,totp_enabled,totp_last_step,recovery_codes_hash}`, `federated_links[]`, `status` | Global login identity, see [identity/DATA-MODEL.md](../identity/DATA-MODEL.md) |
 | `Role`, `UserRole`, `Permission`, `RolePermission` | role `name`, `type` (`system`/`custom`); `UserRole{user_id, role_id, company_id}`; `Permission{module, action, data_scope}` | Org roles and granular permissions |
 | `Group`, `GroupMember` | `type` (`static`/`dynamic`), `dynamic_rules`, `is_active`; `GroupMember{group_id, user_id}` | |
 | `Department`, `Location`, `Team`, `TeamMember` | `parent_id` trees, managers | |

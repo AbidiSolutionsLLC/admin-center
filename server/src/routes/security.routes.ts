@@ -28,7 +28,8 @@ router.put('/policies/:id', requireRole(PERMISSION_GROUPS.IT_ADMINS), updateSecu
 router.delete('/policies/:id', requireRole(PERMISSION_GROUPS.IT_ADMINS), deleteSecurityPolicy);
 
 // Events / access log routes
-router.get('/events', getSecurityEvents);
+// Org-wide access log (sign-ins, IPs, e-mails): IT admins only, like sessions (2026-11-25 browser test: was open to every member).
+router.get('/events', requireRole(PERMISSION_GROUPS.IT_ADMINS), getSecurityEvents);
 
 // Session management routes
 router.post('/force-logout/:userId', requireRole(PERMISSION_GROUPS.IT_ADMINS), forceLogoutUser);

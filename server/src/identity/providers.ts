@@ -17,7 +17,7 @@ import { findOperatorAccount } from '../operator/accounts';
 import { ensureOperatorSessionForToken, revokeOperatorSession, OperatorSessionDeniedError } from '../operator/sessions';
 import { escapeHtml, newNonce, pageCsp, pageShell, OPERATOR_SHELL } from './html';
 import {
-  EXTRA_CLIENT_METADATA, STANDALONE_SCOPE, findStandaloneClientMetadata, resourceForStandaloneClient, secretsEqual, keyFromClientId,
+  EXTRA_CLIENT_METADATA, STANDALONE_SCOPE, findStandaloneClientMetadata, resourceForStandaloneClient, previousSecretMatches, keyFromClientId,
   evaluateGate, logProductAccessDenied, buildStandaloneClaims, type GateResult,
 } from '../lib/standalonePortals';
 import { Company } from '../models/Company.model';
@@ -374,8 +374,7 @@ async function buildTenant(cookieKeys: string[]): Promise<OidcProvider> {
   const compareSecret = clientProto.compareClientSecret;
   clientProto.compareClientSecret = function (this: any, actual: string) {
     if (compareSecret.call(this, actual)) return true;
-    return !!this.karbexaPreviousSecret && typeof actual === 'string' && typeof this.karbexaPreviousSecretExpiresAt === 'number'
-      && this.karbexaPreviousSecretExpiresAt * 1000 > Date.now() && secretsEqual(this.karbexaPreviousSecret, actual);
+    return previousSecretMatches(this, actual);
   };
 
   // `sid` of a standalone client is the Karbexa session id everywhere (ID token, access token, logout token), so the

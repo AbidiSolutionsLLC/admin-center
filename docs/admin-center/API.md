@@ -148,7 +148,7 @@ Role grants are additionally limited by `server/src/lib/roleHierarchy.ts` (`asse
 | GET | `/security/policies` | auth | `security.controller.getSecurityPolicies` |
 | POST | `/security/policies` | IT_ADMINS | `createSecurityPolicy` |
 | PUT / DELETE | `/security/policies/:id` | IT_ADMINS | `updateSecurityPolicy`, `deleteSecurityPolicy` |
-| GET | `/security/events` | auth | `getSecurityEvents` |
+| GET | `/security/events` | IT admins (Super Admin, Admin, IT Admin) | `getSecurityEvents` (was `auth` until 2026-11-25: every member could read the organisation's access log) |
 | POST | `/security/force-logout/:userId` | IT_ADMINS | `forceLogoutUser` (revokes the member's `Session` rows) |
 | GET | `/security/sessions` | IT_ADMINS | `getActiveSessions` (live tenant `Session` rows of the company) |
 | DELETE | `/security/sessions/:tokenId` | IT_ADMINS | `terminateSession` (takes the session id `sid`, looked up by `company_id`) |

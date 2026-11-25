@@ -2691,6 +2691,7 @@ export const unlockUser = asyncHandler(async (req: Request, res: Response) => {
   const prevLockedUntil = user.locked_until;
 
   user.locked_until = undefined;
+  user.login_failures_reset_at = new Date(); // earlier failures no longer count towards the next lock
   // Also clear any MFA OTP if they were locked during MFA attempt
   user.mfa_otp = undefined;
   user.mfa_otp_expires_at = undefined;

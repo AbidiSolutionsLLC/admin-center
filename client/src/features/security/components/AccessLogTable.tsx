@@ -6,6 +6,17 @@ import { useForceLogout } from '../hooks/useForceLogout';
 import { ConfirmDialog } from '@/components/ui/ConfirmDialog';
 import type { SecurityEvent } from '@/types';
 
+/** Member id of an access-log row: `user_id` is populated by the API, or a bare id on older rows. */
+const eventUserId = (event: SecurityEvent | null): string | undefined => {
+  const u = event?.user_id;
+  if (!u) return undefined;
+  return typeof u === 'string' ? u : u._id;
+};
+const eventUserName = (event: SecurityEvent | null): string | undefined => {
+  const u = event?.user_id;
+  return (u && typeof u === 'object' ? u.full_name : undefined) || event?.user?.full_name || event?.email;
+};
+
 /**
  * Access Log Table Component
  * Shows security events with suspicious rows highlighted in red.
@@ -33,8 +44,10 @@ export function AccessLogTable() {
   const forceLogoutMutation = useForceLogout();
 
   const handleForceLogout = async () => {
-    if (forceLogoutTarget?.user_id) {
-      await forceLogoutMutation.mutateAsync(forceLogoutTarget.user_id);
+    // 2026-11-25 browser test: the populated user object was sent as the id (`/force-logout/[object Object]`, 404).
+    const userId = eventUserId(forceLogoutTarget);
+    if (userId) {
+      await forceLogoutMutation.mutateAsync(userId);
       setForceLogoutTarget(null);
     }
   };
@@ -217,7 +230,7 @@ export function AccessLogTable() {
                         )}
                       </td>
                       <td className="h-14 px-4 text-center">
-                        {event.user_id && (
+                        {eventUserId(event) && (
                           <button
                             onClick={() => setForceLogoutTarget(event)}
                             className="h-8 w-8 inline-flex items-center justify-center rounded-md text-ink-secondary hover:text-error hover:bg-red-50 transition-colors"
@@ -270,7 +283,7 @@ export function AccessLogTable() {
         onConfirm={handleForceLogout}
         title="Force Logout User"
         description={`This will immediately terminate all active sessions for ${
-          forceLogoutTarget?.user?.full_name || forceLogoutTarget?.email || 'this user'
+          eventUserName(forceLogoutTarget) || 'this user'
         }. They will need to log in again.`}
         confirmLabel="Force Logout"
         variant="danger"

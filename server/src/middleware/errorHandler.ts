@@ -99,7 +99,18 @@ export const errorHandler = (err: any, req: Request, res: Response, next: NextFu
     });
   }
 
-  // 7. Fallback: Unhandled Errors
+  // 7. Request body errors from express.json / express.urlencoded (body-parser sets `type` and a 4xx `status`):
+  // an oversized or unreadable body is the client's fault, not a 500 (2026-11-25 browser test).
+  if (typeof err.type === 'string' && typeof err.status === 'number' && err.status >= 400 && err.status < 500) {
+    const tooLarge = err.type === 'entity.too.large';
+    return res.status(err.status).json({
+      success: false,
+      error: tooLarge ? 'The request is too large.' : 'The request body could not be read.',
+      code: tooLarge ? 'PAYLOAD_TOO_LARGE' : 'BAD_REQUEST',
+    });
+  }
+
+  // 8. Fallback: Unhandled Errors
   console.error('[Unhandled Error]', err);
   
   // Don't leak stack traces in production

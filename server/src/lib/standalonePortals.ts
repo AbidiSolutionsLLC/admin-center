@@ -331,6 +331,17 @@ export async function findStandaloneClientMetadata(clientId: string): Promise<Re
 export const secretsEqual = (a: string, b: string) =>
   crypto.timingSafeEqual(crypto.createHash('sha256').update(a).digest(), crypto.createHash('sha256').update(b).digest());
 
+/**
+ * True when `actual` is the client's rotated-out secret and that secret has not expired (DRD §8.2, 24 h). oidc-provider
+ * camelCases only the metadata it recognises, so extra metadata keeps its snake_case name on the Client instance.
+ */
+export function previousSecretMatches(client: Record<string, unknown>, actual: unknown, now = Date.now()): boolean {
+  const prev = client.karbexa_previous_secret;
+  const exp = client.karbexa_previous_secret_expires_at;
+  return typeof prev === 'string' && prev.length > 0 && typeof actual === 'string' && typeof exp === 'number'
+    && exp * 1000 > now && secretsEqual(prev, actual);
+}
+
 // ── Access gate (DRD §8.4) ────────────────────────────────────────────────────────────────────
 
 export type GateDenial = 'unavailable' | 'no_access';

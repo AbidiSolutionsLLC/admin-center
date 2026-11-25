@@ -184,10 +184,15 @@ export const isLocked = (user: IUser, identity: IIdentity) =>
 /** Wrong password: count recent failures, lock the membership per the org security policy. */
 export async function recordPasswordFailure(req: Request, user: IUser, identity: IIdentity): Promise<void> {
   const email = identity.email;
+  // Failures count from the later of 30 min ago and the last successful sign-in or admin unlock; attempts refused
+  // while locked do not count (2026-11-25 browser test: one typo after an unlock re-locked the account).
+  const windowStart = new Date(Date.now() - 30 * 60 * 1000);
+  const resetAt = user.login_failures_reset_at;
   const recentFailures = await SecurityEvent.countDocuments({
     email,
     event_type: 'login_failure',
-    created_at: { $gte: new Date(Date.now() - 30 * 60 * 1000) },
+    'metadata.reason': { $ne: 'account_locked' },
+    created_at: { $gte: resetAt && resetAt > windowStart ? resetAt : windowStart },
   });
   const securityPolicy = await getAggregatedSecurityPolicy(user);
   const maxAttempts = securityPolicy?.settings.max_failed_login_attempts || 5;
@@ -233,7 +238,7 @@ export async function recordLoginSuccess(req: Request, user: IUser, identity: II
   identity.failed_login_attempts = 0;
   identity.last_login_at = new Date();
   await identity.save();
-  await User.updateOne({ _id: user._id }, { $set: { last_login: new Date() }, $unset: { locked_until: 1 } });
+  await User.updateOne({ _id: user._id }, { $set: { last_login: new Date(), login_failures_reset_at: new Date() }, $unset: { locked_until: 1 } });
   await touchCompanyActivity(user.company_id);
   await logSecurityEvent({
     company_id: user.company_id,

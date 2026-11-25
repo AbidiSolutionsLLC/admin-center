@@ -136,10 +136,27 @@ const readCookie = (req: Request, name: string): string | undefined => {
 
 export const normaliseCode = (raw: unknown) => String(raw ?? '').replace(/\s+/g, '');
 
+/** RFC 6238 time step the code belongs to (±1 step of drift), or null when the code is not valid. */
+export async function totpStep(secret: string, code: string): Promise<number | null> {
+  if (!/^\d{6}$/.test(code)) return null;
+  const result: any = await verifyTotp({ secret, token: code, epochTolerance: 30 });
+  return result.valid && typeof result.timeStep === 'number' ? result.timeStep : null;
+}
+
 export async function totpValid(secret: string, code: string): Promise<boolean> {
-  if (!/^\d{6}$/.test(code)) return false;
-  const result = await verifyTotp({ secret, token: code, epochTolerance: 30 });
-  return result.valid;
+  return (await totpStep(secret, code)) !== null;
+}
+
+/**
+ * Records `step` as the account's last used code step. False when a code of this step or a later one was already
+ * accepted (replay, RFC 6238 §5.2). One conditional write, so two parallel submissions of the same code cannot both win.
+ */
+export async function claimTotpStep(model: { updateOne: (...a: any[]) => any }, id: unknown, field: string, step: number): Promise<boolean> {
+  const r = await model.updateOne(
+    { _id: id, $or: [{ [field]: { $exists: false } }, { [field]: null }, { [field]: { $lt: step } }] },
+    { $set: { [field]: step } },
+  );
+  return (r?.modifiedCount ?? 0) === 1;
 }
 
 export function registerTenantInteractions(app: Express, provider: OidcProvider): void {
@@ -319,7 +336,8 @@ export function registerTenantInteractions(app: Express, provider: OidcProvider)
     }
     const { user, identity } = principal;
 
-    if (await totpValid(decrypt(identity.mfa.totp_secret_enc!), normaliseCode(req.body?.code))) {
+    const step = await totpStep(decrypt(identity.mfa.totp_secret_enc!), normaliseCode(req.body?.code));
+    if (step !== null && await claimTotpStep(Identity, identity._id, 'mfa.totp_last_step', step)) {
       await logSecurityEvent({ company_id: user.company_id, user_id: user._id, email: identity.email, event_type: 'mfa_verified', ip_address: req.ip, user_agent: req.headers['user-agent'], req });
       return finishLogin(req, res, user, identity, [...pending.amr_first, 'otp']);
     }
@@ -352,9 +370,11 @@ export function registerTenantInteractions(app: Express, provider: OidcProvider)
     const { user, identity } = principal;
     const secret = decrypt(pending.enrol_secret_enc);
 
-    if (await totpValid(secret, normaliseCode(req.body?.code))) {
+    const enrolStep = await totpStep(secret, normaliseCode(req.body?.code));
+    if (enrolStep !== null) {
       identity.mfa.totp_secret_enc = pending.enrol_secret_enc;
       identity.mfa.totp_enabled = true;
+      identity.mfa.totp_last_step = enrolStep; // the enrolment code cannot be replayed at the next sign-in
       await identity.save();
       await logSecurityEvent({ company_id: user.company_id, user_id: user._id, email: identity.email, event_type: 'mfa_verified', ip_address: req.ip, user_agent: req.headers['user-agent'], req, metadata: { totp_enrolled: true } });
       return finishLogin(req, res, user, identity, [...pending.amr_first, 'otp']);

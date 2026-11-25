@@ -5,7 +5,7 @@ export interface IOperatorAccount extends Document {
   email: string;
   full_name: string;
   password_hash: string;
-  mfa: { enabled: boolean; secret_enc?: string; verified_at?: Date };
+  mfa: { enabled: boolean; secret_enc?: string; verified_at?: Date; last_step?: number };
   roles: string[]; // launch: ['platform_admin']
   status: 'active' | 'suspended' | 'invited';
   last_login_at?: Date;
@@ -23,6 +23,7 @@ const OperatorAccountSchema = new Schema<IOperatorAccount>({
     enabled: { type: Boolean, default: false },
     secret_enc: String,
     verified_at: Date,
+    last_step: Number, // last accepted TOTP time step: a code is accepted once (replay guard)
   },
   roles: { type: [String], default: ['platform_admin'] },
   status: { type: String, enum: ['active', 'suspended', 'invited'], default: 'active' },

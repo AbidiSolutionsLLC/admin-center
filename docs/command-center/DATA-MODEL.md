@@ -8,7 +8,7 @@ Collections the operator side owns or writes. Operators are not tenant members: 
 
 | Model (file) | Key fields | Notes |
 |---|---|---|
-| `OperatorAccount` (`server/src/models/OperatorAccount.model.ts`) | `email`, `full_name`, `password_hash`, `mfa.{enabled, secret_enc, verified_at}`, `roles[]`, `status` (`active`/`suspended`/`invited`), `last_login_at`, `failed_attempts`, `locked_until`, `invited_by` | `secret_enc` encrypted with `ENCRYPTION_KEY` (`lib/cryptoService.ts`) |
+| `OperatorAccount` (`server/src/models/OperatorAccount.model.ts`) | `email`, `full_name`, `password_hash`, `mfa.{enabled, secret_enc, verified_at, last_step}` (`last_step`: last accepted code step, a code is accepted once), `roles[]`, `status` (`active`/`suspended`/`invited`), `last_login_at`, `failed_attempts`, `locked_until`, `invited_by` | `secret_enc` encrypted with `ENCRYPTION_KEY` (`lib/cryptoService.ts`) |
 | `OperatorAuditEvent` (`OperatorAuditEvent.model.ts`) | `operator_id`, `operator_email`, `action`, `target_type`, `target_id`, `company_id`, `details`, `category`, `before`, `after`, `reason`, `result`, `correlation_id`, `created_at` | Every operator write. When a company is involved, a tenant `AuditEvent` is also written with `source: 'operator'`, `module: 'operator'`, `actor_email: 'operator:<email>'` |
 | `Plan` (`Plan.model.ts`) | `key`, `name`, `products[]`, `status` (`active`/`archived`), `description`, `seat_defaults`, `trial_days`, `version` | Default plans seeded by `seedProductRegistry` (`DEFAULT_PLANS`); edits raise `version` and reach tenants only on apply |
 | `OrganizationEntitlement` | `company_id`, `product_key`, `status`, `seats_limit`, `source`, `plan_key`, `updated_by_operator_id` | Unique per (company, product) |

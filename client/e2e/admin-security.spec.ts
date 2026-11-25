@@ -30,3 +30,22 @@ test('Active sessions lists a live session and terminates it after confirmation'
   await page.getByRole('button', { name: 'Terminate', exact: true }).click();
   await expect.poll(() => deleted).toBe(true);
 });
+
+// Regression (2026-11-25 browser test ID2-1): the access log's populated `user_id` object was sent as the id.
+test('Access log Force Logout posts the member id, not the populated user object', async ({ page }) => {
+  let forcedPath = '';
+  await page.route('**/api/v1/security/**', (route) => fulfillJson(route, { success: true, data: [] }));
+  await page.route('**/api/v1/security/events**', (route) => fulfillJson(route, {
+    success: true,
+    data: {
+      events: [{ _id: 'e1', company_id: 'c1', user_id: { _id: 'u42', full_name: 'Nina Newhire', email: 'nina@acme.test' }, email: 'nina@acme.test', event_type: 'login_success', ip_address: '10.0.0.9', is_suspicious: false, created_at: '2026-11-25T10:00:00Z' }],
+      pagination: { total: 1, page: 1, limit: 20, totalPages: 1 },
+    },
+  }));
+  await page.route('**/api/v1/security/force-logout/**', (route) => { forcedPath = new URL(route.request().url()).pathname; return fulfillJson(route, { success: true, data: { userId: 'u42' } }); });
+  await page.goto('/security?tab=access-log');
+  await page.getByTitle('Force Logout').click();
+  await expect(page.getByText('Nina Newhire', { exact: false }).last()).toBeVisible();
+  await page.getByRole('button', { name: 'Force Logout', exact: true }).click();
+  await expect.poll(() => forcedPath).toBe('/api/v1/security/force-logout/u42');
+});

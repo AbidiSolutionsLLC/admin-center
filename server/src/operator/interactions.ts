@@ -10,7 +10,7 @@ import { encrypt, decrypt } from '../lib/cryptoService';
 import { authLimiter } from '../middleware/rateLimiter';
 import { getIdentityConfig } from '../identity/config';
 import { escapeHtml, OPERATOR_SHELL } from '../identity/html';
-import { send, errBox, normaliseCode, totpValid, totpEnrolSection } from '../identity/interactions';
+import { send, errBox, normaliseCode, totpStep, claimTotpStep, totpEnrolSection } from '../identity/interactions';
 import type { OidcProvider } from '../identity/providers';
 import { hasOperatorRole } from './accounts';
 import { isOperatorLocked, recordOperatorFailure, recordOperatorSuccess } from './signInGuard';
@@ -157,9 +157,11 @@ export function registerOperatorInteractions(app: Express, provider: OidcProvide
       secret = decrypt(acct.mfa.secret_enc);
     }
 
-    if (await totpValid(secret, normaliseCode(req.body?.code))) {
+    const step = await totpStep(secret, normaliseCode(req.body?.code));
+    // Enrolment stores the step with the new secret; a sign-in claims it atomically (a code is accepted once).
+    if (step !== null && (enrolling || await claimTotpStep(OperatorAccount, acct._id, 'mfa.last_step', step))) {
       if (enrolling) {
-        acct.mfa = { enabled: true, secret_enc: pending.enrol_secret_enc, verified_at: new Date() };
+        acct.mfa = { enabled: true, secret_enc: pending.enrol_secret_enc, verified_at: new Date(), last_step: step };
       }
       acct.last_login_at = new Date();
       await acct.save();

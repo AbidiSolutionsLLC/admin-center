@@ -1001,7 +1001,8 @@ export type SecurityEventType =
 export interface SecurityEvent {
   _id: string;
   company_id: string;
-  user_id?: string;
+  /** The API populates the member (`{ _id, full_name, email }`); older rows may hold the bare id. */
+  user_id?: string | { _id: string; full_name?: string; email?: string } | null;
   user?: { _id: string; full_name: string; email: string };
   email?: string;
   event_type: SecurityEventType;
