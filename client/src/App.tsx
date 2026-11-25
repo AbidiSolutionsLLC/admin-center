@@ -38,6 +38,7 @@ import RolesPage from './pages/roles/RolesPage';
 import GroupsPage from './pages/groups/GroupsPage';
 import AppsPage from './pages/apps/AppsPage';
 import SecurityPage from './pages/security/SecurityPage';
+import { NavAccessGuard } from './components/layout/NavAccessGuard';
 import AuditLogsPage from './pages/audit-logs/AuditLogsPage';
 import PoliciesPage from './pages/policies/PoliciesPage';
 import LocationsPage from './pages/locations/LocationsPage';
@@ -83,32 +84,35 @@ function App() {
           <Route element={<AuthGuard />}>
             <Route path="/" element={<TenantShell />}>
               <Route index element={<Navigate to={ROUTES.OVERVIEW} replace />} />
-              <Route path={ROUTES.OVERVIEW} element={<OverviewPage />} />
-              <Route path={ROUTES.INSIGHT_HISTORY} element={<InsightHistoryPage />} />
-              <Route path={ROUTES.ORGANIZATION} element={<OrganizationPage />} />
-              <Route path="/organization/:id" element={<OrganizationPage />} />
-              <Route path={ROUTES.COMPANY_SETTINGS} element={<CompanySettingsPage />} />
-              <Route path={ROUTES.TEAMS} element={<TeamsPage />} />
-              <Route path={ROUTES.PEOPLE} element={<PeoplePage />} />
-              <Route path="/people/:id" element={<UserDetailPage />} />
-              <Route path={ROUTES.ROLES} element={<RolesPage />} />
-              <Route path="/roles/:id" element={<RolesPage />} />
-              <Route path={ROUTES.GROUPS} element={<GroupsPage />} />
-              <Route path={ROUTES.APPS} element={<AppsPage />} />
-              <Route path={ROUTES.SUBSCRIPTION} element={<SubscriptionPage />} />
-              <Route path={ROUTES.SECURITY} element={<SecurityPage />} />
-              <Route path={ROUTES.AUDIT_LOGS} element={<AuditLogsPage />} />
-              <Route path={ROUTES.POLICIES} element={<PoliciesPage />} />
-              <Route path="/policies/:id" element={<PoliciesPage />} />
-              <Route path={ROUTES.LOCATIONS} element={<LocationsPage />} />
-              <Route path="/locations/:id" element={<LocationDetailPage />} />
-              <Route path={ROUTES.HOLIDAYS} element={<Navigate to="/locations?tab=holidays" replace />} />
-              <Route path={ROUTES.WORK_SCHEDULES} element={<Navigate to="/locations?tab=work-schedules" replace />} />
-              <Route path={ROUTES.DATA_FIELDS} element={<DataFieldsPage />} />
-              <Route path={ROUTES.INTEGRATIONS} element={<IntegrationsPage />} />
-              <Route path={ROUTES.WORKFLOWS} element={<WorkflowsPage />} />
-              <Route path={ROUTES.APPROVALS} element={<ApprovalsPage />} />
-              <Route path={ROUTES.NOTIFICATIONS} element={<NotificationsPage />} />
+              {/* A page the menu hides for the member is closed by URL too (NavAccessGuard). */}
+              <Route element={<NavAccessGuard />}>
+                <Route path={ROUTES.OVERVIEW} element={<OverviewPage />} />
+                <Route path={ROUTES.INSIGHT_HISTORY} element={<InsightHistoryPage />} />
+                <Route path={ROUTES.ORGANIZATION} element={<OrganizationPage />} />
+                <Route path="/organization/:id" element={<OrganizationPage />} />
+                <Route path={ROUTES.COMPANY_SETTINGS} element={<CompanySettingsPage />} />
+                <Route path={ROUTES.TEAMS} element={<TeamsPage />} />
+                <Route path={ROUTES.PEOPLE} element={<PeoplePage />} />
+                <Route path="/people/:id" element={<UserDetailPage />} />
+                <Route path={ROUTES.ROLES} element={<RolesPage />} />
+                <Route path="/roles/:id" element={<RolesPage />} />
+                <Route path={ROUTES.GROUPS} element={<GroupsPage />} />
+                <Route path={ROUTES.APPS} element={<AppsPage />} />
+                <Route path={ROUTES.SUBSCRIPTION} element={<SubscriptionPage />} />
+                <Route path={ROUTES.SECURITY} element={<SecurityPage />} />
+                <Route path={ROUTES.AUDIT_LOGS} element={<AuditLogsPage />} />
+                <Route path={ROUTES.POLICIES} element={<PoliciesPage />} />
+                <Route path="/policies/:id" element={<PoliciesPage />} />
+                <Route path={ROUTES.LOCATIONS} element={<LocationsPage />} />
+                <Route path="/locations/:id" element={<LocationDetailPage />} />
+                <Route path={ROUTES.HOLIDAYS} element={<Navigate to="/locations?tab=holidays" replace />} />
+                <Route path={ROUTES.WORK_SCHEDULES} element={<Navigate to="/locations?tab=work-schedules" replace />} />
+                <Route path={ROUTES.DATA_FIELDS} element={<DataFieldsPage />} />
+                <Route path={ROUTES.INTEGRATIONS} element={<IntegrationsPage />} />
+                <Route path={ROUTES.WORKFLOWS} element={<WorkflowsPage />} />
+                <Route path={ROUTES.APPROVALS} element={<ApprovalsPage />} />
+                <Route path={ROUTES.NOTIFICATIONS} element={<NotificationsPage />} />
+              </Route>
             </Route>
           </Route>
         </Routes>

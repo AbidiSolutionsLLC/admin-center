@@ -40,6 +40,11 @@ export interface NavItem {
   permission?: string;
   /** Roles the server router allows (mirror of its `requireRole` list). Checked in addition to `permission`. */
   roles?: readonly string[];
+  /**
+   * Also close the page when its URL is typed (NavAccessGuard). Set only on pages that serve nobody without the
+   * permission. Pages members may open for their own data (Apps & Access shows a member their own apps) stay open.
+   */
+  guardRoute?: boolean;
 }
 
 export interface NavGroup {
@@ -72,6 +77,21 @@ export function isNavItemVisible(item: NavItem, group: NavGroup, ctx: NavContext
   if (item.permission) return holdsPermission(ctx.permissions, item.permission);
   if (!group.roles) return true;
   return !!ctx.role && group.roles.includes(ctx.role);
+}
+
+/**
+ * The menu item (and its group) that owns a URL path and is marked `guardRoute`, so the route can be held to the same
+ * rule as its menu entry. Matches the item's path (query string ignored) or any sub-path of it.
+ */
+export function findNavItemForPath(config: ShellConfig, pathname: string): { item: NavItem; group: NavGroup } | null {
+  for (const group of config.groups) {
+    for (const item of group.items) {
+      if (!item.guardRoute) continue;
+      const base = item.href.split('?')[0];
+      if (pathname === base || pathname.startsWith(`${base}/`)) return { item, group };
+    }
+  }
+  return null;
 }
 
 /** Groups follow PRD AC-10. Permission keys are the seeded `module:action:scope` keys (lib/seed.ts). */
@@ -109,8 +129,8 @@ export const ADMIN_SHELL: ShellConfig = {
     {
       label: 'Security & Governance',
       items: [
-        { label: 'Admin roles', href: ROUTES.ROLES, icon: Shield, permission: 'roles:read:all' },
-        { label: 'Security', href: ROUTES.SECURITY, icon: Shield, permission: 'security:read:all' },
+        { label: 'Admin roles', href: ROUTES.ROLES, icon: Shield, permission: 'roles:read:all', guardRoute: true },
+        { label: 'Security', href: ROUTES.SECURITY, icon: Shield, permission: 'security:read:all', guardRoute: true },
         { label: 'Policies', href: ROUTES.POLICIES, icon: FileText, permission: 'policies:read:all' },
         { label: 'Audit log', href: ROUTES.AUDIT_LOGS, icon: ClipboardList, permission: 'audit_logs:read:all', roles: [ROLES.SUPER_ADMIN, ROLES.IT_ADMIN] }, // server: auditLogs.routes.ts
       ],
