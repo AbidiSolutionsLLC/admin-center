@@ -5,6 +5,12 @@ Format: [Keep a Changelog](https://keepachangelog.com/en/1.1.0/). Each entry lis
 ## [Unreleased]: Wave 3 test and fix (2026-11-18)
 
 ### Fixed
+- Ecosystem browser test (2026-11-25), smaller findings:
+  - Password reset links are valid 30 minutes (spec 03 §4.4), not 1 hour; the e-mail says so. Test `controllers/__tests__/passwordResetExpiry.test.ts`.
+  - Command Center, register a standalone portal (`PUT /operator/v1/products/:key`): a malformed or reserved key answers 400 `VALIDATION_ERROR` (was 404); a display name another product already has (case-insensitive) answers 409 `NAME_IN_USE`, because launchers and the console could not tell two such portals apart. `smoke:sprint2` 8.8 register cases.
+  - An oversized or unreadable form on the hosted sign-in, operator sign-in and account pages shows a hosted error page (413 / 400) instead of the API's JSON error (`pageForm` in `identity/interactions.ts`). Test `identity/__tests__/pageForm.test.ts`.
+  - Command Center, Plans: products are chosen as checkboxes from the registered catalogue instead of typed as comma-separated keys. Spec in `e2e/operator-plans.spec.ts`.
+  - `smoke:sprint2` 8.8 signed one member in twice inside one 30-second step, which the TOTP replay fix refuses; it now waits for the next step (`freshTotp`).
 - Zyntrus sign-in walk in real browsers (2026-11-25, plan B-21 to B-23):
   - Admins who set up an authenticator app at sign-in were reported as "MFA disabled" (Admin Center health insight) and counted in the Command Center "admins without MFA" signal: both read the legacy `User.mfa_enabled`, which sign-in never sets. They now read the sign-in identity (`lib/mfaStatus.ts`; authenticator app or e-mail code). Insights raised before the fix stay open until resolved (the scan never closes insights).
   - On phones (below 640 px) every button was forced to full width: the client secret dialog showed empty Client ID and secret boxes, and icon buttons stretched across the row. The phone rule now applies to selects and date/time inputs only.

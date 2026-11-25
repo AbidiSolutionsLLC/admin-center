@@ -491,7 +491,7 @@ export const requestPasswordReset = asyncHandler(async (req: Request, res: Respo
     await PasswordResetToken.create({
       user_id: user._id,
       token_hash: tokenHash,
-      expires_at: new Date(Date.now() + 60 * 60 * 1000), // 1 hour
+      expires_at: new Date(Date.now() + 30 * 60 * 1000), // 30 minutes (03 §4.4)
     });
 
     const spaOrigin = resolveSpaOrigin();

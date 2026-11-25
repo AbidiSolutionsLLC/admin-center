@@ -76,3 +76,29 @@ test('plan 4.5: apply to organizations shows a preview, then queues the run', as
   await dialog.getByRole('button', { name: 'Apply to 2 organization(s)' }).click();
   await expect.poll(() => applied).toBe(true);
 });
+
+test('2026-11-25: products are chosen from the registered catalogue (checkboxes), not typed', async ({ page }) => {
+  let saved: any = null;
+  await page.route(PLANS, (route) => {
+    if (route.request().method() === 'POST') {
+      saved = route.request().postDataJSON();
+      return fulfillJson(route, { success: true, data: { key: 'team', name: 'Team', products: saved.products } }, 201);
+    }
+    return fulfillJson(route, { success: true, data: [] });
+  });
+  await page.route('**/operator/v1/products', (route) => fulfillJson(route, { success: true, data: [
+    { product_key: 'people', name: 'People', status: 'active' },
+    { product_key: 'zyntrus', name: 'Zyntrus', status: 'active' },
+  ] }));
+  await page.goto('/operator/plans');
+  await page.getByRole('button', { name: 'Create plan' }).first().click();
+  const dialog = page.getByRole('dialog', { name: 'Create plan' });
+  await expect(dialog.getByRole('checkbox', { name: 'People (people)' })).toBeVisible();
+  await expect(dialog.getByText('comma separated')).toHaveCount(0);
+  await dialog.getByLabel('Key').fill('team');
+  await dialog.getByLabel('Name').fill('Team');
+  await dialog.getByRole('checkbox', { name: 'Zyntrus (zyntrus)' }).click();
+  await expect(dialog.getByLabel('Default seats for zyntrus')).toBeVisible();
+  await dialog.getByRole('button', { name: 'Save' }).click();
+  await expect.poll(() => saved?.products).toEqual(['zyntrus']);
+});

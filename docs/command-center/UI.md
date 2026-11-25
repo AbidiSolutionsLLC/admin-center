@@ -17,7 +17,7 @@ All pages except the callback and the accept-invite page sit inside `OperatorGua
 | `/operator/onboarding` | `OperatorOnboardingPage.tsx` (`ListPage`) | `GET /onboarding`: stage, first admin, invitation sent and expiry, last delivery error, Resend invitation; stage filter in the URL |
 | `/operator/products` | `OperatorProductsPage.tsx` (`ListPage`) | Read-only catalogue: status, category, manifest version, roles, tenants active, suspended, restricted |
 | `/operator/health` | `OperatorHealthPage.tsx` (`DashboardPage`) | `GET /health`, `/health/sync`: overall pill, counts, a card per component, recent state changes, products sync by organisation; polls every 30 s |
-| `/operator/plans` | `OperatorPlansPage.tsx` (`ListPage`) | `GET /plans`: organisations on each, trial, version; create, edit; apply to organisations with a dry-run preview |
+| `/operator/plans` | `OperatorPlansPage.tsx` (`ListPage`) | `GET /plans`: organisations on each, trial, version; create, edit (products are chosen as checkboxes from the registered catalogue, `GET /products`); apply to organisations with a dry-run preview |
 | `/operator/operators` | `OperatorOperatorsPage.tsx` | `GET /operators`: list with role, invite, edit, suspend (confirmed first), sessions with revoke |
 | `/operator/audit` | `OperatorAuditPage.tsx` (`ListPage` and `Drawer`) | `GET /audit`: category, operator, date and action filters, detail drawer (before, after, reason), cursor paging, Export CSV |
 | `/operator/security` | `OperatorSecurityPage.tsx` (`DashboardPage`) | `GET /security`: counts, operators without MFA, locked accounts, active sessions with Revoke, failed sign-ins, role changes, organisations whose admins have no MFA |

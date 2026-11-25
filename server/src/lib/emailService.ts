@@ -445,7 +445,7 @@ export const sendPasswordResetEmail = async (
             <div style="text-align: center;">
               <a href="${reset_link}" class="button">Reset Password</a>
             </div>
-            <p style="font-size: 13px; color: #94a3b8; text-align: center;">This link will expire in 1 hour.</p>
+            <p style="font-size: 13px; color: #94a3b8; text-align: center;">This link will expire in 30 minutes.</p>
             <p style="margin-top: 32px;">If you didn't request this, you can safely ignore this email.</p>
           </div>
           <div class="footer">

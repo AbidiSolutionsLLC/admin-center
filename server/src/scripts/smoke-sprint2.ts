@@ -2472,6 +2472,11 @@ async function main() {
       const reg = await op('/products/rpfake', 'PUT', portal(1, [`${RP}/callback`]));
       const secret = ((await reg.json()) as { data?: { client_secret?: string } }).data?.client_secret || '';
       check('8.8 setup: portal registered with a client secret', reg.status === 201 && secret.length > 20, reg.status);
+      // 2026-11-25 browser test: a malformed key on register was 404; two portals could share one display name.
+      const badKey = await op('/products/Bad-Key', 'PUT', { ...portal(1, [`${RP}/callback`]), key: 'Bad-Key' });
+      check('8.8 register: a malformed key = 400 VALIDATION_ERROR (not 404)', badKey.status === 400 && ((await badKey.json()) as any).code === 'VALIDATION_ERROR', badKey.status);
+      const dupName = await op('/products/rpfaketwo', 'PUT', { ...portal(1, [`${RP}/callback2`]), key: 'rpfaketwo', name: 'rp fake' });
+      check('8.8 register: a second portal with the same name (any case) = 409 NAME_IN_USE, nothing stored', dupName.status === 409 && ((await dupName.json()) as any).code === 'NAME_IN_USE' && !(await App.exists({ product_key: 'rpfaketwo' })), dupName.status);
       check('8.8 setup: organisation entitled to the portal', (await op(`/orgs/${orgId}/entitlements/rpfake`, 'PUT', { status: 'active', reason: 'smoke rp' })).status === 200);
       const rpApp: any = await App.findOne({ product_key: 'rpfake', app_type: 'karbexa_product' }).lean();
 
@@ -2538,6 +2543,17 @@ async function main() {
         }
         return { code: null as string | null, error: null as string | null, res };
       };
+      // A TOTP code is accepted once per account (2026-11-25 F3): a second sign-in of the same member inside one 30 s
+      // step must wait for the next step instead of replaying the code.
+      const lastTotpStep = new Map<string, number>();
+      const freshTotp = async (secret: string) => {
+        const last = lastTotpStep.get(secret);
+        if (last !== undefined && Math.floor(Date.now() / 30_000) <= last) {
+          await new Promise((r) => setTimeout(r, (last + 1) * 30_000 - Date.now() + 250));
+        }
+        lastTotpStep.set(secret, Math.floor(Date.now() / 30_000));
+        return generateTotp({ secret });
+      };
       /** First sign-in: password, TOTP, then follow to the code or the denied page. */
       const signIn = async (jf: Jar, m: { email: string; totp: string }, challenge: string, extra: Record<string, string> = {}) => {
         const r0 = await jf(authorizeUrl(challenge, extra));
@@ -2547,7 +2563,7 @@ async function main() {
         await jf(IX);
         await jf(`${IX}/login`, form({ email: m.email, password: PW }));
         await jf(IX);
-        const r1 = await jf(`${IX}/totp`, form({ code: await generateTotp({ secret: m.totp }) }));
+        const r1 = await jf(`${IX}/totp`, form({ code: await freshTotp(m.totp) }));
         return follow(jf, r1);
       };
       /** Signed in already (SSO): authorize again and follow. */

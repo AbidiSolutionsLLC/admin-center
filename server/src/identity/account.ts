@@ -18,7 +18,7 @@ import { getPublicJwks, loadCookieKeys } from './keys';
 import { findLiveSession, revokeSession } from './sessions';
 import { hasAccessState } from './accounts';
 import { escapeHtml, newNonce, pageCsp, pageShell } from './html';
-import { totpValid, normaliseCode } from './interactions';
+import { totpValid, normaliseCode, pageForm } from './interactions';
 import { generateRecoveryCodes, consumeRecoveryCode } from './recoveryCodes';
 import type { OidcProvider } from './providers';
 
@@ -360,7 +360,7 @@ ${sessionsSection}
  * Must be registered BEFORE the oidc-provider tenant callback.
  */
 export function registerAccountRoutes(app: Express, provider: OidcProvider): void {
-  const form = express.urlencoded({ extended: false, limit: '20kb' });
+  const form = pageForm('20kb');
 
   // ── GET /realms/tenant/account ─────────────────────────────────────────────────────────────
   app.get(BASE, async (req: Request, res: Response) => {

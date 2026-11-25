@@ -62,6 +62,23 @@ export function send(res: Response, title: string, body: string, status = 200) {
   res.type('html').send(pageShell(nonce, title, body, res.locals.karbexaShell));
 }
 
+/**
+ * Form body parser for the hosted pages. An oversized or unreadable form gets a hosted error page with the same status
+ * (413 / 400) instead of the API's JSON error (2026-11-25 browser test: a sign-in form over 10 kB showed raw JSON).
+ */
+export function pageForm(limit: string, shell?: Response['locals']['karbexaShell']) {
+  const parse = express.urlencoded({ extended: false, limit });
+  return (req: Request, res: Response, next: (err?: unknown) => void) => parse(req, res, (err?: any) => {
+    if (!err) return next();
+    const status = typeof err.status === 'number' && err.status >= 400 && err.status < 500 ? err.status : 400;
+    if (shell) res.locals.karbexaShell = shell;
+    const tooLarge = err.type === 'entity.too.large';
+    send(res, tooLarge ? 'Request too large' : 'Request not readable',
+      `<h1>${tooLarge ? 'That form was too large' : 'That form could not be read'}</h1>`
+      + '<p class="sub">Nothing was saved. Go back and try again.</p>', status);
+  });
+}
+
 export const errBox = (msg?: string) => (msg ? `<p class="err" role="alert">${escapeHtml(msg)}</p>` : '');
 
 function renderLogin(res: Response, uid: string, opts: { error?: string; email?: string; status?: number } = {}) {
@@ -161,7 +178,7 @@ export async function claimTotpStep(model: { updateOne: (...a: any[]) => any }, 
 
 export function registerTenantInteractions(app: Express, provider: OidcProvider): void {
   const cfg = getIdentityConfig();
-  const form = express.urlencoded({ extended: false, limit: '10kb' });
+  const form = pageForm('10kb');
 
   /** Interaction for this request; its uid must equal the URL uid (CSRF / mix-up guard). */
   async function details(req: Request, res: Response) {

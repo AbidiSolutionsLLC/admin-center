@@ -62,6 +62,16 @@ const keyParam = (req: Request): string => {
   return key;
 };
 
+/** Registration names a new key, so a malformed or reserved one is the caller's input error (400), not a missing product. */
+const registerKeyParam = (req: Request): string => {
+  const key = String(req.params.key);
+  if (key === RESERVED_PRODUCT_KEY) throw new AppError(`'${key}' is reserved`, 400, 'VALIDATION_ERROR');
+  if (!PRODUCT_KEY_RE.test(key)) {
+    throw new AppError('key: 2-31 characters, a lower-case letter first, then lower-case letters, digits or _', 400, 'VALIDATION_ERROR');
+  }
+  return key;
+};
+
 /** Audit summary of a registration (no secrets; `redact` in ./audit is the second line of defence). */
 const auditSummary = (v: { name?: string; status?: string; version?: number; launch_url?: string; redirect_uris?: string[]; roles?: string[] }) => v;
 
@@ -85,7 +95,7 @@ export function standaloneRoutes(h: Helpers): Router {
 
   // Register or update. 201 + client_secret (once) on first registration of a confidential client; 200 otherwise.
   router.put('/products/:key', requireProductsWrite, asyncHandler(async (req: Request, res: Response) => {
-    const key = keyParam(req);
+    const key = registerKeyParam(req);
     const parsed = standaloneManifestSchema.safeParse(req.body);
     if (!parsed.success) throw new AppError(issuesText(parsed.error), 400, 'VALIDATION_ERROR');
     const m = parsed.data;
@@ -95,6 +105,10 @@ export function standaloneRoutes(h: Helpers): Router {
     if (existing && existing.hosting_mode !== 'standalone') {
       throw new AppError(`'${key}' is a suite product; it cannot be registered as a standalone portal`, 409, 'HOSTING_MODE_CONFLICT');
     }
+    // Launchers and the Command Center show products by name: two with one name cannot be told apart (case-insensitive).
+    const sameName = await App.findOne({ app_type: 'karbexa_product', company_id: { $exists: false }, product_key: { $ne: key }, name: m.name })
+      .collation({ locale: 'en', strength: 2 }).select('product_key').lean();
+    if (sameName) throw new AppError(`Another product (${(sameName as any).product_key}) is already called '${m.name}'`, 409, 'NAME_IN_USE');
     const current = existing?.role_catalog_version ?? 0;
     if (existing && m.version < current) throw new AppError(`version ${m.version} is older than the stored version ${current}`, 409, 'MANIFEST_STALE');
 

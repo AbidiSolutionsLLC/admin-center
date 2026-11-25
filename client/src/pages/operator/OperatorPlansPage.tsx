@@ -6,13 +6,12 @@ import { Input } from '@/components/ui/input';
 import { Textarea } from '@/components/ui/Textarea';
 import { FormField } from '@/components/ui/FormField';
 import { Tag } from '@/components/ui/Tag';
+import { Checkbox } from '@/components/ui/checkbox';
 import { DataTable } from '@/components/ui/DataTable';
 import { ListPage } from '@/components/templates/ListPage';
 import {
-  useApplyPlan, useOperatorCan, usePlanPreview, usePlans, useSavePlan, type Plan, type PlanPreview,
+  useApplyPlan, useCatalogue, useOperatorCan, usePlanPreview, usePlans, useSavePlan, type Plan, type PlanPreview,
 } from '@/features/operator/operatorApi';
-
-const parseProducts = (text: string) => text.split(',').map((p) => p.trim()).filter(Boolean);
 
 const PreviewList = ({ title, rows }: { title: string; rows: PlanPreview['added'] }) => (
   <div>
@@ -72,12 +71,20 @@ function PlanDialog({ plan, onClose }: { plan: Plan | null; onClose: () => void 
   const [key, setKey] = useState(plan?.key ?? '');
   const [name, setName] = useState(plan?.name ?? '');
   const [description, setDescription] = useState(plan?.description ?? '');
-  const [products, setProducts] = useState((plan?.products ?? []).join(', '));
+  const catalogue = useCatalogue();
+  const [list, setList] = useState<string[]>(plan?.products ?? []);
+  // Registered products to choose from (a typed key could name a product that does not exist); a key the plan already
+  // holds stays listed even if it is no longer registered, so it can be removed.
+  const options = useMemo(() => {
+    const known = (catalogue.data ?? []).map((p) => ({ key: p.product_key, name: p.name }));
+    const extra = (plan?.products ?? []).filter((k) => !known.some((o) => o.key === k)).map((k) => ({ key: k, name: k }));
+    return [...known, ...extra];
+  }, [catalogue.data, plan?.products]);
+  const toggle = (k: string, on: boolean) => setList((cur) => (on ? [...cur.filter((x) => x !== k), k] : cur.filter((x) => x !== k)));
   const [trial, setTrial] = useState(plan?.trial_days ? String(plan.trial_days) : '');
   const [seats, setSeats] = useState<Record<string, string>>(
     Object.fromEntries(Object.entries(plan?.seat_defaults ?? {}).map(([k, v]) => [k, v === null ? '' : String(v)]))
   );
-  const list = parseProducts(products);
   const submit = async () => {
     const seat_defaults = Object.fromEntries(list.filter((k) => seats[k] !== undefined && seats[k] !== '').map((k) => [k, Number(seats[k])]));
     const trial_days = trial ? Number(trial) : null;
@@ -118,9 +125,22 @@ function PlanDialog({ plan, onClose }: { plan: Plan | null; onClose: () => void 
           <FormField label="Description">
             {(p) => <Textarea {...p} maxLength={500} rows={2} value={description} onChange={(e) => setDescription(e.target.value)} />}
           </FormField>
-          <FormField label="Products" hint="Product keys, comma separated">
-            {(p) => <Input {...p} value={products} onChange={(e) => setProducts(e.target.value)} />}
-          </FormField>
+          <fieldset className="space-y-2">
+            <legend className="text-table font-medium text-ink">Products</legend>
+            {catalogue.isLoading ? (
+              <p className="text-body text-ink-muted">Loading products…</p>
+            ) : catalogue.isError && options.length === 0 ? (
+              <p className="text-body text-ink-muted">The product list could not be loaded.</p>
+            ) : (
+              options.map((o) => (
+                <label key={o.key} className="flex items-center gap-2 text-body text-ink">
+                  <Checkbox checked={list.includes(o.key)} onCheckedChange={(v) => toggle(o.key, v === true)} aria-label={`${o.name} (${o.key})`} />
+                  <span>{o.name}</span>
+                  <span className="text-ink-muted">{o.key}</span>
+                </label>
+              ))
+            )}
+          </fieldset>
           {list.length > 0 && (
             <div className="space-y-2">
               <p className="text-table font-medium text-ink">Default seats</p>

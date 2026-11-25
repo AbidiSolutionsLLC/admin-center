@@ -24,7 +24,7 @@ The controller is in the file named after the mount unless the row says otherwis
 | GET | `/health` | public | inline in `health.routes.ts` |
 | POST | `/auth/logout` | auth | `auth.controller.logout` (revokes the session, returns `end_session_url`) |
 | POST | `/auth/setup-password` | public + `authLimiter` | `auth.controller.setupPassword`. Accept: one atomic consume of the invitation, password and lifecycle state in one transaction; `email` optional (must match when sent); same six outcome codes as verify |
-| POST | `/auth/request-password-reset` | public + `authLimiter` | `auth.controller.requestPasswordReset` |
+| POST | `/auth/request-password-reset` | public + `authLimiter` | `auth.controller.requestPasswordReset`; the link is valid 30 minutes, single use (03 §4.4; was 1 hour until 2026-11-25) |
 | POST | `/auth/reset-password` | public + `authLimiter` | `auth.controller.resetPassword` (revokes all sessions of the identity) |
 | GET | `/auth/me` | auth | `auth.controller.getMe` |
 | GET | `/auth/my-permissions` | auth | `auth.controller.getMyPermissions` |

@@ -10,7 +10,7 @@ import { encrypt, decrypt } from '../lib/cryptoService';
 import { authLimiter } from '../middleware/rateLimiter';
 import { getIdentityConfig } from '../identity/config';
 import { escapeHtml, OPERATOR_SHELL } from '../identity/html';
-import { send, errBox, normaliseCode, totpStep, claimTotpStep, totpEnrolSection } from '../identity/interactions';
+import { send, errBox, normaliseCode, totpStep, claimTotpStep, totpEnrolSection, pageForm } from '../identity/interactions';
 import type { OidcProvider } from '../identity/providers';
 import { hasOperatorRole } from './accounts';
 import { isOperatorLocked, recordOperatorFailure, recordOperatorSuccess } from './signInGuard';
@@ -60,7 +60,7 @@ function renderExpired(res: Response) {
 }
 
 export function registerOperatorInteractions(app: Express, provider: OidcProvider): void {
-  const form = express.urlencoded({ extended: false, limit: '10kb' });
+  const form = pageForm('10kb', OPERATOR_SHELL);
 
   async function details(req: Request, res: Response) {
     const d = await provider.interactionDetails(req, res);
