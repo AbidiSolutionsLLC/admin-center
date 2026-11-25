@@ -9,6 +9,10 @@ import { User } from '../../models/User.model';
 import { OrganizationEntitlement } from '../../models/OrganizationEntitlement.model';
 import { SeatUsage } from '../../models/SeatUsage.model';
 import { AttentionItem, TenantDailyStat } from '../../models/Signals.model';
+import { Identity } from '../../models/Identity.model';
+import { Role } from '../../models/Role.model';
+import { UserRole } from '../../models/UserRole.model';
+import { ROLES } from '../../constants/roles';
 
 let mongo: MongoMemoryServer;
 before(async () => {
@@ -18,7 +22,7 @@ before(async () => {
 });
 after(async () => { await mongoose.disconnect(); await mongo.stop(); });
 beforeEach(async () => {
-  await Promise.all([Company, User, OrganizationEntitlement, SeatUsage, AttentionItem, TenantDailyStat].map((m: any) => m.deleteMany({})));
+  await Promise.all([Company, User, OrganizationEntitlement, SeatUsage, AttentionItem, TenantDailyStat, Identity, Role, UserRole].map((m: any) => m.deleteMany({})));
 });
 
 const now = new Date('2026-11-16T12:00:00Z');
@@ -119,4 +123,21 @@ test('daily stats: members, seats, admins without MFA; admins_without_mfa feeds 
   const items = await open('admins_without_mfa');
   assert.equal(items.length, 1);
   assert.match(items[0].summary, /2 admin/);
+});
+
+test('daily stats: an admin counts as having MFA when the Identity is enrolled, whatever the legacy User.mfa_enabled says', async () => {
+  const c = await company();
+  const superAdmin = await Role.create({ company_id: c._id, name: ROLES.SUPER_ADMIN, description: 'x', type: 'system' });
+  const enrolled = await Identity.collection.insertOne({ email: 'a1@x.test', status: 'active', mfa: { totp_enabled: true, totp_secret_enc: 'x', email_otp_enabled: false, recovery_codes_hash: [] } });
+  const notEnrolled = await Identity.collection.insertOne({ email: 'a2@x.test', status: 'active', mfa: { totp_enabled: false, email_otp_enabled: false, recovery_codes_hash: [] } });
+  const mk = (i: number, identity_id?: Types.ObjectId) => User.collection.insertOne({
+    company_id: c._id, email: `a${i}@x.test`, full_name: `A${i}`, employee_id: `A${i}`, lifecycle_state: 'active', mfa_enabled: false, role: 'Super Admin', is_active: true, ...(identity_id ? { identity_id } : {}),
+  });
+  const u1 = await mk(1, enrolled.insertedId); // enrolled at the hosted sign-in page: has MFA
+  const u2 = await mk(2, notEnrolled.insertedId); // identity without a second factor
+  const u3 = await mk(3); // no identity yet
+  for (const u of [u1, u2, u3]) await UserRole.collection.insertOne({ company_id: c._id, user_id: u.insertedId, role_id: superAdmin._id });
+  await computeDailyStats(now);
+  const row = await TenantDailyStat.findOne({ company_id: c._id }).lean();
+  assert.equal(row?.admins_without_mfa, 2);
 });

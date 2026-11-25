@@ -59,14 +59,18 @@ export const seedPermissions = async (): Promise<void> => {
     }
   }
 
-  // Upsert all permissions (avoid duplicates)
-  for (const perm of permissions) {
-    await Permission.updateOne(
-      { module: perm.module, action: perm.action, data_scope: perm.data_scope },
-      { $setOnInsert: perm },
-      { upsert: true }
-    );
-  }
+  // Upsert all permissions (avoid duplicates) in one round trip: this runs on every organisation create, and one
+  // request per permission (195) took tens of seconds against a remote database.
+  await Permission.bulkWrite(
+    permissions.map((perm) => ({
+      updateOne: {
+        filter: { module: perm.module, action: perm.action, data_scope: perm.data_scope },
+        update: { $setOnInsert: perm },
+        upsert: true,
+      },
+    })),
+    { ordered: false },
+  );
 
   const count = await Permission.countDocuments();
   console.log(`✅ Permissions seeded: ${count} total`);
@@ -172,17 +176,21 @@ async function assignRolePermissions(
     return permissionMap.get(`${module}:${action}:${scope}`);
   };
 
-  // Helper to assign permission
+  // Helper to assign permission. Writes are collected and sent in one ordered bulkWrite at the end (same result as
+  // one upsert each, in the same order), because one request per grant made organisation creation take tens of seconds.
+  const ops: any[] = [];
   const assign = async (roleId: Types.ObjectId, permId: Types.ObjectId | undefined, granted: boolean = true) => {
     if (!permId) return;
-    await RolePermission.updateOne(
-      { role_id: roleId, permission_id: permId },
-      { 
-        $set: { granted },
-        $setOnInsert: { role_id: roleId, permission_id: permId, company_id: companyId } 
+    ops.push({
+      updateOne: {
+        filter: { role_id: roleId, permission_id: permId },
+        update: {
+          $set: { granted },
+          $setOnInsert: { role_id: roleId, permission_id: permId, company_id: companyId },
+        },
+        upsert: true,
       },
-      { upsert: true, session: session ?? undefined }
-    );
+    });
   };
 
   // ── SUPER ADMIN: Full access to everything ──
@@ -275,6 +283,8 @@ async function assignRolePermissions(
     // Can read insights assigned to them
     await assign(roles[ROLES.EMPLOYEE], getPerm('insights', 'read', 'own'), true);
   }
+
+  if (ops.length) await RolePermission.bulkWrite(ops, { ordered: true, session: session ?? undefined });
 }
 
 /**

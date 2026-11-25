@@ -16,6 +16,7 @@ import { WorkScheduleAssignment } from '../models/WorkScheduleAssignment.model';
 import { InAppNotification, IInAppNotification } from '../models/InAppNotification.model';
 import { Company } from '../models/Company.model';
 import { PERMISSION_GROUPS } from '../constants/roles';
+import { usersWithMfa } from './mfaStatus';
 
 // Type alias for external imports
 export type IInsight = import('../models/Insight.model').IInsight;
@@ -894,10 +895,11 @@ export const runIntelligenceRules = async (companyId: string | Types.ObjectId): 
   // ────────────────────────────────────────────────────────────────────────────
   // 17. SECURITY: RULE-07 Admin Account with MFA Disabled
   // ────────────────────────────────────────────────────────────────────────────
-  const adminUsersWithoutMfa = activeUsers.filter((u) => {
-    const isAdmin = ['super_admin', 'Super Admin', 'hr_admin', 'HR Admin', 'it_admin', 'IT Admin', 'ops_admin', 'Ops Admin'].includes(u.role);
-    return isAdmin && !u.mfa_enabled;
-  });
+  const activeAdmins = activeUsers.filter((u) =>
+    ['super_admin', 'Super Admin', 'hr_admin', 'HR Admin', 'it_admin', 'IT Admin', 'ops_admin', 'Ops Admin'].includes(u.role));
+  // MFA lives on the Identity (hosted sign-in enrolment), not on the legacy User.mfa_enabled flag.
+  const adminsWithMfa = await usersWithMfa(activeAdmins);
+  const adminUsersWithoutMfa = activeAdmins.filter((u) => !adminsWithMfa.has(String(u._id)));
 
   for (const user of adminUsersWithoutMfa) {
     insightsToUpsert.push({

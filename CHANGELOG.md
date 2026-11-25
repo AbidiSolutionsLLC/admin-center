@@ -5,6 +5,10 @@ Format: [Keep a Changelog](https://keepachangelog.com/en/1.1.0/). Each entry lis
 ## [Unreleased]: Wave 3 test and fix (2026-11-18)
 
 ### Fixed
+- Zyntrus sign-in walk in real browsers (2026-11-25, plan B-21 to B-23):
+  - Admins who set up an authenticator app at sign-in were reported as "MFA disabled" (Admin Center health insight) and counted in the Command Center "admins without MFA" signal: both read the legacy `User.mfa_enabled`, which sign-in never sets. They now read the sign-in identity (`lib/mfaStatus.ts`; authenticator app or e-mail code). Insights raised before the fix stay open until resolved (the scan never closes insights).
+  - On phones (below 640 px) every button was forced to full width: the client secret dialog showed empty Client ID and secret boxes, and icon buttons stretched across the row. The phone rule now applies to selects and date/time inputs only.
+  - Creating an organisation took about 50 s on a remote database: permissions (195) and system role grants were written one request at a time. Both are now one `bulkWrite` each (same grants, same order, still inside the provisioning transaction).
 - Browser test of Zyntrus seats, overrides and plans (2026-11-25):
   - Apps & Access, Assign dialog: the Cancel / Confirm footer is always shown (Confirm disabled until a target is chosen); it only appeared after a target was picked, so the dialog looked as if it could not assign. The dependency check no longer shifts the footer while it loads.
   - `GET /apps/:id/dependencies` answered 404 `APP_NOT_FOUND` for every Karbexa product app (it looked up the organisation's own apps only, product apps have no `company_id`), which showed a red "App not found" toast each time a target was chosen. It now uses the same visibility as `POST /apps/:id/assign`.

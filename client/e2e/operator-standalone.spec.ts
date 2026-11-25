@@ -101,6 +101,25 @@ test('Rotate secret asks for confirmation, then shows the new secret once and th
   await expect(page.getByTestId('secret-once')).toContainText('previous secret keeps working');
 });
 
+test('on a phone the client ID and the new secret stay readable next to their copy buttons', async ({ page }) => {
+  // Regression: a global phone rule forced every button to width 100%, so the copy button took the whole row
+  // and the secret was squeezed to zero width (the text was in the DOM, so toContainText alone never noticed).
+  await page.setViewportSize({ width: 375, height: 812 });
+  await open(page);
+  await page.route('**/operator/v1/products/assets/rotate-secret', (route) =>
+    fulfillJson(route, { success: true, data: { client_id: 'karbexa-assets', client_secret: 'rotated-secret', previous_secret_expires_at: '2026-11-19T10:00:00Z' } })
+  );
+  await page.getByRole('button', { name: 'Rotate secret of Assets' }).click();
+  await page.getByRole('button', { name: 'Rotate secret', exact: true }).click();
+  for (const value of ['karbexa-assets', 'rotated-secret']) {
+    const text = page.getByTestId('secret-once').getByTitle(value);
+    await expect(text).toBeVisible();
+    expect((await text.boundingBox())!.width).toBeGreaterThan(100);
+  }
+  const copy = await page.getByRole('button', { name: 'Copy Client secret' }).boundingBox();
+  expect(copy!.width).toBeLessThan(48);
+});
+
 test('server refusals (ROLE_IN_USE) surface as an error and keep the form open', async ({ page }) => {
   await open(page);
   await page.route('**/operator/v1/products/assets', (route) => fulfillJson(route, { success: false, error: 'Role in use', code: 'ROLE_IN_USE' }, 409));

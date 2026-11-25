@@ -17,6 +17,7 @@ import { SecurityEvent } from '../models/SecurityEvent.model';
 import { AttentionItem, TenantDailyStat, type AttentionSeverity } from '../models/Signals.model';
 import { ACCESS_STATES } from '../identity/config';
 import { ROLES } from '../constants/roles';
+import { usersWithMfa } from './mfaStatus';
 import { every } from './periodic';
 import { probeProducts } from './health/productsProbe';
 
@@ -240,17 +241,17 @@ export async function computeDailyStats(now: Date = new Date()): Promise<number>
     Role.find({ name: ROLES.SUPER_ADMIN }).select('_id').lean(),
   ]);
   const links = adminRole.length ? await UserRole.find({ role_id: { $in: adminRole.map((r) => r._id) } }).select('user_id').lean() : [];
-  const noMfa = links.length
-    ? await User.aggregate<{ _id: Types.ObjectId; n: number }>([
-      { $match: { _id: { $in: links.map((l) => l.user_id) }, lifecycle_state: { $in: states }, mfa_enabled: { $ne: true } } },
-      { $group: { _id: '$company_id', n: { $sum: 1 } } },
-    ])
+  // MFA lives on the Identity (hosted sign-in enrolment), not on the legacy User.mfa_enabled flag.
+  const admins = links.length
+    ? await User.find({ _id: { $in: links.map((l) => l.user_id) }, lifecycle_state: { $in: states } }).select('_id company_id identity_id').lean()
     : [];
+  const withMfa = await usersWithMfa(admins);
+  const mfa = new Map<string, number>();
+  for (const a of admins) if (!withMfa.has(String(a._id))) mfa.set(String(a.company_id), (mfa.get(String(a.company_id)) ?? 0) + 1);
 
   const seatMap = new Map<string, Record<string, number>>();
   for (const s of seatRows) seatMap.set(String(s.company_id), { ...(seatMap.get(String(s.company_id)) ?? {}), [s.product_key]: s.used });
   const sign = new Map(signIns.map((r) => [String(r._id), r.n]));
-  const mfa = new Map(noMfa.map((r) => [String(r._id), r.n]));
 
   if (members.length === 0) return 0;
   await TenantDailyStat.bulkWrite(members.map((m) => ({

@@ -718,7 +718,9 @@ select option {
   .responsive-hide {
     display: none !important;
   }
-  select, input[type="time"], input[type="date"], button {
+  /* Form controls fill the row on phones. Buttons are not listed: forcing every button to 100% also stretched
+     icon buttons (copy, close) and pushed the text beside them to zero width, e.g. the client secret dialog. */
+  select, input[type="time"], input[type="date"] {
     width: 100% !important;
     max-width: 100% !important;
   }
