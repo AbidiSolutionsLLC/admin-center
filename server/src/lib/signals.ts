@@ -55,6 +55,16 @@ export const startOfDay = (d: Date) => new Date(Date.UTC(d.getUTCFullYear(), d.g
 
 // ── Rules ────────────────────────────────────────────────────────────────────────────────────
 
+/**
+ * The ids from `ids` whose organization is not closed. A closed organization is permanent and has no members, so it must
+ * not raise attention items (an expiring override, seats, admins without MFA, an undelivered invitation, sync lag).
+ */
+async function notClosed(ids: ReadonlyArray<Types.ObjectId | string>): Promise<Set<string>> {
+  if (ids.length === 0) return new Set();
+  const rows = await Company.find({ _id: { $in: ids }, status: { $ne: 'closed' } }).select('_id').lean();
+  return new Set(rows.map((r) => String(r._id)));
+}
+
 async function provisioningFailed(now: Date): Promise<Desired[]> {
   // The code has no 'provisioning_failed' status (a failed provisioning rolls back). A tenant that stays in
   // 'provisioning' past the limit is the nearest stuck state.
@@ -63,7 +73,9 @@ async function provisioningFailed(now: Date): Promise<Desired[]> {
 }
 
 async function invitationRules(now: Date): Promise<Desired[]> {
-  const invs = await Invitation.find({ kind: 'first_admin', state: 'pending', company_id: { $ne: null } }).select('company_id user_id expires_at createdAt').lean();
+  const pending = await Invitation.find({ kind: 'first_admin', state: 'pending', company_id: { $ne: null } }).select('company_id user_id expires_at createdAt').lean();
+  const open = await notClosed(pending.map((i) => i.company_id as Types.ObjectId));
+  const invs = pending.filter((i) => open.has(String(i.company_id)));
   if (invs.length === 0) return [];
   const n = await names(invs.map((i) => i.company_id as Types.ObjectId));
   const out: Desired[] = [];
@@ -102,7 +114,9 @@ async function trials(now: Date): Promise<Desired[]> {
 }
 
 async function seats(): Promise<Desired[]> {
-  const ents = await OrganizationEntitlement.find({ status: 'active', seats_limit: { $gt: 0 } }).select('company_id product_key seats_limit').lean();
+  const all = await OrganizationEntitlement.find({ status: 'active', seats_limit: { $gt: 0 } }).select('company_id product_key seats_limit').lean();
+  const open = await notClosed(all.map((e) => e.company_id as Types.ObjectId));
+  const ents = all.filter((e) => open.has(String(e.company_id)));
   if (ents.length === 0) return [];
   const usage = await SeatUsage.find({ company_id: { $in: ents.map((e) => e.company_id) } }).select('company_id product_key used').lean();
   const used = new Map(usage.map((u) => [`${u.company_id}:${u.product_key}`, u.used]));
@@ -125,7 +139,9 @@ async function seats(): Promise<Desired[]> {
 async function syncLag(): Promise<Desired[]> {
   const p = await probeProducts();
   if (!p || !p.answered) throw new Error('products backend did not answer'); // leave existing sync_lag items alone
-  const rows = p.orgs.filter((o) => Types.ObjectId.isValid(o.platformOrgId) && syncLagging(o));
+  const lagging = p.orgs.filter((o) => Types.ObjectId.isValid(o.platformOrgId) && syncLagging(o));
+  const open = await notClosed(lagging.map((o) => o.platformOrgId));
+  const rows = lagging.filter((o) => open.has(String(o.platformOrgId)));
   const n = await names(rows.map((o) => o.platformOrgId));
   return rows.map((o) => ({
     kind: 'sync_lag', severity: 'warning', company_id: new Types.ObjectId(o.platformOrgId),
@@ -134,7 +150,9 @@ async function syncLag(): Promise<Desired[]> {
 }
 
 async function overrides(now: Date): Promise<Desired[]> {
-  const rows = await OrganizationEntitlement.find({ source: 'operator', expires_at: { $gt: now, $lte: new Date(now.getTime() + 7 * DAY) } }).select('company_id product_key expires_at').lean();
+  const expiring = await OrganizationEntitlement.find({ source: 'operator', expires_at: { $gt: now, $lte: new Date(now.getTime() + 7 * DAY) } }).select('company_id product_key expires_at').lean();
+  const open = await notClosed(expiring.map((r) => r.company_id as Types.ObjectId));
+  const rows = expiring.filter((r) => open.has(String(r.company_id)));
   const n = await names(rows.map((r) => r.company_id));
   const one = new Map<string, Desired>();
   for (const r of rows) {
@@ -154,7 +172,8 @@ async function noMfa(now: Date): Promise<Desired[]> {
   const stats = await TenantDailyStat.find({ day: { $gte: new Date(startOfDay(now).getTime() - DAY) }, admins_without_mfa: { $gt: 0 } }).sort({ day: -1 }).select('company_id admins_without_mfa').lean();
   const seen = new Map<string, number>();
   for (const s of stats) if (!seen.has(String(s.company_id))) seen.set(String(s.company_id), s.admins_without_mfa);
-  const ids = [...seen.keys()].map((id) => new Types.ObjectId(id));
+  const open = await notClosed([...seen.keys()]);
+  const ids = [...seen.keys()].filter((id) => open.has(id)).map((id) => new Types.ObjectId(id));
   const n = await names(ids);
   return ids.map((id) => ({ kind: 'admins_without_mfa', severity: 'warning', company_id: id, summary: `${label(n, id)}: ${seen.get(String(id))} admin(s) without MFA`, link: link(id, 'admins') }));
 }

@@ -2,6 +2,7 @@ import { useState } from 'react';
 import { Modal } from '@/components/ui/Modal';
 import {
   idOf, useInviteOperator, useOperatorCan, useOperators, useOperatorSessions, useRevokeOperatorSession, useSaveOperator, OPERATOR_ROLE_OPTIONS,
+  type OperatorUser,
 } from '@/features/operator/operatorApi';
 
 const inputCls = 'w-full h-9 px-3 text-sm bg-surface border border-line rounded-md focus:outline-none focus:ring-2 focus:ring-primary-600';
@@ -16,6 +17,8 @@ export default function OperatorOperatorsPage() {
   const [inviting, setInviting] = useState(false);
   const [inviteRole, setInviteRole] = useState<string>('support');
   const [sessionsFor, setSessionsFor] = useState<string | null>(null);
+  // Suspending ends the operator's sessions and blocks sign-in, so it is confirmed; reactivating is not.
+  const [suspending, setSuspending] = useState<OperatorUser | null>(null);
   const sessions = useOperatorSessions(sessionsFor);
   const revoke = useRevokeOperatorSession();
 
@@ -35,20 +38,21 @@ export default function OperatorOperatorsPage() {
       <div className="bg-surface border border-line rounded-lg overflow-x-auto">
         <table className="w-full text-sm">
           <thead className="bg-surface-alt text-ink-muted text-xs uppercase">
-            <tr><th className="text-left p-3">Name</th><th className="text-left p-3">Email</th><th className="text-left p-3">Status</th><th className="p-3" /></tr>
+            <tr><th className="text-left p-3">Name</th><th className="text-left p-3">Email</th><th className="text-left p-3">Role</th><th className="text-left p-3">Status</th><th className="p-3" /></tr>
           </thead>
           <tbody className="divide-y divide-line">
-            {isLoading && <tr><td colSpan={4} className="p-6 text-center text-ink-muted">Loading...</td></tr>}
+            {isLoading && <tr><td colSpan={5} className="p-6 text-center text-ink-muted">Loading...</td></tr>}
             {(operators ?? []).map((o) => (
               <tr key={idOf(o)}>
                 <td className="p-3">{o.full_name ?? '-'}</td>
                 <td className="p-3">{o.email}</td>
+                <td className="p-3">{(o.roles ?? []).map((r) => r.replace('_', ' ')).join(', ') || '-'}</td>
                 <td className="p-3">{o.status}</td>
                 <td className="p-3 text-right">
                   <button onClick={() => setSessionsFor(idOf(o))} className="mr-2 text-xs px-2 h-7 border border-line rounded-md hover:bg-surface-alt">Sessions</button>
                   {canWrite && <button
                     disabled={save.isPending}
-                    onClick={() => save.mutate({ id: idOf(o), body: { status: o.status === 'suspended' ? 'active' : 'suspended' } })}
+                    onClick={() => (o.status === 'suspended' ? save.mutate({ id: idOf(o), body: { status: 'active' } }) : setSuspending(o))}
                     className="text-xs px-2 h-7 border border-line rounded-md hover:bg-surface-alt"
                   >{o.status === 'suspended' ? 'Reactivate' : 'Suspend'}</button>}
                 </td>
@@ -69,6 +73,21 @@ export default function OperatorOperatorsPage() {
             <div className="flex justify-end gap-2 pt-2">
               <button onClick={() => setInviting(false)} className="h-9 px-4 text-sm border border-line rounded-md">Cancel</button>
               <button onClick={sendInvite} disabled={!email || !fullName || invite.isPending} className="h-9 px-4 text-sm bg-primary text-white rounded-md disabled:opacity-50">Send invitation</button>
+            </div>
+          </div>
+        </Modal>
+      )}
+      {suspending && (
+        <Modal isOpen onClose={() => setSuspending(null)} title={`Suspend ${suspending.full_name || suspending.email}?`} size="sm">
+          <div className="space-y-3">
+            <p className="text-sm text-ink-secondary">Their open sessions end now and they cannot sign in until you reactivate them. It is recorded in the audit log.</p>
+            <div className="flex justify-end gap-2 pt-2">
+              <button onClick={() => setSuspending(null)} className="h-9 px-4 text-sm border border-line rounded-md">Cancel</button>
+              <button
+                disabled={save.isPending}
+                onClick={() => save.mutate({ id: idOf(suspending), body: { status: 'suspended' } }, { onSuccess: () => setSuspending(null), onError: () => setSuspending(null) })}
+                className="h-9 px-4 text-sm bg-primary text-white rounded-md disabled:opacity-50"
+              >Suspend</button>
             </div>
           </div>
         </Modal>

@@ -48,7 +48,16 @@ export const useOperatorMe = () =>
 
 export const useOperatorCan = (permission: string) => !!useOperatorMe().data?.permissions.includes(permission);
 
-export const errMsg = (e: any, fallback: string) => e?.response?.data?.error || e?.response?.data?.message || fallback;
+/**
+ * The server's message. A validation answer carries `details: [{ path, message }]`; the first one is appended so the
+ * operator sees which field is wrong ("Validation failed. Please check your input. (first_admin.email: Invalid email)").
+ */
+export const errMsg = (e: any, fallback: string) => {
+  const data = e?.response?.data;
+  const base = data?.error || data?.message || fallback;
+  const first = Array.isArray(data?.details) ? data.details.find((d: any) => d && typeof d.message === 'string') : undefined;
+  return first ? `${base} (${first.path ? `${first.path}: ` : ''}${first.message})` : base;
+};
 
 export interface OrgEntitlement { product_key: string; status: string; seats_limit?: number | null }
 export interface OperatorOrg {

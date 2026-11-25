@@ -81,6 +81,19 @@ test('seats, inactive tenants and expiring overrides', async () => {
   assert.equal((await open('seats_near_limit')).length, 1);
 });
 
+test('a closed organization raises no attention items and its open ones resolve (regression: override_expiring stayed open)', async () => {
+  const c = await company();
+  await OrganizationEntitlement.create({ company_id: c._id, product_key: 'people', status: 'active', seats_limit: 10, source: 'operator', reason: 'x', expires_at: new Date(now.getTime() + 2 * DAY) });
+  await SeatUsage.create({ company_id: c._id, product_key: 'people', used: 12, computed_at: now });
+  await TenantDailyStat.create({ company_id: c._id, day: startOfDay(now), members_total: 1, members_active: 1, admins_without_mfa: 1, seats: {} });
+  await runSignals(now);
+  const kinds = ['override_expiring', 'seats_over_limit', 'admins_without_mfa'];
+  for (const k of kinds) assert.equal((await open(k)).length, 1, k);
+  await Company.updateOne({ _id: c._id }, { $set: { status: 'closed' } });
+  await runSignals(new Date(now.getTime() + 60_000));
+  for (const k of kinds) assert.equal((await open(k)).length, 0, `${k} resolves once the organization is closed`);
+});
+
 test('a tenant with no sign-in yet is inactive only once it is older than 14 days', async () => {
   await company({ last_activity_at: undefined, created_at: new Date(now.getTime() - 3 * DAY) });
   await company({ last_activity_at: undefined, created_at: new Date(now.getTime() - 30 * DAY) });

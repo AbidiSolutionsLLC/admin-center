@@ -27,6 +27,8 @@ const STATUS_VARIANT: Record<string, 'success' | 'warning' | 'neutral' | 'error'
   active: 'success', suspended: 'warning', closed: 'neutral', restricted: 'warning', not_entitled: 'neutral',
 };
 
+const MAX_TAGS = 10; // the server refuses more (PATCH /orgs/:id, tags ≤ 10)
+
 function SummaryTab({ id }: { id: string }) {
   const { data: org } = useOrg(id);
   const idps = useOrgIdps(id);
@@ -53,7 +55,7 @@ function SummaryTab({ id }: { id: string }) {
           {canWrite && (
             <form className="flex gap-2" onSubmit={(e) => { e.preventDefault(); addTag(); }}>
               <Input aria-label="New tag" placeholder="Add a tag" maxLength={30} value={tagText} onChange={(e) => setTagText(e.target.value)} className="w-40" />
-              <Button type="submit" variant="outline" disabled={!tagText.trim() || patch.isPending}>Add</Button>
+              <Button type="submit" variant="outline" disabled={!tagText.trim() || patch.isPending || (org.tags ?? []).length >= MAX_TAGS} title={(org.tags ?? []).length >= MAX_TAGS ? `At most ${MAX_TAGS} tags` : undefined}>Add</Button>
             </form>
           )}
         </div>
@@ -234,7 +236,11 @@ function ProductsTab({ id }: { id: string }) {
       id: 'seats',
       cell: ({ row }) =>
         row.original.seats_used === null || row.original.seats_used === undefined ? (
-          <span className="tabular">{row.original.seats_limit ?? 'No limit'}</span>
+          // No count stored yet (a product registered after the last recompute): say so instead of a bare number.
+          <span className="tabular">
+            {row.original.seats_limit === null || row.original.seats_limit === undefined ? 'No limit' : `Limit ${row.original.seats_limit}`}
+            <span className="text-ink-muted"> (not counted yet)</span>
+          </span>
         ) : (
           <SeatMeter label="" used={row.original.seats_used} total={row.original.seats_limit} className="min-w-40" />
         ),

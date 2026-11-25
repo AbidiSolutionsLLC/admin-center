@@ -36,7 +36,18 @@ test('suspend sends status; sessions dialog lists sessions', async ({ page }) =>
   await expect(page.getByText('10.0.0.5')).toBeVisible();
   await page.keyboard.press('Escape');
   await row.getByRole('button', { name: 'Suspend' }).click();
+  // Suspending is confirmed first; nothing is sent until then.
+  const dialog = page.getByRole('dialog', { name: /Suspend Sue Support/ });
+  await expect(dialog).toContainText('cannot sign in until you reactivate');
+  expect(patch).toBeUndefined();
+  await dialog.getByRole('button', { name: 'Suspend', exact: true }).click();
   await expect.poll(() => patch).toMatchObject({ status: 'suspended' });
+});
+
+test('the list shows each operator\'s role', async ({ page }) => {
+  await page.goto('/operator/operators');
+  await expect(page.getByRole('row', { name: /Sue Support/ })).toContainText('support');
+  await expect(page.getByRole('row', { name: /Op One/ })).toContainText('platform admin');
 });
 
 test('a read-only operator sees no write buttons', async ({ page }) => {
