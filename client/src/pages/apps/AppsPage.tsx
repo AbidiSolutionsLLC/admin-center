@@ -696,8 +696,10 @@ export default function AppsPage() {
             </div>
 
             {/* Dependency Warning & Confirm */}
-            {(assignTargetId || (assignTargetType === 'attribute' && assignAttributeName && assignAttributeValue)) && (
+            {/* The Cancel / Confirm footer is always shown; Confirm stays disabled until a target is chosen. */}
+            {(
               <AssignmentRuleBuilder
+                hasTarget={!!(assignTargetId || (assignTargetType === 'attribute' && assignAttributeName && assignAttributeValue))}
                 appId={selectedApp._id}
                 appName={selectedApp.name}
                 targetType={assignTargetType}

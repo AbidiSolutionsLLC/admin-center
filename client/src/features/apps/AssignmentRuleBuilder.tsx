@@ -12,6 +12,8 @@ interface AssignmentRuleBuilderProps {
   onConfirm: () => void;
   onCancel: () => void;
   isSubmitting?: boolean;
+  /** False until a target is chosen: the Cancel / Confirm footer stays visible, Confirm is disabled, no checks run. */
+  hasTarget?: boolean;
 }
 
 /**
@@ -29,22 +31,24 @@ export const AssignmentRuleBuilder: React.FC<AssignmentRuleBuilderProps> = ({
   onConfirm,
   onCancel,
   isSubmitting = false,
+  hasTarget = true,
 }) => {
   const { data: dependencyCheck, isLoading } = useCheckAppDependencies(
     appId,
     targetType,
-    targetId,
+    hasTarget ? targetId : '',
     attributeName,
     attributeValue
   );
 
-  const hasUnmetDependencies = dependencyCheck && !dependencyCheck.dependencies_met;
-  const hasConflicts = dependencyCheck && dependencyCheck.has_conflicts;
-  const canAssign = !hasUnmetDependencies && !hasConflicts;
+  const hasUnmetDependencies = hasTarget && dependencyCheck && !dependencyCheck.dependencies_met;
+  const hasConflicts = hasTarget && dependencyCheck && dependencyCheck.has_conflicts;
+  const canAssign = hasTarget && !hasUnmetDependencies && !hasConflicts;
 
   return (
     <div className="space-y-3">
-      {/* Assignment Summary */}
+      {/* Assignment Summary (fixed height so the footer does not jump while the checks load) */}
+      {hasTarget && (
       <div className="p-3 bg-surface-alt rounded-md border border-line">
         <div className="flex items-center gap-2 text-sm">
           <Shield className="h-4 w-4 text-primary-600" />
@@ -54,12 +58,13 @@ export const AssignmentRuleBuilder: React.FC<AssignmentRuleBuilderProps> = ({
           <span className="text-ink-muted text-xs">({targetType})</span>
         </div>
       </div>
+      )}
 
       {/* Warning/Error Blocks */}
-      {isLoading ? (
+      {!hasTarget ? null : isLoading ? (
         <div className="h-12 bg-surface-alt animate-pulse rounded" />
       ) : (
-        <div className="space-y-2">
+        <div className="space-y-2 min-h-[3rem]">
           {hasConflicts && (
             <div className="p-3 bg-error/10 border border-error/30 rounded-md">
               <div className="flex items-start gap-2">

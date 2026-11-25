@@ -376,6 +376,11 @@ async function main() {
       check('E4a assign: effective-access shows the granted sign role', (await liveAccess()).sign === r1, await liveAccess());
       await verify('assign', 'smoke-assign', 'apps.assigned');
 
+      // The Assign dialog checks dependencies for the chosen target; a product app has no company_id and answered 404 here.
+      res = await tenant(`/apps/${signApp!._id}/dependencies?target_type=user&target_id=${me._id}`, 'GET', undefined, 'smoke-deps');
+      const depsJson = await res.json() as { data?: { dependencies_met?: boolean } };
+      check('E4a GET /apps/:id/dependencies on a product app = 200 and met (was 404)', res.status === 200 && depsJson.data?.dependencies_met === true, `${res.status} ${JSON.stringify(depsJson).slice(0, 160)}`);
+
       res = await tenant(`/apps/assignments/${asg?._id}`, 'PATCH', { product_role_key: r2 }, 'smoke-update');
       check('E4a tenant PATCH assignment = 200', res.status === 200, `${res.status}`);
       await verify('update', 'smoke-update', 'apps.assignment_updated');
@@ -1964,6 +1969,19 @@ async function main() {
       await op('/plans/p45', 'PATCH', { products: ['people', 'desk'] });
       await op(`/orgs/${cid}`, 'PATCH', { plan_key: 'p45' });
       check('4.5 a restricted product that returns to the plan is active again', (await Ent.findOne({ company_id: cid, product_key: 'desk' }))?.status === 'active');
+
+      // A changed seat default reaches tenants already on the plan (it used to say "already up to date").
+      await op('/plans/p45', 'PATCH', { seat_defaults: { people: 25, desk: 4 } });
+      const dry3 = await json(await op('/plans/p45/apply?dry_run=true', 'POST'));
+      check('4.5 a changed seat default is reported as reseated and counts the tenant', dry3.data.reseated?.[0]?.product_key === 'desk' && dry3.data.tenants_affected === 1, JSON.stringify(dry3.data));
+      await op('/plans/p45/apply', 'POST');
+      await processDueJobs();
+      const reseated = new Map((await Ent.find({ company_id: cid })).map((e) => [e.product_key, e]));
+      check('4.5 apply: the plan-sourced seat limit follows the new default; the override is untouched', reseated.get('desk')?.seats_limit === 4 && reseated.get('people')?.source === 'operator' && reseated.get('people')?.status === 'suspended', JSON.stringify([...reseated.values()].map((e) => [e.product_key, e.seats_limit, e.source])));
+      await op('/plans/p45', 'PATCH', { seat_defaults: { people: 25 } });
+      await op('/plans/p45/apply', 'POST');
+      await processDueJobs();
+      check('4.5 apply: a seat default removed from the plan removes the limit', (await Ent.findOne({ company_id: cid, product_key: 'desk' }))?.seats_limit == null);
     }
 
     // ── Plan 4.4: tenant profile (products, admins, notes, tags and trial) ───────────────────

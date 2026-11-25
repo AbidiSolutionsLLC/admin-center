@@ -162,7 +162,11 @@ function ChangePlanDialog({ orgId, current, onClose }: { orgId: string; current:
   const [plan, setPlan] = useState('');
   const preview = useOrgPlanPreview(orgId, plan);
   const change = useChangePlan(orgId);
-  const lists = preview.data && ([['Products added', preview.data.added], ['Products restricted', preview.data.restricted]] as const);
+  const lists = preview.data && [
+    ['Products added', preview.data.added],
+    ['Products restricted', preview.data.restricted],
+    ...(preview.data.reseated?.length ? [['Seat limit follows the plan', preview.data.reseated] as const] : []),
+  ] as ReadonlyArray<readonly [string, { product_key: string }[]]>;
   return (
     <Modal
       isOpen

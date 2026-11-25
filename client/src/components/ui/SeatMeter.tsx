@@ -11,8 +11,9 @@ interface SeatMeterProps {
 
 /** SeatMeter: used of total seats; amber from 90 %, red at the limit (DRD 9.2). */
 export const SeatMeter: React.FC<SeatMeterProps> = ({ used, total, label = 'Seats', className }) => {
-  const limit = typeof total === 'number' && total > 0 ? total : null;
-  const pct = limit ? Math.min(100, Math.round((used / limit) * 100)) : 0;
+  // 0 is a real limit (no seats; the server refuses every assignment); only null / undefined mean unlimited.
+  const limit = typeof total === 'number' && total >= 0 ? total : null;
+  const pct = limit === null ? 0 : limit === 0 ? 100 : Math.min(100, Math.round((used / limit) * 100));
   const bar = pct >= 100 ? 'bg-error' : pct >= 90 ? 'bg-warning' : 'bg-primary';
   return (
     <div className={cn('flex flex-col gap-1', className)}>
@@ -20,10 +21,10 @@ export const SeatMeter: React.FC<SeatMeterProps> = ({ used, total, label = 'Seat
         <span className="text-ink-secondary">{label}</span>
         <span className="tabular text-ink">
           {used}
-          {limit ? ` of ${limit}` : ' (unlimited)'}
+          {limit !== null ? ` of ${limit}` : ' (unlimited)'}
         </span>
       </div>
-      {limit && (
+      {limit !== null && (
         <div
           role="progressbar"
           aria-label={label}

@@ -1,6 +1,6 @@
 // Operator API client + hooks + contract types (one place to adapt to backend shape).
 import axios from 'axios';
-import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
+import { useQuery, useMutation, useQueryClient, type QueryClient } from '@tanstack/react-query';
 import { toast } from 'sonner';
 import { refreshOperatorSession, startOperatorLogin, useOperatorAuthStore } from './operatorAuth';
 
@@ -63,6 +63,8 @@ export interface Plan {
 export interface PlanPreview {
   added: { product_key: string; tenants: number }[]; restricted: { product_key: string; tenants: number }[];
   unchanged: { product_key: string; tenants: number }[]; tenants_affected: number;
+  /** Products whose seat limit follows a changed plan default (absent on servers that predate it). */
+  reseated?: { product_key: string; tenants: number }[];
 }
 export interface OperatorUser { id?: string; _id?: string; email: string; full_name?: string; roles?: string[]; status: string; mfa_enabled?: boolean; last_login_at?: string | null; created_at?: string }
 export interface AuditEntry {
@@ -125,6 +127,7 @@ export const useSetEntitlement = () => {
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ['operator', 'orgs'] });
       qc.invalidateQueries({ queryKey: ['operator', 'org'] });
+      refetchSeatCountsLater(qc);
       toast.success('Override saved');
     },
     onError: (e) => toast.error(errMsg(e, 'Failed to save override')),
@@ -160,7 +163,7 @@ export const useApplyPlan = () => {
   const qc = useQueryClient();
   return useMutation({
     mutationFn: async (key: string) => (await operatorApi.post(`/plans/${key}/apply`)).data.data as { queued: number },
-    onSuccess: (r) => { qc.invalidateQueries({ queryKey: ['operator'] }); toast.success(`Plan applying to ${r.queued} organization(s)`); },
+    onSuccess: (r) => { qc.invalidateQueries({ queryKey: ['operator'] }); refetchSeatCountsLater(qc); toast.success(`Plan applying to ${r.queued} organization(s)`); },
     onError: (e) => toast.error(errMsg(e, 'Failed to apply plan')),
   });
 };
@@ -239,12 +242,29 @@ export const useOrgOnboarding = (id: string) =>
 export const useOrgIdps = (id: string) =>
   useQuery({ queryKey: orgKey(id, 'idps'), queryFn: async () => ((await operatorApi.get(`/orgs/${id}/identity-providers`)).data.data ?? []) as OrgIdp[] });
 
-/** A mutation on one organization that refreshes everything cached for it (and the list). */
-function useOrgMutation<V>(id: string, fn: (v: V) => Promise<unknown>, done: string, failed: string) {
+/**
+ * Seat counts are recomputed by the server about a second after an entitlement or plan change, so the refetch that
+ * follows the save still sees the old counts. Refetch once more after that delay.
+ */
+function refetchSeatCountsLater(qc: QueryClient) {
+  for (const ms of [1800, 5000]) { // about 5 s against a remote database
+    setTimeout(() => {
+      qc.invalidateQueries({ queryKey: ['operator', 'org'] });
+      qc.invalidateQueries({ queryKey: ['operator', 'orgs'] });
+    }, ms);
+  }
+}
+
+/** A mutation on one organization that refreshes everything cached for it (and the list). `seats`: also refetch after the seat recompute. */
+function useOrgMutation<V>(id: string, fn: (v: V) => Promise<unknown>, done: string, failed: string, seats = false) {
   const qc = useQueryClient();
   return useMutation({
     mutationFn: fn,
-    onSuccess: () => { qc.invalidateQueries({ queryKey: ['operator', 'org', id] }); qc.invalidateQueries({ queryKey: ['operator', 'orgs'] }); toast.success(done); },
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ['operator', 'org', id] }); qc.invalidateQueries({ queryKey: ['operator', 'orgs'] });
+      if (seats) refetchSeatCountsLater(qc);
+      toast.success(done);
+    },
     onError: (e) => toast.error(errMsg(e, failed)),
   });
 }
@@ -264,7 +284,7 @@ export const useApproveTenant = (id: string) =>
 
 export const useRemoveOverride = (id: string) =>
   useOrgMutation(id, ({ productKey, reason }: { productKey: string; reason: string }) =>
-    operatorApi.delete(`/orgs/${id}/entitlements/${productKey}/override`, { params: { reason } }), 'Override removed', 'Failed to remove override');
+    operatorApi.delete(`/orgs/${id}/entitlements/${productKey}/override`, { params: { reason } }), 'Override removed', 'Failed to remove override', true);
 
 /** Dry run of moving one organization to a plan (PATCH ?dry_run=true): nothing is written. */
 export const useOrgPlanPreview = (id: string, planKey: string) =>
@@ -275,7 +295,7 @@ export const useOrgPlanPreview = (id: string, planKey: string) =>
     queryFn: async () => (await operatorApi.patch(`/orgs/${id}`, { plan_key: planKey }, { params: { dry_run: true } })).data.data as PlanPreview,
   });
 export const useChangePlan = (id: string) =>
-  useOrgMutation(id, (plan_key: string) => operatorApi.patch(`/orgs/${id}`, { plan_key }), 'Plan changed', 'Failed to change plan');
+  useOrgMutation(id, (plan_key: string) => operatorApi.patch(`/orgs/${id}`, { plan_key }), 'Plan changed', 'Failed to change plan', true);
 
 /** Organizations whose first admin has not finished onboarding (GET /onboarding), each with its stage. */
 export const useOnboardingList = (params: { cursor?: string; limit?: number }) =>

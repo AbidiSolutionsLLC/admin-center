@@ -1,5 +1,6 @@
 // client/src/features/apps/useApps.ts
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
+import { refreshSeatCounts } from './productAccess';
 import { apiClient } from '@/lib/apiClient';
 import { QUERY_KEYS } from '@/constants/queryKeys';
 import type { App, AppAssignment, AssignAppInput, DependencyCheckResult } from '@/types';
@@ -54,6 +55,7 @@ export const useAssignApp = () => {
       queryClient.invalidateQueries({ queryKey: QUERY_KEYS.APP_DETAIL(appId) });
       queryClient.invalidateQueries({ queryKey: QUERY_KEYS.APP_ASSIGNMENTS(appId) });
       queryClient.invalidateQueries({ queryKey: QUERY_KEYS.APP_TIMELINE(appId) });
+      refreshSeatCounts(queryClient);
       toast.success(`App assigned to ${data.affected_users} user(s)`);
     },
     onError: (error: any) => {
@@ -100,6 +102,7 @@ export const useRevokeApp = () => {
       queryClient.invalidateQueries({ queryKey: QUERY_KEYS.APP_DETAIL(variables.appId) });
       queryClient.invalidateQueries({ queryKey: QUERY_KEYS.APP_ASSIGNMENTS(variables.appId) });
       queryClient.invalidateQueries({ queryKey: QUERY_KEYS.APP_TIMELINE(variables.appId) });
+      refreshSeatCounts(queryClient);
     },
     onSuccess: () => {
       toast.success('App assignment revoked');

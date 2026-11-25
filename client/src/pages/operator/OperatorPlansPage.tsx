@@ -53,10 +53,11 @@ function ApplyPlanDialog({ plan, onClose }: { plan: Plan; onClose: () => void })
           <p className="text-body text-ink-secondary">
             {data.tenants_affected === 0
               ? 'Every organization on this plan is already up to date.'
-              : 'Overrides are never changed. A product that leaves the plan is restricted: access off, data kept.'}
+              : 'Overrides are never changed. A product that leaves the plan is restricted: access off, data kept. Seat limits follow the plan\'s default seats.'}
           </p>
           <PreviewList title="Products added" rows={data.added} />
           <PreviewList title="Products restricted" rows={data.restricted} />
+          {(data.reseated?.length ?? 0) > 0 && <PreviewList title="Seat limit follows the plan" rows={data.reseated ?? []} />}
           <PreviewList title="Unchanged" rows={data.unchanged} />
         </div>
       )}

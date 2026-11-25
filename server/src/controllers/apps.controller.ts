@@ -1008,10 +1008,11 @@ export const checkAppDependencies = asyncHandler(async (req: Request, res: Respo
     throw new AppError('target_id query parameter is required', 400, 'MISSING_PARAMS');
   }
 
-  // Get app with dependencies
+  // Get app with dependencies. Same visibility as assignApp: the tenant's own apps and the system product apps
+  // (no company_id); looking up the tenant's apps only made every Karbexa product answer 404 here.
   const app = await App.findOne({
     _id: appId,
-    company_id: companyId,
+    $or: [{ company_id: companyId }, { company_id: { $exists: false } }],
   }).lean();
 
   if (!app) {

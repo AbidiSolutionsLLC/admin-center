@@ -1,5 +1,5 @@
 // E3 product-access API hooks. Contract types live here so backend shape changes are fixed in one place.
-import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
+import { useQuery, useMutation, useQueryClient, type QueryClient } from '@tanstack/react-query';
 import { toast } from 'sonner';
 import { apiClient } from '@/lib/apiClient';
 import { QUERY_KEYS } from '@/constants/queryKeys';
@@ -80,6 +80,18 @@ export const useAppRoles = (appId: string, enabled = true) =>
     enabled: !!appId && enabled,
   });
 
+/**
+ * Seat counts (Apps & Access cards, Subscription page) come from `/organization/subscription`, which the server only
+ * recomputes about a second after an access change. Refetch it now and once more after that delay, so the meter does
+ * not keep showing the old count until a full reload.
+ */
+export const refreshSeatCounts = (queryClient: QueryClient) => {
+  const key = ['organization', 'subscription'];
+  queryClient.invalidateQueries({ queryKey: key });
+  // The recompute takes longer against a remote database (about 5 s on Atlas), so refetch twice more.
+  for (const ms of [1800, 5000]) setTimeout(() => queryClient.invalidateQueries({ queryKey: key }), ms);
+};
+
 export const useSubscription = () =>
   useQuery({
     queryKey: ['organization', 'subscription'],
@@ -111,6 +123,7 @@ export const useUpdateAssignment = (appId: string) => {
       qc.invalidateQueries({ queryKey: QUERY_KEYS.APP_DETAIL(appId) });
       qc.invalidateQueries({ queryKey: QUERY_KEYS.APP_TIMELINE(appId) });
       qc.invalidateQueries({ queryKey: ['people', 'effective-access'] });
+      refreshSeatCounts(qc);
       toast.success('Assignment updated');
     },
     onError: (e: any) => toast.error(e.response?.data?.error || 'Failed to update assignment'),

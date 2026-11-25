@@ -75,18 +75,23 @@ export interface PlanDiff {
   restricted: string[];
   /** Plan products left as they are: already active, suspended, or an operator override. */
   unchanged: string[];
+  /** Plan-sourced entitlements kept as they are whose seat limit differs from the plan's seat default: the limit follows the plan. */
+  reseated: string[];
 }
 
 /**
  * What applying `plan` would do, given a tenant's current entitlements. Pure. Overrides (`source: 'operator'`) are never
- * touched; only `source: 'plan'` entitlements are restricted when their product leaves the plan.
+ * touched; only `source: 'plan'` entitlements are restricted when their product leaves the plan. `seatDefaultFor` gives the
+ * plan's seat default per product (null = no limit); when it is passed, a plan-sourced entitlement whose limit differs is
+ * reported as `reseated` instead of `unchanged`, so a changed seat default is visible and applied.
  */
-export function diffPlan(products: readonly string[], ents: readonly EntRow[]): PlanDiff {
+export function diffPlan(products: readonly string[], ents: readonly EntRow[], seatDefaultFor?: (key: string) => number | null): PlanDiff {
   const byKey = new Map(ents.map((e) => [e.product_key, e]));
-  const diff: PlanDiff = { added: [], restricted: [], unchanged: [] };
+  const diff: PlanDiff = { added: [], restricted: [], unchanged: [], reseated: [] };
   for (const key of products) {
     const e = byKey.get(key);
     if (!e || (e.status === 'restricted' && e.source !== 'operator')) diff.added.push(key);
+    else if (seatDefaultFor && e.source === 'plan' && e.status !== 'restricted' && (e.seats_limit ?? null) !== seatDefaultFor(key)) diff.reseated.push(key);
     else diff.unchanged.push(key);
   }
   for (const e of ents) if (e.source === 'plan' && e.status !== 'restricted' && !products.includes(e.product_key)) diff.restricted.push(e.product_key);
@@ -117,7 +122,7 @@ export interface PlanApplyCtx {
 export async function applyPlanToOrg(session: ClientSession | undefined, company: ICompany, plan: IPlan, ctx: PlanApplyCtx): Promise<PlanDiff> {
   const opts = { session: session ?? undefined };
   const ents = await OrganizationEntitlement.find({ company_id: company._id }).session(session ?? null).lean();
-  const diff = diffPlan(plan.products, ents);
+  const diff = diffPlan(plan.products, ents, (key) => seatDefault(plan, key));
   if (ctx.dry_run) return diff;
 
   const orgId = String(company._id);
@@ -131,12 +136,18 @@ export async function applyPlanToOrg(session: ClientSession | undefined, company
     const set: Record<string, unknown> = { source: 'plan', plan_key: plan.key, plan_version: plan.version ?? 1, updated_by_operator_id: ctx.operator_id };
     if (diff.added.includes(key)) set.status = 'active';
     const def = seatDefault(plan, key);
-    if (def !== null && (existing?.seats_limit === undefined || existing?.seats_limit === null)) set.seats_limit = def;
-    await OrganizationEntitlement.updateOne({ company_id: company._id, product_key: key }, { $set: set }, { upsert: true, ...opts });
-    if (diff.added.includes(key)) {
+    // A plan-sourced entitlement (or a new one) takes the plan's seat default, also when the default changed since the
+    // plan was last applied: a per-tenant limit is an override (`source: 'operator'`), which `continue`s above. Any other
+    // source keeps the old rule: the default fills an empty limit only.
+    const followsPlan = !existing || existing.source === 'plan';
+    const unset: Record<string, 1> = {};
+    if (def !== null && (followsPlan || existing?.seats_limit === undefined || existing?.seats_limit === null)) set.seats_limit = def;
+    else if (def === null && followsPlan && existing?.seats_limit != null) unset.seats_limit = 1;
+    await OrganizationEntitlement.updateOne({ company_id: company._id, product_key: key }, { $set: set, ...(Object.keys(unset).length ? { $unset: unset } : {}) }, { upsert: true, ...opts });
+    if (diff.added.includes(key) || diff.reseated.includes(key)) {
       await emitPlatformEvent(session, {
         org_id: orgId, type: 'entitlement.changed', subject: { type: 'org', id: orgId }, actor: ctx.actor, correlation_id: ctx.correlation_id,
-        data: { product_key: key, status: 'active', source: 'plan', ...(def !== null ? { seats_limit: def } : {}) },
+        data: { product_key: key, status: existing && !diff.added.includes(key) ? existing.status : 'active', source: 'plan', ...(def !== null ? { seats_limit: def } : {}) },
       });
     }
   }
@@ -155,7 +166,7 @@ export async function applyPlanToOrg(session: ClientSession | undefined, company
   if (diff.added.length || diff.restricted.length) await bumpOrgAuthz(company._id as Types.ObjectId, session);
   await ctx.audit({
     action: 'org.plan_assigned', target_type: 'Company', target_id: orgId, company, before,
-    after: { plan_key: plan.key, plan_version: plan.version ?? 1, added: diff.added, restricted: diff.restricted },
+    after: { plan_key: plan.key, plan_version: plan.version ?? 1, added: diff.added, restricted: diff.restricted, reseated: diff.reseated },
   });
   return diff;
 }
@@ -170,7 +181,8 @@ export const dryRunSummary = (diffs: PlanDiff[]) => ({
   added: countKeys(diffs.map((d) => d.added)),
   restricted: countKeys(diffs.map((d) => d.restricted)),
   unchanged: countKeys(diffs.map((d) => d.unchanged)),
-  tenants_affected: diffs.filter((d) => d.added.length || d.restricted.length).length,
+  reseated: countKeys(diffs.map((d) => d.reseated)),
+  tenants_affected: diffs.filter((d) => d.added.length || d.restricted.length || d.reseated.length).length,
 });
 
 const APPLY_JOB = 'plan.apply';
@@ -264,7 +276,7 @@ export function planRoutes(h: Helpers): Router {
         const ents = await OrganizationEntitlement.find({ company_id: { $in: ids } }).lean();
         const by = new Map<string, EntRow[]>();
         for (const e of ents) by.set(String(e.company_id), [...(by.get(String(e.company_id)) ?? []), e]);
-        for (const id of ids) diffs.push(diffPlan(plan.products, by.get(String(id)) ?? []));
+        for (const id of ids) diffs.push(diffPlan(plan.products, by.get(String(id)) ?? [], (key) => seatDefault(plan, key)));
       }
       return h.ok(res, dryRunSummary(diffs));
     }
