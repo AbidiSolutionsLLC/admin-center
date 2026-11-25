@@ -41,7 +41,7 @@ The standard every folder follows: the meta repo `docs/DOC-STANDARD.md` (nine fi
 - **Routes:** each router starts with `router.use(requireAuth)`. Admin-only actions add `requireRole(PERMISSION_GROUPS.…)`. Register static path segments before `/:id` routes.
 - **Controllers:** wrap handlers in `asyncHandler`. Throw `new AppError(message, status, CODE)`; `middleware/errorHandler.ts` turns it into `{ success: false, error, code }`. Successful responses are `{ success: true, data }`.
 - **Validation:** zod schemas at the controller boundary.
-- **Tenant scoping:** every query filters on `company_id: req.user.company_id`. Look up by `_id` **and** `company_id`, never by `_id` alone.
+- **Tenant scoping:** every query filters on `company_id: req.user.company_id`. Look up by `_id` **and** `company_id`, never by `_id` alone. `npm test` first runs `scripts/tenant-scope-gate.cjs`, which fails on a new unscoped call on a tenant model; a call that is safe on purpose gets `// tenant-scope-ok: <reason>`.
 - **Changes that affect access or members:** do the domain write, `auditLogger.logTx(session, …)` and `emitPlatformEvent(session, …)` inside one `runInTransaction`. Bump `authz_ver` when effective access changes (`bumpAuthzVer`). Post-commit work goes in `onCommit` hooks. Copy an existing transactional controller (`groups.controller.ts`) rather than inventing a pattern.
 - **Event and Platform API shapes are contracts** (`../docs/architecture/05`, `06`). Changes must be additive and recorded in `../docs/DECISIONS.md` first.
 - **Hosted pages** (`identity/html.ts`): server-rendered, inline CSS with a per-response CSP nonce, no external assets. The skin comes from `shellForClient`.
