@@ -5,7 +5,6 @@
   "src/controllers/apps.controller.ts": 14,
   "src/controllers/auth.controller.ts": 7,
   "src/controllers/dataFields.controller.ts": 1,
-  "src/controllers/holidays.controller.ts": 16,
   "src/controllers/identityProviders.controller.ts": 1,
   "src/controllers/ipRestrictions.controller.ts": 1,
   "src/controllers/locations.controller.ts": 1,

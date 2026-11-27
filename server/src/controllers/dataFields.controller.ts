@@ -121,6 +121,16 @@ function generateSlug(name: string): string {
  * Verifies that no other active field in the same company + target object uses the given slug.
  * Field names must be unique within an object (story 106).
  */
+/**
+ * Holiday has no company_id: a company's holidays are the ones in its calendars. Every custom-field operation on
+ * Holiday must carry this filter (tenant-scope review 2026-11-27: renames, clears and counts ran across all
+ * organisations).
+ */
+async function companyHolidayFilter(companyId: string): Promise<{ calendar_id: { $in: Types.ObjectId[] } }> {
+  const calendarIds = (await HolidayCalendar.find({ company_id: companyId }).distinct('_id')) as Types.ObjectId[];
+  return { calendar_id: { $in: calendarIds } };
+}
+
 async function assertUniqueSlug(companyId: string, targetObject: string, slug: string, excludeFieldId?: string): Promise<void> {
   const filter: Record<string, unknown> = {
     company_id: companyId,
@@ -272,6 +282,7 @@ async function checkFieldExistsWithData(fieldId: string, companyId: string, targ
       break;
     case 'holiday':
       count = await Holiday.countDocuments({
+        ...(await companyHolidayFilter(companyId)),
         [`custom_fields.${field.slug}`]: { $exists: true, $ne: null },
       });
       break;
@@ -426,7 +437,7 @@ async function migrateFieldRename(
     )) as unknown as { modifiedCount: number };
   } else if (targetObject === 'holiday') {
     result = (await Holiday.updateMany(
-      { [`custom_fields.${oldSlug}`]: { $exists: true } },
+      { ...(await companyHolidayFilter(companyId)), [`custom_fields.${oldSlug}`]: { $exists: true } },
       { $rename: { [`custom_fields.${oldSlug}`]: `custom_fields.${newSlug}` } },
     )) as unknown as { modifiedCount: number };
   } else if (targetObject === 'holiday_calendar') {
@@ -902,6 +913,7 @@ export const updateCustomField = asyncHandler(async (req: Request, res: Response
         break;
       case 'holiday':
         nullCount = await Holiday.countDocuments({
+          ...(await companyHolidayFilter(req.user.company_id)),
           $or: [
             { [`custom_fields.${field.slug}`]: { $exists: false } },
             { [`custom_fields.${field.slug}`]: null },
@@ -1146,7 +1158,7 @@ export const clearFieldData = asyncHandler(async (req: Request, res: Response) =
     }
     case 'holiday': {
       const result = await Holiday.updateMany(
-        { [`custom_fields.${field.slug}`]: { $exists: true } },
+        { ...(await companyHolidayFilter(req.user.company_id)), [`custom_fields.${field.slug}`]: { $exists: true } },
         { $unset: { [`custom_fields.${field.slug}`]: '' } },
       );
       clearedCount = result.modifiedCount;

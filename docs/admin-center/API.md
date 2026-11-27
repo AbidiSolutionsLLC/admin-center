@@ -188,11 +188,11 @@ Role grants are additionally limited by `server/src/lib/roleHierarchy.ts` (`asse
 | POST | `/holidays/holidays/import` | OPS_ADMINS | `importHolidays` |
 | GET | `/holidays/assignments`, `/holidays/assignments/location/:location_id` | auth | `getHolidayAssignments`, `getHolidayAssignmentsByLocation` |
 | POST | `/holidays/assignments` | OPS_ADMINS | `createHolidayAssignment` |
-| PUT / DELETE | `/holidays/assignments/:id` | OPS_ADMINS | `updateHolidayAssignment`, `deleteHolidayAssignment` |
+| PUT / DELETE | `/holidays/assignments/:id` | OPS_ADMINS | `updateHolidayAssignment`, `deleteHolidayAssignment`; looked up by `_id` and `company_id`; a new `calendar_id` / `location_id` outside the company answers 404 (2026-11-27) |
 | POST | `/holidays/calendars/bulk` | OPS_ADMINS | `createBulkHolidayCalendars` |
 | POST | `/holidays/calendars/:calendar_id/holidays/bulk` | OPS_ADMINS | `createBulkHolidays` |
-| DELETE | `/holidays/assignments/bulk` | OPS_ADMINS | `deleteBulkHolidayAssignments` (registered before `/assignments/:id`; `routeOrder.test.ts`) |
-| POST | `/holidays/holiday/move` | OPS_ADMINS | `moveHoliday` |
+| DELETE | `/holidays/assignments/bulk` | OPS_ADMINS | `deleteBulkHolidayAssignments` (registered before `/assignments/:id`; `routeOrder.test.ts`); deletes only the listed ids that belong to the company, `deleted_count` counts those |
+| POST | `/holidays/holiday/move` | OPS_ADMINS | `moveHoliday`; source and target calendar must both belong to the company (404 otherwise) |
 | GET | `/holidays/integrations/attendance/holidays`, `.../locations`, `.../all-company-holidays` | auth | `getHolidaysForAttendance`, `getLocationsWithHolidayCalendars`, `getAllCompanyHolidays` |
 | GET | `/work-schedules`, `/work-schedules/:id` | auth | `workSchedules.controller.getWorkSchedules`, `getWorkScheduleById` |
 | POST / PUT / DELETE | `/work-schedules`, `/work-schedules/:id` | OPS_ADMINS | `createWorkSchedule`, `updateWorkSchedule`, `deleteWorkSchedule` |
@@ -231,7 +231,7 @@ Role grants are additionally limited by `server/src/lib/roleHierarchy.ts` (`asse
 | POST | `/data-fields/validate` | auth | `validateFieldValues` |
 | POST / PUT | `/data-fields`, `/data-fields/:id`, `/data-fields/reorder`, `/data-fields/:id/rollback`, `/data-fields/layouts`, `/data-fields/layouts/:id` | Super Admin, Ops Admin | `dataFields.controller.*` |
 | DELETE | `/data-fields/:id`, `/data-fields/layouts/:id` | Super Admin | `deleteCustomField`, `deleteProfileLayout` |
-| POST | `/data-fields/:id/clear-data`, `/data-fields/seed-defaults` | Super Admin | `clearFieldData`, `seedDefaultFields` |
+| POST | `/data-fields/:id/clear-data`, `/data-fields/seed-defaults` | Super Admin | `clearFieldData`, `seedDefaultFields`; for `holiday` fields, clear, rename and counts cover only holidays in the company's calendars |
 | GET | `/integrations`, `/integrations/:id`, `/integrations/:id/sync-logs` | auth | `integrations.controller.*` |
 | POST / PUT | `/integrations/connect`, `/integrations/:id`, `/integrations/:id/field-mapping`, `/integrations/:id/sync` | Super Admin, Ops Admin | `connectIntegration`, `updateIntegration`, `updateFieldMapping`, `syncIntegration` |
 | POST | `/integrations/:id/disconnect` | Super Admin | `disconnectIntegration` |

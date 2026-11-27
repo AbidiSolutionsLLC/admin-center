@@ -98,6 +98,7 @@ async function enrichHolidayCalendars(
 
   const assignments = await HolidayAssignment.find({
     calendar_id: { $in: calendarIds },
+    company_id: { $in: calendars.map((c) => c.company_id) },
   }).lean();
 
   const countMap = new Map<string, number>();
@@ -120,7 +121,7 @@ async function enrichHolidays(
   holidays: any[],
   calendarId: string
 ): Promise<any[]> {
-  const calendar = await HolidayCalendar.findById(calendarId).lean();
+  const calendar = await HolidayCalendar.findById(calendarId).lean(); // tenant-scope-ok: callers pass a calendar already loaded with company_id
   const enriched = holidays.map((holiday) => {
     const data = typeof holiday?.toObject === 'function' ? holiday.toObject() : { ...holiday };
     return {
@@ -210,6 +211,7 @@ export const getHolidayCalendarById = asyncHandler(async (req: Request, res: Res
 
   const assignments = await HolidayAssignment.find({
     calendar_id: calendar._id,
+    company_id: req.user.company_id,
   }).populate('location_id', 'name type');
 
   const enriched = await enrichHolidayCalendars([calendar]);
@@ -415,7 +417,7 @@ export const deleteHolidayCalendar = asyncHandler(async (req: Request, res: Resp
 
   const correlation_id = correlationIdFor(req);
   await runInTransaction(async (session) => {
-  await HolidayCalendar.deleteOne({ _id: calendar._id }, { session });
+  await HolidayCalendar.deleteOne({ _id: calendar._id, company_id: req.user.company_id }, { session });
 
   await auditLogger.logTx(session, {
     req,
@@ -475,9 +477,9 @@ export const getHolidayById = asyncHandler(async (req: Request, res: Response) =
     throw new AppError('Holiday not found', 404, 'NOT_FOUND');
   }
 
-  const calendar = await HolidayCalendar.findById(holiday.calendar_id).lean();
+  const calendar = await HolidayCalendar.findOne({ _id: holiday.calendar_id, company_id: req.user.company_id }).lean();
 
-  if (calendar?.company_id?.toString() !== req.user.company_id) {
+  if (!calendar) {
     throw new AppError('Holiday not found', 404, 'NOT_FOUND');
   }
 
@@ -571,9 +573,9 @@ export const updateHoliday = asyncHandler(async (req: Request, res: Response) =>
     throw new AppError('Holiday not found', 404, 'NOT_FOUND');
   }
 
-  const calendar = await HolidayCalendar.findById(holiday.calendar_id).lean();
+  const calendar = await HolidayCalendar.findOne({ _id: holiday.calendar_id, company_id: req.user.company_id }).lean();
 
-  if (calendar?.company_id?.toString() !== req.user.company_id) {
+  if (!calendar) {
     throw new AppError('Holiday not found', 404, 'NOT_FOUND');
   }
 
@@ -636,9 +638,9 @@ export const deleteHoliday = asyncHandler(async (req: Request, res: Response) =>
     throw new AppError('Holiday not found', 404, 'NOT_FOUND');
   }
 
-  const calendar = await HolidayCalendar.findById(holiday.calendar_id).lean();
+  const calendar = await HolidayCalendar.findOne({ _id: holiday.calendar_id, company_id: req.user.company_id }).lean();
 
-  if (calendar?.company_id?.toString() !== req.user.company_id) {
+  if (!calendar) {
     throw new AppError('Holiday not found', 404, 'NOT_FOUND');
   }
 
@@ -699,6 +701,7 @@ export const getHolidayAssignmentsByLocation = asyncHandler(async (req: Request,
 
   const assignments = await HolidayAssignment.find({
     location_id: location._id,
+    company_id: req.user.company_id,
   })
     .populate('calendar_id', 'name description is_active')
     .sort({ effective_date: -1 })
@@ -750,6 +753,7 @@ export const createHolidayAssignment = asyncHandler(async (req: Request, res: Re
 
   // Check for duplicate assignment
   const existing = await HolidayAssignment.findOne({
+    company_id: req.user.company_id,
     location_id: input.location_id,
     calendar_id: input.calendar_id,
     is_primary: true,
@@ -798,16 +802,19 @@ res.status(201).json({ success: true, data: assignment });
 export const updateHolidayAssignment = asyncHandler(async (req: Request, res: Response) => {
   const input = UpdateHolidayAssignmentSchema.parse(req.body);
 
-  const assignment = await HolidayAssignment.findById(req.params.id);
+  const assignment = await HolidayAssignment.findOne({ _id: req.params.id, company_id: req.user.company_id });
 
   if (!assignment) {
     throw new AppError('Holiday assignment not found', 404, 'NOT_FOUND');
   }
 
-  const calendar = await HolidayCalendar.findById(assignment.calendar_id).lean();
-
-  if (calendar?.company_id?.toString() !== req.user.company_id) {
-    throw new AppError('Holiday assignment not found', 404, 'NOT_FOUND');
+  // A new location or calendar must belong to the requesting company, as on create (tenant-scope review
+  // 2026-11-27: the update accepted another organisation's calendar_id / location_id).
+  if (input.location_id && !(await Location.exists({ _id: input.location_id, company_id: req.user.company_id }))) {
+    throw new AppError('Location not found', 404, 'NOT_FOUND');
+  }
+  if (input.calendar_id && !(await HolidayCalendar.exists({ _id: input.calendar_id, company_id: req.user.company_id }))) {
+    throw new AppError('Holiday calendar not found', 404, 'NOT_FOUND');
   }
 
   const beforeState = assignment.toObject();
@@ -849,15 +856,9 @@ export const updateHolidayAssignment = asyncHandler(async (req: Request, res: Re
  * Deletes a holiday assignment
  */
 export const deleteHolidayAssignment = asyncHandler(async (req: Request, res: Response) => {
-  const assignment = await HolidayAssignment.findById(req.params.id);
+  const assignment = await HolidayAssignment.findOne({ _id: req.params.id, company_id: req.user.company_id });
 
   if (!assignment) {
-    throw new AppError('Holiday assignment not found', 404, 'NOT_FOUND');
-  }
-
-  const calendar = await HolidayCalendar.findById(assignment.calendar_id).lean();
-
-  if (calendar?.company_id?.toString() !== req.user.company_id) {
     throw new AppError('Holiday assignment not found', 404, 'NOT_FOUND');
   }
 
@@ -865,7 +866,7 @@ export const deleteHolidayAssignment = asyncHandler(async (req: Request, res: Re
 
   const correlation_id = correlationIdFor(req);
   await runInTransaction(async (session) => {
-  await HolidayAssignment.deleteOne({ _id: assignment._id }, { session });
+  await HolidayAssignment.deleteOne({ _id: assignment._id, company_id: req.user.company_id }, { session });
 
   await auditLogger.logTx(session, {
     req,
@@ -907,6 +908,7 @@ export const getHolidaysForAttendance = asyncHandler(async (req: Request, res: R
   }
 
   const assignments = await HolidayAssignment.find({
+    company_id: req.user.company_id,
     location_id: user.location_id._id,
     is_primary: true,
     effective_date: { $lte: new Date() },
@@ -1197,8 +1199,11 @@ export const deleteBulkHolidayAssignments = asyncHandler(async (req: Request, re
 
   const correlation_id = correlationIdFor(req);
   await runInTransaction(async (session) => {
+  // Only the assignments found in the caller's company: assignment_ids may name another organisation's
+  // (tenant-scope review 2026-11-27: every requested id was deleted).
   await HolidayAssignment.deleteMany({
-    _id: { $in: assignment_ids },
+    _id: { $in: assignments.map((a) => a._id) },
+    company_id: req.user.company_id,
   }, { session });
 
   for (const assignment of assignments) {
@@ -1232,6 +1237,12 @@ export const moveHoliday = asyncHandler(async (req: Request, res: Response) => {
 
   const sourceHoliday = await Holiday.findById(holiday_id);
   if (!sourceHoliday) {
+    throw new AppError('Source holiday not found', 404, 'NOT_FOUND');
+  }
+  // The source holiday must sit in one of the caller's calendars (tenant-scope review 2026-11-27: any
+  // organisation's holiday could be moved into the caller's calendar). Holiday has no company_id of its own.
+  const sourceCalendar = await HolidayCalendar.exists({ _id: sourceHoliday.calendar_id, company_id: req.user.company_id });
+  if (!sourceCalendar) {
     throw new AppError('Source holiday not found', 404, 'NOT_FOUND');
   }
 
