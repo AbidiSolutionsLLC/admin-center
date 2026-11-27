@@ -188,7 +188,9 @@ export const runIntelligenceRules = async (companyId: string | Types.ObjectId): 
       insightsToUpsert.push({
         company_id: companyObjectId,
         category: 'health',
-        severity: 'critical',
+        // Low (owner decision B-6, 2026-11-27): most employees never need an Admin Center role, so a member without one
+        // is normal, not critical. With the default "medium" sensitivity it is no longer raised (see below).
+        severity: 'low',
         affected_area: 'Identity',
         title: `${user.full_name} has no role assigned`,
         // Admin Center roles grant Karbexa Admin pages only; product access comes from App Access (8b B-6).
@@ -971,6 +973,13 @@ export const runIntelligenceRules = async (companyId: string | Types.ObjectId): 
       detected_at: new Date(),
     });
   }
+
+  // B-6: rows raised as critical before the severity change are lowered to match (otherwise they stay critical until the
+  // member gets a role, because the sensitivity filter below no longer touches them).
+  await Insight.updateMany(
+    { company_id: companyObjectId, title: { $regex: / has no role assigned$/ }, is_resolved: false, severity: { $ne: 'low' } },
+    { $set: { severity: 'low' } },
+  );
 
   // Filter insights based on sensitivity
   const sensitivity = (company.settings as any)?.insight_sensitivity || 'medium';
