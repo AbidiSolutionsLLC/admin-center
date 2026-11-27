@@ -1,18 +1,1 @@
-{
-  "src/controllers/accessControlPolicies.controller.ts": 1,
-  "src/controllers/appAccess.controller.ts": 3,
-  "src/controllers/approvals.controller.ts": 2,
-  "src/controllers/dataFields.controller.ts": 1,
-  "src/controllers/identityProviders.controller.ts": 1,
-  "src/controllers/ipRestrictions.controller.ts": 1,
-  "src/controllers/locations.controller.ts": 1,
-  "src/controllers/notifications.controller.ts": 2,
-  "src/controllers/overview.controller.ts": 1,
-  "src/controllers/reportingLines.controller.ts": 1,
-  "src/controllers/roles.controller.ts": 2,
-  "src/controllers/security.controller.ts": 1,
-  "src/controllers/workflowTemplates.controller.ts": 1,
-  "src/controllers/workflows.controller.ts": 4,
-  "src/services/locationSettings.service.ts": 2,
-  "src/services/slaCalculator.service.ts": 1
-}
+{}

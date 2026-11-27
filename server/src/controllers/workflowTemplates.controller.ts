@@ -211,7 +211,7 @@ export const createWorkflowFromTemplate = asyncHandler(async (req: Request, res:
     },
   });
 
-  const populated = await Workflow.findById(workflow._id).populate(
+  const populated = await Workflow.findOne({ _id: workflow._id, company_id: workflow.company_id }).populate(
     'created_by',
     'full_name email'
   );

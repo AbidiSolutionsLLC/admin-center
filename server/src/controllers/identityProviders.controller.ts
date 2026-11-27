@@ -224,6 +224,7 @@ export const verifyDomain = asyncHandler(async (req: Request, res: Response) => 
   }
 
   // 03 §2: verified domain is unique platform-wide
+  // tenant-scope-ok: deliberately across organisations (uniqueness check; only existence is used)
   const otherVerified = await IdentityProviderConnection.findOne({
     _id: { $ne: connection._id },
     domains: {

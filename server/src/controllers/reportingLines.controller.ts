@@ -411,7 +411,7 @@ export const removeSecondaryManager = asyncHandler(async (req: Request, res: Res
   const updatedUser = await runInTransaction(async (session) => {
   // Remove the manager using MongoDB $pull operator
   await User.updateOne(
-    { _id: user._id },
+    { _id: user._id, company_id: user.company_id },
     { $pull: { secondary_manager_ids: managerObjectId } },
     { session },
   );

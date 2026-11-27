@@ -291,7 +291,7 @@ export const createWorkflow = asyncHandler(async (req: Request, res: Response) =
     },
   });
 
-  const populated = await Workflow.findById(workflow._id).populate(
+  const populated = await Workflow.findOne({ _id: workflow._id, company_id: workflow.company_id }).populate(
     'created_by',
     'full_name email'
   );
@@ -358,7 +358,7 @@ export const updateWorkflow = asyncHandler(async (req: Request, res: Response) =
     },
   });
 
-  const populated = await Workflow.findById(workflow._id).populate(
+  const populated = await Workflow.findOne({ _id: workflow._id, company_id: workflow.company_id }).populate(
     'created_by',
     'full_name email'
   );
@@ -685,7 +685,7 @@ export const deleteWorkflow = asyncHandler(async (req: Request, res: Response) =
   });
 
   // Hard delete the workflow
-  await Workflow.deleteOne({ _id: workflow._id });
+  await Workflow.deleteOne({ _id: workflow._id, company_id: workflow.company_id });
 
   res.status(200).json({ success: true, message: 'Workflow deleted' });
 });
@@ -840,7 +840,7 @@ export const deleteWorkflowStep = asyncHandler(async (req: Request, res: Respons
     step_order: step.step_order,
   };
 
-  await WorkflowStep.deleteOne({ _id: step._id });
+  await WorkflowStep.deleteOne({ _id: step._id, company_id: step.company_id });
 
   // Audit log
   await auditLogger.log({

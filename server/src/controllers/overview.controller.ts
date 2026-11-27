@@ -132,6 +132,7 @@ export const getSetupProgress = asyncHandler(async (req: Request, res: Response)
   const companyId = req.user!.company_id;
 
   // Get company
+  // tenant-scope-ok: the caller's own company document
   const company = await Company.findById(companyId).lean();
   if (!company) {
     throw new AppError('Company not found', 404, 'COMPANY_NOT_FOUND');

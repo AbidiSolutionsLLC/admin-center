@@ -139,7 +139,7 @@ export const deleteIpRestriction = asyncHandler(async (req: Request, res: Respon
     throw new AppError('IP Restriction not found', 404, 'NOT_FOUND');
   }
 
-  await IpRestriction.deleteOne({ _id: restriction._id });
+  await IpRestriction.deleteOne({ _id: restriction._id, company_id: req.user.company_id });
 
   await auditLogger.log({
     req,

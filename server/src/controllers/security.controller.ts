@@ -215,7 +215,7 @@ export const deleteSecurityPolicy = asyncHandler(async (req: Request, res: Respo
     throw new AppError('Cannot delete the default global policy', 400, 'BAD_REQUEST');
   }
 
-  await SecurityPolicy.deleteOne({ _id: policy._id });
+  await SecurityPolicy.deleteOne({ _id: policy._id, company_id: policy.company_id });
 
   await auditLogger.log({
     req,

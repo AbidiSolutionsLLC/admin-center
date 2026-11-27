@@ -659,7 +659,7 @@ export const assignRoleToUser = asyncHandler(async (req: Request, res: Response)
   await assertCanAssignRoles(req as any, [role as any], [user._id]);
 
   // Check if already assigned
-  const existing = await UserRole.findOne({ user_id, role_id: roleId });
+  const existing = await UserRole.findOne({ user_id, role_id: roleId, company_id: companyId });
   if (existing) {
     return res.status(200).json({ success: true, message: 'User already assigned to this role' });
   }
@@ -719,6 +719,7 @@ export const unassignRoleFromUser = asyncHandler(async (req: Request, res: Respo
   const result = await UserRole.deleteOne({
     user_id: userId,
     role_id: roleId,
+    company_id: companyId,
   }, { session });
 
   if (result.deletedCount === 0) {

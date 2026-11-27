@@ -117,7 +117,7 @@ export const createTemplate = asyncHandler(async (req: Request, res: Response) =
     after_state: template.toObject(),
   });
 
-  const populated = await NotificationTemplate.findById(template._id).populate(
+  const populated = await NotificationTemplate.findOne({ _id: template._id, company_id: template.company_id }).populate(
     'created_by',
     'full_name email'
   );
@@ -160,7 +160,7 @@ export const updateTemplate = asyncHandler(async (req: Request, res: Response) =
     after_state: template.toObject(),
   });
 
-  const populated = await NotificationTemplate.findById(template._id).populate(
+  const populated = await NotificationTemplate.findOne({ _id: template._id, company_id: template.company_id }).populate(
     'created_by',
     'full_name email'
   );

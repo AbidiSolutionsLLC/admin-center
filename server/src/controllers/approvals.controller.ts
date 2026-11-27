@@ -70,6 +70,7 @@ export const approveRequest = asyncHandler(async (req: Request, res: Response) =
     const now = new Date();
     const delegatedForUsers = await User.find({
       _id: { $in: approval.approver_user_ids },
+      company_id: req.user.company_id,
       delegates: {
         $elemMatch: {
           user_id: new Types.ObjectId(req.user.userId as string),
@@ -176,6 +177,7 @@ export const rejectRequest = asyncHandler(async (req: Request, res: Response) =>
     const now = new Date();
     const delegatedForUsers = await User.find({
       _id: { $in: approval.approver_user_ids },
+      company_id: req.user.company_id,
       delegates: {
         $elemMatch: {
           user_id: new Types.ObjectId(req.user.userId as string),

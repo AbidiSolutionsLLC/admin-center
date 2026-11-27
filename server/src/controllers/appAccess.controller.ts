@@ -55,7 +55,7 @@ export const updateAssignment = asyncHandler(async (req: Request, res: Response)
   const assignment = await runInTransaction(async (session) => {
     const assignment = await AppAssignment.findOne({ _id: oid(req.params.id as string), company_id: companyId, is_active: true }).session(session ?? null);
     if (!assignment) throw new AppError('Active assignment not found', 404, 'ASSIGNMENT_NOT_FOUND');
-    const app = await App.findById(assignment.app_id).session(session ?? null);
+    const app = await App.findOne({ _id: assignment.app_id, $or: [{ company_id: companyId }, { company_id: { $exists: false } }] }).session(session ?? null);
     if (!app) throw new AppError('App not found', 404, 'APP_NOT_FOUND');
 
     if (body.product_role_key !== undefined) {
@@ -73,7 +73,7 @@ export const updateAssignment = asyncHandler(async (req: Request, res: Response)
       assignment.include_descendants = body.include_descendants;
     }
     if (body.reason !== undefined) assignment.reason = body.reason;
-    const before = await AppAssignment.findById(assignment._id).session(session ?? null).lean();
+    const before = await AppAssignment.findOne({ _id: assignment._id, company_id: companyId }).session(session ?? null).lean();
     await assignment.save({ session: session ?? undefined });
 
     await emitAppAccessChanged(session, companyId, await resolveAssignmentMemberIds(assignment, session), {
@@ -156,6 +156,7 @@ export const getSubscription = asyncHandler(async (req: Request, res: Response) 
   const planKey = [...planCounts.entries()].sort((a, b) => b[1] - a[1] || a[0].localeCompare(b[0]))[0]?.[0];
   const [planDoc, company] = await Promise.all([
     planKey ? Plan.findOne({ key: planKey }).select('key name').lean() : null,
+    // tenant-scope-ok: the caller's own company document
     Company.findOne({ _id: companyId }).select('trial_ends_at').lean(),
   ]);
   const ent = new Map(rows.map((e) => [e.product_key as string, e]));

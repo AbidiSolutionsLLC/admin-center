@@ -69,7 +69,8 @@ export const locationSettingsService = {
     // Determine effective location: user's assigned location or company default
     let effectiveLocationId: string | null = user.location_id?.toString() ?? null;
     if (!effectiveLocationId) {
-      const company = await Company.findById(companyId).select('settings.default_location_id').lean();
+      // tenant-scope-ok: the caller's own company document
+  const company = await Company.findById(companyId).select('settings.default_location_id').lean();
       if (company?.settings?.default_location_id) {
         effectiveLocationId = company.settings.default_location_id;
       }
@@ -182,7 +183,8 @@ export const locationSettingsService = {
 
     // Fallback to company default location if user has no location assigned
     if (!locationId) {
-      const company = await Company.findById(companyId).select('settings.default_location_id').lean();
+      // tenant-scope-ok: the caller's own company document
+  const company = await Company.findById(companyId).select('settings.default_location_id').lean();
       if (company?.settings?.default_location_id) {
         locationId = company.settings.default_location_id as any;
         isDefaultFallback = true;

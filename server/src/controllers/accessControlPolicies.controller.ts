@@ -119,7 +119,7 @@ export const deletePolicy = asyncHandler(async (req: Request, res: Response) => 
     throw new AppError('Cannot delete: Policy is actively assigned to subjects', 400, 'HAS_DEPENDENTS');
   }
 
-  await AccessControlPolicy.deleteOne({ _id: id });
+  await AccessControlPolicy.deleteOne({ _id: id, company_id });
 
   res.status(200).json({ success: true, message: 'Policy deleted' });
 });

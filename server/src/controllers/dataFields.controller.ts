@@ -319,7 +319,7 @@ async function checkFieldDependencies(fieldId: string, companyId: string): Promi
 }
 
 async function checkConditionalDependencies(fieldId: string, companyId: string): Promise<{ hasDependents: boolean; dependentFields: Array<{ _id: string; label: string }> }> {
-  const field = await CustomField.findById(fieldId).select('slug').lean();
+  const field = await CustomField.findOne({ _id: fieldId, company_id: companyId }).select('slug').lean();
   if (!field) return { hasDependents: false, dependentFields: [] };
 
   const dependents = await CustomField.find({

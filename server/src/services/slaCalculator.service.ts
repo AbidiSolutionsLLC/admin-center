@@ -179,7 +179,7 @@ export const slaCalculator = {
       const isBreached = newSla.dueDate < now;
 
       await WorkflowRun.updateOne(
-        { _id: run._id },
+        { _id: run._id, company_id: companyId },
         { $set: { sla_status: isBreached ? 'breached' : 'ok' } }
       );
     }

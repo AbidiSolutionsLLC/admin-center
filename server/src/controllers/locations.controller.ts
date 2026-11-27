@@ -14,7 +14,7 @@ import { isValidTimezone } from '../constants/timezones';
 import { locationSettingsService } from '../services/locationSettings.service';
 import { validateAndSanitizeCustomFields, enforceStandardFieldPermissions, enforceCustomFieldPermissions } from '../services/customFieldValidation.service';
 
-// 05 �2 org_structure.changed payload for locations: only the contract fields (no toObject() leakage).
+// 05 �2 org_structure.changed payload for locations: only the contract fields (no toObject() leakage).
 const locationEventData = (l: any) => ({ id: String(l._id), name: l.name, parent_id: l.parent_id ? String(l.parent_id) : null, timezone: l.timezone });
 
 // ── Zod Schemas ──────────────────────────────────────────────────────────────
@@ -712,7 +712,7 @@ export const removeLocationPolicy = asyncHandler(async (req: Request, res: Respo
 
   const beforeState = assignment.toObject();
   await runInTransaction(async (session) => {
-  await PolicyAssignment.findByIdAndDelete(assignment._id, { session });
+  await PolicyAssignment.findOneAndDelete({ _id: assignment._id, company_id: req.user.company_id }, { session });
 
   await auditLogger.logTx(session, {
     req,
