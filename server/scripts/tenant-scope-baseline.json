@@ -14,7 +14,6 @@
   "src/controllers/notifications.controller.ts": 5,
   "src/controllers/organization.controller.ts": 18,
   "src/controllers/overview.controller.ts": 2,
-  "src/controllers/people.controller.ts": 20,
   "src/controllers/policies.controller.ts": 7,
   "src/controllers/reportingLines.controller.ts": 1,
   "src/controllers/roles.controller.ts": 3,

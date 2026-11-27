@@ -270,12 +270,12 @@ async function validateEmailDomain(req: Request, email: string): Promise<void> {
  */
 async function checkAndFlagUserDataIntegrity(user: any, companyId: string): Promise<void> {
   try {
-    const company = await Company.findById(companyId).select('settings.required_user_fields');
+    const company = await Company.findById(companyId).select('settings.required_user_fields'); // tenant-scope-ok: the caller's own company
 
     if (!company || !company.settings?.required_user_fields) {
       // If no required fields are set, unflag the user
       if (user.is_flagged) {
-        await User.findByIdAndUpdate(user._id, { is_flagged: false });
+        await User.updateOne({ _id: user._id, company_id: companyId }, { is_flagged: false });
         user.is_flagged = false;
       }
       return;
@@ -296,7 +296,7 @@ async function checkAndFlagUserDataIntegrity(user: any, companyId: string): Prom
 
     // Update the flag if it has changed
     if (user.is_flagged !== isMissingRequiredField) {
-      await User.findByIdAndUpdate(user._id, { is_flagged: isMissingRequiredField });
+      await User.updateOne({ _id: user._id, company_id: companyId }, { is_flagged: isMissingRequiredField });
       user.is_flagged = isMissingRequiredField;
     }
   } catch (error) {
@@ -331,6 +331,7 @@ async function enrichUsers(
 
   // Fetch all role assignments for these users in one query
   const roleAssignments = await UserRole.find({
+    company_id: companyId,
     user_id: { $in: userIds }
   }).populate('role_id', 'name type').lean();
 
@@ -672,7 +673,7 @@ async function runLifecycleAutomations(
 
   // Notify the manager
   if (originalManagerId) {
-    const manager = await User.findById(originalManagerId);
+    const manager = await User.findOne({ _id: originalManagerId, company_id: req.user.company_id });
     if (manager) {
       await sendLifecycleNotification({
         templateKey: 'manager_lifecycle_alert',
@@ -812,6 +813,7 @@ export const getUsers = asyncHandler(async (req: Request, res: Response) => {
     filter.$and = [{ $or: [{ created_at: { $lt: cursor.at } }, { created_at: cursor.at, _id: { $lt: cursor.id } }] }];
   }
 
+  // tenant-scope-ok: filter starts as { company_id: req.user.company_id }
   const rows = await User.find(filter)
     .select('-password_hash -refresh_token_hash')
     .populate('department_id', 'name slug')
@@ -837,7 +839,7 @@ export const getUsers = asyncHandler(async (req: Request, res: Response) => {
     const companyObjectId = new Types.ObjectId(String(req.user.company_id));
     const { $and: _unused, ...countFilter } = filter;
     const [total, byState] = await Promise.all([
-      User.countDocuments(countFilter as never),
+      User.countDocuments(countFilter as never), // tenant-scope-ok: countFilter = filter without the cursor clause (keeps company_id)
       User.aggregate<{ _id: string; n: number }>([{ $match: { company_id: companyObjectId } }, { $group: { _id: '$lifecycle_state', n: { $sum: 1 } } }]),
     ]);
     meta.total = total;
@@ -856,6 +858,7 @@ export const getUserById = asyncHandler(async (req: Request, res: Response) => {
     company_id: req.user.company_id,
   };
 
+  // tenant-scope-ok: filter = { _id, company_id: req.user.company_id }
   const user = await User.findOne(filter)
     .select('-password_hash -refresh_token_hash')
     .populate('department_id', 'name slug')
@@ -939,23 +942,24 @@ export const getUserAppAccessHistory = asyncHandler(async (req: Request, res: Re
 
   const enrichedAssignments = await Promise.all(
     assignments.map(async (assignment) => {
+      // tenant-scope-ok: product apps (Karbexa products) are global, an organisation's own apps carry company_id
       const app = await App.findById(assignment.app_id).select('name icon_url slug').lean();
       
-      const grantedBy = await User.findById(assignment.granted_by).select('full_name email').lean();
+      const grantedBy = await User.findOne({ _id: assignment.granted_by, company_id: companyId }).select('full_name email').lean();
       let revokedBy = null;
       if (assignment.revoked_by) {
-        revokedBy = await User.findById(assignment.revoked_by).select('full_name email').lean();
+        revokedBy = await User.findOne({ _id: assignment.revoked_by, company_id: companyId }).select('full_name email').lean();
       }
       
       let target_name = user.full_name;
       if (assignment.target_type === 'role') {
-        const role = await Role.findById(assignment.target_id).select('name').lean();
+        const role = await Role.findOne({ _id: assignment.target_id, company_id: companyId }).select('name').lean();
         target_name = role?.name || 'Unknown Role';
       } else if (assignment.target_type === 'department') {
-        const dept = await Department.findById(assignment.target_id).select('name').lean();
+        const dept = await Department.findOne({ _id: assignment.target_id, company_id: companyId }).select('name').lean();
         target_name = dept?.name || 'Unknown Department';
       } else if (assignment.target_type === 'group') {
-        const group = await Group.findById(assignment.target_id).select('name').lean();
+        const group = await Group.findOne({ _id: assignment.target_id, company_id: companyId }).select('name').lean();
         target_name = group?.name || 'Unknown Group';
       } else if (assignment.target_type === 'attribute') {
         target_name = `${assignment.attribute_name} = ${assignment.attribute_value}`;
@@ -1245,6 +1249,7 @@ export const updateUser = asyncHandler(async (req: Request, res: Response) => {
     company_id: req.user.company_id,
   };
 
+  // tenant-scope-ok: filter = { _id, company_id: req.user.company_id }
   const user = await User.findOne(filter);
 
   if (!user) {
@@ -1591,6 +1596,7 @@ export const updateUserLifecycle = asyncHandler(async (req: Request, res: Respon
     company_id: req.user.company_id,
   };
 
+  // tenant-scope-ok: filter = { _id, company_id: req.user.company_id }
   const user = await User.findOne(filter);
 
   if (!user) {
@@ -1861,6 +1867,7 @@ export const deleteUser = asyncHandler(async (req: Request, res: Response) => {
     company_id: req.user.company_id,
   };
 
+  // tenant-scope-ok: filter = { _id, company_id: req.user.company_id }
   const user = await User.findOne(filter);
 
   if (!user) {
@@ -2345,6 +2352,7 @@ export const exportUsers = asyncHandler(async (req: Request, res: Response) => {
     }
   }
 
+  // tenant-scope-ok: filter starts as { company_id: req.user.company_id }
   const users = await User.find(filter)
     .populate('department_id', 'name')
     .populate('manager_id', 'full_name')
@@ -2468,6 +2476,7 @@ async function renewInvitation(token: string): Promise<void> {
   await runInTransaction(async (session) => {
     // Re-read inside the transaction: the link must still be pending (of two concurrent renewals only the first renews)
     // and must be the user's newest invitation.
+    // tenant-scope-ok: public accept flow; user_id comes from the invitation found by its token
     const [newest] = await Invitation.find({ user_id: invitation.user_id, kind: { $ne: 'operator' } })
       .sort({ createdAt: -1, _id: -1 }).limit(1).select('_id state').session(session ?? null);
     if (!newest || !newest._id.equals(invitation._id) || newest.state !== 'pending') return;
@@ -2810,7 +2819,7 @@ export const resetUserMfa = asyncHandler(async (req: Request, res: Response) => 
   });
 
   // Notify member by email
-  const company = await Company.findById(companyId).select('name');
+  const company = await Company.findById(companyId).select('name'); // tenant-scope-ok: the caller's own company
   sendMfaResetEmail({
     email: identity.email,
     full_name: targetUser.full_name,
