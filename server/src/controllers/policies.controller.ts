@@ -607,7 +607,7 @@ export const publishPolicy = asyncHandler(async (req: Request, res: Response) =>
     }
   }
 
-  const populatedPolicy = await PolicyVersion.findById(policyVersion._id).populate(
+  const populatedPolicy = await PolicyVersion.findOne({ _id: policyVersion._id, company_id: policyVersion.company_id }).populate(
     'published_by',
     'full_name email avatar_url'
   );
@@ -886,7 +886,7 @@ export const updatePolicyDraft = asyncHandler(async (req: Request, res: Response
     },
   });
 
-  const populatedPolicy = await PolicyVersion.findById(policyVersion._id).populate(
+  const populatedPolicy = await PolicyVersion.findOne({ _id: policyVersion._id, company_id: policyVersion.company_id }).populate(
     'published_by',
     'full_name email avatar_url'
   );
@@ -1005,7 +1005,7 @@ export const archivePolicy = asyncHandler(async (req: Request, res: Response) =>
     },
   });
 
-  const populatedPolicy = await PolicyVersion.findById(policyVersion._id).populate(
+  const populatedPolicy = await PolicyVersion.findOne({ _id: policyVersion._id, company_id: policyVersion.company_id }).populate(
     'published_by',
     'full_name email avatar_url'
   );
@@ -1033,13 +1033,14 @@ export const deletePolicy = asyncHandler(async (req: Request, res: Response) => 
 
   // Prevent deleting entities with dependents
   const assignments = await PolicyAssignment.countDocuments({
+    company_id: policyVersion.company_id,
     policy_version_id: policyVersion._id,
   });
   if (assignments > 0) {
     throw new AppError('Cannot delete: Policy still has assignment rules assigned', 400, 'HAS_DEPENDENTS');
   }
 
-  await PolicyVersion.deleteOne({ _id: policyVersion._id });
+  await PolicyVersion.deleteOne({ _id: policyVersion._id, company_id: policyVersion.company_id });
 
   // Audit log
   await auditLogger.log({
@@ -1119,7 +1120,7 @@ export const rollbackPolicy = asyncHandler(async (req: Request, res: Response) =
     if (conflicts.has_conflicts) {
       // Cleanup the orphaned version; wrap in try/catch to ensure AppError still propagates
       try {
-        await PolicyVersion.deleteOne({ _id: policyVersion._id });
+        await PolicyVersion.deleteOne({ _id: policyVersion._id, company_id: policyVersion.company_id });
       } catch (cleanupErr) {
         // Ignore cleanup errors
       }
@@ -1161,7 +1162,7 @@ export const rollbackPolicy = asyncHandler(async (req: Request, res: Response) =
     },
   });
 
-  const populatedPolicy = await PolicyVersion.findById(policyVersion._id).populate(
+  const populatedPolicy = await PolicyVersion.findOne({ _id: policyVersion._id, company_id: policyVersion.company_id }).populate(
     'published_by',
     'full_name email avatar_url'
   );

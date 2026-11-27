@@ -74,10 +74,11 @@ const UpdateAssignmentSchema = CreateAssignmentSchema.partial();
 
 // ── Helpers ──────────────────────────────────────────────────────────────────
 
-async function enrichWorkSchedules(schedules: any[]): Promise<any[]> {
+async function enrichWorkSchedules(schedules: any[], companyId: string): Promise<any[]> {
   const scheduleIds = schedules.map((s) => s._id.toString());
 
   const assignments = await WorkScheduleAssignment.find({
+    company_id: companyId,
     work_schedule_id: { $in: scheduleIds },
   }).lean();
 
@@ -106,7 +107,7 @@ export const getWorkSchedules = asyncHandler(async (req: Request, res: Response)
     .sort({ name: 1 })
     .lean();
 
-  const enriched = await enrichWorkSchedules(schedules);
+  const enriched = await enrichWorkSchedules(schedules, req.user.company_id);
   res.status(200).json({ success: true, data: enriched });
 });
 
@@ -125,12 +126,13 @@ export const getWorkScheduleById = asyncHandler(async (req: Request, res: Respon
   }
 
   const assignments = await WorkScheduleAssignment.find({
+    company_id: req.user.company_id,
     work_schedule_id: schedule._id,
   })
     .populate('location_id', 'name type')
     .lean();
 
-  const [enriched] = await enrichWorkSchedules([schedule.toObject()]);
+  const [enriched] = await enrichWorkSchedules([schedule.toObject()], req.user.company_id);
 
   res.status(200).json({
     success: true,
@@ -310,7 +312,7 @@ export const deleteWorkSchedule = asyncHandler(async (req: Request, res: Respons
 
   const correlation_id = correlationIdFor(req);
   await runInTransaction(async (session) => {
-  await WorkSchedule.deleteOne({ _id: schedule._id }, { session });
+  await WorkSchedule.deleteOne({ _id: schedule._id, company_id: req.user.company_id }, { session });
 
   await auditLogger.logTx(session, {
     req,
@@ -363,6 +365,7 @@ export const getWorkScheduleAssignmentsByLocation = asyncHandler(async (req: Req
   }
 
   const assignments = await WorkScheduleAssignment.find({
+    company_id: req.user.company_id,
     location_id: location._id,
   })
     .populate('work_schedule_id', 'name description timezone working_days working_hours break_hours is_active')
@@ -399,6 +402,7 @@ export const createWorkScheduleAssignment = asyncHandler(async (req: Request, re
 
   if (input.is_primary) {
     const existingPrimary = await WorkScheduleAssignment.findOne({
+      company_id: req.user.company_id,
       location_id: input.location_id,
       is_primary: true,
       effective_date: { $lte: new Date(input.effective_date) },
@@ -455,15 +459,9 @@ export const createWorkScheduleAssignment = asyncHandler(async (req: Request, re
 export const updateWorkScheduleAssignment = asyncHandler(async (req: Request, res: Response) => {
   const input = UpdateAssignmentSchema.parse(req.body);
 
-  const assignment = await WorkScheduleAssignment.findById(req.params.id);
+  const assignment = await WorkScheduleAssignment.findOne({ _id: req.params.id, company_id: req.user.company_id });
 
   if (!assignment) {
-    throw new AppError('Work schedule assignment not found', 404, 'NOT_FOUND');
-  }
-
-  const schedule = await WorkSchedule.findById(assignment.work_schedule_id).lean();
-
-  if (schedule?.company_id?.toString() !== req.user.company_id) {
     throw new AppError('Work schedule assignment not found', 404, 'NOT_FOUND');
   }
 
@@ -505,15 +503,9 @@ export const updateWorkScheduleAssignment = asyncHandler(async (req: Request, re
  * Deletes a work schedule assignment.
  */
 export const deleteWorkScheduleAssignment = asyncHandler(async (req: Request, res: Response) => {
-  const assignment = await WorkScheduleAssignment.findById(req.params.id);
+  const assignment = await WorkScheduleAssignment.findOne({ _id: req.params.id, company_id: req.user.company_id });
 
   if (!assignment) {
-    throw new AppError('Work schedule assignment not found', 404, 'NOT_FOUND');
-  }
-
-  const schedule = await WorkSchedule.findById(assignment.work_schedule_id).lean();
-
-  if (schedule?.company_id?.toString() !== req.user.company_id) {
     throw new AppError('Work schedule assignment not found', 404, 'NOT_FOUND');
   }
 
@@ -521,7 +513,7 @@ export const deleteWorkScheduleAssignment = asyncHandler(async (req: Request, re
 
   const correlation_id = correlationIdFor(req);
   await runInTransaction(async (session) => {
-  await WorkScheduleAssignment.deleteOne({ _id: assignment._id }, { session });
+  await WorkScheduleAssignment.deleteOne({ _id: assignment._id, company_id: req.user.company_id }, { session });
 
   await auditLogger.logTx(session, {
     req,
@@ -561,6 +553,7 @@ export const getUserWorkSchedule = asyncHandler(async (req: Request, res: Respon
   }
 
   const assignment = await WorkScheduleAssignment.findOne({
+    company_id: req.user.company_id,
     location_id: user.location_id._id,
     is_primary: true,
     effective_date: { $lte: new Date() },
@@ -600,6 +593,7 @@ export const getLocationWorkSchedule = asyncHandler(async (req: Request, res: Re
   }
 
   const assignment = await WorkScheduleAssignment.findOne({
+    company_id: req.user.company_id,
     location_id: location._id,
     is_primary: true,
     effective_date: { $lte: new Date() },

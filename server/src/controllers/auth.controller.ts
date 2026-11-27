@@ -97,6 +97,7 @@ const loginEvent = (req: Request, user: IUser, email: string, reason: string, is
 
 /** Unknown-email failure (logged without a company, suspicious after repeated attempts). */
 export async function recordUnknownEmailFailure(req: Request, email: string): Promise<void> {
+  // tenant-scope-ok: pre-sign-in, no organisation is known for an unknown e-mail
   const recentFailures = await SecurityEvent.countDocuments({
     email,
     event_type: 'login_failure',
@@ -146,6 +147,7 @@ export async function evaluateLoginIpPolicy(req: Request, user: IUser, email: st
 
     if (targetRestrictions.length > 0) {
       const userIdStr = user._id.toString();
+      // tenant-scope-ok: user is the membership being signed in; its id belongs to one organisation
       const userRoleAssignment = await UserRole.findOne({ user_id: user._id });
       const userRoleId = userRoleAssignment?.role_id?.toString() || null;
       const memberships = await GroupMember.find({ user_id: user._id });
@@ -188,6 +190,7 @@ export async function recordPasswordFailure(req: Request, user: IUser, identity:
   // while locked do not count (2026-11-25 browser test: one typo after an unlock re-locked the account).
   const windowStart = new Date(Date.now() - 30 * 60 * 1000);
   const resetAt = user.login_failures_reset_at;
+  // tenant-scope-ok: failures are counted per sign-in identity (e-mail), which is shared by its memberships
   const recentFailures = await SecurityEvent.countDocuments({
     email,
     event_type: 'login_failure',
@@ -228,6 +231,7 @@ export async function checkPasswordExpired(req: Request, user: IUser, identity: 
 
 /** Tenant last-activity marker for the Command Center (Plan 4.3): one conditional write, at most once per hour per tenant. */
 export async function touchCompanyActivity(companyId: Types.ObjectId, now = new Date()): Promise<void> {
+  // tenant-scope-ok: the signed-in member's own company document
   await Company.updateOne(
     { _id: companyId, $or: [{ last_activity_at: { $exists: false } }, { last_activity_at: { $lt: new Date(now.getTime() - 3600_000) } }] },
     { $set: { last_activity_at: now } },
@@ -238,6 +242,7 @@ export async function recordLoginSuccess(req: Request, user: IUser, identity: II
   identity.failed_login_attempts = 0;
   identity.last_login_at = new Date();
   await identity.save();
+  // tenant-scope-ok: the membership just signed in
   await User.updateOne({ _id: user._id }, { $set: { last_login: new Date(), login_failures_reset_at: new Date() }, $unset: { locked_until: 1 } });
   await touchCompanyActivity(user.company_id);
   await logSecurityEvent({
@@ -482,6 +487,7 @@ export const requestPasswordReset = asyncHandler(async (req: Request, res: Respo
   }
 
   const { email } = result.data;
+  // tenant-scope-ok: public reset request, no organisation yet; the reply never reveals whether the e-mail exists
   const user = await User.findOne({ email });
 
   if (user) {
@@ -544,6 +550,7 @@ export const resetPassword = asyncHandler(async (req: Request, res: Response) =>
     throw new AppError('Invalid or expired reset token', 400, 'INVALID_TOKEN');
   }
 
+  // tenant-scope-ok: membership named by a valid single-use reset token, matched with its e-mail
   const user = await User.findOne({
     _id: resetRecord.user_id,
     email: email,

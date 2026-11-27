@@ -491,7 +491,7 @@ export const addTeamMember = asyncHandler(async (req: Request, res: Response) =>
     return created;
   });
 
-  const populated = await TeamMember.findById(member._id)
+  const populated = await TeamMember.findOne({ _id: member._id, company_id: req.user.company_id })
     .populate('user_id', 'full_name email avatar_url employee_id')
     .lean();
 
@@ -552,7 +552,7 @@ export const updateTeamMember = asyncHandler(async (req: Request, res: Response)
     });
   });
 
-  const populated = await TeamMember.findById(member._id)
+  const populated = await TeamMember.findOne({ _id: member._id, company_id: req.user.company_id })
     .populate('user_id', 'full_name email avatar_url employee_id')
     .lean();
 
@@ -603,12 +603,12 @@ export const removeTeamMember = asyncHandler(async (req: Request, res: Response)
 
     // 2. Synchronize User.team_id (clear if it matches this team)
     await User.findOneAndUpdate(
-      { _id: userId, team_id: team._id },
+      { _id: userId, company_id: req.user.company_id, team_id: team._id },
       { $set: { team_id: null } },
       { session },
     );
 
-    const user = await User.findById(userId).session(session ?? null);
+    const user = await User.findOne({ _id: userId, company_id: req.user.company_id }).session(session ?? null);
 
     await auditLogger.logTx(session, {
       req,
@@ -664,7 +664,7 @@ export const removeBulkTeamMembers = asyncHandler(async (req: Request, res: Resp
 
     // 2. Synchronize User.team_id for all removed members
     await User.updateMany(
-      { _id: { $in: userIds }, team_id: team._id },
+      { _id: { $in: userIds }, company_id: req.user.company_id, team_id: team._id },
       { $set: { team_id: null } },
       { session },
     );
