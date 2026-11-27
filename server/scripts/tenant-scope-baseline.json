@@ -2,7 +2,6 @@
   "src/controllers/accessControlPolicies.controller.ts": 1,
   "src/controllers/appAccess.controller.ts": 3,
   "src/controllers/approvals.controller.ts": 2,
-  "src/controllers/apps.controller.ts": 14,
   "src/controllers/auth.controller.ts": 7,
   "src/controllers/dataFields.controller.ts": 1,
   "src/controllers/identityProviders.controller.ts": 1,

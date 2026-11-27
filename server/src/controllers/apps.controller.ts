@@ -15,6 +15,7 @@ import { UserRole } from '../models/UserRole.model';
 import { Group } from '../models/Group.model';
 import { GroupMember } from '../models/GroupMember.model';
 import { Company } from '../models/Company.model';
+import { Location } from '../models/Location.model';
 import { Types } from 'mongoose';
 import { ProductRole } from '../models/ProductRole.model';
 import { OrganizationEntitlement } from '../models/OrganizationEntitlement.model';
@@ -35,8 +36,26 @@ const ALLOWED_ATTRIBUTE_NAMES = [
   'location_id',
 ] as const;
 
+/** owner_id must be a member of the caller's organisation (otherwise owner_info would show another organisation's user). */
+async function assertOwnerInCompany(ownerId: string | undefined, companyId: string): Promise<void> {
+  if (!ownerId) return;
+  if (!Types.ObjectId.isValid(ownerId) || !(await User.exists({ _id: ownerId, company_id: companyId }))) {
+    throw new AppError('Owner not found in this organization', 400, 'INVALID_OWNER');
+  }
+}
+
+/**
+ * Global apps (no company_id: the Karbexa products and shared catalogue apps) are one document shared by every
+ * organisation. A tenant may read and assign them but not change or delete them: that would affect all organisations.
+ */
+function assertTenantOwnedApp(app: { company_id?: unknown }): void {
+  if (!app.company_id) {
+    throw new AppError('Global apps cannot be changed from an organization', 403, 'SYSTEM_APP_READ_ONLY');
+  }
+}
+
 const getUserAccessibleAppIds = async (userId: string, companyId: string): Promise<Types.ObjectId[]> => {
-  const user = await User.findById(userId).lean();
+  const user = await User.findOne({ _id: userId, company_id: companyId }).lean();
   if (!user) return [];
 
   const userRoles = await UserRole.find({ user_id: userId, company_id: companyId }).lean();
@@ -87,6 +106,7 @@ const getUserAccessibleAppIds = async (userId: string, companyId: string): Promi
 
   // Determine effective location (user's location or company default)
   const effectiveLocationId = user.location_id
+    // tenant-scope-ok: the caller's own company document
     || (await Company.findById(companyId).select('settings.default_location_id').lean())?.settings?.default_location_id;
 
   const targets: any[] = [
@@ -280,7 +300,7 @@ export const getApps = asyncHandler(async (req: Request, res: Response) => {
   // Batch-fetch owner info for apps that have an owner_id
   const ownerIds = apps.filter((a) => a.owner_id).map((a) => a.owner_id!);
   const owners = ownerIds.length > 0
-    ? await User.find({ _id: { $in: ownerIds } }).select('full_name email').lean()
+    ? await User.find({ _id: { $in: ownerIds }, company_id: companyId }).select('full_name email').lean()
     : [];
   const ownerMap = new Map(owners.map((o) => [o._id.toString(), o]));
 
@@ -347,16 +367,16 @@ export const getAppById = asyncHandler(async (req: Request, res: Response) => {
     assignments.map(async (assignment) => {
       let target_name = '';
       if (assignment.target_type === 'role') {
-        const role = await Role.findById(assignment.target_id).select('name').lean();
+        const role = await Role.findOne({ _id: assignment.target_id, company_id: companyId }).select('name').lean();
         target_name = role ? role.name : 'Unknown Role';
       } else if (assignment.target_type === 'department') {
-        const dept = await Department.findById(assignment.target_id).select('name').lean();
+        const dept = await Department.findOne({ _id: assignment.target_id, company_id: companyId }).select('name').lean();
         target_name = dept ? dept.name : 'Unknown Department';
       } else if (assignment.target_type === 'user') {
-        const user = await User.findById(assignment.target_id).select('full_name').lean();
+        const user = await User.findOne({ _id: assignment.target_id, company_id: companyId }).select('full_name').lean();
         target_name = user ? user.full_name : 'Unknown User';
       } else if (assignment.target_type === 'group') {
-        const group = await Group.findById(assignment.target_id).select('name').lean();
+        const group = await Group.findOne({ _id: assignment.target_id, company_id: companyId }).select('name').lean();
         target_name = group ? group.name : 'Unknown Group';
       }
       return {
@@ -368,7 +388,7 @@ export const getAppById = asyncHandler(async (req: Request, res: Response) => {
 
   let owner_info = null;
   if (app.owner_id) {
-    owner_info = await User.findById(app.owner_id)
+    owner_info = await User.findOne({ _id: app.owner_id, company_id: companyId })
       .select('full_name email')
       .lean();
   }
@@ -391,6 +411,7 @@ export const createApp = asyncHandler(async (req: Request, res: Response) => {
   const companyId = req.user!.company_id;
 
   const validated = createAppSchema.parse(req.body);
+  await assertOwnerInCompany(validated.owner_id, companyId);
 
   // Check for duplicate slug or name
   const existingApp = await App.findOne({
@@ -454,6 +475,8 @@ export const updateApp = asyncHandler(async (req: Request, res: Response) => {
   if (!app) {
     throw new AppError('App not found', 404, 'APP_NOT_FOUND');
   }
+  assertTenantOwnedApp(app);
+  await assertOwnerInCompany(validated.owner_id, companyId);
 
   const beforeState = { ...app.toObject() };
 
@@ -531,6 +554,7 @@ export const deleteApp = asyncHandler(async (req: Request, res: Response) => {
   if (!app) {
     throw new AppError('App not found', 404, 'APP_NOT_FOUND');
   }
+  assertTenantOwnedApp(app);
 
   // Check for active assignments
   const activeAssignments = await AppAssignment.countDocuments({
@@ -548,7 +572,7 @@ export const deleteApp = asyncHandler(async (req: Request, res: Response) => {
   }
 
   const beforeState = { ...app.toObject() };
-  await App.deleteOne({ _id: appId });
+  await App.deleteOne({ _id: appId, company_id: companyId });
 
   // Audit log
   await auditLogger.log({
@@ -645,6 +669,10 @@ export const assignApp = asyncHandler(async (req: Request, res: Response) => {
     if (!group) {
       throw new AppError('Target group not found', 404, 'TARGET_NOT_FOUND');
     }
+  } else if (validated.target_type === 'location') {
+    if (!Types.ObjectId.isValid(validated.target_id!) || !(await Location.exists({ _id: validated.target_id, company_id: companyId }))) {
+      throw new AppError('Target location not found', 404, 'TARGET_NOT_FOUND');
+    }
   } else if (validated.target_type === 'attribute') {
     // Bug fix: whitelist attribute_name to prevent prototype pollution / NoSQL operator injection
     if (!ALLOWED_ATTRIBUTE_NAMES.includes(validated.attribute_name as any)) {
@@ -721,6 +749,7 @@ export const assignApp = asyncHandler(async (req: Request, res: Response) => {
   }).lean();
 
   const assignedAppIds = targetAssignments.map((a) => a.app_id);
+  // tenant-scope-ok: ids come from this company's assignments, which only point at its own or global apps
   const existingAssignedApps = await App.find({
     _id: { $in: assignedAppIds }
   }).lean();
@@ -965,7 +994,7 @@ export const getAppAssignmentTimeline = asyncHandler(async (req: Request, res: R
   const allUserIds = [...new Set([...grantorIds.map(String), ...revokerIds.map(String)])];
 
   const allUsers = allUserIds.length > 0
-    ? await User.find({ _id: { $in: allUserIds } }).select('full_name email').lean()
+    ? await User.find({ _id: { $in: allUserIds }, company_id: companyId }).select('full_name email').lean()
     : [];
   const userInfoMap = new Map(allUsers.map((u) => [u._id.toString(), u]));
 
@@ -1077,6 +1106,7 @@ export const checkAppDependencies = asyncHandler(async (req: Request, res: Respo
   }).lean();
 
   const assignedAppIds = targetAssignments.map((a) => a.app_id);
+  // tenant-scope-ok: ids come from this company's assignments, which only point at its own or global apps
   const existingAssignedApps = await App.find({
     _id: { $in: assignedAppIds }
   }).lean();
@@ -1138,9 +1168,10 @@ export const getAppAssignmentsByTarget = asyncHandler(async (req: Request, res: 
   const grantorUserIds = assignments.map((a) => a.granted_by).filter(Boolean);
 
   const [appsList, grantorsList] = await Promise.all([
+    // tenant-scope-ok: ids come from this company's assignments, which only point at its own or global apps
     App.find({ _id: { $in: assignedAppIds } }).select('name icon_url slug status is_active category').lean(),
     grantorUserIds.length > 0
-      ? User.find({ _id: { $in: grantorUserIds } }).select('full_name email').lean()
+      ? User.find({ _id: { $in: grantorUserIds }, company_id: companyId }).select('full_name email').lean()
       : Promise.resolve([]),
   ]);
 

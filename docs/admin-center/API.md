@@ -136,9 +136,9 @@ Role grants are additionally limited by `server/src/lib/roleHierarchy.ts` (`asse
 | GET | `/apps/:id/users` | auth | `getAppUsers` |
 | GET | `/apps/:id/dependencies` | auth | `checkAppDependencies` |
 | POST | `/apps` | IT_ADMINS | `createApp` |
-| PUT | `/apps/:id` | IT_ADMINS | `updateApp` |
-| DELETE | `/apps/:id` | IT_ADMINS | `deleteApp` |
-| POST | `/apps/:id/assign` | IT_ADMINS | `assignApp` (for product apps: needs an active entitlement and an assignable product role; 409 `SEAT_LIMIT_REACHED` with `details { product_key, limit, used, requested }` when it would exceed the entitlement's seat limit) |
+| PUT | `/apps/:id` | IT_ADMINS | `updateApp` (the organisation's own apps only: a global app, with no `company_id`, answers 403 `SYSTEM_APP_READ_ONLY`; `owner_id` must be a member of the organisation, else 400 `INVALID_OWNER`; same `owner_id` rule on `POST /apps`) |
+| DELETE | `/apps/:id` | IT_ADMINS | `deleteApp` (own apps only; a global app answers 403 `SYSTEM_APP_READ_ONLY`) |
+| POST | `/apps/:id/assign` | IT_ADMINS | `assignApp` (every `target_id`, locations included, must belong to the organisation, else 404 `TARGET_NOT_FOUND`; for product apps: needs an active entitlement and an assignable product role; 409 `SEAT_LIMIT_REACHED` with `details { product_key, limit, used, requested }` when it would exceed the entitlement's seat limit) |
 | POST | `/apps/:id/revoke` | IT_ADMINS | `revokeApp` |
 
 #### Security (`security.routes.ts`, `ipRestrictions.routes.ts`, `identityProviders.routes.ts`)

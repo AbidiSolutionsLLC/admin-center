@@ -424,7 +424,8 @@ export default function AppsPage() {
               </div>
             </div>
 
-            {isItAdmin && (
+            {/* Global apps (no company_id) are shared by every organisation: the server refuses tenant changes. */}
+            {isItAdmin && currentApp.company_id && (
               <div className="mt-5 pt-4 border-t border-line flex flex-col gap-2">
                 <button
                   onClick={handleToggleAppStatus}
@@ -438,8 +439,8 @@ export default function AppsPage() {
                   {updateAppMutation.isPending
                     ? 'Updating...'
                     : currentApp.is_active !== false && currentApp.status !== 'inactive'
-                    ? 'Disable System-Wide App'
-                    : 'Enable System-Wide App'}
+                    ? 'Disable App'
+                    : 'Enable App'}
                 </button>
               </div>
             )}
@@ -755,7 +756,7 @@ export default function AppsPage() {
             <AlertTriangle className="h-6 w-6 text-error flex-shrink-0" />
             <div>
               <p className="text-sm font-semibold text-ink">
-                Disable "{currentApp?.name}" System-Wide?
+                Disable "{currentApp?.name}"?
               </p>
               <p className="text-xs text-ink-secondary mt-1">
                 Warning: This app has active assignments. Disabling it will immediately revoke access for all assigned users and hide it from their dashboards.
