@@ -1,0 +1,58 @@
+# Minimal CI (meta decision WF-6b, roadmap 3.2 + 3.5): typecheck, unit tests (with the tenant-scope gate) and the
+# web build. No smoke scripts, no Playwright (they need a running stack; they stay local gates).
+# WF-6b: push CI starts at go-live. Until then this runs only by hand (Actions tab > CI > Run workflow).
+# At go-live, uncomment the push / pull_request triggers below.
+name: CI
+
+on:
+  workflow_dispatch:
+  # push:
+  #   branches: [main]
+  # pull_request:
+  #   branches: [main]
+
+permissions:
+  contents: read
+
+jobs:
+  server:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    defaults:
+      run:
+        working-directory: server
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22.x'
+          cache: npm
+          cache-dependency-path: server/package-lock.json
+      - run: npm ci
+      - name: Typecheck
+        run: npm run typecheck
+      - name: Unit tests (pretest runs scripts/tenant-scope-gate.cjs)
+        run: npm test
+      - name: Dependency audit (report only)
+        run: npm audit --omit=dev --audit-level=high
+        continue-on-error: true
+
+  client:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    defaults:
+      run:
+        working-directory: client
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22.x'
+          cache: npm
+          cache-dependency-path: client/package-lock.json
+      - run: npm ci
+      - name: Build (tsc -b + vite build)
+        run: npm run build
+      - name: Dependency audit (report only)
+        run: npm audit --omit=dev --audit-level=high
+        continue-on-error: true
