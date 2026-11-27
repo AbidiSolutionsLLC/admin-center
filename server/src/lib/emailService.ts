@@ -42,13 +42,17 @@ if (connectionString) {
   }
 }
 
+if (process.env.NODE_ENV === 'production' && !azureClient && !process.env.SMTP_HOST) {
+  console.error('❌ No e-mail service configured (AZURE_COMMUNICATION_CONNECTION_STRING or SMTP_HOST): every e-mail will fail');
+}
+
 // ── Nodemailer Setup (Fallback) ──────────────────────────────────────────────
 
 /**
  * Nodemailer transporter configuration
  * Used as a fallback when Azure is not configured
  */
-const createTransporter = async () => {
+export const createTransporter = async () => {
   // Test harnesses (e2e-platform, cutover smokes): MOCK_EMAIL=true keeps every e-mail in-process (nodemailer's JSON
   // transport) instead of reaching the ethereal.email fallback over the internet. Ignored in production, so a stray
   // flag can never silently drop real mail.
@@ -67,6 +71,12 @@ const createTransporter = async () => {
         pass: process.env.SMTP_PASS,
       },
     });
+  }
+
+  // Production never falls back to a throwaway test mailbox: mail would look sent and never arrive (code audit
+  // 2026-11-27, go-live blocker G3). Failing here makes every send fail visibly (EmailDelivery status, logs).
+  if (process.env.NODE_ENV === 'production') {
+    throw new Error('No e-mail service configured: set AZURE_COMMUNICATION_CONNECTION_STRING (Azure) or SMTP_HOST in production');
   }
 
   // Development fallback: use auto-generated ethereal.email test account

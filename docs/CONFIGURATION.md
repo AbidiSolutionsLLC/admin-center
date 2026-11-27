@@ -77,14 +77,14 @@ Note: `requestPasswordReset` builds its link from `ADMIN_SPA_ORIGIN || CLIENT_UR
 
 ## 6. Server: e-mail
 
-Order of transports (`server/src/lib/emailService.ts`): Azure Communication Services when both `AZURE_COMMUNICATION_CONNECTION_STRING` and `SENDER_EMAIL_ADDRESS` are set; otherwise (or on Azure failure) nodemailer: `MOCK_EMAIL` JSON transport → SMTP if `SMTP_HOST` → an ethereal.email test account (network call, preview URL logged).
+Order of transports (`server/src/lib/emailService.ts`): Azure Communication Services when both `AZURE_COMMUNICATION_CONNECTION_STRING` and `SENDER_EMAIL_ADDRESS` are set; otherwise (or on Azure failure) nodemailer: `MOCK_EMAIL` JSON transport → SMTP if `SMTP_HOST` → an ethereal.email test account (network call, preview URL logged) outside production only. In production with neither Azure nor `SMTP_HOST` every send fails (the delivery row is marked failed, an error is logged at start) instead of going to a test mailbox (2026-11-27).
 
 | Name | Required | Default (code) | Purpose | Dev value | Production notes | Read in |
 |---|---|---|---|---|---|---|
 | `AZURE_COMMUNICATION_CONNECTION_STRING` | no | unset | Azure Communication Services e-mail client (created at module load) | empty | | `lib/emailService.ts:28` |
 | `SENDER_EMAIL_ADDRESS` | with Azure | unset | Azure sender; also a `from` fallback | empty | | `lib/emailService.ts:110` |
 | `EMAIL_FROM` | no | `SMTP_FROM_EMAIL` → `SENDER_EMAIL_ADDRESS` → `noreply@admin-center.com` | From address for nodemailer | empty | | `lib/emailService.ts:139`, `lib/notificationEngine.ts:96` |
-| `SMTP_HOST` | no | unset = ethereal fallback | SMTP server | empty | Set in production unless Azure is used. | `lib/emailService.ts:55`, `lib/notificationEngine.ts:103` |
+| `SMTP_HOST` | no | unset = ethereal fallback (not in production: there every send fails) | SMTP server | empty | Set in production unless Azure is used. | `lib/emailService.ts:55`, `lib/notificationEngine.ts:103` |
 | `SMTP_PORT` | no | `587` | | | | `lib/emailService.ts:58` |
 | `SMTP_SECURE` | no | false | `true` for implicit TLS | | | `lib/emailService.ts:59` |
 | `SMTP_USER`, `SMTP_PASS` | with SMTP | unset | SMTP auth | | | `lib/emailService.ts:61-62` |

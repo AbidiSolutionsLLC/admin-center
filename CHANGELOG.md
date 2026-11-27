@@ -6,6 +6,7 @@ Format: [Keep a Changelog](https://keepachangelog.com/en/1.1.0/). Each entry lis
 
 ### Fixed
 - Insights, "X has no role assigned" is low, not critical (owner decision B-6, 2026-11-27): an Admin Center role only opens Karbexa Admin pages and most employees never need one. With the default "medium" sensitivity it is no longer raised; open rows raised as critical before are lowered on the next scan. `lib/intelligence.ts`; test `lib/__tests__/noRoleInsight.test.ts`.
+- E-mail in production no longer falls back to an ethereal.email test mailbox when neither Azure nor SMTP is configured (code audit 2026-11-27, go-live blocker G3): mail looked sent and never arrived. Every send now fails visibly (delivery row failed, error logged at start). `lib/emailService.ts` `createTransporter`; test `lib/__tests__/emailFailClosed.test.ts`.
 - Ecosystem browser test (2026-11-25), smaller findings:
   - Password reset links are valid 30 minutes (spec 03 §4.4), not 1 hour; the e-mail says so. Test `controllers/__tests__/passwordResetExpiry.test.ts`.
   - Command Center, register a standalone portal (`PUT /operator/v1/products/:key`): a malformed or reserved key answers 400 `VALIDATION_ERROR` (was 404); a display name another product already has (case-insensitive) answers 409 `NAME_IN_USE`, because launchers and the console could not tell two such portals apart. `smoke:sprint2` 8.8 register cases.
