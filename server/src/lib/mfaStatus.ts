@@ -14,3 +14,12 @@ export async function usersWithMfa(users: Array<{ _id: Types.ObjectId | string; 
   const enrolled = new Set(identities.filter((i: any) => i.mfa?.totp_enabled || i.mfa?.email_otp_enabled).map((i) => String(i._id)));
   return new Set(users.filter((u) => u.identity_id && enrolled.has(String(u.identity_id))).map((u) => String(u._id)));
 }
+
+/**
+ * Sets `mfa_enabled` on a member read from the sign-in identity, so the member profile's MFA badge is true for members
+ * who enrolled an authenticator at the hosted sign-in (it read the legacy `User.mfa_enabled`, always false).
+ */
+export async function withMfaStatus<T extends { _id: Types.ObjectId | string; identity_id?: Types.ObjectId | string | null }>(user: T): Promise<T & { mfa_enabled: boolean }> {
+  const enrolled = await usersWithMfa([user]);
+  return { ...user, mfa_enabled: enrolled.has(String(user._id)) };
+}

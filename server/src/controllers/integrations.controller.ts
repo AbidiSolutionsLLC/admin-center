@@ -255,6 +255,12 @@ export const updateIntegration = asyncHandler(async (req: Request, res: Response
  * Creates a sync log entry and updates integration status.
  */
 export const syncIntegration = asyncHandler(async (req: Request, res: Response) => {
+  // No connector is built: the sync below only simulates results (random counts, random failures). Production refuses
+  // instead of recording invented numbers (code audit 2026-11-27); development and tests keep the simulation.
+  if (process.env.NODE_ENV === 'production') {
+    throw new AppError('Syncing integrations is not available yet: no connector is built', 501, 'SYNC_NOT_AVAILABLE');
+  }
+
   const integration = await Integration.findOne({
     _id: req.params.id,
     company_id: req.user.company_id,

@@ -5,6 +5,11 @@ Format: [Keep a Changelog](https://keepachangelog.com/en/1.1.0/). Each entry lis
 ## [Unreleased]: Wave 3 test and fix (2026-11-18)
 
 ### Fixed
+- Code audit 2026-11-27, pre-go-live fixes:
+  - Users and member pages asked `GET /people/form-metadata` for every viewer; only people admins may read it, so IT Admins, Managers and Employees got a background 403 (B-18). `useFormMetadata` loads it for people admins only. Spec in `e2e/admin-member-profile.spec.ts`.
+  - Opening Data fields with no fields wrote the default fields (`POST /data-fields/seed-defaults` on view, B-19). A Super Admin now adds them with "Add default fields". Spec in `e2e/admin-data-fields.spec.ts`.
+  - Member profile MFA badge: `GET /people/:id` returns `mfa_enabled` from the sign-in identity (`lib/mfaStatus.ts` `withMfaStatus`); it read the legacy field that sign-in never sets, so enrolled members showed "not enrolled". Test `lib/__tests__/withMfaStatus.test.ts`.
+  - Features that looked finished but did nothing now say so: the Microsoft JIT provisioning switch is disabled with "Not available yet" (sign-in never read it); workflow steps of an unbuilt type (assign_role, revoke_access, update_field, create_task, webhook) are recorded as `skipped`, not `success`, and the builder marks those options "not available yet"; integration sync, which only simulated random results, answers 501 `SYNC_NOT_AVAILABLE` in production. Test `controllers/__tests__/notBuiltFeatures.test.ts`.
 - Insights, "X has no role assigned" is low, not critical (owner decision B-6, 2026-11-27): an Admin Center role only opens Karbexa Admin pages and most employees never need one. With the default "medium" sensitivity it is no longer raised; open rows raised as critical before are lowered on the next scan. `lib/intelligence.ts`; test `lib/__tests__/noRoleInsight.test.ts`.
 - E-mail in production no longer falls back to an ethereal.email test mailbox when neither Azure nor SMTP is configured (code audit 2026-11-27, go-live blocker G3): mail looked sent and never arrived. Every send now fails visibly (delivery row failed, error logged at start). `lib/emailService.ts` `createTransporter`; test `lib/__tests__/emailFailClosed.test.ts`.
 - Ecosystem browser test (2026-11-25), smaller findings:

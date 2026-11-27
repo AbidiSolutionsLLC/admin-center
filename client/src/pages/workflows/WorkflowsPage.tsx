@@ -1946,10 +1946,11 @@ function EditStepModal({ isOpen, onClose, workflowId, step }: EditStepModalProps
             className="w-full h-9 px-3 text-sm rounded-md border border-line bg-surface text-ink focus:outline-none focus:ring-2 focus:ring-primary/30 focus:border-primary"
           >
             <option value="send_email">Send Email</option>
-            <option value="assign_role">Assign Role</option>
-            <option value="remove_role">Remove Role</option>
             <option value="require_approval">Require Approval</option>
-            <option value="webhook">Trigger Webhook</option>
+            {/* Not built in the engine yet (lib/workflowEngine.ts NOT_BUILT_ACTIONS): a step would be skipped. */}
+            <option value="assign_role" disabled>Assign Role (not available yet)</option>
+            <option value="remove_role" disabled>Remove Role (not available yet)</option>
+            <option value="webhook" disabled>Trigger Webhook (not available yet)</option>
           </select>
         </div>
 

@@ -45,3 +45,20 @@ test('the Product access tab explains where the role comes from', async ({ page 
   await expect(page.getByTestId('granted-via').first()).toContainText('department: Finance');
   await expect(page.getByText('Product not included in organization subscription plan')).toBeVisible();
 });
+
+// Regression B-18: the member page asked GET /people/form-metadata for every viewer; the server answers people admins
+// only, so IT Admins, Managers and Employees got a background 403.
+for (const [role, expected] of [['Employee', 0], ['IT Admin', 0], ['HR Admin', 1]] as const) {
+  test(`form metadata is requested only by people admins (${role})`, async ({ page }) => {
+    await page.unrouteAll({ behavior: 'ignoreErrors' });
+    await signInTenant(page, { role, permissions: ['people:read:all'] });
+    let calls = 0;
+    await page.route('**/api/v1/people/form-metadata', (route) => { calls += 1; return fulfillJson(route, { success: true, data: { required_fields: [] } }); });
+    await page.route(`**/api/v1/people/${ID}`, (route) => fulfillJson(route, { success: true, data: USER }));
+    await page.route(`**/api/v1/people/${ID}/**`, (route) => fulfillJson(route, { success: true, data: [] }));
+    await page.goto(`/people/${ID}`);
+    await expect(page.getByRole('heading', { name: 'Olive Member', level: 1 })).toBeVisible();
+    await page.waitForTimeout(500);
+    expect(calls).toBe(expected);
+  });
+}

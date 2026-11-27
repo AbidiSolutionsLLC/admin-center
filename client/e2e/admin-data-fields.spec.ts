@@ -21,3 +21,28 @@ test('a failed load shows the error state', async ({ page }) => {
   await page.goto('/data-fields');
   await expect(page.getByText('Failed to load custom fields')).toBeVisible();
 });
+
+// Regression B-19: opening the page with no fields wrote default fields (POST /data-fields/seed-defaults on view).
+test('an empty list does not seed by itself; a Super Admin adds the defaults on request', async ({ page }) => {
+  await page.unrouteAll({ behavior: 'ignoreErrors' });
+  await signInTenant(page, { role: 'Super Admin', permissions: ['data_fields:read:all'] });
+  const seeded: string[] = [];
+  await page.route('**/api/v1/data-fields/seed-defaults', (route) => { seeded.push(route.request().method()); return fulfillJson(route, { success: true, data: [] }); });
+  await page.route('**/api/v1/data-fields?**', (route) => fulfillJson(route, { success: true, data: [] }));
+  await page.goto('/data-fields');
+  const add = page.getByRole('button', { name: 'Add default fields' });
+  await expect(add).toBeVisible();
+  await page.waitForTimeout(500);
+  expect(seeded).toEqual([]);
+  await add.click();
+  await expect.poll(() => seeded).toEqual(['POST']);
+});
+
+test('members other than Super Admin get no Add default fields button', async ({ page }) => {
+  await page.unrouteAll({ behavior: 'ignoreErrors' });
+  await signInTenant(page, { role: 'HR Admin', permissions: ['data_fields:read:all'] });
+  await page.route('**/api/v1/data-fields?**', (route) => fulfillJson(route, { success: true, data: [] }));
+  await page.goto('/data-fields');
+  await expect(page.getByRole('heading', { name: 'Data fields', level: 1 })).toBeVisible();
+  await expect(page.getByRole('button', { name: 'Add default fields' })).toHaveCount(0);
+});

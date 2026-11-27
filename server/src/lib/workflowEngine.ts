@@ -39,9 +39,14 @@ export interface StepExecutionResult {
   stepName: string;
   actionType: string;
   success: boolean;
+  /** True when the action type is not built yet: nothing was done, and the run records the step as `skipped`. */
+  skipped?: boolean;
   error?: string;
   output?: Record<string, unknown>;
 }
+
+/** Action types the builder offers that have no implementation yet (code audit 2026-11-27): recorded as skipped. */
+export const NOT_BUILT_ACTIONS = new Set(['assign_role', 'revoke_access', 'update_field', 'create_task', 'webhook']);
 
 export interface WorkflowExecutionResult {
   runId: string;
@@ -143,24 +148,13 @@ async function executeStep(
       }
 
       case 'assign_role':
-        // TODO: Integrate with RBAC in Phase 2
-        stepResult.output = { note: 'Role assignment (to be implemented with RBAC module)', config: step.action_config };
-        break;
       case 'revoke_access':
-        // TODO: Integrate with session management in Phase 2
-        stepResult.output = { note: 'Access revocation (to be implemented with Auth module)', config: step.action_config };
-        break;
       case 'update_field':
-        // TODO: Integrate with user model in Phase 2
-        stepResult.output = { note: 'Field update (to be implemented with User Management)', config: step.action_config };
-        break;
       case 'create_task':
-        // TODO: Integrate with task system in Phase 2
-        stepResult.output = { note: 'Task creation (to be implemented with Task Management)', config: step.action_config };
-        break;
       case 'webhook':
-        // TODO: Execute webhook URL in Phase 2
-        stepResult.output = { note: 'Webhook (to be implemented with Integration Engine)', config: step.action_config };
+        // Not built yet. Nothing is done, so the step is recorded as skipped rather than as a success.
+        stepResult.skipped = true;
+        stepResult.output = { note: `The "${step.action_type}" action is not available yet; nothing was done`, config: step.action_config };
         break;
       default:
         stepResult.success = false;
@@ -376,7 +370,7 @@ export async function executeWorkflow(
         step_id: step._id,
         step_name: step.name,
         action_type: step.action_type,
-        status: result.success ? 'success' : 'failure',
+        status: result.skipped ? 'skipped' : result.success ? 'success' : 'failure',
         execution_time_ms: stepExecutionTimeMs,
         started_at: new Date(stepStartTime),
         completed_at: new Date(),

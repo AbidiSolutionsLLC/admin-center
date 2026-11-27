@@ -258,11 +258,15 @@ const ConnectionCard: React.FC<ConnectionCardProps> = ({ connection, onTestConne
               <p className="text-xs text-ink-secondary leading-relaxed">
                 Automatically create employee profiles when an unknown user with a verified corporate domain successfully authenticates.
               </p>
+              <p className="text-xs text-ink-muted leading-relaxed mt-1">
+                Not available yet: sign-in does not create members, so a Microsoft user who is not a member is refused. Invite members first.
+              </p>
             </div>
             <Switch
               checked={connection.jit_provisioning === 'create_member'}
               onCheckedChange={handleJitToggle}
-              disabled={updateIdp.isPending}
+              disabled
+              aria-label="Just-In-Time provisioning (not available yet)"
             />
           </div>
 

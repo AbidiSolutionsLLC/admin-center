@@ -1,5 +1,5 @@
 // src/pages/data-fields/DataFieldsPage.tsx
-import { useState, useEffect, useCallback, useDeferredValue, useMemo, useRef } from 'react';
+import { useState, useCallback, useDeferredValue, useMemo } from 'react';
 import { Database, Search } from 'lucide-react';
 import * as Tabs from '@radix-ui/react-tabs';
 import { useCustomFields } from '@/features/data-fields/hooks/useCustomFields';
@@ -16,6 +16,8 @@ import { PageHeader } from '@/components/ui/PageHeader';
 import { Button } from '@/components/ui/button';
 import type { CustomField, TargetObject, CreateCustomFieldInput } from '@/types';
 import { cn } from '@/utils/cn';
+import { useAuthStore } from '@/store/useAuthStore';
+import { ROLES } from '@/constants/roles';
 
 const TARGET_OBJECTS: { value: TargetObject; label: string; description: string }[] = [
   { value: 'user', label: 'People', description: 'Add custom fields to user profiles and forms' },
@@ -51,15 +53,11 @@ export default function DataFieldsPage() {
   const updateMutation = useUpdateCustomField();
   const seedDefaultsMutation = useSeedDefaultFields();
 
-  // ── Auto-seed default fields when page loads with no fields ──────────
-  // Use a ref to prevent duplicate seed calls for the same target object
-  const seededTargetsRef = useRef<Set<string>>(new Set());
-  useEffect(() => {
-    if (!isLoading && !isError && fields && fields.length === 0 && !seededTargetsRef.current.has(targetObject)) {
-      seededTargetsRef.current.add(targetObject);
-      seedDefaultsMutation.mutate(targetObject);
-    }
-  }, [isLoading, isError, fields, targetObject, seedDefaultsMutation]);
+  // Default fields are added on request, not by opening the page: a page view must not write data (B-19). The server
+  // allows `POST /data-fields/seed-defaults` for Super Admin only.
+  const userRole = useAuthStore((state) => state.userRole);
+  const canSeedDefaults = userRole === ROLES.SUPER_ADMIN;
+  const showSeedDefaults = canSeedDefaults && !isLoading && !isError && !!fields && fields.length === 0;
 
   // ── Search state with deferred value for non-blocking UI ─────────────
   const [searchQuery, setSearchQuery] = useState('');
@@ -198,6 +196,19 @@ export default function DataFieldsPage() {
               Clear search
             </button>
           )}
+        </div>
+      )}
+
+      {showSeedDefaults && (
+        <div className="flex items-center justify-between gap-3 rounded-lg border border-line bg-surface px-4 py-3">
+          <p className="text-sm text-ink-secondary">No fields yet. Add the standard fields for this record type, or create your own.</p>
+          <Button
+            variant="outline"
+            disabled={seedDefaultsMutation.isPending}
+            onClick={() => seedDefaultsMutation.mutate(targetObject)}
+          >
+            Add default fields
+          </Button>
         </div>
       )}
 

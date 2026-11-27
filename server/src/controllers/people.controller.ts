@@ -64,6 +64,7 @@ import { Invitation } from '../models/Invitation.model';
 import { EmailDelivery } from '../models/EmailDelivery.model';
 import { createInvitation, createInvitations, inviteLink, findInvitationByToken, invitationProblem, maskEmail } from '../lib/invitations';
 import { fetchMemberOpenItems } from '../platform/openItems';
+import { withMfaStatus } from '../lib/mfaStatus';
 
 /** Admin-owned member fields carried on member.provisioned / member.updated (07 §1.2). */
 const MEMBER_ADMIN_FIELDS = [
@@ -869,7 +870,7 @@ export const getUserById = asyncHandler(async (req: Request, res: Response) => {
   }
 
   const [enriched] = await enrichUsers([user.toObject()], req.user.company_id);
-  const safeData = await applyDataGovernanceRead(req.user, 'User', enriched);
+  const safeData = await applyDataGovernanceRead(req.user, 'User', await withMfaStatus(enriched));
   res.status(200).json({ success: true, data: safeData });
 });
 
