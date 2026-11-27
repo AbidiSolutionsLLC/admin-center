@@ -30,6 +30,32 @@ test('passes calls whose arguments mention company_id, across lines', () => {
   assert.equal(gate.findUnscoped(src, models).length, 0);
 });
 
+test('a filter variable declared just above with company_id counts as scoped; one without it does not', () => {
+  const scoped = [
+    'export const list = async (req: any) => {',
+    '  const filter: UserFilter = {',
+    '    company_id: req.user.company_id,',
+    '    is_active: true,',
+    '  };',
+    '  if (req.query.q) filter.name = req.query.q;',
+    '  const rows = await User.find(filter).lean();',
+    '  const n = await User.countDocuments(filter as never);',
+    '};',
+  ].join('\n');
+  assert.equal(gate.findUnscoped(scoped, models).length, 0);
+
+  const unscoped = [
+    '  const filter: any = {',
+    '    _id: req.params.id,',
+    '  };',
+    '  const user = await User.findOne(filter);',
+  ].join('\n');
+  assert.equal(gate.findUnscoped(unscoped, models).length, 1);
+
+  // An undeclared variable (parameter, import) is not trusted.
+  assert.equal(gate.findUnscoped('async function f(q: any) { return User.find(q); }', models).length, 1);
+});
+
 test('tenant-scope-ok on the line or the line above exempts a call', () => {
   const src = [
     '// tenant-scope-ok: id comes from a group loaded with company_id above',

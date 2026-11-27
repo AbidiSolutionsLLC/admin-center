@@ -53,6 +53,25 @@ function callArgs(text, openIdx) {
   return text.slice(openIdx + 1);
 }
 
+/**
+ * The argument is a bare variable (`filter`, `filter as never`): is it declared within the previous LOOKBACK lines
+ * as an object literal whose first lines mention company_id? (`const filter: X = { company_id: req.user.company_id, ...`)
+ * A parameter or an import is not trusted. Later mutations keep company_id unless code deletes it, which reviews catch.
+ */
+const LOOKBACK = 80;
+function variableHasCompany(text, callIndex, args) {
+  const m = args.trim().match(/^([A-Za-z_$][\w$]*)(\s+as\s+\w+)?$/);
+  if (!m) return false;
+  const before = text.slice(0, callIndex).split('\n');
+  const window = before.slice(-LOOKBACK).join('\n');
+  const decl = new RegExp(`\\b(?:const|let|var)\\s+${m[1]}\\b[^=;]*=\\s*\\{`, 'g');
+  let found = null;
+  for (const d of window.matchAll(decl)) found = d; // the nearest declaration above the call
+  if (!found) return false;
+  const body = window.slice(found.index, found.index + found[0].length + 400);
+  return /\bcompany_id\b/.test(body.slice(0, body.indexOf('}') === -1 ? body.length : body.indexOf('}') + 1));
+}
+
 /** Unscoped calls in one source text: [{ line, model, method, snippet }]. */
 function findUnscoped(text, models) {
   const hits = [];
@@ -62,6 +81,7 @@ function findUnscoped(text, models) {
     const open = m.index + m[0].length - 1;
     const args = callArgs(text, open);
     if (/\bcompany_id\b/.test(args)) continue;
+    if (variableHasCompany(text, m.index, args)) continue;
     const line = text.slice(0, m.index).split('\n').length;
     const here = lines[line - 1] ?? '';
     const above = lines[line - 2] ?? '';
